@@ -30,4 +30,4 @@ println("Relative error: $(abs(total_area(grid) - 4pi) / 4pi)")
 - [Finite-Volume Method](@ref) -- mathematical foundations and operator formulas
 - [Cubed-Sphere Grid](@ref) -- grid construction and geometry
 - [Operators](@ref) -- using FV operators on data
-- [Tutorial: Advection on the Sphere](@ref) -- full advection simulation example
+- [Tutorial: Diffusion on the Sphere](@ref) -- full diffusion simulation example

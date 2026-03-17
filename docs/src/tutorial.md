@@ -125,14 +125,10 @@ for p in 1:6
 end
 lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
 Colorbar(fig[1, 2]; colormap=:viridis, colorrange=(0, 1), label="u")
-title_obs = Observable("t = 0.00")
-ga.title = title_obs
-
 # Sample frames from the solution
 frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round .|> Int |> unique
 
 record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
-    title_obs[] = "t = $(round(sol.t[tidx]; digits=3))"
     q = get_snapshot(sol, u_sym, grid, tidx)
     for p in 1:6
         color_obs[p][] = q[p, :, :]
@@ -140,8 +136,6 @@ record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
 end
 nothing # hide
 ```
-
-![Diffusion animation](diffusion.gif)
 
 ## What happened under the hood
 

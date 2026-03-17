@@ -26,9 +26,6 @@ The discrete divergence at cell center $(i, j)$ on panel $p$ is:
 
 where $F^\xi$ and $F^\eta$ are the contravariant flux components at U-edges and V-edges respectively, $\Delta x$ and $\Delta y$ are edge lengths, and $A$ is the cell area.
 
-```@docs
-fv_divergence
-```
 
 ### Gradient
 
@@ -44,10 +41,6 @@ The $\eta$-component at interior V-edges:
 \left(\frac{\partial \phi}{\partial \eta}\right)_{p,i,j} = \frac{\phi_{p,i,j+1} - \phi_{p,i,j}}{\Delta \eta}
 ```
 
-```@docs
-fv_gradient_xi
-fv_gradient_eta
-```
 
 ### Laplacian
 
@@ -59,9 +52,6 @@ The discrete Laplacian uses a 5-point stencil with metric corrections:
 
 The edge lengths $\Delta x$ and $\Delta y$ account for the non-uniform metric of the gnomonic projection.
 
-```@docs
-fv_laplacian
-```
 
 ### Transport
 
@@ -77,27 +67,16 @@ where $c$ is the Courant number and $q$ is the transported scalar. The tendency 
 \frac{\partial q}{\partial t} = -\frac{F_{i+1/2} - F_{i-1/2}}{\Delta \xi}
 ```
 
-```@docs
-flux_1d
-transport_2d
-```
 
 ### PPM Reconstruction
 
 The Piecewise Parabolic Method (PPM) provides higher-order sub-grid reconstruction for transport. It computes left and right interface values using a 4th-order interpolation formula with monotonicity limiting (Colella & Woodward, 1984).
 
-```@docs
-ppm_reconstruction
-ppm_reconstruction!
-```
 
 ### Vertical Remapping
 
 Vertical remapping using PPM is planned but not yet implemented.
 
-```@docs
-vertical_remap_tendency
-```
 
 ## C-Grid Staggering
 
@@ -110,29 +89,13 @@ The Arakawa C-grid staggering places different variables at different locations 
 | `VEdge` | $(i, j+1/2)$ | $(N_c, N_c+1)$ | Normal velocity component in $\eta$-direction |
 | `Corner` | $(i+1/2, j+1/2)$ | $(N_c+1, N_c+1)$ | Vorticity, stream function |
 
-```@docs
-VarLocation
-grid_size
-full_array_size
-ghost_array_size
-```
 
 ## Ghost Cells
 
 Inter-panel communication is handled through ghost cells. Each panel is padded with $N_g$ ghost layers on each side, filled from neighboring panels using the connectivity table and index transformations.
 
-```@docs
-fill_ghost_cells!
-extend_with_ghosts
-```
 
 ## ArrayOp Utilities
 
 All operators return symbolic `ArrayOp` objects. Use `evaluate_arrayop` to obtain numerical results.
 
-```@docs
-const_wrap
-get_idx_vars
-make_arrayop
-evaluate_arrayop
-```

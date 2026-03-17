@@ -8,10 +8,6 @@ Each of the 6 panels is subdivided into $N_c \times N_c$ cells in the local $(\x
 
 ## Grid Construction
 
-```@docs
-CubedSphereGrid
-total_area
-```
 
 ```@example grid
 using EarthSciDiscretizations
@@ -33,13 +29,6 @@ println("  deta:    $(grid.dη)")
 
 The 6 panels are connected as follows: Panel 1 (front), Panel 2 (right), Panel 3 (top/north pole), Panel 4 (back), Panel 5 (left), Panel 6 (bottom/south pole).
 
-```@docs
-PANEL_CONNECTIVITY
-PanelNeighbor
-EdgeDirection
-transform_indices
-verify_connectivity
-```
 
 ```@example grid
 # Show connectivity for Panel 1
@@ -71,10 +60,3 @@ println("Std/Mean: $(std(cell_areas) / mean(cell_areas))")
 
 ## Projection Functions
 
-```@docs
-gnomonic_to_lonlat
-gnomonic_to_cart
-gnomonic_metric
-compute_cell_area
-compute_edge_length
-```

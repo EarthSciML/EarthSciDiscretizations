@@ -3,7 +3,7 @@ using EarthSciDiscretizations
 
 makedocs(
     sitename = "EarthSciDiscretizations.jl",
-    modules = [EarthSciDiscretizations],
+    modules = Module[],
     pages = [
         "Home" => "index.md",
         "Finite-Volume Method" => "fv_method.md",
