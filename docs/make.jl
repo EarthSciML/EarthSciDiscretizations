@@ -1,0 +1,17 @@
+using Documenter
+using EarthSciDiscretizations
+
+makedocs(
+    sitename = "EarthSciDiscretizations.jl",
+    modules = [EarthSciDiscretizations],
+    pages = [
+        "Home" => "index.md",
+        "Finite-Volume Method" => "fv_method.md",
+        "Cubed-Sphere Grid" => "grid.md",
+        "Operators" => "operators.md",
+        "Tutorial: Advection on the Sphere" => "tutorial.md",
+    ],
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", nothing) == "true",
+    ),
+)
