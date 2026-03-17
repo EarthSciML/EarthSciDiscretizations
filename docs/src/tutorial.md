@@ -52,7 +52,7 @@ nothing # hide
 Nc = 8  # C8 resolution (6 × 64 = 384 cells)
 disc = FVCubedSphere(Nc; R=1.0)
 
-prob = SciMLBase.discretize(pdesys, disc)
+prob = discretize(pdesys, disc)
 sol = solve(prob)
 
 println("Retcode: ", sol.retcode)
@@ -139,7 +139,7 @@ nothing # hide
 
 ## What happened under the hood
 
-When you call `SciMLBase.discretize(pdesys, disc)`:
+When you call `discretize(pdesys, disc)`:
 
 1. A `CubedSphereGrid` is constructed with the specified resolution
 2. For each PDE unknown `u(t, lon, lat)`, a discrete state array `u(t)[1:6, 1:Nc, 1:Nc]` is created
