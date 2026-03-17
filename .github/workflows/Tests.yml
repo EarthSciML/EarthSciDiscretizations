@@ -1,0 +1,58 @@
+name: "Tests"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-'
+    paths-ignore:
+      - 'docs/**'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  tests:
+    name: "Tests"
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - "1"
+          - "lts"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Setup Julia ${{ matrix.version }}"
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "${{ matrix.version }}"
+
+      - uses: julia-actions/cache@v2
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - name: "Run tests"
+        uses: julia-actions/julia-runtest@v1
+        with:
+          depwarn: "yes"
+
+      - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: "src"
+
+      - name: "Report Coverage with Codecov"
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          token: "${{ secrets.CODECOV_TOKEN }}"
+          fail_ci_if_error: true
