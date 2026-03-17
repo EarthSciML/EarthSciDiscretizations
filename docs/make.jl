@@ -9,7 +9,7 @@ makedocs(
         "Finite-Volume Method" => "fv_method.md",
         "Cubed-Sphere Grid" => "grid.md",
         "Operators" => "operators.md",
-        "Tutorial: Advection on the Sphere" => "tutorial.md",
+        "Tutorial: Diffusion on the Sphere" => "tutorial.md",
     ],
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",

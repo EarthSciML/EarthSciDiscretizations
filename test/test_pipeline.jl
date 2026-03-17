@@ -1,7 +1,6 @@
 @testsnippet PipelineSetup begin
     using Test
     using EarthSciDiscretizations
-    using SymbolicUtils: isarrayop
 end
 
 @testitem "FVCubedSphere construction" setup=[PipelineSetup] tags=[:pipeline] begin
@@ -27,17 +26,6 @@ end
     @test identify_dimension(:z) == :vertical
 end
 
-@testitem "Operator registry dispatches correctly" setup=[PipelineSetup] tags=[:pipeline] begin
-    Nc = 4
-    grid = CubedSphereGrid(Nc; R=1.0)
-    disc = FVCubedSphere(Nc; R=1.0)
-    registry = build_operator_registry(grid, disc)
-
-    phi = ones(6, Nc, Nc)
-    grad = apply_operator(registry, :gradient_xi, phi)
-    @test isarrayop(grad)
-end
-
 @testitem "Initial condition projection" setup=[PipelineSetup] tags=[:pipeline] begin
     Nc = 8
     grid = CubedSphereGrid(Nc; R=1.0)
@@ -50,4 +38,38 @@ end
     @test all(-1.0 .<= q .<= 1.0)
     center = Nc ÷ 2
     @test q[1, center, center] > 0.9
+end
+
+@testitem "End-to-end discretize pipeline" setup=[PipelineSetup] tags=[:pipeline] begin
+    using ModelingToolkit
+    using ModelingToolkit: t_nounits as t, D_nounits as D
+    using Symbolics
+    using DomainSets
+    using OrdinaryDiffEqDefault
+    using SciMLBase
+
+    @parameters lon lat
+    @variables u(..)
+    Dlon = Differential(lon)
+    Dlat = Differential(lat)
+
+    # Diffusion equation
+    eq = [D(u(t, lon, lat)) ~ 0.01 * (Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat))))]
+    bcs = [u(0, lon, lat) ~ cos(lat) * cos(lon)]
+    domains = [t ∈ Interval(0.0, 0.1),
+               lon ∈ Interval(-π, π),
+               lat ∈ Interval(-π/2, π/2)]
+    @named sys = PDESystem(eq, bcs, domains, [t, lon, lat], [u(t, lon, lat)])
+
+    disc = FVCubedSphere(4; R=1.0)
+    prob = SciMLBase.discretize(sys, disc)
+
+    @test prob isa ODEProblem
+    @test length(prob.u0) == 6 * 4 * 4  # 6 panels × 4 × 4
+
+    sol = solve(prob)
+    @test sol.retcode == SciMLBase.ReturnCode.Success
+
+    # Initial condition should have max ≈ 1 (cos(0)*cos(0))
+    @test maximum(prob.u0) > 0.9
 end

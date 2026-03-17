@@ -1,154 +1,157 @@
-# Tutorial: Advection on the Sphere
+# Tutorial: Diffusion on the Sphere
 
-This tutorial demonstrates a simple advection simulation on the cubed-sphere grid using EarthSciDiscretizations.jl. We transport a cosine bell initial condition under solid-body rotation and visualize the results.
+This tutorial simulates diffusion on the cubed sphere using the full
+ModelingToolkit integration — you write the PDE, and `discretize` converts
+it into an ODE system that can be solved with any SciML solver.
 
-## Step 1: Create Grid and Initial Condition
+## Problem setup
 
-We create a C16 cubed-sphere grid and project a cosine bell centered at (lon=0, lat=0) onto it.
+The diffusion equation on the sphere is:
+
+```math
+\frac{\partial u}{\partial t} = \kappa \left(
+  \frac{\partial^2 u}{\partial \lambda^2} +
+  \frac{\partial^2 u}{\partial \varphi^2}
+\right)
+```
+
+where ``\lambda`` and ``\varphi`` are longitude and latitude, and ``\kappa``
+is the diffusion coefficient.
+
+## Step 1: Define the PDE
 
 ```@example tutorial
 using EarthSciDiscretizations
-using EarthSciDiscretizations: evaluate_arrayop
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as D
+using Symbolics
+using DomainSets
+using OrdinaryDiffEqDefault
+using SciMLBase
 
-Nc = 16
-R = 1.0
-grid = CubedSphereGrid(Nc; R=R)
+@parameters lon lat
+@variables u(..)
+Dlon = Differential(lon)
+Dlat = Differential(lat)
 
-# Cosine bell initial condition
-function cosine_bell(lon, lat; lon0=0.0, lat0=0.0, r0=1.0)
-    # Great-circle distance
-    d = acos(clamp(sin(lat0)*sin(lat) + cos(lat0)*cos(lat)*cos(lon - lon0), -1.0, 1.0))
-    return d < r0 ? 0.5 * (1.0 + cos(pi * d / r0)) : 0.0
-end
+κ = 0.1  # diffusion coefficient
 
-q0 = project_initial_condition((lon, lat) -> cosine_bell(lon, lat; r0=1.0), grid)
-println("Initial condition range: [$(minimum(q0)), $(maximum(q0))]")
-println("Grid: $(Nc)x$(Nc) per panel, 6 panels")
+eq = [D(u(t, lon, lat)) ~ κ * (Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat))))]
+bcs = [u(0, lon, lat) ~ exp(-10 * (lon^2 + lat^2))]  # Gaussian blob at (0,0)
+domains = [t ∈ Interval(0.0, 0.5),
+           lon ∈ Interval(-π, π),
+           lat ∈ Interval(-π/2, π/2)]
+
+@named pdesys = PDESystem(eq, bcs, domains, [t, lon, lat], [u(t, lon, lat)])
+nothing # hide
 ```
 
-## Step 2: Set Up Solid-Body Rotation
-
-We define a solid-body rotation velocity field. The zonal wind is $u = \omega \cos(\text{lat})$ and the meridional wind is $v = 0$. We approximate the Courant number in computational coordinates.
+## Step 2: Discretize and solve
 
 ```@example tutorial
-# Angular velocity for one full rotation in T_rot time units
-T_rot = 2pi  # one rotation period
-omega = 2pi / T_rot
+Nc = 8  # C8 resolution (6 × 64 = 384 cells)
+disc = FVCubedSphere(Nc; R=1.0)
 
-# Courant numbers in computational coordinates
-# For solid-body rotation, the xi-courant is approximately omega * cos(lat) * dt / dxi
-dt = 0.01  # time step
-dxi = grid.dξ
+prob = SciMLBase.discretize(pdesys, disc)
+sol = solve(prob)
 
-courant_xi = zeros(6, Nc, Nc)
-courant_eta = zeros(6, Nc, Nc)
-for p in 1:6, i in 1:Nc, j in 1:Nc
-    courant_xi[p, i, j] = omega * cos(grid.lat[p, i, j]) * dt / dxi
-end
-
-println("Max Courant number: $(maximum(abs.(courant_xi)))")
-println("Time step: $(dt)")
-println("Rotation period: $(T_rot)")
+println("Retcode: ", sol.retcode)
+println("Grid cells: ", 6 * Nc^2)
+println("Timesteps: ", length(sol.t))
 ```
 
-## Step 3: Forward Euler Time Integration
+That's the entire workflow: define a PDE with ModelingToolkit, create a
+`FVCubedSphere` discretization, and call `discretize`. The library handles
+grid construction, spatial derivative replacement, initial condition
+projection, and ODE system assembly automatically.
 
-We use a simple forward Euler scheme to advance the tracer field. The `transport_2d` operator returns the tendency (time derivative), which we evaluate and apply.
-
-Note: the transport operator works on the interior cells [6, Nc-2, Nc-2], so we update only the interior and keep boundary cells fixed.
+## Step 3: Visualize the result
 
 ```@example tutorial
-q = copy(q0)
-nsteps = 100
+using CairoMakie, GeoMakie
 
-for step in 1:nsteps
-    ao = transport_2d(q, courant_xi, courant_eta, grid)
-    tendency = evaluate_arrayop(ao)
+grid = CubedSphereGrid(Nc; R=1.0)
 
-    # Update interior cells: index (p, i, j) in tendency maps to
-    # physical cell (p, i+1, j+1)
-    for p in 1:6, i in 1:size(tendency, 2), j in 1:size(tendency, 3)
-        q[p, i + 1, j + 1] += dt * tendency[p, i, j]
+# Extract solution at a given time
+u_sym = first(Symbolics.@variables u(t)[1:6, 1:Nc, 1:Nc])
+
+function get_snapshot(sol, u_sym, grid, tidx)
+    Nc = grid.Nc
+    q = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        q[p, i, j] = sol[u_sym[p, i, j]][tidx]
     end
+    return q
 end
 
-println("After $(nsteps) steps:")
-println("  q range: [$(minimum(q)), $(maximum(q))]")
-println("  Mass (sum q*area): $(sum(q .* grid.area))")
-println("  Initial mass:      $(sum(q0 .* grid.area))")
-```
-
-## Step 4: Visualization
-
-We plot the initial and final tracer fields on a Robinson projection using CairoMakie and GeoMakie.
-
-```@example tutorial
-using CairoMakie
-using GeoMakie
-
-fig = Figure(size=(900, 400))
-
-for (col, (data, title)) in enumerate(zip([q0, q], ["Initial condition", "After $(nsteps) steps"]))
-    ax = GeoAxis(fig[1, col];
-        dest="+proj=robin",
-        title=title,
-    )
-
+function plot_cubed_sphere(grid, q; title="", colorrange=nothing)
+    Nc = grid.Nc
+    cr = isnothing(colorrange) ? (minimum(q), maximum(q)) : colorrange
+    fig = Figure(size=(900, 500))
+    ga = GeoAxis(fig[1, 1]; dest="+proj=robin", title=title)
     for p in 1:6
-        lons = rad2deg.(grid.lon[p, :, :])
-        lats = rad2deg.(grid.lat[p, :, :])
-        vals = data[p, :, :]
-        surface!(ax, lons[:], lats[:], zeros(length(lons[:]));
-            color=vals[:], colormap=:viridis,
-            colorrange=(0.0, 1.0), shading=NoShading)
+        surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
+                 zeros(Nc, Nc); color=q[p, :, :], shading=NoShading,
+                 colormap=:viridis, colorrange=cr)
     end
+    lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
+    Colorbar(fig[1, 2]; colormap=:viridis, colorrange=cr, label="u")
+    fig
 end
 
+q_initial = get_snapshot(sol, u_sym, grid, 1)
+fig = plot_cubed_sphere(grid, q_initial; title="Initial condition", colorrange=(0, 1))
 fig
 ```
 
-## Step 5: Animation
-
-We create an animation of the advection process by running the time loop and recording frames.
-
 ```@example tutorial
-q_anim = copy(q0)
-nframes = 50
-steps_per_frame = 2
-
-fig_anim = Figure(size=(600, 350))
-ax_anim = GeoAxis(fig_anim[1, 1];
-    dest="+proj=robin",
-    title="Advection on the Sphere",
-)
-
-# Initial plot - collect all panel data
-all_lons = Float64[]
-all_lats = Float64[]
-all_vals = Observable(Float64[])
-
-for p in 1:6
-    append!(all_lons, rad2deg.(vec(grid.lon[p, :, :])))
-    append!(all_lats, rad2deg.(vec(grid.lat[p, :, :])))
-end
-all_vals[] = vcat([vec(q_anim[p, :, :]) for p in 1:6]...)
-
-surface!(ax_anim, all_lons, all_lats, zeros(length(all_lons));
-    color=all_vals, colormap=:viridis,
-    colorrange=(0.0, 1.0), shading=NoShading)
-
-record(fig_anim, "advection.gif", 1:nframes; framerate=10) do frame
-    for _ in 1:steps_per_frame
-        ao = transport_2d(q_anim, courant_xi, courant_eta, grid)
-        tendency = evaluate_arrayop(ao)
-        for p in 1:6, i in 1:size(tendency, 2), j in 1:size(tendency, 3)
-            q_anim[p, i + 1, j + 1] += dt * tendency[p, i, j]
-        end
-    end
-    all_vals[] = vcat([vec(q_anim[p, :, :]) for p in 1:6]...)
-end
-
-nothing
+q_final = get_snapshot(sol, u_sym, grid, length(sol.t))
+fig = plot_cubed_sphere(grid, q_final; title="Final state (t=$(sol.t[end]))",
+                        colorrange=(0, 1))
+fig
 ```
 
-![Advection animation](advection.gif)
+## Step 4: Animate
+
+```@example tutorial
+fig = Figure(size=(900, 500))
+ga = GeoAxis(fig[1, 1]; dest="+proj=robin")
+
+color_obs = [Observable(q_initial[p, :, :]) for p in 1:6]
+for p in 1:6
+    surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
+             zeros(Nc, Nc); color=color_obs[p], shading=NoShading,
+             colormap=:viridis, colorrange=(0, 1))
+end
+lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
+Colorbar(fig[1, 2]; colormap=:viridis, colorrange=(0, 1), label="u")
+title_obs = Observable("t = 0.00")
+ga.title = title_obs
+
+# Sample frames from the solution
+frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round .|> Int |> unique
+
+record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
+    title_obs[] = "t = $(round(sol.t[tidx]; digits=3))"
+    q = get_snapshot(sol, u_sym, grid, tidx)
+    for p in 1:6
+        color_obs[p][] = q[p, :, :]
+    end
+end
+nothing # hide
+```
+
+![Diffusion animation](diffusion.gif)
+
+## What happened under the hood
+
+When you call `SciMLBase.discretize(pdesys, disc)`:
+
+1. A `CubedSphereGrid` is constructed with the specified resolution
+2. For each PDE unknown `u(t, lon, lat)`, a discrete state array `u(t)[1:6, 1:Nc, 1:Nc]` is created
+3. The PDE equations are walked symbolically — each spatial `Differential` is replaced with a finite-difference stencil operating on the discrete array
+4. Initial conditions from the BCs are evaluated at each grid cell's (lon, lat)
+5. The resulting ODE system is compiled by ModelingToolkit and wrapped in an `ODEProblem`
+
+The solver then integrates the ODE system using any algorithm from the
+DifferentialEquations.jl ecosystem (Tsit5, Rodas5, etc.).

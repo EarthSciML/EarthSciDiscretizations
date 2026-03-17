@@ -3,8 +3,13 @@ module EarthSciDiscretizations
 using LinearAlgebra: norm, cross, dot
 using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @makearray, @syms
 using SymbolicUtils
-using Symbolics: unwrap, wrap
+using Symbolics: unwrap, wrap, Differential, iscall, operation, arguments, Num
 import Symbolics
+using ModelingToolkit: PDESystem, System, mtkcompile, ODEProblem, @named
+using ModelingToolkit: t_nounits as mtk_t, D_nounits as mtk_D
+import ModelingToolkit
+import SciMLBase
+import DomainSets
 
 # Grid infrastructure
 include("grids/abstract_grid.jl")
@@ -31,10 +36,8 @@ include("operators/vertical_remap.jl")
 
 # Discretization pipeline
 include("discretization.jl")
-include("operator_registry.jl")
 include("equation_discretizer.jl")
 include("bc_handler.jl")
-include("system_assembly.jl")
 
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
@@ -61,7 +64,7 @@ export ghost_fill_indices, ghost_fill_arrayop
 # Exports: ArrayOp utilities
 export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 
-# Exports: FV operators (all return ArrayOps)
+# Exports: FV operators
 export fv_divergence
 export fv_gradient_xi, fv_gradient_eta
 export fv_laplacian
@@ -72,7 +75,6 @@ export vertical_remap_tendency
 
 # Exports: Discretization pipeline
 export FVCubedSphere
-export OperatorRegistry, build_operator_registry, apply_operator
 export project_initial_condition
 export identify_dimension
 
