@@ -73,7 +73,7 @@ using CairoMakie, GeoMakie
 grid = CubedSphereGrid(Nc; R=1.0)
 
 # Extract solution at a given time
-u_sym = first(Symbolics.@variables u(t)[1:6, 1:Nc, 1:Nc])
+u_sym = first(@variables u(t)[1:6, 1:Nc, 1:Nc])
 
 function get_snapshot(sol, u_sym, grid, tidx)
     Nc = grid.Nc
