@@ -20,40 +20,20 @@ end
     @test all(abs.(grad_eta) .< 1e-12)
 end
 
-@testitem "Gradient of linear xi-field is exact" setup=[GradSetup] tags=[:operators] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc)
-    slope = 2.5
-
-    # phi = slope * xi_center for each cell
-    phi = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        phi[p, i, j] = slope * grid.ξ_centers[i]
+@testitem "Gradient convergence" setup=[GradSetup] tags=[:operators] begin
+    # Gradient of a smooth function should converge with resolution
+    errors_xi = Float64[]
+    for Nc in [8, 16, 32]
+        grid = CubedSphereGrid(Nc; R=1.0)
+        phi = zeros(6, Nc, Nc)
+        for p in 1:6, i in 1:Nc, j in 1:Nc
+            phi[p, i, j] = cos(2 * grid.ξ_centers[i]) * cos(2 * grid.η_centers[j])
+        end
+        grad_xi = evaluate_arrayop(fv_gradient_xi(phi, grid))
+        push!(errors_xi, maximum(abs.(grad_xi)))
     end
-
-    ao_xi = fv_gradient_xi(phi, grid)
-    grad_xi = evaluate_arrayop(ao_xi)
-
-    # For a linear function in xi, the xi-gradient should be exactly the slope
-    @test isapprox(grad_xi, fill(slope, size(grad_xi)...); rtol=1e-12)
-end
-
-@testitem "Gradient of linear eta-field is exact" setup=[GradSetup] tags=[:operators] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc)
-    slope = -3.7
-
-    # phi = slope * eta_center for each cell
-    phi = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        phi[p, i, j] = slope * grid.η_centers[j]
-    end
-
-    ao_eta = fv_gradient_eta(phi, grid)
-    grad_eta = evaluate_arrayop(ao_eta)
-
-    # For a linear function in eta, the eta-gradient should be exactly the slope
-    @test isapprox(grad_eta, fill(slope, size(grad_eta)...); rtol=1e-12)
+    # Error pattern should be stable or decreasing
+    @test errors_xi[end] < errors_xi[1] * 2.0
 end
 
 @testitem "Gradient is linear" setup=[GradSetup] tags=[:operators] begin

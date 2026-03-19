@@ -148,17 +148,13 @@ function _is_initial_condition(bc, dv, t0)
 end
 
 function _eval_ic(rhs, spatial_ivs, grid, p, i, j)
-    try
-        subs = Dict{Any,Any}()
-        if length(spatial_ivs) >= 1
-            subs[spatial_ivs[1]] = grid.lon[p, i, j]
-        end
-        if length(spatial_ivs) >= 2
-            subs[spatial_ivs[2]] = grid.lat[p, i, j]
-        end
-        v = Symbolics.value(Symbolics.substitute(rhs, subs))
-        return v isa Number ? Float64(v) : Float64(eval(Symbolics.toexpr(v)))
-    catch
-        return 0.0
+    subs = Dict{Any,Any}()
+    if length(spatial_ivs) >= 1
+        subs[spatial_ivs[1]] = grid.lon[p, i, j]
     end
+    if length(spatial_ivs) >= 2
+        subs[spatial_ivs[2]] = grid.lat[p, i, j]
+    end
+    v = Symbolics.value(Symbolics.substitute(rhs, subs))
+    return v isa Number ? Float64(v) : Float64(eval(Symbolics.toexpr(v)))
 end

@@ -21,6 +21,16 @@ end
     @test size(grid.area) == (6, Nc, Nc)
     @test size(grid.dx) == (6, Nc + 1, Nc)
     @test size(grid.dy) == (6, Nc, Nc + 1)
+
+    # New arrays: coordinate Jacobian
+    @test size(grid.dξ_dlon) == (6, Nc, Nc)
+    @test size(grid.dξ_dlat) == (6, Nc, Nc)
+    @test size(grid.dη_dlon) == (6, Nc, Nc)
+    @test size(grid.dη_dlat) == (6, Nc, Nc)
+
+    # New arrays: center-to-center distances
+    @test size(grid.dist_xi) == (6, Nc - 1, Nc)
+    @test size(grid.dist_eta) == (6, Nc, Nc - 1)
 end
 
 @testitem "Total area equals 4piR^2" setup=[GridSetup] tags=[:grid] begin
@@ -131,4 +141,29 @@ end
             @test J > 0
         end
     end
+end
+
+@testitem "Coordinate Jacobian consistency" setup=[GridSetup] tags=[:grid] begin
+    # At panel 1 center (ξ=0,η=0), lon≈ξ and lat≈η, so the
+    # Jacobian d(ξ,η)/d(lon,lat) should be approximately identity
+    jac = compute_coord_jacobian(0.0, 0.0, 1)
+    @test isapprox(jac.dξ_dlon, 1.0; rtol=0.01)
+    @test isapprox(jac.dη_dlat, 1.0; rtol=0.01)
+    @test abs(jac.dξ_dlat) < 0.01
+    @test abs(jac.dη_dlon) < 0.01
+
+    # Jacobian should be finite everywhere
+    grid = CubedSphereGrid(8; R=1.0)
+    for p in 1:6
+        @test all(isfinite.(grid.dξ_dlon[p, :, :]))
+        @test all(isfinite.(grid.dξ_dlat[p, :, :]))
+        @test all(isfinite.(grid.dη_dlon[p, :, :]))
+        @test all(isfinite.(grid.dη_dlat[p, :, :]))
+    end
+end
+
+@testitem "Center-to-center distances are positive" setup=[GridSetup] tags=[:grid] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    @test all(grid.dist_xi .> 0)
+    @test all(grid.dist_eta .> 0)
 end

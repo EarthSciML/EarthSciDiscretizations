@@ -6,11 +6,19 @@ with FV stencil operators, producing per-cell ODE equations.
 function identify_dimension(iv)
     name = Symbol(iv)
     name == :t && return :t
-    name in (:lon, :λ, :x, :ξ, :xi) && return :xi
-    name in (:lat, :φ, :y, :η, :eta) && return :eta
+    name in (:lon, :λ) && return :lon
+    name in (:lat, :φ) && return :lat
+    name in (:x, :ξ, :xi) && return :xi
+    name in (:y, :η, :eta) && return :eta
     name in (:z, :p, :σ, :k) && return :vertical
     error("Cannot identify grid dimension for variable: $name")
 end
+
+"""
+Return true if `dim` is a physical (lon/lat) coordinate that needs
+chain-rule transformation to computational (ξ/η) coordinates.
+"""
+_is_physical_coord(dim::Symbol) = dim in (:lon, :lat)
 
 """
     discretize_equation(eq, disc_vars, dvs, spatial_ivs, grid, disc)
@@ -20,6 +28,9 @@ spatial derivatives with metric-corrected finite-difference stencils.
 
 Handles multiple dependent variables, nonlinear terms, mixed derivatives,
 and inter-panel ghost cell references at boundaries.
+
+Physical coordinates (lon, lat) are transformed to computational coordinates
+(ξ, η) via the chain rule using the precomputed coordinate Jacobian.
 """
 function discretize_equation(eq, disc_vars, dvs, spatial_ivs, grid, disc)
     Nc = grid.Nc
@@ -152,9 +163,9 @@ end
 
 Recursively walk a symbolic expression, replacing:
 - DV calls u(t, x, y) → disc_vars[u][p, i, j]
-- First spatial derivatives → metric-corrected centered FD
-- Second spatial derivatives → metric-corrected 3-point FD
-- Mixed spatial derivatives → 4-point cross-derivative stencil
+- First spatial derivatives → chain-rule-transformed centered FD
+- Second spatial derivatives → chain-rule-transformed 3-point FD
+- Mixed spatial derivatives → chain-rule-transformed cross-derivative
 - Nonlinear terms are preserved (arithmetic is recursed into)
 """
 function _substitute_at_point(expr, disc_vars, dvs, spatial_ivs,
@@ -186,19 +197,11 @@ function _substitute_at_point(expr, disc_vars, dvs, spatial_ivs,
             inner_dim = identify_dimension(Symbol(inner_op.x))
             innermost = arguments(inner)[1]
 
-            if dim == inner_dim
-                # Same-dimension second derivative with metric correction:
-                # (1/J) * d/dξ(J * g^{ξξ} * du/dξ) at cell (p,i,j)
-                return _second_deriv_same(innermost, dim, disc_vars, dvs,
-                                          p, i, j, neighbors, dξ, dη, grid)
-            else
-                # Mixed derivative: d²u/(dξ dη) with metric cross-term
-                return _second_deriv_mixed(innermost, dim, inner_dim, disc_vars, dvs,
-                                            p, i, j, neighbors, dξ, dη, grid)
-            end
+            return _second_deriv(innermost, dim, inner_dim, disc_vars, dvs,
+                                 p, i, j, neighbors, dξ, dη, grid)
         end
 
-        # First derivative with metric correction
+        # First derivative
         return _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
                              p, i, j, neighbors, dξ, dη, grid)
     end
@@ -210,14 +213,13 @@ function _substitute_at_point(expr, disc_vars, dvs, spatial_ivs,
 end
 
 """
-Metric-corrected first derivative.
+First derivative with chain-rule coordinate transformation.
 
-For a derivative in the ξ-direction:
-  du/dx_phys = (g^{ξξ} * du/dξ + g^{ξη} * du/dη) / sqrt(g^{ξξ})
+For physical coordinates (lon, lat), applies:
+    ∂u/∂lon = (∂ξ/∂lon)·∂u/∂ξ + (∂η/∂lon)·∂u/∂η
+    ∂u/∂lat = (∂ξ/∂lat)·∂u/∂ξ + (∂η/∂lat)·∂u/∂η
 
-For a generic scalar PDE, we approximate the physical first derivative
-using the contravariant metric. This uses centered differences in both
-directions when the cross-metric term is nonzero.
+For computational coordinates (ξ, η), uses direct centered differences.
 """
 function _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
                        p, i, j, neighbors, dξ, dη, grid)
@@ -229,71 +231,119 @@ function _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
     u_jp1 = _get_dv_value(inner, disc_vars, dvs, pjp1...)
     u_jm1 = _get_dv_value(inner, disc_vars, dvs, pjm1...)
 
-    # Inverse metric at this cell
-    ginv_ξξ = grid.ginv_ξξ[p, i, j]
-    ginv_ηη = grid.ginv_ηη[p, i, j]
-    ginv_ξη = grid.ginv_ξη[p, i, j]
-
     du_dξ = (u_ip1 - u_im1) / (2 * dξ)
     du_dη = (u_jp1 - u_jm1) / (2 * dη)
 
-    if dim == :xi
-        # Physical derivative in the ξ-mapped direction
-        # Scale by sqrt(ginv_ξξ) to convert from covariant to physical
-        return ginv_ξξ / sqrt(ginv_ξξ) * du_dξ + ginv_ξη / sqrt(ginv_ξξ) * du_dη
+    if dim == :lon
+        # Chain rule: d/dlon = (dξ/dlon)·d/dξ + (dη/dlon)·d/dη
+        dξ_dlon = grid.dξ_dlon[p, i, j]
+        dη_dlon = grid.dη_dlon[p, i, j]
+        return dξ_dlon * du_dξ + dη_dlon * du_dη
+    elseif dim == :lat
+        # Chain rule: d/dlat = (dξ/dlat)·d/dξ + (dη/dlat)·d/dη
+        dξ_dlat = grid.dξ_dlat[p, i, j]
+        dη_dlat = grid.dη_dlat[p, i, j]
+        return dξ_dlat * du_dξ + dη_dlat * du_dη
+    elseif dim == :xi
+        return du_dξ
     elseif dim == :eta
-        return ginv_ηη / sqrt(ginv_ηη) * du_dη + ginv_ξη / sqrt(ginv_ηη) * du_dξ
+        return du_dη
     end
 end
 
 """
-Metric-corrected second derivative in the same dimension.
+Second derivative with chain-rule coordinate transformation.
 
-Computes (1/J) * ∂/∂ξ(J * g^{ξξ} * ∂u/∂ξ) using half-point averaged metrics.
+For physical coordinates, applies the chain rule. For example:
+    ∂²u/∂lon² = (∂ξ/∂lon)²·∂²u/∂ξ² + 2(∂ξ/∂lon)(∂η/∂lon)·∂²u/(∂ξ∂η) + (∂η/∂lon)²·∂²u/∂η²
+
+For computational coordinates, uses direct stencils.
 """
-function _second_deriv_same(innermost, dim, disc_vars, dvs,
-                             p, i, j, neighbors, dξ, dη, grid)
+function _second_deriv(innermost, dim_outer, dim_inner, disc_vars, dvs,
+                        p, i, j, neighbors, dξ, dη, grid)
+    # Compute all three computational-coordinate second derivatives
+    d2u_dξ2 = _comp_second_deriv_xi(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, grid)
+    d2u_dη2 = _comp_second_deriv_eta(innermost, disc_vars, dvs, p, i, j, neighbors, dη, grid)
+    d2u_dξdη = _comp_mixed_deriv(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, dη)
+
+    # Map outer/inner dimensions to chain-rule coefficients
+    a_ξ_outer, a_η_outer = _chain_rule_coeffs(dim_outer, grid, p, i, j)
+    a_ξ_inner, a_η_inner = _chain_rule_coeffs(dim_inner, grid, p, i, j)
+
+    # Full chain rule: Σ_k Σ_l (∂x_k/∂dim_outer)(∂x_l/∂dim_inner) ∂²u/(∂x_k ∂x_l)
+    return (a_ξ_outer * a_ξ_inner * d2u_dξ2 +
+            (a_ξ_outer * a_η_inner + a_η_outer * a_ξ_inner) * d2u_dξdη +
+            a_η_outer * a_η_inner * d2u_dη2)
+end
+
+"""
+Return (coeff_ξ, coeff_η) for the chain rule transformation of dimension `dim`.
+For computational coordinates: (:xi → (1,0), :eta → (0,1)).
+For physical coordinates: uses the coordinate Jacobian.
+"""
+function _chain_rule_coeffs(dim, grid, p, i, j)
+    if dim == :lon
+        return (grid.dξ_dlon[p, i, j], grid.dη_dlon[p, i, j])
+    elseif dim == :lat
+        return (grid.dξ_dlat[p, i, j], grid.dη_dlat[p, i, j])
+    elseif dim == :xi
+        return (1.0, 0.0)
+    elseif dim == :eta
+        return (0.0, 1.0)
+    end
+end
+
+"""
+Computational-coordinate second derivative in ξ:
+    (1/J)·∂/∂ξ(J·g^{ξξ}·∂u/∂ξ) with half-point averaged metrics.
+"""
+function _comp_second_deriv_xi(innermost, disc_vars, dvs,
+                                p, i, j, neighbors, dξ, grid)
+    pip1 = neighbors.pip1; pim1 = neighbors.pim1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
+    u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
+    u_im1 = _get_dv_value(innermost, disc_vars, dvs, pim1...)
+
     J_ij = grid.J[p, i, j]
+    J_ip = (grid.J[pip1...] + J_ij) / 2
+    J_im = (grid.J[pim1...] + J_ij) / 2
+    ginv_ip = (grid.ginv_ξξ[pip1...] + grid.ginv_ξξ[p, i, j]) / 2
+    ginv_im = (grid.ginv_ξξ[pim1...] + grid.ginv_ξξ[p, i, j]) / 2
 
-    if dim == :xi
-        pip1 = neighbors.pip1; pim1 = neighbors.pim1
-        u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
-        u_im1 = _get_dv_value(innermost, disc_vars, dvs, pim1...)
-
-        # Half-point metric averages
-        J_ip = (grid.J[pip1...] + J_ij) / 2
-        J_im = (grid.J[pim1...] + J_ij) / 2
-        ginv_ip = (grid.ginv_ξξ[pip1...] + grid.ginv_ξξ[p, i, j]) / 2
-        ginv_im = (grid.ginv_ξξ[pim1...] + grid.ginv_ξξ[p, i, j]) / 2
-
-        return (1 / J_ij) * (
-            J_ip * ginv_ip * (u_ip1 - u_ij) / dξ -
-            J_im * ginv_im * (u_ij - u_im1) / dξ
-        ) / dξ
-    elseif dim == :eta
-        pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
-        u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
-        u_jm1 = _get_dv_value(innermost, disc_vars, dvs, pjm1...)
-
-        J_jp = (grid.J[pjp1...] + J_ij) / 2
-        J_jm = (grid.J[pjm1...] + J_ij) / 2
-        ginv_jp = (grid.ginv_ηη[pjp1...] + grid.ginv_ηη[p, i, j]) / 2
-        ginv_jm = (grid.ginv_ηη[pjm1...] + grid.ginv_ηη[p, i, j]) / 2
-
-        return (1 / J_ij) * (
-            J_jp * ginv_jp * (u_jp1 - u_ij) / dη -
-            J_jm * ginv_jm * (u_ij - u_jm1) / dη
-        ) / dη
-    end
+    return (1 / J_ij) * (
+        J_ip * ginv_ip * (u_ip1 - u_ij) / dξ -
+        J_im * ginv_im * (u_ij - u_im1) / dξ
+    ) / dξ
 end
 
 """
-Metric-corrected mixed second derivative: ∂²u/(∂ξ ∂η).
-Uses 4-point cross-derivative stencil scaled by the inverse metric cross-term.
+Computational-coordinate second derivative in η:
+    (1/J)·∂/∂η(J·g^{ηη}·∂u/∂η) with half-point averaged metrics.
 """
-function _second_deriv_mixed(innermost, dim_outer, dim_inner, disc_vars, dvs,
-                              p, i, j, neighbors, dξ, dη, grid)
+function _comp_second_deriv_eta(innermost, disc_vars, dvs,
+                                 p, i, j, neighbors, dη, grid)
+    pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
+    u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
+    u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
+    u_jm1 = _get_dv_value(innermost, disc_vars, dvs, pjm1...)
+
+    J_ij = grid.J[p, i, j]
+    J_jp = (grid.J[pjp1...] + J_ij) / 2
+    J_jm = (grid.J[pjm1...] + J_ij) / 2
+    ginv_jp = (grid.ginv_ηη[pjp1...] + grid.ginv_ηη[p, i, j]) / 2
+    ginv_jm = (grid.ginv_ηη[pjm1...] + grid.ginv_ηη[p, i, j]) / 2
+
+    return (1 / J_ij) * (
+        J_jp * ginv_jp * (u_jp1 - u_ij) / dη -
+        J_jm * ginv_jm * (u_ij - u_jm1) / dη
+    ) / dη
+end
+
+"""
+Computational-coordinate mixed derivative ∂²u/(∂ξ∂η) using 4-point stencil.
+"""
+function _comp_mixed_deriv(innermost, disc_vars, dvs,
+                            p, i, j, neighbors, dξ, dη)
     u_pp = _get_dv_value(innermost, disc_vars, dvs, neighbors.pip1jp1...)
     u_pm = _get_dv_value(innermost, disc_vars, dvs, neighbors.pip1jm1...)
     u_mp = _get_dv_value(innermost, disc_vars, dvs, neighbors.pim1jp1...)

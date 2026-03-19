@@ -19,8 +19,8 @@ end
 
 @testitem "Dimension identification" setup=[PipelineSetup] tags=[:pipeline] begin
     @test identify_dimension(:t) == :t
-    @test identify_dimension(:lon) == :xi
-    @test identify_dimension(:lat) == :eta
+    @test identify_dimension(:lon) == :lon
+    @test identify_dimension(:lat) == :lat
     @test identify_dimension(:x) == :xi
     @test identify_dimension(:y) == :eta
     @test identify_dimension(:z) == :vertical

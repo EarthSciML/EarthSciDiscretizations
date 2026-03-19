@@ -70,3 +70,48 @@ function compute_rotation_angle(panel_src, edge_src, panel_dst, edge_dst)
         end
     end
 end
+
+"""
+    compute_coord_jacobian(ξ, η, panel)
+
+Compute the Jacobian of the inverse coordinate mapping (lon, lat) → (ξ, η)
+at a given point. Returns (dξ_dlon, dξ_dlat, dη_dlon, dη_dlat).
+
+This is needed to transform PDE derivatives written in (lon, lat) coordinates
+to the computational (ξ, η) coordinate system via the chain rule:
+    ∂/∂lon = (∂ξ/∂lon)·∂/∂ξ + (∂η/∂lon)·∂/∂η
+    ∂/∂lat = (∂ξ/∂lat)·∂/∂ξ + (∂η/∂lat)·∂/∂η
+"""
+function compute_coord_jacobian(ξ, η, panel)
+    eps = 1e-7
+
+    # Forward Jacobian d(lon,lat)/d(ξ,η) via central differences
+    lon_p, lat_p = gnomonic_to_lonlat(ξ + eps, η, panel)
+    lon_m, lat_m = gnomonic_to_lonlat(ξ - eps, η, panel)
+    # Handle longitude wrapping
+    dlon_dξ = _wrap_angle(lon_p - lon_m) / (2 * eps)
+    dlat_dξ = (lat_p - lat_m) / (2 * eps)
+
+    lon_p, lat_p = gnomonic_to_lonlat(ξ, η + eps, panel)
+    lon_m, lat_m = gnomonic_to_lonlat(ξ, η - eps, panel)
+    dlon_dη = _wrap_angle(lon_p - lon_m) / (2 * eps)
+    dlat_dη = (lat_p - lat_m) / (2 * eps)
+
+    # Invert the 2×2 forward Jacobian to get d(ξ,η)/d(lon,lat)
+    det = dlon_dξ * dlat_dη - dlon_dη * dlat_dξ
+    dξ_dlon = dlat_dη / det
+    dξ_dlat = -dlon_dη / det
+    dη_dlon = -dlat_dξ / det
+    dη_dlat = dlon_dξ / det
+
+    return (dξ_dlon=dξ_dlon, dξ_dlat=dξ_dlat, dη_dlon=dη_dlon, dη_dlat=dη_dlat)
+end
+
+"""
+Wrap angle difference to [-π, π].
+"""
+function _wrap_angle(dθ)
+    while dθ > π; dθ -= 2π; end
+    while dθ < -π; dθ += 2π; end
+    return dθ
+end

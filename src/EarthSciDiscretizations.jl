@@ -51,6 +51,7 @@ export transform_indices, verify_connectivity
 # Exports: Metrics
 export gnomonic_to_lonlat, gnomonic_to_cart
 export gnomonic_metric, compute_cell_area, compute_edge_length
+export compute_coord_jacobian
 
 # Exports: Staggering
 export VarLocation, CellCenter, UEdge, VEdge, Corner
@@ -72,6 +73,9 @@ export ppm_reconstruction, ppm_reconstruction!
 export flux_1d
 export transport_2d
 export vertical_remap_tendency
+
+# Exports: Numerical transport operators
+export flux_1d_ppm!, transport_2d_linrood!
 
 # Exports: Discretization pipeline
 export FVCubedSphere
