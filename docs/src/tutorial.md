@@ -85,14 +85,30 @@ function get_snapshot(sol, u_sym, grid, tidx)
     return q
 end
 
+# Interpolate cell-center values to cell corners for vertex coloring
+function to_corners(q_panel, Nc)
+    c = zeros(Nc + 1, Nc + 1)
+    for ii in 1:Nc+1, jj in 1:Nc+1
+        n = 0; v = 0.0
+        for di in -1:0, dj in -1:0
+            ci, cj = ii + di, jj + dj
+            if 1 <= ci <= Nc && 1 <= cj <= Nc
+                v += q_panel[ci, cj]; n += 1
+            end
+        end
+        c[ii, jj] = v / n
+    end
+    return c
+end
+
 # Build animation of diffusion over time
 fig = Figure(size=(900, 500))
 ga = GeoAxis(fig[1, 1]; dest="+proj=robin")
 
 q_initial = get_snapshot(sol, u_sym, grid, 1)
-color_obs = [Observable(q_initial[p, :, :]) for p in 1:6]
+color_obs = [Observable(to_corners(q_initial[p, :, :], Nc)) for p in 1:6]
 
-# Use edge coordinates so panels tile seamlessly (no gaps)
+# Use edge coordinates so panels tile seamlessly
 for p in 1:6
     lon_corners = zeros(Nc + 1, Nc + 1)
     lat_corners = zeros(Nc + 1, Nc + 1)
@@ -100,6 +116,8 @@ for p in 1:6
         lon_corners[ii, jj], lat_corners[ii, jj] =
             gnomonic_to_lonlat(grid.ξ_edges[ii], grid.η_edges[jj], p)
     end
+    # Clamp longitudes to [-180, 180] to avoid projection artifacts at map edges
+    clamp!(lon_corners, -π, π)
     surface!(ga, rad2deg.(lon_corners), rad2deg.(lat_corners),
              zeros(Nc + 1, Nc + 1); color=color_obs[p], shading=NoShading,
              colormap=:viridis, colorrange=(0, 1))
@@ -112,7 +130,7 @@ frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round
 record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
     q = get_snapshot(sol, u_sym, grid, tidx)
     for p in 1:6
-        color_obs[p][] = q[p, :, :]
+        color_obs[p][] = to_corners(q[p, :, :], Nc)
     end
 end
 nothing # hide
