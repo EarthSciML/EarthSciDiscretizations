@@ -79,6 +79,20 @@ end
     @test _identify_lhs_dv(lhs_v, dvs) === dvs[2]
 end
 
+@testitem "Dimension identification" setup=[DiscretizerSetup] tags=[:discretizer] begin
+    @test identify_dimension(:t) == :t
+    @test identify_dimension(:lon) == :lon
+    @test identify_dimension(:lat) == :lat
+    @test identify_dimension(:x) == :xi
+    @test identify_dimension(:y) == :eta
+    @test identify_dimension(:z) == :vertical
+    # Physical coordinates are distinguished from computational ones
+    @test identify_dimension(:ξ) == :xi
+    @test identify_dimension(:η) == :eta
+    @test identify_dimension(:λ) == :lon
+    @test identify_dimension(:φ) == :lat
+end
+
 @testitem "Multi-variable discretization" setup=[DiscretizerSetup] tags=[:discretizer] begin
     @parameters lon lat
     @variables u(..) v(..)

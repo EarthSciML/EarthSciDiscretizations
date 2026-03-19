@@ -15,6 +15,14 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     ginv_ξξ::Array{T,3}     # Inverse metric g^{ξξ}
     ginv_ηη::Array{T,3}     # Inverse metric g^{ηη}
     ginv_ξη::Array{T,3}     # Inverse metric g^{ξη}
+    # Physical-to-computational coordinate Jacobian: d(ξ,η)/d(lon,lat)
+    dξ_dlon::Array{T,3}
+    dξ_dlat::Array{T,3}
+    dη_dlon::Array{T,3}
+    dη_dlat::Array{T,3}
+    # Center-to-center physical distances
+    dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
+    dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
 end
 
 function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
@@ -65,9 +73,38 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         ginv_ξη[p, i, j] = -gxe / det_g
     end
 
+    # Precompute physical-to-computational coordinate Jacobian
+    dξ_dlon_arr = zeros(T, 6, Nc, Nc)
+    dξ_dlat_arr = zeros(T, 6, Nc, Nc)
+    dη_dlon_arr = zeros(T, 6, Nc, Nc)
+    dη_dlat_arr = zeros(T, 6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        jac = compute_coord_jacobian(ξ_centers[i], η_centers[j], p)
+        dξ_dlon_arr[p, i, j] = jac.dξ_dlon
+        dξ_dlat_arr[p, i, j] = jac.dξ_dlat
+        dη_dlon_arr[p, i, j] = jac.dη_dlon
+        dη_dlat_arr[p, i, j] = jac.dη_dlat
+    end
+
+    # Precompute center-to-center physical distances
+    dist_xi = zeros(T, 6, Nc - 1, Nc)
+    for p in 1:6, i in 1:Nc-1, j in 1:Nc
+        v1 = gnomonic_to_cart(ξ_centers[i], η_centers[j], p)
+        v2 = gnomonic_to_cart(ξ_centers[i+1], η_centers[j], p)
+        dist_xi[p, i, j] = R * acos(clamp(dot(v1, v2), -1.0, 1.0))
+    end
+    dist_eta = zeros(T, 6, Nc, Nc - 1)
+    for p in 1:6, i in 1:Nc, j in 1:Nc-1
+        v1 = gnomonic_to_cart(ξ_centers[i], η_centers[j], p)
+        v2 = gnomonic_to_cart(ξ_centers[i], η_centers[j+1], p)
+        dist_eta[p, i, j] = R * acos(clamp(dot(v1, v2), -1.0, 1.0))
+    end
+
     CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
         lon, lat, area, dx, dy, dξ, dη, rotation_angles,
-        J_arr, ginv_ξξ, ginv_ηη, ginv_ξη)
+        J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
+        dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
+        dist_xi, dist_eta)
 end
 
 total_area(grid::CubedSphereGrid) = sum(grid.area)

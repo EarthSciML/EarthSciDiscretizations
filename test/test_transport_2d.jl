@@ -4,7 +4,7 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "2D transport of constant field is zero" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "2D Lax-Friedrichs transport of constant field is zero" setup=[Transport2DSetup] tags=[:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -19,7 +19,7 @@ end
     @test all(abs.(tendency) .< 1e-12)
 end
 
-@testitem "2D transport is linear in q" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "2D Lax-Friedrichs transport is linear in q" setup=[Transport2DSetup] tags=[:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -37,4 +37,19 @@ end
     t_sum = evaluate_arrayop(ao_sum)
 
     @test isapprox(t_sum, t1 + t2; rtol=1e-10)
+end
+
+@testitem "Lin-Rood 2D transport of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    q = fill(5.0, 6, Nc, Nc)
+    vel_xi = fill(0.0, 6, Nc + 1, Nc)
+    vel_eta = fill(0.0, 6, Nc, Nc + 1)
+    dt = 0.01
+
+    tendency = zeros(6, Nc, Nc)
+    transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
+
+    @test all(abs.(tendency) .< 1e-14)
 end
