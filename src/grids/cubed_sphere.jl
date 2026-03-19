@@ -20,6 +20,13 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     dξ_dlat::Array{T,3}
     dη_dlon::Array{T,3}
     dη_dlat::Array{T,3}
+    # Second-derivative coordinate Jacobian: d²(ξ,η)/d(lon,lat)²
+    d2ξ_dlon2::Array{T,3}
+    d2ξ_dlondlat::Array{T,3}
+    d2ξ_dlat2::Array{T,3}
+    d2η_dlon2::Array{T,3}
+    d2η_dlondlat::Array{T,3}
+    d2η_dlat2::Array{T,3}
     # Center-to-center physical distances
     dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
     dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
@@ -86,6 +93,23 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dη_dlat_arr[p, i, j] = jac.dη_dlat
     end
 
+    # Precompute second-derivative coordinate Jacobian
+    d2ξ_dlon2_arr = zeros(T, 6, Nc, Nc)
+    d2ξ_dlondlat_arr = zeros(T, 6, Nc, Nc)
+    d2ξ_dlat2_arr = zeros(T, 6, Nc, Nc)
+    d2η_dlon2_arr = zeros(T, 6, Nc, Nc)
+    d2η_dlondlat_arr = zeros(T, 6, Nc, Nc)
+    d2η_dlat2_arr = zeros(T, 6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        jac2 = compute_second_coord_jacobian(ξ_centers[i], η_centers[j], p)
+        d2ξ_dlon2_arr[p, i, j] = jac2.d2ξ_dlon2
+        d2ξ_dlondlat_arr[p, i, j] = jac2.d2ξ_dlondlat
+        d2ξ_dlat2_arr[p, i, j] = jac2.d2ξ_dlat2
+        d2η_dlon2_arr[p, i, j] = jac2.d2η_dlon2
+        d2η_dlondlat_arr[p, i, j] = jac2.d2η_dlondlat
+        d2η_dlat2_arr[p, i, j] = jac2.d2η_dlat2
+    end
+
     # Precompute center-to-center physical distances
     dist_xi = zeros(T, 6, Nc - 1, Nc)
     for p in 1:6, i in 1:Nc-1, j in 1:Nc
@@ -104,6 +128,8 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         lon, lat, area, dx, dy, dξ, dη, rotation_angles,
         J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
+        d2ξ_dlon2_arr, d2ξ_dlondlat_arr, d2ξ_dlat2_arr,
+        d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
         dist_xi, dist_eta)
 end
 

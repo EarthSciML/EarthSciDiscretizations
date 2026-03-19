@@ -44,13 +44,21 @@ The $\eta$-component at interior V-edges:
 
 ### Laplacian
 
-The discrete Laplacian uses a 5-point stencil with metric corrections:
+The full covariant Laplacian on the cubed sphere is:
 
 ```math
-\nabla^2 \phi_{p,i,j} = \frac{1}{A_{p,i,j}} \left[ \frac{\phi_{p,i+1,j} - \phi_{p,i,j}}{\Delta \xi} \Delta x_{p,i+1,j} - \frac{\phi_{p,i,j} - \phi_{p,i-1,j}}{\Delta \xi} \Delta x_{p,i,j} + \frac{\phi_{p,i,j+1} - \phi_{p,i,j}}{\Delta \eta} \Delta y_{p,i,j+1} - \frac{\phi_{p,i,j} - \phi_{p,i,j-1}}{\Delta \eta} \Delta y_{p,i,j} \right]
+\nabla^2 \phi = \frac{1}{J} \left[ \frac{\partial}{\partial \xi}\left(J\, g^{\xi\xi} \frac{\partial \phi}{\partial \xi} + J\, g^{\xi\eta} \frac{\partial \phi}{\partial \eta}\right) + \frac{\partial}{\partial \eta}\left(J\, g^{\xi\eta} \frac{\partial \phi}{\partial \xi} + J\, g^{\eta\eta} \frac{\partial \phi}{\partial \eta}\right) \right]
 ```
 
-The edge lengths $\Delta x$ and $\Delta y$ account for the non-uniform metric of the gnomonic projection.
+where $J$ is the Jacobian determinant and $g^{\alpha\beta}$ are the inverse metric tensor components.
+
+The discrete operator uses a 5-point orthogonal stencil plus a cross-metric correction:
+
+```math
+\nabla^2 \phi_{p,i,j} \approx \frac{1}{A_{p,i,j}} \left[ \text{(face gradient} \times \text{edge length)} \right] + \frac{2\, g^{\xi\eta}}{J} \frac{\partial^2 \phi}{\partial \xi \, \partial \eta}
+```
+
+The orthogonal part uses physical center-to-center distances and edge lengths. The cross-metric $g^{\xi\eta}$ correction uses a 4-point cross-stencil (9-point total) to account for the non-orthogonality of the gnomonic cubed-sphere grid.
 
 
 ### Transport
@@ -75,7 +83,7 @@ The Piecewise Parabolic Method (PPM) provides higher-order sub-grid reconstructi
 
 ### Vertical Remapping
 
-Vertical remapping using PPM is planned but not yet implemented.
+Vertical remapping uses PPM with Colella-Woodward (1984) monotonicity limiting to conservatively remap quantities between different vertical layer structures. The remapping preserves column-integrated mass ($\sum q \cdot \Delta p$) exactly. See `vertical_remap_tendency`.
 
 
 ## C-Grid Staggering

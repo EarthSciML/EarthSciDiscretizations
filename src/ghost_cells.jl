@@ -32,6 +32,29 @@ function fill_ghost_cells!(q_ext, q, grid::CubedSphereGrid, loc::VarLocation = C
             end
         end
     end
+
+    # Fill corner ghost cells by resolving through two successive edge crossings.
+    # At cube vertices (where 3 panels meet), we pick values from the nearest
+    # edge ghost cell, which was already filled above.
+    for p in 1:6
+        # SW corner: extended indices (1:Ng, 1:Ng)
+        for gi in 1:Ng, gj in 1:Ng
+            q_ext[p, gi, gj] = q_ext[p, gi, Ng + 1]
+        end
+        # SE corner: extended indices (ni+Ng+1:ni+2Ng, 1:Ng)
+        for gi in 1:Ng, gj in 1:Ng
+            q_ext[p, ni + Ng + gi, gj] = q_ext[p, ni + Ng + gi, Ng + 1]
+        end
+        # NW corner: extended indices (1:Ng, nj+Ng+1:nj+2Ng)
+        for gi in 1:Ng, gj in 1:Ng
+            q_ext[p, gi, nj + Ng + gj] = q_ext[p, gi, nj + Ng]
+        end
+        # NE corner: extended indices (ni+Ng+1:ni+2Ng, nj+Ng+1:nj+2Ng)
+        for gi in 1:Ng, gj in 1:Ng
+            q_ext[p, ni + Ng + gi, nj + Ng + gj] = q_ext[p, ni + Ng + gi, nj + Ng]
+        end
+    end
+
     return q_ext
 end
 
