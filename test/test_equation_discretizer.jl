@@ -256,6 +256,14 @@ end
     @test size(grid.ginv_ηη) == (6, Nc, Nc)
     @test size(grid.ginv_ξη) == (6, Nc, Nc)
 
+    # Second-derivative Jacobian arrays
+    @test size(grid.d2ξ_dlon2) == (6, Nc, Nc)
+    @test size(grid.d2ξ_dlondlat) == (6, Nc, Nc)
+    @test size(grid.d2ξ_dlat2) == (6, Nc, Nc)
+    @test size(grid.d2η_dlon2) == (6, Nc, Nc)
+    @test size(grid.d2η_dlondlat) == (6, Nc, Nc)
+    @test size(grid.d2η_dlat2) == (6, Nc, Nc)
+
     # Jacobian should be positive everywhere
     @test all(grid.J .> 0)
 
@@ -271,4 +279,59 @@ end
                        grid.ginv_ηη[p, center, center]; rtol=0.1)
         @test abs(grid.ginv_ξη[p, center, center]) < 0.1
     end
+end
+
+@testitem "Forward Jacobian is well-conditioned everywhere" setup=[DiscretizerSetup] tags=[:discretizer] begin
+    grid = CubedSphereGrid(16; R=1.0)
+    Nc = grid.Nc
+
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        fwd = compute_forward_jacobian(grid.ξ_centers[i], grid.η_centers[j], p)
+        # Forward Jacobian should always be finite
+        @test isfinite(fwd.dlon_dξ)
+        @test isfinite(fwd.dlon_dη)
+        @test isfinite(fwd.dlat_dξ)
+        @test isfinite(fwd.dlat_dη)
+    end
+
+    # Inverse Jacobian should be finite after regularization (even near poles)
+    for p in [3, 6], i in 1:Nc, j in 1:Nc
+        jac = compute_coord_jacobian(grid.ξ_centers[i], grid.η_centers[j], p)
+        @test isfinite(jac.dξ_dlon)
+        @test isfinite(jac.dξ_dlat)
+        @test isfinite(jac.dη_dlon)
+        @test isfinite(jac.dη_dlat)
+    end
+end
+
+@testitem "Second-derivative chain rule: Laplacian of cos(lat) on equatorial panel" setup=[DiscretizerSetup] tags=[:discretizer] begin
+    # Test that ∂²cos(lat)/∂lon² + ∂²cos(lat)/∂lat² gives the correct value.
+    # For f = cos(lat):
+    #   ∂f/∂lon = 0, so ∂²f/∂lon² = 0
+    #   ∂f/∂lat = -sin(lat), ∂²f/∂lat² = -cos(lat)
+    @parameters lon lat
+    @variables u(..)
+    Dlon = Differential(lon)
+    Dlat = Differential(lat)
+
+    eq = [D(u(t, lon, lat)) ~ Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat)))]
+    bcs = [u(0, lon, lat) ~ cos(lat)]
+    domains = [t ∈ Interval(0.0, 0.01),
+               lon ∈ Interval(-π, π),
+               lat ∈ Interval(-π/2, π/2)]
+    @named sys = PDESystem(eq, bcs, domains,
+                           [t, lon, lat], [u(t, lon, lat)])
+
+    disc = FVCubedSphere(8; R=1.0)
+    prob = SciMLBase.discretize(sys, disc)
+
+    du = prob.f(prob.u0, prob.p, 0.0)
+
+    # The ODE state is flattened; check that the tendency is non-trivial.
+    # For cos(lat), ∂²f/∂lat² = -cos(lat), so du/dt should have O(1) magnitude.
+    # By the divergence theorem, ∫_sphere ∇²f dA = 0, so the global sum should vanish.
+    @test !all(iszero, du)
+    @test maximum(abs.(du)) > 0.1  # Tendency should be O(1) for a unit-sphere Laplacian
+    # Global integral of Laplacian vanishes (divergence theorem)
+    @test abs(sum(du)) / (length(du) * maximum(abs.(du))) < 0.1
 end

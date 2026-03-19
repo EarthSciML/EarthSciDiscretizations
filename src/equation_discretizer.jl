@@ -252,28 +252,49 @@ function _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
 end
 
 """
-Second derivative with chain-rule coordinate transformation.
+Second derivative with full chain-rule coordinate transformation.
 
-For physical coordinates, applies the chain rule. For example:
+For physical coordinates, applies the complete chain rule including the
+second-derivative correction terms that arise from the nonlinear mapping:
     ∂²u/∂lon² = (∂ξ/∂lon)²·∂²u/∂ξ² + 2(∂ξ/∂lon)(∂η/∂lon)·∂²u/(∂ξ∂η) + (∂η/∂lon)²·∂²u/∂η²
+              + (∂²ξ/∂lon²)·∂u/∂ξ + (∂²η/∂lon²)·∂u/∂η
+
+Uses plain centered second differences (not metric-weighted operators)
+for the ∂²u/∂ξ² and ∂²u/∂η² terms, as required by the chain rule.
 
 For computational coordinates, uses direct stencils.
 """
 function _second_deriv(innermost, dim_outer, dim_inner, disc_vars, dvs,
                         p, i, j, neighbors, dξ, dη, grid)
-    # Compute all three computational-coordinate second derivatives
-    d2u_dξ2 = _comp_second_deriv_xi(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, grid)
-    d2u_dη2 = _comp_second_deriv_eta(innermost, disc_vars, dvs, p, i, j, neighbors, dη, grid)
+    # Plain (non-metric-weighted) second differences in computational coords
+    d2u_dξ2 = _plain_second_deriv_xi(innermost, disc_vars, dvs, p, i, j, neighbors, dξ)
+    d2u_dη2 = _plain_second_deriv_eta(innermost, disc_vars, dvs, p, i, j, neighbors, dη)
     d2u_dξdη = _comp_mixed_deriv(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, dη)
 
-    # Map outer/inner dimensions to chain-rule coefficients
+    # First derivatives (needed for second-order correction terms)
+    pip1 = neighbors.pip1; pim1 = neighbors.pim1
+    pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
+    u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
+    u_im1 = _get_dv_value(innermost, disc_vars, dvs, pim1...)
+    u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
+    u_jm1 = _get_dv_value(innermost, disc_vars, dvs, pjm1...)
+    du_dξ = (u_ip1 - u_im1) / (2 * dξ)
+    du_dη = (u_jp1 - u_jm1) / (2 * dη)
+
+    # Chain-rule coefficients (first derivatives of coordinate map)
     a_ξ_outer, a_η_outer = _chain_rule_coeffs(dim_outer, grid, p, i, j)
     a_ξ_inner, a_η_inner = _chain_rule_coeffs(dim_inner, grid, p, i, j)
 
-    # Full chain rule: Σ_k Σ_l (∂x_k/∂dim_outer)(∂x_l/∂dim_inner) ∂²u/(∂x_k ∂x_l)
+    # Second-derivative chain-rule correction coefficients: (∂²ξ/∂x∂y, ∂²η/∂x∂y)
+    b_ξ, b_η = _second_chain_rule_coeffs(dim_outer, dim_inner, grid, p, i, j)
+
+    # Full chain rule for second derivatives:
+    # ∂²u/∂x∂y = Σ_k Σ_l (∂ξ_k/∂x)(∂ξ_l/∂y) ∂²u/(∂ξ_k ∂ξ_l)
+    #           + Σ_k (∂²ξ_k/∂x∂y) ∂u/∂ξ_k
     return (a_ξ_outer * a_ξ_inner * d2u_dξ2 +
             (a_ξ_outer * a_η_inner + a_η_outer * a_ξ_inner) * d2u_dξdη +
-            a_η_outer * a_η_inner * d2u_dη2)
+            a_η_outer * a_η_inner * d2u_dη2 +
+            b_ξ * du_dξ + b_η * du_dη)
 end
 
 """
@@ -294,11 +315,56 @@ function _chain_rule_coeffs(dim, grid, p, i, j)
 end
 
 """
-Computational-coordinate second derivative in ξ:
-    (1/J)·∂/∂ξ(J·g^{ξξ}·∂u/∂ξ) with half-point averaged metrics.
+Return (coeff_ξ, coeff_η) for the second-derivative chain-rule correction.
+These are the (∂²ξ/∂x∂y, ∂²η/∂x∂y) terms that arise because the coordinate
+mapping is nonlinear.
 """
-function _comp_second_deriv_xi(innermost, disc_vars, dvs,
-                                p, i, j, neighbors, dξ, grid)
+function _second_chain_rule_coeffs(dim_outer, dim_inner, grid, p, i, j)
+    if dim_outer == :lon && dim_inner == :lon
+        return (grid.d2ξ_dlon2[p, i, j], grid.d2η_dlon2[p, i, j])
+    elseif dim_outer == :lat && dim_inner == :lat
+        return (grid.d2ξ_dlat2[p, i, j], grid.d2η_dlat2[p, i, j])
+    elseif (dim_outer == :lon && dim_inner == :lat) || (dim_outer == :lat && dim_inner == :lon)
+        return (grid.d2ξ_dlondlat[p, i, j], grid.d2η_dlondlat[p, i, j])
+    else
+        # Computational coordinates: no second-order correction
+        return (0.0, 0.0)
+    end
+end
+
+"""
+Plain centered second difference in ξ: (u_{i+1} - 2u_i + u_{i-1}) / dξ².
+No metric weighting — this is the form required by the chain rule.
+"""
+function _plain_second_deriv_xi(innermost, disc_vars, dvs,
+                                 p, i, j, neighbors, dξ)
+    pip1 = neighbors.pip1; pim1 = neighbors.pim1
+    u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
+    u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
+    u_im1 = _get_dv_value(innermost, disc_vars, dvs, pim1...)
+    return (u_ip1 - 2 * u_ij + u_im1) / (dξ^2)
+end
+
+"""
+Plain centered second difference in η: (u_{j+1} - 2u_j + u_{j-1}) / dη².
+No metric weighting — this is the form required by the chain rule.
+"""
+function _plain_second_deriv_eta(innermost, disc_vars, dvs,
+                                  p, i, j, neighbors, dη)
+    pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
+    u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
+    u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
+    u_jm1 = _get_dv_value(innermost, disc_vars, dvs, pjm1...)
+    return (u_jp1 - 2 * u_ij + u_jm1) / (dη^2)
+end
+
+"""
+Covariant second derivative in ξ:
+    (1/J)·∂/∂ξ(J·g^{ξξ}·∂u/∂ξ) with half-point averaged metrics.
+Used by the covariant Laplacian (not the chain-rule path).
+"""
+function _covariant_second_deriv_xi(innermost, disc_vars, dvs,
+                                     p, i, j, neighbors, dξ, grid)
     pip1 = neighbors.pip1; pim1 = neighbors.pim1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
@@ -317,11 +383,12 @@ function _comp_second_deriv_xi(innermost, disc_vars, dvs,
 end
 
 """
-Computational-coordinate second derivative in η:
+Covariant second derivative in η:
     (1/J)·∂/∂η(J·g^{ηη}·∂u/∂η) with half-point averaged metrics.
+Used by the covariant Laplacian (not the chain-rule path).
 """
-function _comp_second_deriv_eta(innermost, disc_vars, dvs,
-                                 p, i, j, neighbors, dη, grid)
+function _covariant_second_deriv_eta(innermost, disc_vars, dvs,
+                                      p, i, j, neighbors, dη, grid)
     pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
@@ -337,6 +404,17 @@ function _comp_second_deriv_eta(innermost, disc_vars, dvs,
         J_jp * ginv_jp * (u_jp1 - u_ij) / dη -
         J_jm * ginv_jm * (u_ij - u_jm1) / dη
     ) / dη
+end
+
+"""
+Covariant cross-derivative term for the Laplacian:
+    (1/J)·∂/∂ξ(J·g^{ξη}·∂u/∂η) + (1/J)·∂/∂η(J·g^{ξη}·∂u/∂ξ)
+Approximated as 2·(g^{ξη}/J)·∂²u/(∂ξ∂η) at the cell center.
+"""
+function _covariant_cross_deriv(innermost, disc_vars, dvs,
+                                 p, i, j, neighbors, dξ, dη, grid)
+    d2u_dξdη = _comp_mixed_deriv(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, dη)
+    return 2 * grid.ginv_ξη[p, i, j] * d2u_dξdη
 end
 
 """

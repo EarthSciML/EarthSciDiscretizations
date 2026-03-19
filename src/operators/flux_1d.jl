@@ -81,8 +81,9 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
                 # Interface value at i-1/2 (between cell i-1 and cell i)
                 qi_half = (7.0 / 12.0) * (qim1 + qi) - (1.0 / 12.0) * (qim2 + qip1)
 
-                # Compute Courant number at this interface
-                c = vel[p, i, j] * dt / (grid.R * grid.dξ)
+                # Compute Courant number using physical center-to-center distance
+                i_cell = clamp(i - 1, 1, Nc - 1)
+                c = vel[p, i, j] * dt / grid.dist_xi[p, i_cell, j]
 
                 if c >= 0
                     # Upwind cell is i-1 (to the left)
@@ -118,7 +119,9 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
 
                 qj_half = (7.0 / 12.0) * (qjm1 + qj) - (1.0 / 12.0) * (qjm2 + qjp1)
 
-                c = vel[p, i, j] * dt / (grid.R * grid.dη)
+                # Compute Courant number using physical center-to-center distance
+                j_cell = clamp(j - 1, 1, Nc - 1)
+                c = vel[p, i, j] * dt / grid.dist_eta[p, i, j_cell]
 
                 if c >= 0
                     ql_left = (7.0 / 12.0) * (qjm2 + qjm1) - (1.0 / 12.0) * (q_ext[p, ie, je - 3] + qj)

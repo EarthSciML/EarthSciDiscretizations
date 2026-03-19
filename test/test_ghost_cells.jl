@@ -86,6 +86,40 @@ end
     @test ghost_array_size(UEdge, Nc, Ng) == (6, Nc + 1 + 2Ng, Nc + 2Ng)
 end
 
+@testitem "Corner ghost cells are filled" setup=[GhostSetup] tags=[:ghost] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc)
+    Ng = grid.Ng
+
+    # Create a field with unique non-zero values
+    q = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        q[p, i, j] = 100.0 * p + 10.0 * i + j
+    end
+
+    q_ext = extend_with_ghosts(q, grid)
+
+    # Corner ghost cells should be non-zero (were previously left as 0)
+    for p in 1:6
+        # SW corner
+        for gi in 1:Ng, gj in 1:Ng
+            @test q_ext[p, gi, gj] != 0.0
+        end
+        # SE corner
+        for gi in 1:Ng, gj in 1:Ng
+            @test q_ext[p, Nc + Ng + gi, gj] != 0.0
+        end
+        # NW corner
+        for gi in 1:Ng, gj in 1:Ng
+            @test q_ext[p, gi, Nc + Ng + gj] != 0.0
+        end
+        # NE corner
+        for gi in 1:Ng, gj in 1:Ng
+            @test q_ext[p, Nc + Ng + gi, Nc + Ng + gj] != 0.0
+        end
+    end
+end
+
 @testitem "Discrete space creation" setup=[GhostSetup] tags=[:ghost] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)

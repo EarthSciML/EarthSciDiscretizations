@@ -51,7 +51,7 @@ export transform_indices, verify_connectivity
 # Exports: Metrics
 export gnomonic_to_lonlat, gnomonic_to_cart
 export gnomonic_metric, compute_cell_area, compute_edge_length
-export compute_coord_jacobian
+export compute_coord_jacobian, compute_forward_jacobian, compute_second_coord_jacobian
 
 # Exports: Staggering
 export VarLocation, CellCenter, UEdge, VEdge, Corner

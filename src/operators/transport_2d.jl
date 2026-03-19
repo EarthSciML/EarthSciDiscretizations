@@ -33,6 +33,35 @@ function transport_2d(q, courant_xi, courant_eta, grid::CubedSphereGrid)
 end
 
 """
+    _advective_tendency!(tend_adv, tend_flux, q, vel, grid, dim)
+
+Convert a flux-form tendency to advective-form by adding the convergence
+deformation correction:
+    (dq/dt)_advective = (dq/dt)_flux + q · C_def
+
+where C_def = (1/A) · δ(v · edge_length) is the velocity convergence.
+The advective form correctly preserves uniform mixing ratios in
+convergent/divergent flow fields.
+"""
+function _advective_tendency!(tend_adv, tend_flux, q, vel, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    if dim == :xi
+        for p in 1:6, i in 1:Nc, j in 1:Nc
+            c_def = (vel[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                     vel[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+            tend_adv[p, i, j] = tend_flux[p, i, j] + q[p, i, j] * c_def
+        end
+    else  # :eta
+        for p in 1:6, i in 1:Nc, j in 1:Nc
+            c_def = (vel[p, i, j + 1] * grid.dy[p, i, j + 1] -
+                     vel[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
+            tend_adv[p, i, j] = tend_flux[p, i, j] + q[p, i, j] * c_def
+        end
+    end
+    return tend_adv
+end
+
+"""
     transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
 
 Lin-Rood (1996) dimensionally-split 2D transport with PPM reconstruction.
@@ -40,9 +69,11 @@ Lin-Rood (1996) dimensionally-split 2D transport with PPM reconstruction.
 Implements the dimensionally-split scheme:
     q^{n+1} = q^n + F[u*, dt, q^θ] + G[v*, dt, q^λ]
 
-where the inner operators provide cross-directional half-step updates:
-    q^θ = q^n + (1/2)·G[v*, dt, q^n]     (half-step in η)
-    q^λ = q^n + (1/2)·F[u*, dt, q^n]     (half-step in ξ)
+where the inner operators use the ADVECTIVE form for the half-step updates
+(preserving uniform mixing ratios) and the FLUX form for the full step
+(ensuring conservation):
+    q^θ = q^n + (1/2)·g[v*, dt, q^n]     (advective half-step in η)
+    q^λ = q^n + (1/2)·f[u*, dt, q^n]     (advective half-step in ξ)
 
 This eliminates first-order splitting errors present in naive operator splitting.
 
@@ -60,20 +91,23 @@ function transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid::CubedSphereGr
     # Temporary arrays
     tend_xi = zeros(6, Nc, Nc)
     tend_eta = zeros(6, Nc, Nc)
+    tend_adv = zeros(6, Nc, Nc)
     q_theta = zeros(6, Nc, Nc)
     q_lambda = zeros(6, Nc, Nc)
 
-    # Step 1: Half-step intermediate in η-direction
-    # q^θ = q^n + (1/2)·G[v*, dt, q^n]
+    # Step 1: Half-step intermediate in η-direction using ADVECTIVE form
+    # q^θ = q^n + (1/2)·g[v*, dt, q^n]
     flux_1d_ppm!(tend_eta, q, vel_eta, grid, :eta, dt)
-    @. q_theta = q + 0.5 * dt * tend_eta
+    _advective_tendency!(tend_adv, tend_eta, q, vel_eta, grid, :eta)
+    @. q_theta = q + 0.5 * dt * tend_adv
 
-    # Step 2: Half-step intermediate in ξ-direction
-    # q^λ = q^n + (1/2)·F[u*, dt, q^n]
+    # Step 2: Half-step intermediate in ξ-direction using ADVECTIVE form
+    # q^λ = q^n + (1/2)·f[u*, dt, q^n]
     flux_1d_ppm!(tend_xi, q, vel_xi, grid, :xi, dt)
-    @. q_lambda = q + 0.5 * dt * tend_xi
+    _advective_tendency!(tend_adv, tend_xi, q, vel_xi, grid, :xi)
+    @. q_lambda = q + 0.5 * dt * tend_adv
 
-    # Step 3: Full step with cross-terms
+    # Step 3: Full step with FLUX form (for conservation)
     # tendency = F[u*, dt, q^θ] + G[v*, dt, q^λ]
     flux_1d_ppm!(tend_xi, q_theta, vel_xi, grid, :xi, dt)
     flux_1d_ppm!(tend_eta, q_lambda, vel_eta, grid, :eta, dt)
