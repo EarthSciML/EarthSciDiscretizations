@@ -347,6 +347,11 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
 
             dv = _match_dv(innermost, dvs)
             if dv !== nothing && dim == inner_dim
+                # Each ∂²u/∂x² maps to the full covariant Laplacian.
+                # Scale by 1/n_spatial so that the conventional sum
+                # ∂²u/∂lon² + ∂²u/∂lat² produces exactly one Laplacian.
+                n_spatial = length(spatial_ivs)
+
                 u_c = const_wrap(ext_vars[dv])
 
                 # Build the covariant Laplacian stencil inline using shared idx vars.
@@ -382,7 +387,7 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
                         wrap(dJgxe_dξ_c[p, i, j]) * du_dη +
                         wrap(dJgxe_dη_c[p, i, j]) * du_dξ)
 
-                return coeff * (orth + cross)
+                return (coeff / n_spatial) * (orth + cross)
             end
         end
 

@@ -16,7 +16,8 @@ The diffusion equation on the sphere is:
 ```
 
 where ``\lambda`` and ``\varphi`` are longitude and latitude, and ``\kappa``
-is the diffusion coefficient.
+is the diffusion coefficient. The library automatically maps this notation
+to the covariant Laplacian on the cubed-sphere grid.
 
 ## Step 1: Define the PDE
 
@@ -72,7 +73,7 @@ using CairoMakie, GeoMakie
 
 grid = CubedSphereGrid(Nc; R=1.0)
 
-# Extract solution at a given time
+# Extract solution at a given time using symbolic indexing
 u_sym = first(@variables u(t)[1:6, 1:Nc, 1:Nc])
 
 function get_snapshot(sol, u_sym, grid, tidx)
@@ -84,48 +85,28 @@ function get_snapshot(sol, u_sym, grid, tidx)
     return q
 end
 
-function plot_cubed_sphere(grid, q; title="", colorrange=nothing)
-    Nc = grid.Nc
-    cr = isnothing(colorrange) ? (minimum(q), maximum(q)) : colorrange
-    fig = Figure(size=(900, 500))
-    ga = GeoAxis(fig[1, 1]; dest="+proj=robin", title=title)
-    for p in 1:6
-        surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
-                 zeros(Nc, Nc); color=q[p, :, :], shading=NoShading,
-                 colormap=:viridis, colorrange=cr)
-    end
-    lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
-    Colorbar(fig[1, 2]; colormap=:viridis, colorrange=cr, label="u")
-    fig
-end
-
-q_initial = get_snapshot(sol, u_sym, grid, 1)
-fig = plot_cubed_sphere(grid, q_initial; title="Initial condition", colorrange=(0, 1))
-fig
-```
-
-```@example tutorial
-q_final = get_snapshot(sol, u_sym, grid, length(sol.t))
-fig = plot_cubed_sphere(grid, q_final; title="Final state (t=$(sol.t[end]))",
-                        colorrange=(0, 1))
-fig
-```
-
-## Step 4: Animate
-
-```@example tutorial
+# Build animation of diffusion over time
 fig = Figure(size=(900, 500))
 ga = GeoAxis(fig[1, 1]; dest="+proj=robin")
 
+q_initial = get_snapshot(sol, u_sym, grid, 1)
 color_obs = [Observable(q_initial[p, :, :]) for p in 1:6]
+
+# Use edge coordinates so panels tile seamlessly (no gaps)
 for p in 1:6
-    surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
-             zeros(Nc, Nc); color=color_obs[p], shading=NoShading,
+    lon_corners = zeros(Nc + 1, Nc + 1)
+    lat_corners = zeros(Nc + 1, Nc + 1)
+    for ii in 1:Nc+1, jj in 1:Nc+1
+        lon_corners[ii, jj], lat_corners[ii, jj] =
+            gnomonic_to_lonlat(grid.ξ_edges[ii], grid.η_edges[jj], p)
+    end
+    surface!(ga, rad2deg.(lon_corners), rad2deg.(lat_corners),
+             zeros(Nc + 1, Nc + 1); color=color_obs[p], shading=NoShading,
              colormap=:viridis, colorrange=(0, 1))
 end
 lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
 Colorbar(fig[1, 2]; colormap=:viridis, colorrange=(0, 1), label="u")
-# Sample frames from the solution
+
 frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round .|> Int |> unique
 
 record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
@@ -136,6 +117,8 @@ record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
 end
 nothing # hide
 ```
+
+![Diffusion on the sphere](diffusion.gif)
 
 ## What happened under the hood
 

@@ -281,3 +281,51 @@ end
     # Should not be zero everywhere
     @test maximum(abs.(result)) > 1e-3
 end
+
+# ============================================================
+# Task 8: Double-Laplacian deduplication
+# ============================================================
+
+@testitem "∂²u/∂lon² + ∂²u/∂lat² produces single Laplacian" setup=[FixesSetup] begin
+    using ModelingToolkit
+    using ModelingToolkit: t_nounits as t, D_nounits as D
+    using Symbolics
+    using DomainSets
+    using OrdinaryDiffEqDefault
+    using SciMLBase
+
+    @parameters lon lat
+    @variables u(..)
+    Dlon = Differential(lon)
+    Dlat = Differential(lat)
+
+    bcs = [u(0, lon, lat) ~ exp(-10 * (lon^2 + lat^2))]
+    domains = [t ∈ Interval(0.0, 0.1),
+               lon ∈ Interval(-π, π),
+               lat ∈ Interval(-π/2, π/2)]
+
+    # Each ∂²u/∂x² maps to (1/n_spatial) of the full covariant Laplacian.
+    # So ∂²u/∂lon² + ∂²u/∂lat² (n_spatial=2) gives 1/2 + 1/2 = 1 Laplacian,
+    # and a single ∂²u/∂lon² gives 1/2 Laplacian.
+    # Therefore, RHS of (both with κ) should be 2× RHS of (one with κ).
+    eq_one  = [D(u(t, lon, lat)) ~ 0.1 * Dlon(Dlon(u(t, lon, lat)))]
+    eq_both = [D(u(t, lon, lat)) ~ 0.1 * (Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat))))]
+
+    @named sys_one  = PDESystem(eq_one,  bcs, domains, [t, lon, lat], [u(t, lon, lat)])
+    @named sys_both = PDESystem(eq_both, bcs, domains, [t, lon, lat], [u(t, lon, lat)])
+
+    Nc = 4
+    disc = FVCubedSphere(Nc; R=1.0)
+
+    prob_one  = discretize(sys_one, disc)
+    prob_both = discretize(sys_both, disc)
+
+    du_one  = similar(prob_one.u0);  prob_one.f(du_one, prob_one.u0, prob_one.p, 0.0)
+    du_both = similar(prob_both.u0); prob_both.f(du_both, prob_both.u0, prob_both.p, 0.0)
+
+    ratio = maximum(abs.(du_both)) / maximum(abs.(du_one))
+    @test isapprox(ratio, 2.0, rtol=0.1)
+
+    sol = solve(prob_both)
+    @test sol.retcode == SciMLBase.ReturnCode.Success
+end
