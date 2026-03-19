@@ -51,11 +51,11 @@ function discretize_equation(eq, disc_vars, dvs, spatial_ivs, grid, disc)
         pim1 = _neighbor_index(grid, p, i - 1, j)
         pjp1 = _neighbor_index(grid, p, i, j + 1)
         pjm1 = _neighbor_index(grid, p, i, j - 1)
-        # Corner neighbors for mixed derivatives
-        pip1jp1 = _neighbor_index(grid, pip1..., 0, 1)
-        pip1jm1 = _neighbor_index(grid, pip1..., 0, -1)
-        pim1jp1 = _neighbor_index(grid, pim1..., 0, 1)
-        pim1jm1 = _neighbor_index(grid, pim1..., 0, -1)
+        # Corner neighbors for mixed derivatives, with rotation-aware offsets
+        pip1jp1 = _diagonal_neighbor(grid, p, i, j, +1,  0, +1, pip1)
+        pip1jm1 = _diagonal_neighbor(grid, p, i, j, +1,  0, -1, pip1)
+        pim1jp1 = _diagonal_neighbor(grid, p, i, j, -1,  0, +1, pim1)
+        pim1jm1 = _diagonal_neighbor(grid, p, i, j, -1,  0, -1, pim1)
 
         neighbors = (pip1=pip1, pim1=pim1, pjp1=pjp1, pjm1=pjm1,
                      pip1jp1=pip1jp1, pip1jm1=pip1jm1,
@@ -137,6 +137,54 @@ end
 # Unpack tuple form
 function _neighbor_index(grid::CubedSphereGrid, pij::Tuple{Int,Int,Int}, di::Int, dj::Int)
     return _neighbor_index(grid, pij[1], pij[2] + di, pij[3] + dj)
+end
+
+"""
+    _diagonal_neighbor(grid, p, i, j, di_first, di_rest, dj_rest, first_nb)
+
+Compute the diagonal neighbor of cell (p, i, j) by first stepping in the
+ξ-direction by di_first (already resolved as `first_nb`), then stepping by
+(di_rest, dj_rest). When the first step crosses a panel boundary, the
+remaining offset is transformed into the neighbor panel's coordinate system
+using the precomputed rotation matrix.
+
+This fixes the issue where a naive offset in the neighbor panel's j-index
+does not correspond to the original panel's η-direction after a rotated
+panel crossing (e.g., panel 2 North → panel 3 East).
+"""
+function _diagonal_neighbor(grid::CubedSphereGrid, p::Int, i::Int, j::Int,
+                             di_first::Int, di_rest::Int, dj_rest::Int,
+                             first_nb::Tuple{Int,Int,Int})
+    Nc = grid.Nc
+    i_step = i + di_first
+
+    # Check if the first step crossed a panel boundary
+    crossed = first_nb[1] != p
+
+    if !crossed
+        # No boundary crossing: apply remaining offset directly
+        return _neighbor_index(grid, first_nb[1], first_nb[2] + di_rest, first_nb[3] + dj_rest)
+    end
+
+    # Determine which edge was crossed by the first step
+    if di_first > 0 && i_step > Nc
+        edge_dir = East
+    elseif di_first < 0 && i_step < 1
+        edge_dir = West
+    elseif dj_rest != 0 && di_first == 0  # shouldn't happen in current usage
+        edge_dir = dj_rest > 0 ? North : South
+    else
+        # Fallback: just apply directly (shouldn't happen for ξ-first diagonals)
+        return _neighbor_index(grid, first_nb..., di_rest, dj_rest)
+    end
+
+    # Transform remaining offset from local coords to neighbor coords using M^T
+    # M transforms neighbor→local, so M^T transforms local→neighbor
+    M11, M12, M21, M22 = grid.rotation_matrices[(p, edge_dir)]
+    di_nb = round(Int, M11 * di_rest + M21 * dj_rest)
+    dj_nb = round(Int, M12 * di_rest + M22 * dj_rest)
+
+    return _neighbor_index(grid, first_nb[1], first_nb[2] + di_nb, first_nb[3] + dj_nb)
 end
 
 """

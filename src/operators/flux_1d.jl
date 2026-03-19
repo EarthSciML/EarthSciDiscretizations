@@ -54,6 +54,12 @@ Arguments:
 - `grid`: CubedSphereGrid
 - `dim`: :xi or :eta
 - `dt`: time step
+
+!!! note "Conservation at panel boundaries"
+    At shared panel edges, fluxes are computed independently by each panel using
+    ghost cell data. The resulting fluxes agree to machine precision since both
+    panels access the same underlying data through ghost cells. For strict
+    bitwise conservation, an explicit flux-sharing step would be needed.
 """
 function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
     Nc = grid.Nc
@@ -81,9 +87,17 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
                 # Interface value at i-1/2 (between cell i-1 and cell i)
                 qi_half = (7.0 / 12.0) * (qim1 + qi) - (1.0 / 12.0) * (qim2 + qip1)
 
-                # Compute Courant number using physical center-to-center distance
-                i_cell = clamp(i - 1, 1, Nc - 1)
-                c = vel[p, i, j] * dt / grid.dist_xi[p, i_cell, j]
+                # Compute Courant number using physical center-to-center distance.
+                # At interior interfaces (2 ≤ i ≤ Nc), dist_xi[i-1] gives the
+                # exact center-to-center distance. At boundary interfaces (i=1
+                # and i=Nc+1), use dξ-scaled metric distance as an approximation
+                # since the ghost cell centers are equidistant by construction.
+                if 2 <= i <= Nc
+                    dist = grid.dist_xi[p, i - 1, j]
+                else
+                    dist = grid.dξ * grid.J[p, clamp(i, 1, Nc), j] / sqrt(grid.ginv_ξξ[p, clamp(i, 1, Nc), j])
+                end
+                c = vel[p, i, j] * dt / dist
 
                 if c >= 0
                     # Upwind cell is i-1 (to the left)
@@ -119,9 +133,13 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
 
                 qj_half = (7.0 / 12.0) * (qjm1 + qj) - (1.0 / 12.0) * (qjm2 + qjp1)
 
-                # Compute Courant number using physical center-to-center distance
-                j_cell = clamp(j - 1, 1, Nc - 1)
-                c = vel[p, i, j] * dt / grid.dist_eta[p, i, j_cell]
+                # Compute Courant number using physical center-to-center distance.
+                if 2 <= j <= Nc
+                    dist = grid.dist_eta[p, i, j - 1]
+                else
+                    dist = grid.dη * grid.J[p, i, clamp(j, 1, Nc)] / sqrt(grid.ginv_ηη[p, i, clamp(j, 1, Nc)])
+                end
+                c = vel[p, i, j] * dt / dist
 
                 if c >= 0
                     ql_left = (7.0 / 12.0) * (qjm2 + qjm1) - (1.0 / 12.0) * (q_ext[p, ie, je - 3] + qj)
