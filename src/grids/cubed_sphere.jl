@@ -10,6 +10,11 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     area::Array{T,3}; dx::Array{T,3}; dy::Array{T,3}
     dξ::T; dη::T
     rotation_angles::Dict{Tuple{Int,EdgeDirection},Float64}
+    # Metric tensor components at cell centers
+    J::Array{T,3}           # Jacobian
+    ginv_ξξ::Array{T,3}     # Inverse metric g^{ξξ}
+    ginv_ηη::Array{T,3}     # Inverse metric g^{ηη}
+    ginv_ξη::Array{T,3}     # Inverse metric g^{ξη}
 end
 
 function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
@@ -46,8 +51,23 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         rotation_angles[(p, dir)] = compute_rotation_angle(p, dir, nb.neighbor_panel, nb.neighbor_edge)
     end
 
+    # Precompute metric tensor and its inverse at cell centers
+    J_arr = zeros(T, 6, Nc, Nc)
+    ginv_ξξ = zeros(T, 6, Nc, Nc)
+    ginv_ηη = zeros(T, 6, Nc, Nc)
+    ginv_ξη = zeros(T, 6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        Jv, gxx, gee, gxe = gnomonic_metric(ξ_centers[i], η_centers[j], R)
+        J_arr[p, i, j] = Jv
+        det_g = gxx * gee - gxe^2
+        ginv_ξξ[p, i, j] = gee / det_g
+        ginv_ηη[p, i, j] = gxx / det_g
+        ginv_ξη[p, i, j] = -gxe / det_g
+    end
+
     CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
-        lon, lat, area, dx, dy, dξ, dη, rotation_angles)
+        lon, lat, area, dx, dy, dξ, dη, rotation_angles,
+        J_arr, ginv_ξξ, ginv_ηη, ginv_ξη)
 end
 
 total_area(grid::CubedSphereGrid) = sum(grid.area)

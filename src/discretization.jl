@@ -28,7 +28,7 @@ Discretize a PDESystem onto a cubed-sphere grid, returning an ODEProblem.
 
 The PDE must have independent variables `(t, x, y)` where the first is time
 and the remaining are spatial coordinates on the sphere. Spatial `Differential`
-operators are replaced with finite-volume stencil operators.
+operators are replaced with metric-corrected finite-volume stencil operators.
 """
 function SciMLBase.discretize(sys::PDESystem, disc::FVCubedSphere; kwargs...)
     grid = CubedSphereGrid(disc.Nc; R=disc.R, Ng=disc.Ng)
@@ -51,7 +51,6 @@ function SciMLBase.discretize(sys::PDESystem, disc::FVCubedSphere; kwargs...)
     disc_vars = Dict{Any,Any}()
     for dv in dvs
         name = Symbol(Symbolics.tosymbol(dv, escape=false))
-        # Create u(t)[1:6, 1:Nc, 1:Nc] using MTK's @variables
         arr = first(Symbolics.@variables $name(mtk_t)[1:6, 1:Nc, 1:Nc])
         disc_vars[dv] = arr
     end
@@ -89,34 +88,77 @@ function build_u0(sys::PDESystem, disc_vars, dvs, grid, compiled)
     Nc = grid.Nc
     u0 = Pair[]
 
-    # Find spatial IVs (non-time)
     spatial_ivs = [iv for iv in sys.ivs if identify_dimension(Symbol(iv)) != :t]
+    tspan = extract_tspan(sys)
+    t0 = tspan[1]
 
-    for (dv_idx, dv) in enumerate(dvs)
+    for dv in dvs
         arr = disc_vars[dv]
+        ic_found = false
 
-        # Find the initial condition BC for this DV (t=0 form)
         for bc in sys.bcs
-            rhs = bc.rhs
-            for p in 1:6, i in 1:Nc, j in 1:Nc
-                val = try
-                    subs = Dict{Any,Any}()
-                    if length(spatial_ivs) >= 1
-                        subs[spatial_ivs[1]] = grid.lon[p, i, j]
-                    end
-                    if length(spatial_ivs) >= 2
-                        subs[spatial_ivs[2]] = grid.lat[p, i, j]
-                    end
-                    v = Symbolics.value(Symbolics.substitute(rhs, subs))
-                    v isa Number ? Float64(v) : Float64(eval(Symbolics.toexpr(v)))
-                catch
-                    0.0
+            if _is_initial_condition(bc, dv, t0)
+                rhs = bc.rhs
+                for p in 1:6, i in 1:Nc, j in 1:Nc
+                    val = _eval_ic(rhs, spatial_ivs, grid, p, i, j)
+                    push!(u0, arr[p, i, j] => val)
                 end
-                push!(u0, arr[p, i, j] => val)
+                ic_found = true
+                break
             end
-            break  # Use first BC as IC
+        end
+
+        if !ic_found
+            # Default to zero if no IC found for this DV
+            for p in 1:6, i in 1:Nc, j in 1:Nc
+                push!(u0, arr[p, i, j] => 0.0)
+            end
         end
     end
 
     return u0
+end
+
+"""
+Check if a boundary condition is an initial condition for a given DV.
+An IC has the form `dv(t0, x, y) ~ expr(x, y)` where the first argument
+of the DV call equals the start of the time domain.
+"""
+function _is_initial_condition(bc, dv, t0)
+    lhs = unwrap(bc.lhs)
+    if !iscall(lhs)
+        return false
+    end
+    args = arguments(lhs)
+    # Check name match
+    lhs_name = Symbol(Symbolics.tosymbol(wrap(lhs), escape=false))
+    dv_name = Symbol(Symbolics.tosymbol(dv, escape=false))
+    if lhs_name != dv_name
+        return false
+    end
+    # Check first argument is t0
+    if length(args) >= 1
+        t_arg = args[1]
+        t_val = Symbolics.value(t_arg)
+        if t_val isa Number && isapprox(Float64(t_val), t0)
+            return true
+        end
+    end
+    return false
+end
+
+function _eval_ic(rhs, spatial_ivs, grid, p, i, j)
+    try
+        subs = Dict{Any,Any}()
+        if length(spatial_ivs) >= 1
+            subs[spatial_ivs[1]] = grid.lon[p, i, j]
+        end
+        if length(spatial_ivs) >= 2
+            subs[spatial_ivs[2]] = grid.lat[p, i, j]
+        end
+        v = Symbolics.value(Symbolics.substitute(rhs, subs))
+        return v isa Number ? Float64(v) : Float64(eval(Symbolics.toexpr(v)))
+    catch
+        return 0.0
+    end
 end
