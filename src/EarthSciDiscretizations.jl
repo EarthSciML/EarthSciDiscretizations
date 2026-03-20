@@ -1,7 +1,7 @@
 module EarthSciDiscretizations
 
 using LinearAlgebra: norm, cross, dot
-using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @makearray, @syms
+using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @syms
 using SymbolicUtils
 using Symbolics: unwrap, wrap, Differential, iscall, operation, arguments, Num
 import Symbolics
