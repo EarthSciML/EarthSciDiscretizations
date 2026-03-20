@@ -168,20 +168,20 @@ end
 end
 
 # =============================================================================
-# Vorticity operator tests
+# Corner-point vorticity operator tests (default fv_vorticity)
 # =============================================================================
 
-@testitem "Vorticity: zero for irrotational field" setup=[FV3Setup] tags=[:fv3] begin
-    # A uniform wind field has zero vorticity
+@testitem "Corner vorticity: zero for irrotational field" setup=[FV3Setup] tags=[:fv3] begin
     grid = CubedSphereGrid(12; R=1.0)
     Nc = grid.Nc
     u_d = zeros(6, Nc + 1, Nc)
     v_d = zeros(6, Nc, Nc + 1)
     omega = fv_vorticity(u_d, v_d, grid)
+    @test size(omega) == (6, Nc + 1, Nc + 1)  # Corner staggering
     @test maximum(abs.(omega)) < 1e-14
 end
 
-@testitem "Vorticity: solid body rotation" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+@testitem "Corner vorticity: solid body rotation" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     # For solid-body rotation about the z-axis with angular velocity Ω,
     # the relative vorticity is ω = 2Ω·sin(lat).
     R = 1.0
@@ -191,46 +191,118 @@ end
 
     u_d, v_d = init_solid_body_winds(grid, Omega_test, R)
     omega = fv_vorticity(u_d, v_d, grid)
+    omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
 
-    # Expected: ω = 2Ω·sin(lat)
+    # Corner vorticity is interpolated from cell-mean, so it should be
+    # the exact average of the 4 surrounding cell-mean values
+    for p in 1:6, i in 2:Nc, j in 2:Nc
+        avg = 0.25 * (omega_cell[p,i-1,j-1] + omega_cell[p,i,j-1] +
+                      omega_cell[p,i-1,j] + omega_cell[p,i,j])
+        @test isapprox(omega[p, i, j], avg; atol=1e-14)
+    end
+
+    # And the interpolated values should be close to the analytical value
+    for p in 1:6, i in 2:Nc, j in 2:Nc
+        cart = EarthSciDiscretizations.gnomonic_to_cart(grid.ξ_edges[i], grid.η_edges[j], p)
+        lat_corner = asin(clamp(cart[3], -1.0, 1.0))
+        expected = 2 * Omega_test * sin(lat_corner)
+        @test isapprox(omega[p, i, j], expected; rtol=0.15, atol=0.05)
+    end
+end
+
+@testitem "Corner vorticity: boundary corners are zero" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    # Boundary corner values are set to zero (require cross-panel communication)
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+    omega = fv_vorticity(u_d, v_d, grid)
+    Nc = grid.Nc
+    for p in 1:6
+        @test all(omega[p, 1, :] .== 0.0)
+        @test all(omega[p, Nc + 1, :] .== 0.0)
+        @test all(omega[p, :, 1] .== 0.0)
+        @test all(omega[p, :, Nc + 1] .== 0.0)
+    end
+end
+
+@testitem "Corner vorticity: exact average of cell-mean values" setup=[FV3Setup] tags=[:fv3] begin
+    # Corner vorticity is defined as the average of 4 surrounding cell-mean values
+    grid = CubedSphereGrid(12; R=1.0)
+    Nc = grid.Nc
+    # Use random D-grid winds to test for arbitrary fields
+    u_d = randn(6, Nc + 1, Nc)
+    v_d = randn(6, Nc, Nc + 1)
+
+    omega_corner = fv_vorticity(u_d, v_d, grid)
+    omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
+
+    for p in 1:6, i in 2:Nc, j in 2:Nc
+        avg_cell = 0.25 * (omega_cell[p,i-1,j-1] + omega_cell[p,i,j-1] +
+                           omega_cell[p,i-1,j] + omega_cell[p,i,j])
+        @test isapprox(omega_corner[p,i,j], avg_cell; atol=1e-14)
+    end
+end
+
+# =============================================================================
+# Cell-mean vorticity operator tests (fv_vorticity_cellmean)
+# =============================================================================
+
+@testitem "Cell-mean vorticity: zero for irrotational field" setup=[FV3Setup] tags=[:fv3] begin
+    grid = CubedSphereGrid(12; R=1.0)
+    Nc = grid.Nc
+    u_d = zeros(6, Nc + 1, Nc)
+    v_d = zeros(6, Nc, Nc + 1)
+    omega = fv_vorticity_cellmean(u_d, v_d, grid)
+    @test size(omega) == (6, Nc, Nc)  # CellCenter staggering
+    @test maximum(abs.(omega)) < 1e-14
+end
+
+@testitem "Cell-mean vorticity: solid body rotation" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    R = 1.0
+    Nc = 16
+    grid = CubedSphereGrid(Nc; R=R)
+    Omega_test = 1.0
+
+    u_d, v_d = init_solid_body_winds(grid, Omega_test, R)
+    omega = fv_vorticity_cellmean(u_d, v_d, grid)
+
     for p in 1:6, i in 1:Nc, j in 1:Nc
         expected = 2 * Omega_test * sin(grid.lat[p, i, j])
         @test isapprox(omega[p, i, j], expected; rtol=0.05, atol=0.05)
     end
 end
 
-@testitem "Vorticity: global integral = 0" setup=[FV3Setup] tags=[:fv3] begin
-    # The global integral of vorticity on a closed surface must be zero
-    # (by Stokes' theorem, since the surface has no boundary)
+@testitem "Cell-mean vorticity: global integral = 0" setup=[FV3Setup] tags=[:fv3] begin
+    # The global integral of cell-mean vorticity on a closed surface must be zero
+    # (by Stokes' theorem, since the surface has no boundary).
+    # Note: This uses independently random D-grid winds on each panel, which do
+    # NOT satisfy continuity at panel boundaries. The non-zero residual comes from
+    # boundary edges being counted once per panel with unrelated wind values.
+    # For exact cancellation, winds must be consistent across shared panel edges
+    # (e.g., from a smooth global field like solid body rotation).
     R = 1.0
     Nc = 12
     grid = CubedSphereGrid(Nc; R=R)
 
-    # Random D-grid winds
     u_d = randn(6, Nc + 1, Nc)
     v_d = randn(6, Nc, Nc + 1)
 
-    omega = fv_vorticity(u_d, v_d, grid)
+    omega = fv_vorticity_cellmean(u_d, v_d, grid)
 
-    # Area-weighted sum of vorticity
     global_integral = sum(omega[p, i, j] * grid.area[p, i, j]
                           for p in 1:6, i in 1:Nc, j in 1:Nc)
 
-    # Should be zero up to edge-length mismatch at panel boundaries
     total_circ = sum(abs(omega[p, i, j]) * grid.area[p, i, j]
                      for p in 1:6, i in 1:Nc, j in 1:Nc)
     @test abs(global_integral) / total_circ < 0.05
 end
 
-@testitem "Vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+@testitem "Cell-mean vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     grid = CubedSphereGrid(8; R=1.0)
     u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
 
-    # Loop version
-    omega_loop = fv_vorticity(u_d, v_d, grid)
+    omega_loop = fv_vorticity_cellmean(u_d, v_d, grid)
 
-    # ArrayOp version
-    ao = fv_vorticity_arrayop(u_d, v_d, grid)
+    ao = fv_vorticity_cellmean_arrayop(u_d, v_d, grid)
     omega_ao = evaluate_arrayop(ao)
 
     @test isapprox(omega_ao, omega_loop; rtol=1e-12)
@@ -462,8 +534,8 @@ end
     # D-grid winds for solid body zonal rotation (normalized covariant)
     u_d, v_d = init_zonal_winds(grid, u0, R)
 
-    # Compute vorticity - should match 2Ω_test sin(lat)
-    omega = fv_vorticity(u_d, v_d, grid)
+    # Compute cell-mean vorticity (at cell centers, for comparison with cell-center lat)
+    omega = fv_vorticity_cellmean(u_d, v_d, grid)
     Omega_test = u0 / R  # angular velocity of the solid body rotation
 
     # Check that vorticity has the correct sign pattern:
@@ -524,5 +596,5 @@ end
     expected = a * x_iface + b
 
     ts = EarthSciDiscretizations.ppm_edge_value_twosided(q[2], q[3], q[4], q[1], dx[2], dx[3], dx[4], dx[1])
-    @test isapprox(ts, expected; rtol=0.1)  # Approximate for non-uniform grids
+    @test isapprox(ts, expected; rtol=1e-12)  # Exact for linear fields on any grid
 end
