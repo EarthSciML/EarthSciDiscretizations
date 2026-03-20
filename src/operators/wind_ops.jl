@@ -32,13 +32,13 @@ They have units of m/s (physical velocity). This matches FV3's convention
 ## Conversion formulas (Harris et al. 2021, Eq. 3.4-3.7)
 
 Given normalized covariant (u, v) and contravariant (ũ, ṽ):
-    ũ = (u - v·cos α) / sin²α
-    ṽ = (v - u·cos α) / sin²α
+    ũ = (v - u·cos α) / sin²α    (contravariant ξ-component)
+    ṽ = (u - v·cos α) / sin²α    (contravariant η-component)
 
 where α is the angle between ê_ξ and ê_η.
 
 The face-normal velocity through a ξ-edge (for flux computation) is:
-    U_n = ũ · sin α = (u - v·cos α) / sin α
+    U_n = ũ · sin α = (v - u·cos α) / sin α
 
 ## Sub-grid sin(α) positions
 
@@ -65,8 +65,12 @@ References:
 
 Convert normalized covariant wind components to contravariant at a single point.
 
-    ũ = (u - v·cos α) / sin²α
-    ṽ = (v - u·cos α) / sin²α
+Returns `(u_contra, v_contra)` where:
+    u_contra = ṽ = (u - v·cos α) / sin²α    (contravariant η-component)
+    v_contra = ũ = (v - u·cos α) / sin²α    (contravariant ξ-component)
+
+Note: the first output pairs with the first input (both η-related),
+and the second output pairs with the second input (both ξ-related).
 """
 function covariant_to_contravariant(u_cov, v_cov, sin_alpha, cos_alpha)
     sin2 = sin_alpha^2
@@ -80,8 +84,8 @@ end
 
 Convert contravariant wind components to normalized covariant at a single point.
 
-    u = ũ + ṽ·cos α
-    v = ṽ + ũ·cos α
+    u = u_contra + v_contra·cos α = ṽ + ũ·cos α
+    v = v_contra + u_contra·cos α = ũ + ṽ·cos α
 """
 function contravariant_to_covariant(u_contra, v_contra, sin_alpha, cos_alpha)
     u_cov = u_contra + v_contra * cos_alpha

@@ -504,6 +504,41 @@ end
     @test min_sin < 0.99  # Should be significantly less than 1 near panel edges
 end
 
+@testitem "sinsg flux: ArrayOp matches loop version (xi)" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    Nc = grid.Nc
+    dt = 0.01
+    # Use solid body rotation contravariant winds at UEdge as test velocities
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+    uc, vc = dgrid_to_cgrid(u_d, v_d, grid)
+
+    # Loop version
+    flux_xi_loop, _ = compute_flux_with_sinsg(uc, vc, grid, dt)
+
+    # ArrayOp version
+    ao_xi = compute_flux_with_sinsg_xi_arrayop(uc, grid, dt)
+    flux_xi_ao = evaluate_arrayop(ao_xi)
+
+    @test isapprox(flux_xi_ao, flux_xi_loop; rtol=1e-12)
+end
+
+@testitem "sinsg flux: ArrayOp matches loop version (eta)" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    Nc = grid.Nc
+    dt = 0.01
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+    uc, vc = dgrid_to_cgrid(u_d, v_d, grid)
+
+    # Loop version
+    _, flux_eta_loop = compute_flux_with_sinsg(uc, vc, grid, dt)
+
+    # ArrayOp version
+    ao_eta = compute_flux_with_sinsg_eta_arrayop(vc, grid, dt)
+    flux_eta_ao = evaluate_arrayop(ao_eta)
+
+    @test isapprox(flux_eta_ao, flux_eta_loop; rtol=1e-12)
+end
+
 # =============================================================================
 # Two-sided PPM tests
 # =============================================================================
@@ -560,6 +595,55 @@ end
     total_mass = sum(q[p, i, j] * grid.area[p, i, j]
                      for p in 1:6, i in 1:Nc, j in 1:Nc)
     @test abs(mass_change / total_mass) < 1e-2
+end
+
+@testitem "Two-sided PPM: η-direction constant field" setup=[FV3Setup] tags=[:fv3] begin
+    # Test two-sided PPM in the η-direction (all previous tests are ξ-only)
+    grid = CubedSphereGrid(12; R=1.0)
+    Nc = grid.Nc
+    q_const = ones(6, Nc, Nc)
+    vel = zeros(6, Nc, Nc + 1)
+    tend = zeros(6, Nc, Nc)
+    flux_1d_ppm_twosided!(tend, q_const, vel, grid, :eta, 0.01)
+    @test maximum(abs.(tend)) < 1e-12
+end
+
+@testitem "Two-sided PPM: η-direction agrees with standard interior" setup=[FV3Setup] tags=[:fv3] begin
+    grid = CubedSphereGrid(16; R=1.0)
+    Nc = grid.Nc
+    q = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        q[p, i, j] = 1.0 + 0.3 * sin(4π * (j - 0.5) / Nc) * sin(4π * (i - 0.5) / Nc)
+    end
+    vel = fill(0.05, 6, Nc, Nc + 1)
+    tend_std = zeros(6, Nc, Nc)
+    tend_2s = zeros(6, Nc, Nc)
+    flux_1d_ppm!(tend_std, q, vel, grid, :eta, 0.001)
+    flux_1d_ppm_twosided!(tend_2s, q, vel, grid, :eta, 0.001)
+
+    interior_diffs = Float64[]
+    for p in 1:6, i in 1:Nc, j in 4:Nc-3
+        push!(interior_diffs, abs(tend_2s[p, i, j] - tend_std[p, i, j]))
+    end
+    @test maximum(interior_diffs) < 1e-10
+end
+
+@testitem "KE: upstream-biased and cell-center agree for smooth wind" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    # Both KE formulations should give similar results for smooth wind fields
+    R = 1.0
+    grid = CubedSphereGrid(12; R=R)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, R)
+
+    ke_upstream = fv_kinetic_energy(u_d, v_d, grid)
+    ke_cell = fv_kinetic_energy_cell(u_d, v_d, grid)
+
+    # Both should be close (the upstream-biased uses face-position averaging
+    # while cell-center uses center averaging, so they differ by O(dx²)).
+    # The discrepancy is largest near panel corners where non-orthogonality
+    # makes face-position evaluation differ most from center evaluation.
+    for p in 1:6, i in 1:grid.Nc, j in 1:grid.Nc
+        @test isapprox(ke_upstream[p, i, j], ke_cell[p, i, j]; rtol=0.25, atol=0.02)
+    end
 end
 
 @testitem "Two-sided PPM: smoother than standard near edges" setup=[FV3Setup] tags=[:fv3] begin

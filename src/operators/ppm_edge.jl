@@ -6,8 +6,8 @@ breaks down because the coordinate system is discontinuous across panel
 boundaries. FV3 uses a two-sided extrapolation that accounts for varying
 grid-cell widths:
 
-    a_E = (1/2) · [(2dx₁ + dx₂)q₂ - dx₁ q₁] / (dx₁ + dx₂)
-        + (1/2) · [(2dx₀ + dx₋₁)q₋₁ - dx₀ q₀] / (dx₀ + dx₋₁)
+    a_E = (1/2) · [(2dx₁ + dx₂)q₁ - dx₁ q₂] / (dx₁ + dx₂)
+        + (1/2) · [(2dx₀ + dx₋₁)q₀ - dx₀ q₋₁] / (dx₀ + dx₋₁)
 
 where indices ≤ 0 are on the neighboring panel, accessed through ghost cells.
 This produces a smooth transition across the discontinuous coordinate system
