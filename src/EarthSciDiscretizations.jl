@@ -1,7 +1,7 @@
 module EarthSciDiscretizations
 
 using LinearAlgebra: norm, cross, dot
-using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @makearray, @syms
+using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @syms
 using SymbolicUtils
 using Symbolics: unwrap, wrap, Differential, iscall, operation, arguments, Num
 import Symbolics
@@ -88,6 +88,10 @@ export vertical_remap, vertical_remap_tendency
 
 # Exports: Numerical transport operators
 export flux_1d_ppm!, transport_2d_linrood!
+
+# Exports: ArrayOp-based PPM transport operators
+export flux_1d_ppm_arrayop, flux_to_tendency_arrayop, advective_tendency_arrayop
+export compute_courant_numbers
 
 # Exports: FV3 super-grid
 export compute_super_grid, compute_super_grid!, compute_angle_at_point

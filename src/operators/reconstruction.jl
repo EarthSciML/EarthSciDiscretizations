@@ -24,13 +24,9 @@ function ppm_reconstruction!(q_left, q_right, q, grid::CubedSphereGrid, dim::Sym
                 ifaces[i] = (7.0 / 12.0) * (q[p, i, j] + q[p, i - 1, j]) -
                             (1.0 / 12.0) * (q[p, max(1, i - 2), j] + q[p, min(Nc, i + 1), j])
             end
-            # Boundary interfaces: use simple average
-            ifaces[1] = (q[p, 1, j] + q[p, 1, j]) / 2  # extrapolate
-            ifaces[Nc + 1] = (q[p, Nc, j] + q[p, Nc, j]) / 2
-            if Nc >= 2
-                ifaces[1] = q[p, 1, j]  # cell edge value
-                ifaces[Nc + 1] = q[p, Nc, j]
-            end
+            # Boundary interfaces: use cell center value as edge estimate
+            ifaces[1] = q[p, 1, j]
+            ifaces[Nc + 1] = q[p, Nc, j]
 
             # Step 2: Assign left/right edges and apply CW84 limiter
             for i in 3:Nc-2
@@ -100,6 +96,30 @@ function _ppm_limit_cw84(ql, qr, qi)
         end
     end
     return (ql, qr)
+end
+
+"""
+    _ppm_limit_cw84_sym(ql, qr, qi)
+
+Symbolic (ifelse-based) CW84 PPM limiter for use in ArrayOp expressions.
+Equivalent to `_ppm_limit_cw84` but uses `ifelse` instead of `if` for
+compatibility with symbolic tracing.
+"""
+function _ppm_limit_cw84_sym(ql, qr, qi)
+    # Step 1: Local extremum detection — flatten to qi
+    is_extremum = (qr - qi) * (qi - ql) <= 0
+    ql1 = ifelse(is_extremum, qi, ql)
+    qr1 = ifelse(is_extremum, qi, qr)
+
+    # Step 2: Overshoot correction (mutually exclusive conditions)
+    dq = qr1 - ql1
+    q6 = 6.0 * (qi - 0.5 * (ql1 + qr1))
+    overshoot_left = dq * q6 > dq^2
+    overshoot_right = -dq^2 > dq * q6
+    ql2 = ifelse(overshoot_left, 3.0 * qi - 2.0 * qr1, ql1)
+    qr2 = ifelse(overshoot_right, 3.0 * qi - 2.0 * ql1, qr1)
+
+    return (ql2, qr2)
 end
 
 function ppm_reconstruction(q, grid::CubedSphereGrid, dim::Symbol)

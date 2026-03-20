@@ -30,9 +30,11 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     d2η_dlon2::Array{T,3}
     d2η_dlondlat::Array{T,3}
     d2η_dlat2::Array{T,3}
-    # Derivatives of J·g^{ξη} for the Laplacian cross-metric correction
+    # Derivatives of J·g^{ab} for the Laplacian metric corrections
     dJgxe_dξ::Array{T,3}   # ∂(J·g^{ξη})/∂ξ at cell centers
     dJgxe_dη::Array{T,3}   # ∂(J·g^{ξη})/∂η at cell centers
+    dJgxx_dξ::Array{T,3}   # ∂(J·g^{ξξ})/∂ξ at cell centers
+    dJgyy_dη::Array{T,3}   # ∂(J·g^{ηη})/∂η at cell centers
     # Center-to-center physical distances
     dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
     dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
@@ -150,6 +152,29 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dJgxe_dη_arr[p, i, j] = (Jgxe_p2 - Jgxe_m2) / (2 * h_metric)
     end
 
+    # Precompute ∂(J·g^{ξξ})/∂ξ and ∂(J·g^{ηη})/∂η for the Laplacian orthogonal correction.
+    dJgxx_dξ_arr = zeros(T, 6, Nc, Nc)
+    dJgyy_dη_arr = zeros(T, 6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        ξc = ξ_centers[i]; ηc = η_centers[j]
+        # ∂(J·g^{ξξ})/∂ξ
+        Jp, gxx_p, gee_p, gxe_p = gnomonic_metric(ξc + h_metric, ηc, R)
+        Jm, gxx_m, gee_m, gxe_m = gnomonic_metric(ξc - h_metric, ηc, R)
+        det_gp = gxx_p * gee_p - gxe_p^2
+        det_gm = gxx_m * gee_m - gxe_m^2
+        Jgxx_p = Jp * (gee_p / det_gp)  # J·g^{ξξ} = J·g_{ηη}/det(g)
+        Jgxx_m = Jm * (gee_m / det_gm)
+        dJgxx_dξ_arr[p, i, j] = (Jgxx_p - Jgxx_m) / (2 * h_metric)
+        # ∂(J·g^{ηη})/∂η
+        Jp2, gxx_p2, gee_p2, gxe_p2 = gnomonic_metric(ξc, ηc + h_metric, R)
+        Jm2, gxx_m2, gee_m2, gxe_m2 = gnomonic_metric(ξc, ηc - h_metric, R)
+        det_gp2 = gxx_p2 * gee_p2 - gxe_p2^2
+        det_gm2 = gxx_m2 * gee_m2 - gxe_m2^2
+        Jgyy_p = Jp2 * (gxx_p2 / det_gp2)  # J·g^{ηη} = J·g_{ξξ}/det(g)
+        Jgyy_m = Jm2 * (gxx_m2 / det_gm2)
+        dJgyy_dη_arr[p, i, j] = (Jgyy_p - Jgyy_m) / (2 * h_metric)
+    end
+
     # Precompute center-to-center physical distances
     dist_xi = zeros(T, 6, Nc - 1, Nc)
     for p in 1:6, i in 1:Nc-1, j in 1:Nc
@@ -202,7 +227,7 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
         d2ξ_dlon2_arr, d2ξ_dlondlat_arr, d2ξ_dlat2_arr,
         d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
-        dJgxe_dξ_arr, dJgxe_dη_arr,
+        dJgxe_dξ_arr, dJgxe_dη_arr, dJgxx_dξ_arr, dJgyy_dη_arr,
         dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd,
         zeros(T, 6, Nc, Nc, 9), zeros(T, 6, Nc, Nc, 9))
 
