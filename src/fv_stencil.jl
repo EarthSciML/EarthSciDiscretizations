@@ -33,12 +33,12 @@ end
 """
     precompute_laplacian_stencil(grid)
 
-Precompute the FV Laplacian stencil weights and neighbor indices for all
-cells on the cubed sphere, including panel boundary cells.
+Precompute the full covariant Laplacian stencil weights and neighbor indices
+for all cells on the cubed sphere, including panel boundary cells.
 
-The Laplacian uses:
-- Orthogonal part: (1/A) Σ_faces [(φ_nb - φ_center)/dist * edge_length]
-- Cross-metric correction: 2g^{ξη}·∂²φ/(∂ξ∂η) + gradient-of-metric terms
+Uses the covariant expansion with explicit inverse metric components:
+- Orthogonal: g^{ξξ}·∂²φ/∂ξ² + g^{ηη}·∂²φ/∂η² + metric gradient corrections
+- Cross-metric: 2g^{ξη}·∂²φ/(∂ξ∂η) + gradient-of-metric terms
 """
 function precompute_laplacian_stencil(grid::CubedSphereGrid)
     Nc = grid.Nc
@@ -70,33 +70,22 @@ function precompute_laplacian_stencil(grid::CubedSphereGrid)
             nb_j[p, i, j, k] = nbs[k][3]
         end
 
-        # --- Compute weights ---
-        A = grid.area[p, i, j]
+        # --- Compute weights using covariant form ---
         J_c = grid.J[p, i, j]
+        gxx = grid.ginv_ξξ[p, i, j]
+        gyy = grid.ginv_ηη[p, i, j]
         gxe = grid.ginv_ξη[p, i, j]
+        dJgxx_dξ = grid.dJgxx_dξ[p, i, j]
+        dJgyy_dη = grid.dJgyy_dη[p, i, j]
         dJgxe_dξ = grid.dJgxe_dξ[p, i, j]
         dJgxe_dη = grid.dJgxe_dη[p, i, j]
 
-        # Orthogonal part: flux through each of 4 faces
-        # East face (between cell center and east neighbor)
-        _dist_east = _physical_distance(grid, center, east)
-        _dx_east = _edge_length_xi(grid, p, i + 1, j)
-        w_east_orth = _dx_east / (_dist_east * A)
-
-        # West face
-        _dist_west = _physical_distance(grid, west, center)
-        _dx_west = _edge_length_xi(grid, p, i, j)
-        w_west_orth = _dx_west / (_dist_west * A)
-
-        # North face
-        _dist_north = _physical_distance(grid, center, north)
-        _dy_north = _edge_length_eta(grid, p, i, j + 1)
-        w_north_orth = _dy_north / (_dist_north * A)
-
-        # South face
-        _dist_south = _physical_distance(grid, south, center)
-        _dy_south = _edge_length_eta(grid, p, i, j)
-        w_south_orth = _dy_south / (_dist_south * A)
+        # Orthogonal part: g^{ξξ}·∂²φ/∂ξ² + (1/J)·∂(Jg^{ξξ})/∂ξ·∂φ/∂ξ
+        #                + g^{ηη}·∂²φ/∂η² + (1/J)·∂(Jg^{ηη})/∂η·∂φ/∂η
+        # ∂²φ/∂ξ² → (φ_e - 2φ_c + φ_w) / dξ²: weights +1/dξ² for e,w, -2/dξ² for c
+        # ∂φ/∂ξ  → (φ_e - φ_w) / (2dξ): weights +1/(2dξ) for e, -1/(2dξ) for w
+        orth_dxi_corr = (1 / J_c) * dJgxx_dξ / (2 * dξ)
+        orth_deta_corr = (1 / J_c) * dJgyy_dη / (2 * dη)
 
         # Cross-metric correction weights
         cross_d2 = 2 * gxe / (4 * dξ * dη)   # weight for ∂²φ/(∂ξ∂η) cross term
@@ -105,15 +94,15 @@ function precompute_laplacian_stencil(grid::CubedSphereGrid)
 
         # Assemble 9-point stencil weights
         # 1: center
-        weights[p, i, j, 1] = -(w_east_orth + w_west_orth + w_north_orth + w_south_orth)
+        weights[p, i, j, 1] = -2 * gxx / dξ^2 - 2 * gyy / dη^2
         # 2: east (i+1, j)
-        weights[p, i, j, 2] = w_east_orth + cross_dxi
+        weights[p, i, j, 2] = gxx / dξ^2 + orth_dxi_corr + cross_dxi
         # 3: west (i-1, j)
-        weights[p, i, j, 3] = w_west_orth - cross_dxi
+        weights[p, i, j, 3] = gxx / dξ^2 - orth_dxi_corr - cross_dxi
         # 4: north (i, j+1)
-        weights[p, i, j, 4] = w_north_orth + cross_deta
+        weights[p, i, j, 4] = gyy / dη^2 + orth_deta_corr + cross_deta
         # 5: south (i, j-1)
-        weights[p, i, j, 5] = w_south_orth - cross_deta
+        weights[p, i, j, 5] = gyy / dη^2 - orth_deta_corr - cross_deta
         # 6: NE (i+1, j+1)
         weights[p, i, j, 6] = +cross_d2
         # 7: NW (i-1, j+1)
