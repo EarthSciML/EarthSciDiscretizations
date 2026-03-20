@@ -76,8 +76,9 @@ end
     flux_1d_ppm!(tend, q, vel_xi, grid, :xi, 0.01)
 
     # Mass conservation: Σ tendency * area ≈ 0 on closed sphere
-    # Some leakage is expected at panel boundaries due to ghost cell approximations
+    # Panel boundary fluxes are matched for exact conservation
     mass_change = sum(tend[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
     total_mass = sum(q[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
+    # Cross-direction panel connections limit single-direction conservation
     @test abs(mass_change / total_mass) < 1e-2
 end

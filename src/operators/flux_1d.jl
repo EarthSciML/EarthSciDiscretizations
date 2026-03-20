@@ -38,6 +38,42 @@ function flux_1d(q, courant, grid::CubedSphereGrid, dim::Symbol)
 end
 
 """
+    _get_courant_xi(vel, dt, grid, p, i, j)
+
+Compute the Courant number for the ξ-direction interface at (p, i, j),
+using proper boundary distances at panel edges.
+"""
+function _get_courant_xi(vel, dt, grid::CubedSphereGrid, p, i, j)
+    Nc = grid.Nc
+    if i == 1
+        dist = grid.dist_xi_bnd[p, 1, j]
+    elseif i == Nc + 1
+        dist = grid.dist_xi_bnd[p, 2, j]
+    else
+        dist = grid.dist_xi[p, i - 1, j]
+    end
+    return vel[p, i, j] * dt / dist
+end
+
+"""
+    _get_courant_eta(vel, dt, grid, p, i, j)
+
+Compute the Courant number for the η-direction interface at (p, i, j),
+using proper boundary distances at panel edges.
+"""
+function _get_courant_eta(vel, dt, grid::CubedSphereGrid, p, i, j)
+    Nc = grid.Nc
+    if j == 1
+        dist = grid.dist_eta_bnd[p, i, 1]
+    elseif j == Nc + 1
+        dist = grid.dist_eta_bnd[p, i, 2]
+    else
+        dist = grid.dist_eta[p, i, j - 1]
+    end
+    return vel[p, i, j] * dt / dist
+end
+
+"""
     flux_1d_ppm!(tendency, q, vel, grid, dim, dt)
 
 PPM-based 1D flux-form transport. Computes the tendency for `q` transported
@@ -46,6 +82,10 @@ by velocity `vel` in dimension `dim` (:xi or :eta).
 Uses PPM reconstruction with the Colella-Woodward (1984) limiter for
 high-order, monotone transport. The flux through each interface is computed
 by integrating the parabolic profile over the swept volume.
+
+At panel boundaries, fluxes are matched between adjacent panels to ensure
+exact conservation: for same-direction connections, the flux is averaged
+between both panels' independently computed values.
 
 Arguments:
 - `tendency`: output array (6, Nc, Nc), modified in-place
@@ -87,17 +127,8 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
                 # Interface value at i-1/2 (between cell i-1 and cell i)
                 qi_half = (7.0 / 12.0) * (qim1 + qi) - (1.0 / 12.0) * (qim2 + qip1)
 
-                # Compute Courant number using physical center-to-center distance.
-                # At interior interfaces (2 ≤ i ≤ Nc), dist_xi[i-1] gives the
-                # exact center-to-center distance. At boundary interfaces (i=1
-                # and i=Nc+1), use dξ-scaled metric distance as an approximation
-                # since the ghost cell centers are equidistant by construction.
-                if 2 <= i <= Nc
-                    dist = grid.dist_xi[p, i - 1, j]
-                else
-                    dist = grid.dξ * grid.J[p, clamp(i, 1, Nc), j] / sqrt(grid.ginv_ξξ[p, clamp(i, 1, Nc), j])
-                end
-                c = vel[p, i, j] * dt / dist
+                # Compute Courant number using proper boundary distances
+                c = _get_courant_xi(vel, dt, grid, p, i, j)
 
                 if c >= 0
                     # Upwind cell is i-1 (to the left)
@@ -116,6 +147,9 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
             end
         end
 
+        # Match boundary fluxes for same-direction panel connections
+        _match_boundary_fluxes_xi!(flux, grid)
+
         # Compute tendency: -(F_{i+1} - F_i) / (A * dξ)
         for p in 1:6, i in 1:Nc, j in 1:Nc
             tendency[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
@@ -133,13 +167,8 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
 
                 qj_half = (7.0 / 12.0) * (qjm1 + qj) - (1.0 / 12.0) * (qjm2 + qjp1)
 
-                # Compute Courant number using physical center-to-center distance.
-                if 2 <= j <= Nc
-                    dist = grid.dist_eta[p, i, j - 1]
-                else
-                    dist = grid.dη * grid.J[p, i, clamp(j, 1, Nc)] / sqrt(grid.ginv_ηη[p, i, clamp(j, 1, Nc)])
-                end
-                c = vel[p, i, j] * dt / dist
+                # Compute Courant number using proper boundary distances
+                c = _get_courant_eta(vel, dt, grid, p, i, j)
 
                 if c >= 0
                     ql_left = (7.0 / 12.0) * (qjm2 + qjm1) - (1.0 / 12.0) * (q_ext[p, ie, je - 3] + qj)
@@ -155,6 +184,9 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
             end
         end
 
+        # Match boundary fluxes for same-direction panel connections
+        _match_boundary_fluxes_eta!(flux, grid)
+
         for p in 1:6, i in 1:Nc, j in 1:Nc
             tendency[p, i, j] = -(flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
                                    flux[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
@@ -162,4 +194,56 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
     end
 
     return tendency
+end
+
+"""
+    _match_boundary_fluxes_xi!(flux, grid)
+
+Match ξ-direction fluxes at panel boundaries for same-direction connections.
+For each shared edge where both panels have ξ-fluxes, average the two
+independently computed fluxes to ensure exact conservation.
+"""
+function _match_boundary_fluxes_xi!(flux, grid::CubedSphereGrid)
+    Nc = grid.Nc
+    for p in 1:6
+        # East boundary: flux[p, Nc+1, j] is the east-edge flux of panel p
+        nb = PANEL_CONNECTIVITY[p][East]
+        nb_edge = nb.neighbor_edge
+        # Only match if neighbor's edge is West (same-direction ξ-ξ connection)
+        if nb_edge == West
+            for j in 1:Nc
+                j_nb = nb.reverse_index ? (Nc + 1 - j) : j
+                # Panel p's east flux = flux[p, Nc+1, j]
+                # Neighbor's west flux = flux[nb.neighbor_panel, 1, j_nb]
+                # The fluxes should be equal in magnitude (outgoing from p = incoming to neighbor)
+                # Average to enforce exact conservation
+                avg = 0.5 * (flux[p, Nc + 1, j] + flux[nb.neighbor_panel, 1, j_nb])
+                flux[p, Nc + 1, j] = avg
+                flux[nb.neighbor_panel, 1, j_nb] = avg
+            end
+        end
+    end
+end
+
+"""
+    _match_boundary_fluxes_eta!(flux, grid)
+
+Match η-direction fluxes at panel boundaries for same-direction connections.
+"""
+function _match_boundary_fluxes_eta!(flux, grid::CubedSphereGrid)
+    Nc = grid.Nc
+    for p in 1:6
+        # North boundary: flux[p, i, Nc+1]
+        nb = PANEL_CONNECTIVITY[p][North]
+        nb_edge = nb.neighbor_edge
+        # Only match if neighbor's edge is South (same-direction η-η connection)
+        if nb_edge == South
+            for i in 1:Nc
+                i_nb = nb.reverse_index ? (Nc + 1 - i) : i
+                avg = 0.5 * (flux[p, i, Nc + 1] + flux[nb.neighbor_panel, i_nb, 1])
+                flux[p, i, Nc + 1] = avg
+                flux[nb.neighbor_panel, i_nb, 1] = avg
+            end
+        end
+    end
 end

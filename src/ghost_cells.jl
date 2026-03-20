@@ -34,24 +34,32 @@ function fill_ghost_cells!(q_ext, q, grid::CubedSphereGrid, loc::VarLocation = C
     end
 
     # Fill corner ghost cells by resolving through two successive edge crossings.
-    # At cube vertices (where 3 panels meet), we pick values from the nearest
-    # edge ghost cell, which was already filled above.
+    # At cube vertices (where 3 panels meet), we trace through two panel
+    # boundaries to find the correct source cell on the diagonal neighbor.
     for p in 1:6
         # SW corner: extended indices (1:Ng, 1:Ng)
         for gi in 1:Ng, gj in 1:Ng
-            q_ext[p, gi, gj] = q_ext[p, gi, Ng + 1]
+            i_virt = gi - Ng  # virtual interior index (negative)
+            j_virt = gj - Ng
+            q_ext[p, gi, gj] = _resolve_corner_value(q, p, i_virt, j_virt, ni, nj)
         end
         # SE corner: extended indices (ni+Ng+1:ni+2Ng, 1:Ng)
         for gi in 1:Ng, gj in 1:Ng
-            q_ext[p, ni + Ng + gi, gj] = q_ext[p, ni + Ng + gi, Ng + 1]
+            i_virt = ni + gi  # past the east boundary
+            j_virt = gj - Ng
+            q_ext[p, ni + Ng + gi, gj] = _resolve_corner_value(q, p, i_virt, j_virt, ni, nj)
         end
         # NW corner: extended indices (1:Ng, nj+Ng+1:nj+2Ng)
         for gi in 1:Ng, gj in 1:Ng
-            q_ext[p, gi, nj + Ng + gj] = q_ext[p, gi, nj + Ng]
+            i_virt = gi - Ng
+            j_virt = nj + gj  # past the north boundary
+            q_ext[p, gi, nj + Ng + gj] = _resolve_corner_value(q, p, i_virt, j_virt, ni, nj)
         end
         # NE corner: extended indices (ni+Ng+1:ni+2Ng, nj+Ng+1:nj+2Ng)
         for gi in 1:Ng, gj in 1:Ng
-            q_ext[p, ni + Ng + gi, nj + Ng + gj] = q_ext[p, ni + Ng + gi, nj + Ng]
+            i_virt = ni + gi
+            j_virt = nj + gj
+            q_ext[p, ni + Ng + gi, nj + Ng + gj] = _resolve_corner_value(q, p, i_virt, j_virt, ni, nj)
         end
     end
 
@@ -155,6 +163,48 @@ function extend_with_ghosts(q, grid::CubedSphereGrid, loc::VarLocation = CellCen
     q_ext = zeros(eltype(q), 6, ni + 2Ng, nj + 2Ng)
     fill_ghost_cells!(q_ext, q, grid, loc)
     return q_ext
+end
+
+"""
+    _resolve_corner_value(q, p, i_virt, j_virt, ni, nj, max_depth=2)
+
+Resolve a ghost cell position that may require crossing two panel boundaries
+(corner ghost cells). Uses recursive edge crossings with a depth limit.
+
+`i_virt` and `j_virt` are virtual interior indices that may be outside [1:ni]
+or [1:nj]. Each recursive call crosses one panel boundary, mapping the
+out-of-range index to a position on the neighbor panel.
+"""
+function _resolve_corner_value(q, p, i_virt, j_virt, ni, nj, max_depth=2)
+    if 1 <= i_virt <= ni && 1 <= j_virt <= nj
+        return q[p, i_virt, j_virt]
+    end
+    if max_depth <= 0
+        return q[p, clamp(i_virt, 1, ni), clamp(j_virt, 1, nj)]
+    end
+
+    # Resolve one out-of-range dimension at a time via edge crossing
+    if i_virt < 1
+        nb = PANEL_CONNECTIVITY[p][West]
+        depth = 1 - i_virt
+        i_nb, j_nb = transform_ghost_index(nb, depth, j_virt, ni, nj, West)
+        return _resolve_corner_value(q, nb.neighbor_panel, i_nb, j_nb, ni, nj, max_depth - 1)
+    elseif i_virt > ni
+        nb = PANEL_CONNECTIVITY[p][East]
+        depth = i_virt - ni
+        i_nb, j_nb = transform_ghost_index(nb, depth, j_virt, ni, nj, East)
+        return _resolve_corner_value(q, nb.neighbor_panel, i_nb, j_nb, ni, nj, max_depth - 1)
+    elseif j_virt < 1
+        nb = PANEL_CONNECTIVITY[p][South]
+        depth = 1 - j_virt
+        i_nb, j_nb = transform_ghost_index(nb, depth, i_virt, ni, nj, South)
+        return _resolve_corner_value(q, nb.neighbor_panel, i_nb, j_nb, ni, nj, max_depth - 1)
+    else  # j_virt > nj
+        nb = PANEL_CONNECTIVITY[p][North]
+        depth = j_virt - nj
+        i_nb, j_nb = transform_ghost_index(nb, depth, i_virt, ni, nj, North)
+        return _resolve_corner_value(q, nb.neighbor_panel, i_nb, j_nb, ni, nj, max_depth - 1)
+    end
 end
 
 function transform_ghost_index(neighbor::PanelNeighbor, i_perp, j_along, ni, nj, src_dir)

@@ -55,10 +55,10 @@ where $J$ is the Jacobian determinant and $g^{\alpha\beta}$ are the inverse metr
 The discrete operator uses a 5-point orthogonal stencil plus a cross-metric correction:
 
 ```math
-\nabla^2 \phi_{p,i,j} \approx \frac{1}{A_{p,i,j}} \left[ \text{(face gradient} \times \text{edge length)} \right] + \frac{2\, g^{\xi\eta}}{J} \frac{\partial^2 \phi}{\partial \xi \, \partial \eta}
+\nabla^2 \phi_{p,i,j} \approx \frac{1}{A_{p,i,j}} \left[ \text{(face gradient} \times \text{edge length)} \right] + 2\, g^{\xi\eta} \frac{\partial^2 \phi}{\partial \xi \, \partial \eta} + \frac{1}{J}\left[\frac{\partial(J\, g^{\xi\eta})}{\partial \xi} \frac{\partial \phi}{\partial \eta} + \frac{\partial(J\, g^{\xi\eta})}{\partial \eta} \frac{\partial \phi}{\partial \xi}\right]
 ```
 
-The orthogonal part uses physical center-to-center distances and edge lengths. The cross-metric $g^{\xi\eta}$ correction uses a 4-point cross-stencil (9-point total) to account for the non-orthogonality of the gnomonic cubed-sphere grid.
+The orthogonal part uses physical center-to-center distances and edge lengths. The cross-metric $g^{\xi\eta}$ correction uses a 4-point cross-stencil for the mixed second derivative and includes first-derivative correction terms arising from the spatial variation of $J \cdot g^{\xi\eta}$ to account for the non-orthogonality of the gnomonic cubed-sphere grid.
 
 
 ### Transport
@@ -83,7 +83,7 @@ The Piecewise Parabolic Method (PPM) provides higher-order sub-grid reconstructi
 
 ### Vertical Remapping
 
-Vertical remapping uses PPM with Colella-Woodward (1984) monotonicity limiting to conservatively remap quantities between different vertical layer structures. The remapping preserves column-integrated mass ($\sum q \cdot \Delta p$) exactly. See `vertical_remap_tendency`.
+Vertical remapping uses PPM with Colella-Woodward (1984) monotonicity limiting to conservatively remap quantities between different vertical layer structures. The remapping preserves column-integrated mass ($\sum q \cdot \Delta p$) exactly. See `vertical_remap`.
 
 
 ## C-Grid Staggering
@@ -106,4 +106,15 @@ Inter-panel communication is handled through ghost cells. Each panel is padded w
 ## ArrayOp Utilities
 
 All operators return symbolic `ArrayOp` objects. Use `evaluate_arrayop` to obtain numerical results.
+
+
+## References
+
+The finite-volume methods implemented in this package are based on the following foundational works:
+
+- Lin, S.-J. and R. B. Rood (1996). "Multidimensional Flux-Form Semi-Lagrangian Transport Schemes." *Monthly Weather Review*, 124(9), 2046--2070. — Dimensionally-split transport algorithm.
+- Colella, P. and P. R. Woodward (1984). "The Piecewise Parabolic Method (PPM) for gas-dynamical simulations." *Journal of Computational Physics*, 54(1), 174--201. — PPM reconstruction and monotonicity limiter.
+- Lin, S.-J. (2004). "A 'Vertically Lagrangian' Finite-Volume Dynamical Core for Global Models." *Monthly Weather Review*, 132(10), 2293--2307. — Vertically Lagrangian FV framework and conservative vertical remapping.
+- Putman, W. M. and S.-J. Lin (2007). "Finite-volume transport on various cubed-sphere grids." *Journal of Computational Physics*, 227(1), 55--78. — FV transport on cubed-sphere grids.
+- Ronchi, C., R. Iacono, and P. S. Paolucci (1996). "The 'Cubed Sphere': A New Method for the Solution of Partial Differential Equations in Spherical Geometry." *Journal of Computational Physics*, 124(1), 93--114. — Gnomonic cubed-sphere projection and metric tensors.
 
