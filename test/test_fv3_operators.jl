@@ -95,6 +95,79 @@ end
 end
 
 # =============================================================================
+# Helper: initialize D-grid winds for solid body rotation (normalized covariant)
+# =============================================================================
+
+@testsnippet SolidBodyRotation begin
+    using LinearAlgebra: norm, dot
+
+    """
+    Initialize D-grid normalized covariant winds for solid body rotation
+    about the z-axis with angular velocity Omega_test.
+
+    Returns (u_d, v_d) where:
+    - u_d[p,i,j] = V·ê_η at UEdge(i,j) (normalized, m/s)
+    - v_d[p,i,j] = V·ê_ξ at VEdge(i,j) (normalized, m/s)
+    """
+    function init_solid_body_winds(grid, Omega_test, R)
+        Nc = grid.Nc
+        u_d = zeros(6, Nc + 1, Nc)
+        v_d = zeros(6, Nc, Nc + 1)
+
+        # u_d at UEdge positions
+        for p in 1:6, i in 1:Nc+1, j in 1:Nc
+            ξ = grid.ξ_edges[i]; η = grid.η_centers[j]
+            e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
+            cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
+            vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
+            u_d[p, i, j] = dot(vel_3d, e_η) / norm(e_η)
+        end
+
+        # v_d at VEdge positions
+        for p in 1:6, i in 1:Nc, j in 1:Nc+1
+            ξ = grid.ξ_centers[i]; η = grid.η_edges[j]
+            e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
+            cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
+            vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
+            v_d[p, i, j] = dot(vel_3d, e_ξ) / norm(e_ξ)
+        end
+
+        return (u_d, v_d)
+    end
+
+    """
+    Initialize D-grid normalized covariant winds for zonal flow u0 * cos(lat).
+    """
+    function init_zonal_winds(grid, u0, R)
+        Nc = grid.Nc
+        u_d = zeros(6, Nc + 1, Nc)
+        v_d = zeros(6, Nc, Nc + 1)
+
+        for p in 1:6, i in 1:Nc+1, j in 1:Nc
+            ξ = grid.ξ_edges[i]; η = grid.η_centers[j]
+            e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
+            cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
+            lat_pt = asin(clamp(cart[3], -1.0, 1.0))
+            lon_pt = atan(cart[2], cart[1])
+            vel_east = [-sin(lon_pt), cos(lon_pt), 0.0] * u0 * cos(lat_pt)
+            u_d[p, i, j] = dot(vel_east, e_η) / norm(e_η)
+        end
+
+        for p in 1:6, i in 1:Nc, j in 1:Nc+1
+            ξ = grid.ξ_centers[i]; η = grid.η_edges[j]
+            e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
+            cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
+            lat_pt = asin(clamp(cart[3], -1.0, 1.0))
+            lon_pt = atan(cart[2], cart[1])
+            vel_east = [-sin(lon_pt), cos(lon_pt), 0.0] * u0 * cos(lat_pt)
+            v_d[p, i, j] = dot(vel_east, e_ξ) / norm(e_ξ)
+        end
+
+        return (u_d, v_d)
+    end
+end
+
+# =============================================================================
 # Vorticity operator tests
 # =============================================================================
 
@@ -108,47 +181,21 @@ end
     @test maximum(abs.(omega)) < 1e-14
 end
 
-@testitem "Vorticity: solid body rotation" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "Vorticity: solid body rotation" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     # For solid-body rotation about the z-axis with angular velocity Ω,
-    # the relative vorticity is ω = 2Ω·sin(lat) (same as Coriolis parameter).
-    #
-    # The covariant wind components for solid body rotation V = Ω × r are:
-    #   V·e_ξ and V·e_η computed by projecting the velocity onto tangent vectors
+    # the relative vorticity is ω = 2Ω·sin(lat).
     R = 1.0
     Nc = 16
     grid = CubedSphereGrid(Nc; R=R)
-    Omega_test = 1.0  # angular velocity
+    Omega_test = 1.0
 
-    # Compute D-grid winds for solid body rotation
-    u_d = zeros(6, Nc + 1, Nc)  # covariant η-component at UEdge
-    v_d = zeros(6, Nc, Nc + 1)  # covariant ξ-component at VEdge
-
-    # At each UEdge position (ξ_{i+1/2}, η_j), compute V·e_η
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
-        ξ = grid.ξ_edges[i]; η = grid.η_centers[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        # Solid body rotation: V = Ω × r = Ω·(-y, x, 0) for rotation about z-axis
-        vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
-        u_d[p, i, j] = dot(vel_3d, e_η)
-    end
-
-    # At each VEdge position (ξ_i, η_{j+1/2}), compute V·e_ξ
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
-        ξ = grid.ξ_centers[i]; η = grid.η_edges[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
-        v_d[p, i, j] = dot(vel_3d, e_ξ)
-    end
-
+    u_d, v_d = init_solid_body_winds(grid, Omega_test, R)
     omega = fv_vorticity(u_d, v_d, grid)
 
     # Expected: ω = 2Ω·sin(lat)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         expected = 2 * Omega_test * sin(grid.lat[p, i, j])
-        # Use generous tolerance since this is a cell-mean vs point value comparison
-        @test isapprox(omega[p, i, j], expected; rtol=0.15, atol=0.1)
+        @test isapprox(omega[p, i, j], expected; rtol=0.05, atol=0.05)
     end
 end
 
@@ -170,10 +217,23 @@ end
                           for p in 1:6, i in 1:Nc, j in 1:Nc)
 
     # Should be zero up to edge-length mismatch at panel boundaries
-    # (exact only if edge lengths are consistent across panels)
     total_circ = sum(abs(omega[p, i, j]) * grid.area[p, i, j]
                      for p in 1:6, i in 1:Nc, j in 1:Nc)
     @test abs(global_integral) / total_circ < 0.05
+end
+
+@testitem "Vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    # Loop version
+    omega_loop = fv_vorticity(u_d, v_d, grid)
+
+    # ArrayOp version
+    ao = fv_vorticity_arrayop(u_d, v_d, grid)
+    omega_ao = evaluate_arrayop(ao)
+
+    @test isapprox(omega_ao, omega_loop; rtol=1e-12)
 end
 
 # =============================================================================
@@ -189,47 +249,33 @@ end
     @test maximum(abs.(ke)) < 1e-14
 end
 
-@testitem "KE: solid body rotation" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "KE: solid body rotation" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     # For solid body rotation V = Ω × r, the speed is |V| = Ω·R·cos(lat)
     # so KE = (Ω·R·cos(lat))² / 2
     R = 1.0
-    Nc = 12
+    Nc = 16
     grid = CubedSphereGrid(Nc; R=R)
     Omega_test = 1.0
 
-    u_d = zeros(6, Nc + 1, Nc)
-    v_d = zeros(6, Nc, Nc + 1)
-
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
-        ξ = grid.ξ_edges[i]; η = grid.η_centers[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
-        u_d[p, i, j] = dot(vel_3d, e_η)
-    end
-
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
-        ξ = grid.ξ_centers[i]; η = grid.η_edges[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        vel_3d = Omega_test * R * [-cart[2], cart[1], 0.0]
-        v_d[p, i, j] = dot(vel_3d, e_ξ)
-    end
-
+    u_d, v_d = init_solid_body_winds(grid, Omega_test, R)
     ke = fv_kinetic_energy(u_d, v_d, grid)
 
-    # Check area-weighted mean KE matches the analytical value.
-    # On a coarse grid (Nc=12), individual cells can have ~40% error from
-    # D-grid→center averaging, but the global mean should be much better.
+    # Check area-weighted mean KE matches the analytical value
     ke_total = sum(ke[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
     total_A = total_area(grid)
     ke_mean = ke_total / total_A
     # Analytical mean KE for solid body rotation: ∫ (ΩR cos λ)²/2 dA / 4πR²
     # = (ΩR)²/2 · 2/3 = (ΩR)²/3
     ke_mean_expected = (Omega_test * R)^2 / 3
-    @test isapprox(ke_mean, ke_mean_expected; rtol=0.3)
+    @test isapprox(ke_mean, ke_mean_expected; rtol=0.05)
 
-    # Also check that KE is positive everywhere
+    # Check individual cells
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        expected_ke = 0.5 * (Omega_test * R * cos(grid.lat[p, i, j]))^2
+        @test isapprox(ke[p, i, j], expected_ke; rtol=0.15, atol=0.01)
+    end
+
+    # KE is positive everywhere
     @test all(ke .>= 0)
 end
 
@@ -240,6 +286,18 @@ end
     v_d = randn(6, Nc, Nc + 1)
     ke = fv_kinetic_energy(u_d, v_d, grid)
     @test all(ke .>= 0)
+end
+
+@testitem "KE: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    ke_loop = fv_kinetic_energy(u_d, v_d, grid)
+
+    ao = fv_kinetic_energy_arrayop(u_d, v_d, grid)
+    ke_ao = evaluate_arrayop(ao)
+
+    @test isapprox(ke_ao, ke_loop; rtol=1e-12)
 end
 
 # =============================================================================
@@ -254,6 +312,15 @@ end
     uc, vc = dgrid_to_cgrid(u_d, v_d, grid)
     @test maximum(abs.(uc)) < 1e-14
     @test maximum(abs.(vc)) < 1e-14
+end
+
+@testitem "D→C grid: solid body rotation produces nonzero" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    # For solid body rotation, the contravariant C-grid winds should be nonzero
+    grid = CubedSphereGrid(12; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+    uc, vc = dgrid_to_cgrid(u_d, v_d, grid)
+    @test maximum(abs.(uc)) > 0.1
+    @test maximum(abs.(vc)) > 0.1
 end
 
 # =============================================================================
@@ -368,7 +435,7 @@ end
 # Integration test: shallow water geostrophic balance
 # =============================================================================
 
-@testitem "Integration: shallow water geostrophic balance" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "Integration: shallow water geostrophic balance" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     # In geostrophic balance: f × V = -∇(gh)
     # For solid body rotation with angular velocity ω:
     #   V = ωR cos(lat) ê_east
@@ -392,30 +459,8 @@ end
         h[p, i, j] = h0 - (1.0 / g_val) * (R * Omega_E * u0 + u0^2 / 2) * cos(lat_ij)^2
     end
 
-    # D-grid winds for solid body zonal rotation
-    u_d = zeros(6, Nc + 1, Nc)
-    v_d = zeros(6, Nc, Nc + 1)
-
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
-        ξ = grid.ξ_edges[i]; η = grid.η_centers[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        # Zonal velocity: u0 * cos(lat) in the east direction
-        lat_pt = asin(clamp(cart[3], -1.0, 1.0))
-        lon_pt = atan(cart[2], cart[1])
-        vel_east = [-sin(lon_pt), cos(lon_pt), 0.0] * u0 * cos(lat_pt)
-        u_d[p, i, j] = dot(vel_east, e_η)
-    end
-
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
-        ξ = grid.ξ_centers[i]; η = grid.η_edges[j]
-        e_ξ, e_η = EarthSciDiscretizations.tangent_vectors_3d(ξ, η, p)
-        cart = EarthSciDiscretizations.gnomonic_to_cart(ξ, η, p)
-        lat_pt = asin(clamp(cart[3], -1.0, 1.0))
-        lon_pt = atan(cart[2], cart[1])
-        vel_east = [-sin(lon_pt), cos(lon_pt), 0.0] * u0 * cos(lat_pt)
-        v_d[p, i, j] = dot(vel_east, e_ξ)
-    end
+    # D-grid winds for solid body zonal rotation (normalized covariant)
+    u_d, v_d = init_zonal_winds(grid, u0, R)
 
     # Compute vorticity - should match 2Ω_test sin(lat)
     omega = fv_vorticity(u_d, v_d, grid)
@@ -436,7 +481,7 @@ end
     ke = fv_kinetic_energy(u_d, v_d, grid)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         expected_ke = 0.5 * (u0 * cos(grid.lat[p, i, j]))^2
-        @test isapprox(ke[p, i, j], expected_ke; rtol=0.4, atol=100.0)
+        @test isapprox(ke[p, i, j], expected_ke; rtol=0.15, atol=10.0)
     end
 end
 
@@ -444,11 +489,13 @@ end
 # Two-sided PPM edge value formula tests
 # =============================================================================
 
-@testitem "Two-sided PPM: reduces to 4th order for uniform grid" setup=[FV3Setup] tags=[:fv3] begin
-    # On a uniform grid (all dx equal), the two-sided formula should give the
-    # same result as the standard 4th-order formula
+@testitem "Two-sided PPM: exact for linear fields on uniform grid" setup=[FV3Setup] tags=[:fv3] begin
+    # On a uniform grid (all dx equal), the two-sided formula and the standard
+    # 4th-order formula are both exact for linear fields. The two-sided formula
+    # is 2nd-order accurate (by design, for robustness at cube edges), while
+    # the standard formula is 4th-order.
     dx = 1.0
-    q = [1.0, 3.0, 5.0, 7.0]  # q_{-1}, q_0, q_1, q_2
+    q = [1.0, 3.0, 5.0, 7.0]  # linear field: q(x) = 2x - 1
 
     # Standard 4th-order: a_{1/2} = 7/12 * (q_0 + q_1) - 1/12 * (q_{-1} + q_2)
     std = 7.0/12.0 * (q[2] + q[3]) - 1.0/12.0 * (q[1] + q[4])
@@ -456,15 +503,15 @@ end
     # Two-sided: q_m1=q[1], q0=q[2], q1=q[3], q2=q[4]
     ts = EarthSciDiscretizations.ppm_edge_value_twosided(q[2], q[3], q[4], q[1], dx, dx, dx, dx)
 
+    # Both formulas are exact for linear fields
     @test isapprox(ts, std; rtol=1e-12)
+    @test isapprox(ts, 4.0; rtol=1e-12)  # exact value at interface
 end
 
-@testitem "Two-sided PPM: exact for linear fields" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "Two-sided PPM: exact for linear fields on non-uniform grid" setup=[FV3Setup] tags=[:fv3] begin
     # For a linear field q(x) = ax + b, the interface value should be exact
     # regardless of grid spacing
     dx = [0.5, 1.0, 1.5, 2.0]  # non-uniform grid
-    # Cell centers at cumulative midpoints: 0.25, 1.0, 2.25, 4.0
-    x_centers = [0.25, 0.75 + 0.5, 0.75 + 0.5 + 0.75 + 0.25, 0.75 + 0.5 + 1.5 + 1.0]
     x_centers = [dx[1]/2]
     for k in 2:4
         push!(x_centers, sum(dx[1:k-1]) + dx[k]/2)

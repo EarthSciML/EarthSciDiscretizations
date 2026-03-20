@@ -8,14 +8,18 @@ of vorticity over the cell area:
     ω_cell = (1/A) ∮ V · dl
 
 where the line integral sums the D-grid tangential wind components times
-their respective edge lengths around the cell boundary.
+their respective physical edge lengths around the cell boundary.
 
 This is a key advantage of D-grid staggering: vorticity is computed without
 any finite-difference approximation, regardless of grid resolution.
 
-D-grid wind convention (same as wind_ops.jl):
-- `u_d[p, i, j]` at UEdge (ξ_{i+1/2}, η_j): covariant η-component (tangent to ξ-edge)
-- `v_d[p, i, j]` at VEdge (ξ_i, η_{j+1/2}): covariant ξ-component (tangent to η-edge)
+D-grid wind convention (normalized covariant, matching FV3):
+- `u_d[p, i, j]` at UEdge (ξ_{i-1/2}, η_j): V·ê_η (projection onto unit η-vector)
+- `v_d[p, i, j]` at VEdge (ξ_i, η_{j-1/2}): V·ê_ξ (projection onto unit ξ-vector)
+
+The circulation is computed as u_d * dx (edge length) rather than u_d * Δη
+(coordinate interval), because the D-grid winds are normalized covariant
+components (physical velocity projections, units m/s) per Harris et al. (2021).
 
 Reference: Harris et al. (2021), GFDL FV3 Technical Memorandum, Section 5.
 """
@@ -25,36 +29,35 @@ Reference: Harris et al. (2021), GFDL FV3 Technical Memorandum, Section 5.
 
 Compute cell-mean relative vorticity at cell centers using Stokes' theorem.
 
-For D-grid covariant winds (u_d = V·e_η, v_d = V·e_ξ), the circulation
-integral ∮ V·dl uses the computational coordinate intervals:
+For D-grid normalized covariant winds (u_d = V·ê_η, v_d = V·ê_ξ), the
+circulation integral ∮ V·dl uses the physical edge lengths:
 
-    Γ = v_d[i, j] · Δξ         (south edge, +ξ direction)
-      + u_d[i+1, j] · Δη       (east edge, +η direction)
-      - v_d[i, j+1] · Δξ       (north edge, -ξ direction)
-      - u_d[i, j] · Δη         (west edge, -η direction)
+    Γ = v_d[i, j] · dy[i, j]           (south edge, +ξ direction)
+      + u_d[i+1, j] · dx[i+1, j]       (east edge, +η direction)
+      - v_d[i, j+1] · dy[i, j+1]       (north edge, -ξ direction)
+      - u_d[i, j] · dx[i, j]           (west edge, -η direction)
 
 Then: ω = Γ / A
 
-This works because dl = e_ξ dξ along ξ-edges and dl = e_η dη along η-edges,
-so V·dl = (V·e_ξ) dξ = v_d dξ, and the midpoint rule gives v_d · Δξ.
+where dx[p,i,j] is the physical length of the ξ-constant edge at UEdge(i,j)
+and dy[p,i,j] is the physical length of the η-constant edge at VEdge(i,j).
 
 Note: The sign convention follows right-hand rule with outward normal.
 Positive circulation = counterclockwise when viewed from outside the sphere.
 """
 function fv_vorticity!(omega, u_d, v_d, grid::CubedSphereGrid)
     Nc = grid.Nc
-    Δξ = grid.dξ; Δη = grid.dη
 
     for p in 1:6, i in 1:Nc, j in 1:Nc
-        # Circulation = sum of covariant wind × coordinate interval around cell boundary
-        # South edge (η = η_{j-1/2}): v_d (= V·e_ξ) in +ξ direction
-        circ_south = v_d[p, i, j] * Δξ
-        # East edge (ξ = ξ_{i+1/2}): u_d (= V·e_η) in +η direction
-        circ_east = u_d[p, i + 1, j] * Δη
+        # Circulation = normalized covariant wind × physical edge length
+        # South edge (η = η_{j-1/2}): v_d (= V·ê_ξ) in +ξ direction
+        circ_south = v_d[p, i, j] * grid.dy[p, i, j]
+        # East edge (ξ = ξ_{i+1/2}): u_d (= V·ê_η) in +η direction
+        circ_east = u_d[p, i + 1, j] * grid.dx[p, i + 1, j]
         # North edge (η = η_{j+1/2}): v_d in -ξ direction
-        circ_north = -v_d[p, i, j + 1] * Δξ
+        circ_north = -v_d[p, i, j + 1] * grid.dy[p, i, j + 1]
         # West edge (ξ = ξ_{i-1/2}): u_d in -η direction
-        circ_west = -u_d[p, i, j] * Δη
+        circ_west = -u_d[p, i, j] * grid.dx[p, i, j]
 
         omega[p, i, j] = (circ_south + circ_east + circ_north + circ_west) / grid.area[p, i, j]
     end
@@ -73,6 +76,29 @@ function fv_vorticity(u_d, v_d, grid::CubedSphereGrid)
     omega = zeros(T, 6, Nc, Nc)
     fv_vorticity!(omega, u_d, v_d, grid)
     return omega
+end
+
+"""
+    fv_vorticity_arrayop(u_d, v_d, grid)
+
+ArrayOp version of the FV3 vorticity operator for the symbolic discretization
+pipeline. Returns an ArrayOp{SymReal} of shape [6, Nc, Nc].
+"""
+function fv_vorticity_arrayop(u_d, v_d, grid::CubedSphereGrid)
+    Nc = grid.Nc
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    u_c = const_wrap(unwrap(u_d)); v_c = const_wrap(unwrap(v_d))
+    A_c = const_wrap(grid.area)
+    dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
+
+    # Circulation: v_d * dy (south) + u_d * dx (east) - v_d * dy (north) - u_d * dx (west)
+    circ = wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j]) +
+           wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+           wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+           wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
+
+    expr = circ / wrap(A_c[p, i, j])
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end
 
 """

@@ -98,9 +98,9 @@ export dgrid_to_cgrid!, dgrid_to_cgrid
 export compute_flux_with_sinsg!, compute_flux_with_sinsg
 
 # Exports: FV3 vorticity and kinetic energy
-export fv_vorticity!, fv_vorticity
+export fv_vorticity!, fv_vorticity, fv_vorticity_arrayop
 export fv_absolute_vorticity!, fv_absolute_vorticity
-export fv_kinetic_energy!, fv_kinetic_energy
+export fv_kinetic_energy!, fv_kinetic_energy, fv_kinetic_energy_arrayop
 
 # Exports: FV3 two-sided PPM
 export ppm_edge_value_twosided, ppm_edge_value_twosided_limited

@@ -3,16 +3,24 @@ FV3 wind operations: covariant/contravariant decomposition and C-D grid transfor
 
 On the non-orthogonal gnomonic cubed-sphere grid, wind vectors must be decomposed
 into covariant and contravariant components. FV3 uses D-grid staggering where
-prognostic winds are covariant (face-tangential), and the C-D grid algorithm
-converts them to contravariant (face-normal) winds for advection.
+prognostic winds are normalized covariant (face-tangential velocity projections
+onto unit coordinate vectors), and the C-D grid algorithm converts them to
+contravariant (face-normal) winds for advection.
+
+## Wind convention (normalized covariant, matching FV3)
+
+All D-grid winds in this module are **normalized covariant** components:
+projections of the velocity vector onto local unit tangent vectors ê_ξ, ê_η.
+They have units of m/s (physical velocity). This matches FV3's convention
+(Harris et al. 2021, Section 3.2, Table 5.1).
 
 ## Staggering conventions
 
-**D-grid** (prognostic, covariant):
-- `u_d[p, i, j]` at UEdge position (ξ_{i+1/2}, η_j): covariant η-component v·e_η
-  (tangential to the ξ-edge, which runs in the η-direction)
-- `v_d[p, i, j]` at VEdge position (ξ_i, η_{j+1/2}): covariant ξ-component v·e_ξ
-  (tangential to the η-edge, which runs in the ξ-direction)
+**D-grid** (prognostic, normalized covariant):
+- `u_d[p, i, j]` at UEdge position (ξ_{i-1/2}, η_j): V·ê_η
+  (projection onto unit η-vector at the ξ-constant edge)
+- `v_d[p, i, j]` at VEdge position (ξ_i, η_{j-1/2}): V·ê_ξ
+  (projection onto unit ξ-vector at the η-constant edge)
 
 **C-grid** (advecting, contravariant):
 - `uc[p, i, j]` at UEdge position: contravariant ξ-component ũ
@@ -22,11 +30,11 @@ converts them to contravariant (face-normal) winds for advection.
 
 ## Conversion formulas (Harris et al. 2021, Eq. 3.4-3.7)
 
-Given covariant (u, v) and contravariant (ũ, ṽ):
+Given normalized covariant (u, v) and contravariant (ũ, ṽ):
     ũ = (u - v·cos α) / sin²α
     ṽ = (v - u·cos α) / sin²α
 
-where α is the angle between e_ξ and e_η.
+where α is the angle between ê_ξ and ê_η.
 
 The face-normal velocity through a ξ-edge (for flux computation) is:
     U_n = ũ · sin α = (u - v·cos α) / sin α
@@ -37,9 +45,9 @@ References:
 """
 
 """
-    covariant_to_contravariant!(u_contra, v_contra, u_cov, v_cov, sin_alpha, cos_alpha)
+    covariant_to_contravariant(u_cov, v_cov, sin_alpha, cos_alpha)
 
-Convert covariant wind components to contravariant at a single point.
+Convert normalized covariant wind components to contravariant at a single point.
 
     ũ = (u - v·cos α) / sin²α
     ṽ = (v - u·cos α) / sin²α
@@ -54,7 +62,7 @@ end
 """
     contravariant_to_covariant(u_contra, v_contra, sin_alpha, cos_alpha)
 
-Convert contravariant wind components to covariant at a single point.
+Convert contravariant wind components to normalized covariant at a single point.
 
     u = ũ + ṽ·cos α
     v = ṽ + ũ·cos α
@@ -68,96 +76,70 @@ end
 """
     dgrid_to_cgrid!(uc, vc, u_d, v_d, grid)
 
-Interpolate D-grid covariant winds to C-grid positions and convert to
-contravariant (face-normal) components.
+Convert D-grid normalized covariant winds to C-grid contravariant winds
+using the FV3 D→A→C algorithm.
+
+**Step 1 (D→A)**: Average D-grid covariant winds to cell centers (A-grid)
+using simple 2-point averaging.
+
+**Step 2 (Contravariant conversion)**: Convert covariant to contravariant
+at cell centers using the non-orthogonal formula (Eq. 3.4).
+
+**Step 3 (Ghost extension)**: Extend A-grid contravariant winds with ghost
+cells using `extend_with_ghosts_vector`, which correctly applies rotation
+matrices at panel boundaries.
+
+**Step 4 (A→C)**: Interpolate A-grid contravariant winds to C-grid face
+positions using 2-point averaging from the ghost-extended arrays.
 
 D-grid winds:
-- `u_d[p, i, j]` at UEdge (ξ_{i+1/2}, η_j): stores the covariant η-component
-- `v_d[p, i, j]` at VEdge (ξ_i, η_{j+1/2}): stores the covariant ξ-component
+- `u_d[p, i, j]` at UEdge (ξ_{i-1/2}, η_j): normalized covariant V·ê_η
+- `v_d[p, i, j]` at VEdge (ξ_i, η_{j-1/2}): normalized covariant V·ê_ξ
 
 C-grid output:
 - `uc[p, i, j]` at UEdge: contravariant ξ-component (face-normal)
 - `vc[p, i, j]` at VEdge: contravariant η-component (face-normal)
 
-The conversion follows FV3 (Harris et al. 2021, Eq. 6.20):
-At each UEdge position (i+1/2, j), the D-grid covariant ξ-component (v_d)
-is averaged from the 4 neighboring VEdge positions, and then the pair is
-converted to contravariant using the local sin/cos(α).
-
-Similarly for VEdge positions.
+Reference: Harris et al. (2021), GFDL FV3 Technical Memorandum, Section 6.
 """
 function dgrid_to_cgrid!(uc, vc, u_d, v_d, grid::CubedSphereGrid)
     Nc = grid.Nc
 
-    # Extend D-grid winds with ghost cells for boundary averaging
-    # u_d is at UEdge (Nc+1, Nc), v_d is at VEdge (Nc, Nc+1)
-    # For averaging, we need ghost cells of the cross-component
-    v_d_ext = extend_with_ghosts(v_d, grid, VEdge)
-    u_d_ext = extend_with_ghosts(u_d, grid, UEdge)
-    Ng = grid.Ng
+    # Step 1-2: Average D-grid to A-grid and convert to contravariant
+    ua = zeros(6, Nc, Nc)  # contravariant ξ at cell center
+    va = zeros(6, Nc, Nc)  # contravariant η at cell center
 
-    # At each UEdge position (i+1/2, j), compute C-grid ξ-velocity:
-    # Need covariant ξ-component (v_d) averaged to UEdge, and local u_d
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
-        # u_d at this position is the covariant η-component
-        u_cov_eta = u_d[p, i, j]
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        # Average covariant winds to cell center
+        u_center = 0.5 * (u_d[p, i, j] + u_d[p, i + 1, j])  # V·ê_η averaged
+        v_center = 0.5 * (v_d[p, i, j] + v_d[p, i, j + 1])  # V·ê_ξ averaged
 
-        # Average v_d (covariant ξ-component) from 4 neighboring VEdge positions
-        # VEdge neighbors of UEdge(i+1/2, j): V(i-1, j-1/2), V(i, j-1/2), V(i-1, j+1/2), V(i, j+1/2)
-        # In extended array: V(i-1+Ng, j-1+Ng) etc.
-        ie = i - 1 + Ng; je = j + Ng  # map UEdge i to left cell index in ext array
-        v_avg = 0.25 * (v_d_ext[p, ie, je] + v_d_ext[p, ie + 1, je] +
-                         v_d_ext[p, ie, je + 1] + v_d_ext[p, ie + 1, je + 1])
-
-        # Get sin/cos(α) at this UEdge position
-        # UEdge(i, j) is at ξ_{i-1/2}, η_j which is the west mid-edge of cell i
-        # → sin_sg position 1 (west) of cell i, or position 3 (east) of cell i-1
-        if i >= 1 && i <= Nc
-            sin_a = grid.sin_sg[p, i, j, 1]
-            cos_a = grid.cos_sg[p, i, j, 1]
-        elseif i == Nc + 1
-            sin_a = grid.sin_sg[p, Nc, j, 3]
-            cos_a = grid.cos_sg[p, Nc, j, 3]
-        else
-            sin_a = grid.sin_sg[p, 1, j, 1]
-            cos_a = grid.cos_sg[p, 1, j, 1]
-        end
-
-        # Convert: covariant (v_avg=ξ-comp, u_cov_eta=η-comp) → contravariant ξ-comp
-        # ũ = (u_ξ_cov - u_η_cov·cos α) / sin²α
-        # Here u_ξ_cov = v_avg, u_η_cov = u_cov_eta
+        # Convert to contravariant at cell center using sin/cos(α) at position 5
+        sin_a = grid.sin_sg[p, i, j, 5]
+        cos_a = grid.cos_sg[p, i, j, 5]
         sin2 = sin_a^2
-        uc[p, i, j] = (v_avg - u_cov_eta * cos_a) / sin2
+
+        # ũ_ξ = (V·ê_ξ - V·ê_η · cos α) / sin²α
+        ua[p, i, j] = (v_center - u_center * cos_a) / sin2
+        # ũ_η = (V·ê_η - V·ê_ξ · cos α) / sin²α
+        va[p, i, j] = (u_center - v_center * cos_a) / sin2
     end
 
-    # At each VEdge position (i, j+1/2), compute C-grid η-velocity:
+    # Step 3: Extend A-grid with ghost cells (with vector rotation at boundaries)
+    ua_ext, va_ext = extend_with_ghosts_vector(ua, va, grid)
+    Ng = grid.Ng
+
+    # Step 4: Interpolate A-grid to C-grid
+    # uc at UEdge(i, j): between cell (i-1, j) and cell (i, j)
+    for p in 1:6, i in 1:Nc+1, j in 1:Nc
+        ie = i - 1 + Ng; je = j + Ng
+        uc[p, i, j] = 0.5 * (ua_ext[p, ie, je] + ua_ext[p, ie + 1, je])
+    end
+
+    # vc at VEdge(i, j): between cell (i, j-1) and cell (i, j)
     for p in 1:6, i in 1:Nc, j in 1:Nc+1
-        # v_d at this position is the covariant ξ-component
-        v_cov_xi = v_d[p, i, j]
-
-        # Average u_d (covariant η-component) from 4 neighboring UEdge positions
         ie = i + Ng; je = j - 1 + Ng
-        u_avg = 0.25 * (u_d_ext[p, ie, je] + u_d_ext[p, ie + 1, je] +
-                         u_d_ext[p, ie, je + 1] + u_d_ext[p, ie + 1, je + 1])
-
-        # Get sin/cos(α) at this VEdge position
-        # VEdge(i, j) is at ξ_i, η_{j-1/2} which is the south mid-edge of cell i,j
-        # → sin_sg position 2 (south) of cell (i, j)
-        if j >= 1 && j <= Nc
-            sin_a = grid.sin_sg[p, i, j, 2]
-            cos_a = grid.cos_sg[p, i, j, 2]
-        elseif j == Nc + 1
-            sin_a = grid.sin_sg[p, i, Nc, 4]
-            cos_a = grid.cos_sg[p, i, Nc, 4]
-        else
-            sin_a = grid.sin_sg[p, i, 1, 2]
-            cos_a = grid.cos_sg[p, i, 1, 2]
-        end
-
-        # Convert: covariant (v_cov_xi=ξ-comp, u_avg=η-comp) → contravariant η-comp
-        # ṽ = (u_η_cov - u_ξ_cov·cos α) / sin²α
-        sin2 = sin_a^2
-        vc[p, i, j] = (u_avg - v_cov_xi * cos_a) / sin2
+        vc[p, i, j] = 0.5 * (va_ext[p, ie, je] + va_ext[p, ie, je + 1])
     end
 
     return (uc, vc)
