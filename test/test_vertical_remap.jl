@@ -9,7 +9,7 @@ end
     dp_old = fill(100.0, 6, Nc, Nc, Nk)
     dp_new = fill(100.0, 6, Nc, Nc, Nk)
 
-    q_new = vertical_remap_tendency(q, dp_old, dp_new, Nk)
+    q_new = vertical_remap(q, dp_old, dp_new, Nk)
     @test isapprox(q_new, q; atol=1e-12)
 end
 
@@ -32,7 +32,7 @@ end
         dp_new[p, i, j, :] .*= total_old / total_new
     end
 
-    q_new = vertical_remap_tendency(q, dp_old, dp_new, Nk)
+    q_new = vertical_remap(q, dp_old, dp_new, Nk)
 
     # Conservation: sum(q * dp) should be preserved for each column
     for p in 1:6, i in 1:Nc, j in 1:Nc
@@ -62,7 +62,7 @@ end
         dp_new[p, i, j, :] .*= sum(dp_old[p, i, j, :]) / total
     end
 
-    q_new = vertical_remap_tendency(q, dp_old, dp_new, Nk)
+    q_new = vertical_remap(q, dp_old, dp_new, Nk)
 
     # CW84 limiter allows small overshoots near discontinuities (~0.5%)
     # while preserving conservation. Values should be close to [0, 1].

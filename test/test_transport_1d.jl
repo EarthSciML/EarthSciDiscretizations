@@ -87,7 +87,9 @@ end
     flux_1d_ppm!(tendency, q, vel_xi, grid, :xi, dt)
 
     # Total tendency weighted by area should be approximately zero
-    # (conservation on a closed sphere — fluxes cancel)
+    # (conservation on a closed sphere — fluxes cancel at matched panel boundaries)
     total = sum(tendency[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    @test abs(total) < 1.0  # Relaxed for panel boundary effects
+    # Cross-direction panel connections (ξ on one panel → η on neighbor) mean
+    # single-direction flux matching cannot achieve machine-precision conservation.
+    @test abs(total) < 1.0
 end

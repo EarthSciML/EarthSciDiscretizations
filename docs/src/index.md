@@ -2,6 +2,8 @@
 
 **EarthSciDiscretizations.jl** provides finite-volume (FV) discretization of partial differential equations on the cubed-sphere grid. It is designed for global atmospheric and oceanic modeling, where the cubed-sphere avoids the polar singularities of latitude-longitude grids while providing quasi-uniform resolution.
 
+The transport algorithms are based on the Lin-Rood (1996) dimensionally-split scheme with Piecewise Parabolic Method (PPM) reconstruction (Colella & Woodward 1984), adapted to the cubed-sphere geometry following Putman & Lin (2007). Vertical remapping follows Lin (2004). See [Finite-Volume Method](@ref) for full references.
+
 ## Features
 
 - **Cubed-sphere grid construction** with gnomonic equidistant projection, automatic metric tensor computation, and panel connectivity

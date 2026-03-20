@@ -30,6 +30,9 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     # Center-to-center physical distances
     dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
     dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
+    # Boundary distances: cross-panel center-to-center distances at panel edges
+    dist_xi_bnd::Array{T,3} # (6, 2, Nc): [p, 1=west/2=east, j] boundary distances in ξ
+    dist_eta_bnd::Array{T,3}# (6, Nc, 2): [p, i, 1=south/2=north] boundary distances in η
 end
 
 function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
@@ -124,13 +127,45 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dist_eta[p, i, j] = R * acos(clamp(dot(v1, v2), -1.0, 1.0))
     end
 
+    # Precompute cross-panel boundary distances
+    dist_xi_bnd = zeros(T, 6, 2, Nc)
+    for p in 1:6, j in 1:Nc
+        # West boundary: distance from neighbor's cell to this panel's cell 1
+        nb_w = PANEL_CONNECTIVITY[p][West]
+        i_nb, j_nb = transform_ghost_index(nb_w, 1, j, Nc, Nc, West)
+        v_nb = gnomonic_to_cart(ξ_centers[clamp(i_nb, 1, Nc)], η_centers[clamp(j_nb, 1, Nc)], nb_w.neighbor_panel)
+        v_loc = gnomonic_to_cart(ξ_centers[1], η_centers[j], p)
+        dist_xi_bnd[p, 1, j] = R * acos(clamp(dot(v_nb, v_loc), -1.0, 1.0))
+        # East boundary: distance from this panel's cell Nc to neighbor's cell
+        nb_e = PANEL_CONNECTIVITY[p][East]
+        i_nb, j_nb = transform_ghost_index(nb_e, 1, j, Nc, Nc, East)
+        v_loc = gnomonic_to_cart(ξ_centers[Nc], η_centers[j], p)
+        v_nb = gnomonic_to_cart(ξ_centers[clamp(i_nb, 1, Nc)], η_centers[clamp(j_nb, 1, Nc)], nb_e.neighbor_panel)
+        dist_xi_bnd[p, 2, j] = R * acos(clamp(dot(v_loc, v_nb), -1.0, 1.0))
+    end
+    dist_eta_bnd = zeros(T, 6, Nc, 2)
+    for p in 1:6, i in 1:Nc
+        # South boundary: distance from neighbor's cell to this panel's cell 1
+        nb_s = PANEL_CONNECTIVITY[p][South]
+        i_nb, j_nb = transform_ghost_index(nb_s, 1, i, Nc, Nc, South)
+        v_nb = gnomonic_to_cart(ξ_centers[clamp(i_nb, 1, Nc)], η_centers[clamp(j_nb, 1, Nc)], nb_s.neighbor_panel)
+        v_loc = gnomonic_to_cart(ξ_centers[i], η_centers[1], p)
+        dist_eta_bnd[p, i, 1] = R * acos(clamp(dot(v_nb, v_loc), -1.0, 1.0))
+        # North boundary: distance from this panel's cell Nc to neighbor's cell
+        nb_n = PANEL_CONNECTIVITY[p][North]
+        i_nb, j_nb = transform_ghost_index(nb_n, 1, i, Nc, Nc, North)
+        v_loc = gnomonic_to_cart(ξ_centers[i], η_centers[Nc], p)
+        v_nb = gnomonic_to_cart(ξ_centers[clamp(i_nb, 1, Nc)], η_centers[clamp(j_nb, 1, Nc)], nb_n.neighbor_panel)
+        dist_eta_bnd[p, i, 2] = R * acos(clamp(dot(v_loc, v_nb), -1.0, 1.0))
+    end
+
     CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
         lon, lat, area, dx, dy, dξ, dη, rotation_angles,
         J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
         d2ξ_dlon2_arr, d2ξ_dlondlat_arr, d2ξ_dlat2_arr,
         d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
-        dist_xi, dist_eta)
+        dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd)
 end
 
 total_area(grid::CubedSphereGrid) = sum(grid.area)

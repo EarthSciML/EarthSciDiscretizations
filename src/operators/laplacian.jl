@@ -8,10 +8,14 @@ The full covariant Laplacian on the cubed sphere is:
 
 The orthogonal part (g^{ξξ}, g^{ηη}) is computed using physical
 center-to-center distances and edge lengths. The cross-metric
-g^{ξη} correction uses a 4-point cross-stencil for the mixed derivative.
+g^{ξη} correction includes:
+  1. The mixed second derivative: 2 g^{ξη} ∂²φ/(∂ξ∂η)
+  2. First-derivative corrections from spatial variation of J·g^{ξη}:
+     (1/J)[∂(J g^{ξη})/∂ξ · ∂φ/∂η + ∂(J g^{ξη})/∂η · ∂φ/∂ξ]
 
     ∇²φ ≈ (1/A) Σ_edges [(φ_neighbor - φ_center) / dist_phys * edge_length]
-         + (2/J) g^{ξη} ∂²φ/(∂ξ∂η)
+         + 2 g^{ξη} ∂²φ/(∂ξ∂η)
+         + (1/J)[∂(J g^{ξη})/∂ξ · ∂φ/∂η + ∂(J g^{ξη})/∂η · ∂φ/∂ξ]
 """
 
 """
@@ -31,6 +35,10 @@ function fv_laplacian(phi, grid::CubedSphereGrid)
 
     dξ = grid.dξ; dη = grid.dη
 
+    # Precompute J * g^{ξη} product for first-derivative corrections
+    Jgxe = grid.J .* grid.ginv_ξη
+    Jgxe_c = const_wrap(Jgxe)
+
     # Orthogonal part: 5-point stencil using physical distances and edge lengths
     # East face: gradient uses dist_xi between cells (i+1,j+1) and (i+2,j+1), edge length dx at ξ-edge i+2
     # West face: gradient uses dist_xi between cells (i,j+1) and (i+1,j+1), edge length dx at ξ-edge i+1
@@ -42,13 +50,22 @@ function fv_laplacian(phi, grid::CubedSphereGrid)
         (wrap(phi_c[p, i + 1, j + 2]) - wrap(phi_c[p, i + 1, j + 1])) / wrap(dist_eta_c[p, i + 1, j + 1]) * wrap(dy_c[p, i + 1, j + 2]) -
         (wrap(phi_c[p, i + 1, j + 1]) - wrap(phi_c[p, i + 1, j]))     / wrap(dist_eta_c[p, i + 1, j])     * wrap(dy_c[p, i + 1, j + 1]))
 
-    # Cross-metric correction: 2 * (1/J) * g^{ξη} * ∂²φ/(∂ξ∂η)
-    # The factor of 2 accounts for both ∂/∂ξ(J g^{ξη} ∂φ/∂η) and ∂/∂η(J g^{ξη} ∂φ/∂ξ)
-    # which contribute equally when discretized with the 4-point cross stencil.
-    cross_term = wrap(2 / J_c[p, i + 1, j + 1]) * wrap(gxe_c[p, i + 1, j + 1]) *
+    # Cross-metric correction: 2 * g^{ξη} * ∂²φ/(∂ξ∂η)
+    # From the covariant Laplacian: (1/J)[∂/∂ξ(J g^{ξη} ∂φ/∂η) + ∂/∂η(J g^{ξη} ∂φ/∂ξ)]
+    # Under constant J·g^{ξη} assumption, both terms reduce to J·g^{ξη}·∂²φ/(∂ξ∂η),
+    # and (1/J) times their sum gives 2·g^{ξη}·∂²φ/(∂ξ∂η).
+    cross_term = 2 * wrap(gxe_c[p, i + 1, j + 1]) *
         (wrap(phi_c[p, i + 2, j + 2]) - wrap(phi_c[p, i + 2, j]) -
          wrap(phi_c[p, i, j + 2]) + wrap(phi_c[p, i, j])) / (4 * dξ * dη)
 
-    expr = orthogonal + cross_term
+    # First-derivative corrections from spatial variation of J·g^{ξη}:
+    # (1/J)[∂(J g^{ξη})/∂ξ · ∂φ/∂η + ∂(J g^{ξη})/∂η · ∂φ/∂ξ]
+    dJgxe_dξ = (wrap(Jgxe_c[p, i + 2, j + 1]) - wrap(Jgxe_c[p, i, j + 1])) / (2 * dξ)
+    dJgxe_dη = (wrap(Jgxe_c[p, i + 1, j + 2]) - wrap(Jgxe_c[p, i + 1, j])) / (2 * dη)
+    dphi_dξ = (wrap(phi_c[p, i + 2, j + 1]) - wrap(phi_c[p, i, j + 1])) / (2 * dξ)
+    dphi_dη = (wrap(phi_c[p, i + 1, j + 2]) - wrap(phi_c[p, i + 1, j])) / (2 * dη)
+    first_deriv_correction = wrap(1 / J_c[p, i + 1, j + 1]) * (dJgxe_dξ * dphi_dη + dJgxe_dη * dphi_dξ)
+
+    expr = orthogonal + cross_term + first_deriv_correction
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc - 2), j => 1:1:(Nc - 2)))
 end

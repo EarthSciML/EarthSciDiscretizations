@@ -72,7 +72,7 @@ export fv_laplacian
 export ppm_reconstruction, ppm_reconstruction!
 export flux_1d
 export transport_2d
-export vertical_remap_tendency
+export vertical_remap, vertical_remap_tendency
 
 # Exports: Numerical transport operators
 export flux_1d_ppm!, transport_2d_linrood!

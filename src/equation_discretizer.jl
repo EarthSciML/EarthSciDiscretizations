@@ -409,12 +409,36 @@ end
 """
 Covariant cross-derivative term for the Laplacian:
     (1/J)·∂/∂ξ(J·g^{ξη}·∂u/∂η) + (1/J)·∂/∂η(J·g^{ξη}·∂u/∂ξ)
-Approximated as 2·(g^{ξη}/J)·∂²u/(∂ξ∂η) at the cell center.
+
+Expands to:
+    2·g^{ξη}·∂²u/(∂ξ∂η) + (1/J)·[∂(J·g^{ξη})/∂ξ·∂u/∂η + ∂(J·g^{ξη})/∂η·∂u/∂ξ]
 """
 function _covariant_cross_deriv(innermost, disc_vars, dvs,
                                  p, i, j, neighbors, dξ, dη, grid)
     d2u_dξdη = _comp_mixed_deriv(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, dη)
-    return 2 * grid.ginv_ξη[p, i, j] * d2u_dξdη
+
+    # First derivatives of u
+    pip1 = neighbors.pip1; pim1 = neighbors.pim1
+    pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
+    u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
+    u_im1 = _get_dv_value(innermost, disc_vars, dvs, pim1...)
+    u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
+    u_jm1 = _get_dv_value(innermost, disc_vars, dvs, pjm1...)
+    du_dξ = (u_ip1 - u_im1) / (2 * dξ)
+    du_dη = (u_jp1 - u_jm1) / (2 * dη)
+
+    # Derivatives of J·g^{ξη} using centered differences
+    Jgxe_ip1 = grid.J[pip1...] * grid.ginv_ξη[pip1...]
+    Jgxe_im1 = grid.J[pim1...] * grid.ginv_ξη[pim1...]
+    Jgxe_jp1 = grid.J[pjp1...] * grid.ginv_ξη[pjp1...]
+    Jgxe_jm1 = grid.J[pjm1...] * grid.ginv_ξη[pjm1...]
+    dJgxe_dξ = (Jgxe_ip1 - Jgxe_im1) / (2 * dξ)
+    dJgxe_dη = (Jgxe_jp1 - Jgxe_jm1) / (2 * dη)
+
+    J_center = grid.J[p, i, j]
+    first_deriv_correction = (1 / J_center) * (dJgxe_dξ * du_dη + dJgxe_dη * du_dξ)
+
+    return 2 * grid.ginv_ξη[p, i, j] * d2u_dξdη + first_deriv_correction
 end
 
 """

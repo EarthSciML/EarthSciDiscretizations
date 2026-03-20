@@ -15,9 +15,10 @@ Note: This is a first-order scheme retained for backward compatibility.
 For accurate transport, use `transport_2d_linrood!`.
 """
 function transport_2d(q, courant_xi, courant_eta, grid::CubedSphereGrid)
-    Nc = grid.Nc; dξ = grid.dξ; dη = grid.dη
+    Nc = grid.Nc
     idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
     q_c = const_wrap(unwrap(q)); cxi = const_wrap(unwrap(courant_xi)); ceta = const_wrap(unwrap(courant_eta))
+    dξ = grid.dξ; dη = grid.dη
 
     F_e_a = wrap(cxi[p, i + 2, j + 1]) * (wrap(q_c[p, i + 1, j + 1]) + wrap(q_c[p, i + 2, j + 1])) / 2
     F_e_d = abs(wrap(cxi[p, i + 2, j + 1])) * (wrap(q_c[p, i + 2, j + 1]) - wrap(q_c[p, i + 1, j + 1])) / 2

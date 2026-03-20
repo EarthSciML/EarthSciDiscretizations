@@ -6,7 +6,7 @@ conserving the column-integrated mass of `q * dp`.
 """
 
 """
-    vertical_remap_tendency(q, dp_old, dp_new, Nk)
+    vertical_remap(q, dp_old, dp_new, Nk)
 
 Remap `q` (6, Nc, Nc, Nk) from layers defined by `dp_old` (6, Nc, Nc, Nk) to
 layers defined by `dp_new` (6, Nc, Nc, Nk), returning the remapped field.
@@ -15,7 +15,7 @@ Uses PPM with Colella-Woodward limiting for the sub-grid reconstruction
 within each old-grid layer, then integrates the parabolic profile
 across the new-grid layers for exact conservation.
 """
-function vertical_remap_tendency(q, dp_old, dp_new, Nk::Int)
+function vertical_remap(q, dp_old, dp_new, Nk::Int)
     sz = size(q)
     length(sz) >= 4 || error("q must have at least 4 dimensions (6, Nc, Nc, Nk)")
     sz[4] == Nk || error("4th dimension of q must equal Nk=$Nk, got $(sz[4])")
@@ -113,4 +113,14 @@ function _remap_column!(q_new, q_old, dp_old, dp_new, Nk)
     end
 
     return q_new
+end
+
+"""
+    vertical_remap_tendency(q, dp_old, dp_new, Nk)
+
+Deprecated: use `vertical_remap` instead.
+"""
+function vertical_remap_tendency(q, dp_old, dp_new, Nk::Int)
+    Base.depwarn("`vertical_remap_tendency` is deprecated, use `vertical_remap` instead.", :vertical_remap_tendency)
+    return vertical_remap(q, dp_old, dp_new, Nk)
 end
