@@ -17,21 +17,28 @@ symbolic testing. For accurate transport, use `flux_1d_ppm!`.
 function flux_1d(q, courant, grid::CubedSphereGrid, dim::Symbol)
     Nc = grid.Nc; idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
     q_c = const_wrap(unwrap(q)); c_c = const_wrap(unwrap(courant))
+    A_c = const_wrap(grid.area); dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
     if dim == :xi
-        dξ = grid.dξ
+        # Index (p,i,j) maps to physical cell (p, i+1, j)
+        # East face = interface i+2, West face = interface i+1
         F_e_a = wrap(c_c[p, i + 2, j]) * (wrap(q_c[p, i + 1, j]) + wrap(q_c[p, i + 2, j])) / 2
         F_e_d = abs(wrap(c_c[p, i + 2, j])) * (wrap(q_c[p, i + 2, j]) - wrap(q_c[p, i + 1, j])) / 2
         F_w_a = wrap(c_c[p, i + 1, j]) * (wrap(q_c[p, i, j]) + wrap(q_c[p, i + 1, j])) / 2
         F_w_d = abs(wrap(c_c[p, i + 1, j])) * (wrap(q_c[p, i + 1, j]) - wrap(q_c[p, i, j])) / 2
-        expr = -((F_e_a - F_e_d) - (F_w_a - F_w_d)) / dξ
+        F_east = F_e_a - F_e_d
+        F_west = F_w_a - F_w_d
+        expr = -(F_east * wrap(dx_c[p, i + 2, j]) - F_west * wrap(dx_c[p, i + 1, j])) / wrap(A_c[p, i + 1, j])
         ranges = Dict(p => 1:1:6, i => 1:1:(Nc - 2), j => 1:1:Nc)
     else
-        dη = grid.dη
+        # Index (p,i,j) maps to physical cell (p, i, j+1)
+        # North face = interface j+2, South face = interface j+1
         F_n_a = wrap(c_c[p, i, j + 2]) * (wrap(q_c[p, i, j + 1]) + wrap(q_c[p, i, j + 2])) / 2
         F_n_d = abs(wrap(c_c[p, i, j + 2])) * (wrap(q_c[p, i, j + 2]) - wrap(q_c[p, i, j + 1])) / 2
         F_s_a = wrap(c_c[p, i, j + 1]) * (wrap(q_c[p, i, j]) + wrap(q_c[p, i, j + 1])) / 2
         F_s_d = abs(wrap(c_c[p, i, j + 1])) * (wrap(q_c[p, i, j + 1]) - wrap(q_c[p, i, j])) / 2
-        expr = -((F_n_a - F_n_d) - (F_s_a - F_s_d)) / dη
+        F_north = F_n_a - F_n_d
+        F_south = F_s_a - F_s_d
+        expr = -(F_north * wrap(dy_c[p, i, j + 2]) - F_south * wrap(dy_c[p, i, j + 1])) / wrap(A_c[p, i, j + 1])
         ranges = Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:(Nc - 2))
     end
     return make_arrayop(idx, unwrap(expr), ranges)
@@ -250,8 +257,8 @@ end
     _match_boundary_fluxes_xi!(flux, grid)
 
 Match ξ-direction fluxes at panel boundaries for same-direction connections.
-For each shared edge where both panels have ξ-fluxes, average the two
-independently computed fluxes to ensure exact conservation.
+For each shared edge where both panels have ξ-fluxes, average the mass fluxes
+(flux × edge_length) to ensure exact conservation, then convert back.
 """
 function _match_boundary_fluxes_xi!(flux, grid::CubedSphereGrid)
     Nc = grid.Nc
@@ -263,13 +270,18 @@ function _match_boundary_fluxes_xi!(flux, grid::CubedSphereGrid)
         if nb_edge == West
             for j in 1:Nc
                 j_nb = nb.reverse_index ? (Nc + 1 - j) : j
-                # Panel p's east flux = flux[p, Nc+1, j]
-                # Neighbor's west flux = flux[nb.neighbor_panel, 1, j_nb]
-                # The fluxes should be equal in magnitude (outgoing from p = incoming to neighbor)
-                # Average to enforce exact conservation
-                avg = 0.5 * (flux[p, Nc + 1, j] + flux[nb.neighbor_panel, 1, j_nb])
-                flux[p, Nc + 1, j] = avg
-                flux[nb.neighbor_panel, 1, j_nb] = avg
+                # Convert to mass fluxes for averaging
+                # Both fluxes are positive in the +ξ direction:
+                #   Panel p east: positive = outflow from p
+                #   Neighbor west: positive = inflow to neighbor
+                # For conservation: outflow from p = inflow to neighbor
+                dx_p = grid.dx[p, Nc + 1, j]
+                dx_nb = grid.dx[nb.neighbor_panel, 1, j_nb]
+                M_p = flux[p, Nc + 1, j] * dx_p
+                M_nb = flux[nb.neighbor_panel, 1, j_nb] * dx_nb
+                avg_M = 0.5 * (M_p + M_nb)
+                flux[p, Nc + 1, j] = avg_M / dx_p
+                flux[nb.neighbor_panel, 1, j_nb] = avg_M / dx_nb
             end
         end
     end
@@ -279,6 +291,7 @@ end
     _match_boundary_fluxes_eta!(flux, grid)
 
 Match η-direction fluxes at panel boundaries for same-direction connections.
+Uses mass fluxes (flux × edge_length) for averaging to ensure exact conservation.
 """
 function _match_boundary_fluxes_eta!(flux, grid::CubedSphereGrid)
     Nc = grid.Nc
@@ -290,9 +303,14 @@ function _match_boundary_fluxes_eta!(flux, grid::CubedSphereGrid)
         if nb_edge == South
             for i in 1:Nc
                 i_nb = nb.reverse_index ? (Nc + 1 - i) : i
-                avg = 0.5 * (flux[p, i, Nc + 1] + flux[nb.neighbor_panel, i_nb, 1])
-                flux[p, i, Nc + 1] = avg
-                flux[nb.neighbor_panel, i_nb, 1] = avg
+                # Convert to mass fluxes for averaging
+                dy_p = grid.dy[p, i, Nc + 1]
+                dy_nb = grid.dy[nb.neighbor_panel, i_nb, 1]
+                M_p = flux[p, i, Nc + 1] * dy_p
+                M_nb = flux[nb.neighbor_panel, i_nb, 1] * dy_nb
+                avg_M = 0.5 * (M_p + M_nb)
+                flux[p, i, Nc + 1] = avg_M / dy_p
+                flux[nb.neighbor_panel, i_nb, 1] = avg_M / dy_nb
             end
         end
     end
@@ -431,4 +449,235 @@ function _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid::CubedSphereGri
             end
         end
     end
+end
+
+# ============================================================================
+# ArrayOp-based PPM transport operators
+# ============================================================================
+
+"""
+    compute_courant_numbers(vel, dt, grid, dim)
+
+Precompute Courant numbers at all cell interfaces for use with PPM ArrayOps.
+Returns an array of size (6, Nc+1, Nc) for `:xi` or (6, Nc, Nc+1) for `:eta`.
+"""
+function compute_courant_numbers(vel, dt, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    if dim == :xi
+        courant = zeros(6, Nc + 1, Nc)
+        for p in 1:6, i in 1:Nc+1, j in 1:Nc
+            courant[p, i, j] = _get_courant_xi(vel, dt, grid, p, i, j)
+        end
+    else
+        courant = zeros(6, Nc, Nc + 1)
+        for p in 1:6, i in 1:Nc, j in 1:Nc+1
+            courant[p, i, j] = _get_courant_eta(vel, dt, grid, p, i, j)
+        end
+    end
+    return courant
+end
+
+"""
+    _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i_face, j, o)
+
+Build a symbolic expression for the PPM flux at a single ξ-interface.
+Uses `ifelse` for CW84 limiting and upwind selection, making it compatible
+with ArrayOp symbolic tracing.
+
+Arguments:
+- `q_c`: Const-wrapped ghost-extended scalar field
+- `c_c`: Const-wrapped Courant number at interfaces (6, Nc+1, Nc)
+- `v_c`: Const-wrapped velocity at interfaces (6, Nc+1, Nc)
+- `p, i_face, j`: symbolic index expressions for interface position
+- `o`: ghost offset (Ng)
+"""
+function _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i_face, j, o)
+    # Interface i_face sits between cells (i_face-1) and i_face in interior coords
+    # In extended array: cell k -> index k+o
+    ie = i_face + o   # extended index for right cell (i_face)
+    je = j + o        # extended j index
+
+    # Stencil values from extended array (7 points)
+    qm3 = wrap(q_c[p, ie - 3, je])
+    qm2 = wrap(q_c[p, ie - 2, je])
+    qm1 = wrap(q_c[p, ie - 1, je])  # left cell (i_face - 1)
+    q0  = wrap(q_c[p, ie, je])       # right cell (i_face)
+    qp1 = wrap(q_c[p, ie + 1, je])
+    qp2 = wrap(q_c[p, ie + 2, je])
+
+    # 4th-order interface value between qm1 and q0
+    qi_half = (7.0 / 12.0) * (qm1 + q0) - (1.0 / 12.0) * (qm2 + qp1)
+
+    # Left cell (qm1) reconstruction: edges ql_L, qr_L
+    ql_L = (7.0 / 12.0) * (qm2 + qm1) - (1.0 / 12.0) * (qm3 + q0)
+    qr_L = qi_half
+    ql_L, qr_L = _ppm_limit_cw84_sym(ql_L, qr_L, qm1)
+
+    # Right cell (q0) reconstruction: edges ql_R, qr_R
+    ql_R = qi_half
+    qr_R = (7.0 / 12.0) * (q0 + qp1) - (1.0 / 12.0) * (qm1 + qp2)
+    ql_R, qr_R = _ppm_limit_cw84_sym(ql_R, qr_R, q0)
+
+    # Courant number and velocity at this interface
+    c = wrap(c_c[p, i_face, j])
+    v = wrap(v_c[p, i_face, j])
+    c_abs = abs(c)
+
+    # PPM flux integral for left cell (positive flow, c >= 0)
+    dq_L = qr_L - ql_L
+    q6_L = 6.0 * (qm1 - 0.5 * (ql_L + qr_L))
+    int_left = qr_L - 0.5 * c_abs * (dq_L - q6_L * (1.0 - (2.0 / 3.0) * c_abs))
+
+    # PPM flux integral for right cell (negative flow, c < 0)
+    dq_R = qr_R - ql_R
+    q6_R = 6.0 * (q0 - 0.5 * (ql_R + qr_R))
+    int_right = ql_R + 0.5 * c_abs * (dq_R + q6_R * (1.0 - (2.0 / 3.0) * c_abs))
+
+    # Select based on flow direction
+    flux_val = ifelse(c >= 0, int_left, int_right)
+
+    return v * flux_val
+end
+
+"""
+    _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j_face, o)
+
+Build a symbolic expression for the PPM flux at a single η-interface.
+Same as `_build_ppm_face_expr_xi` but for the η-direction.
+"""
+function _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j_face, o)
+    ie = i + o
+    je = j_face + o   # extended index for top cell (j_face)
+
+    # Stencil values from extended array
+    qm3 = wrap(q_c[p, ie, je - 3])
+    qm2 = wrap(q_c[p, ie, je - 2])
+    qm1 = wrap(q_c[p, ie, je - 1])  # bottom cell (j_face - 1)
+    q0  = wrap(q_c[p, ie, je])       # top cell (j_face)
+    qp1 = wrap(q_c[p, ie, je + 1])
+    qp2 = wrap(q_c[p, ie, je + 2])
+
+    qi_half = (7.0 / 12.0) * (qm1 + q0) - (1.0 / 12.0) * (qm2 + qp1)
+
+    ql_L = (7.0 / 12.0) * (qm2 + qm1) - (1.0 / 12.0) * (qm3 + q0)
+    qr_L = qi_half
+    ql_L, qr_L = _ppm_limit_cw84_sym(ql_L, qr_L, qm1)
+
+    ql_R = qi_half
+    qr_R = (7.0 / 12.0) * (q0 + qp1) - (1.0 / 12.0) * (qm1 + qp2)
+    ql_R, qr_R = _ppm_limit_cw84_sym(ql_R, qr_R, q0)
+
+    c = wrap(c_c[p, i, j_face])
+    v = wrap(v_c[p, i, j_face])
+    c_abs = abs(c)
+
+    dq_L = qr_L - ql_L
+    q6_L = 6.0 * (qm1 - 0.5 * (ql_L + qr_L))
+    int_left = qr_L - 0.5 * c_abs * (dq_L - q6_L * (1.0 - (2.0 / 3.0) * c_abs))
+
+    dq_R = qr_R - ql_R
+    q6_R = 6.0 * (q0 - 0.5 * (ql_R + qr_R))
+    int_right = ql_R + 0.5 * c_abs * (dq_R + q6_R * (1.0 - (2.0 / 3.0) * c_abs))
+
+    flux_val = ifelse(c >= 0, int_left, int_right)
+    return v * flux_val
+end
+
+"""
+    flux_1d_ppm_arrayop(q_ext, courant, vel, grid, dim)
+
+ArrayOp for PPM-based 1D flux-form transport tendency [6, Nc, Nc].
+
+Combines PPM reconstruction, CW84 limiting (via `ifelse`), upwind flux selection,
+and FV divergence into a single ArrayOp expression. Operates on a ghost-extended
+scalar field `q_ext` with precomputed Courant numbers and velocities at interfaces.
+
+Arguments:
+- `q_ext`: ghost-extended scalar field (6, Nc+2Ng, Nc+2Ng)
+- `courant`: Courant numbers at interfaces (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
+- `vel`: velocity at interfaces, same size as courant
+- `grid`: CubedSphereGrid
+- `dim`: :xi or :eta
+"""
+function flux_1d_ppm_arrayop(q_ext, courant, vel, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc; Ng = grid.Ng; o = Ng
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+
+    q_c = const_wrap(q_ext)
+    c_c = const_wrap(unwrap(courant))
+    v_c = const_wrap(unwrap(vel))
+    A_c = const_wrap(grid.area)
+
+    if dim == :xi
+        dx_c = const_wrap(grid.dx)
+        # East face = interface i+1, West face = interface i
+        F_east = _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i + 1, j, o)
+        F_west = _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i, j, o)
+        expr = -(F_east * wrap(dx_c[p, i + 1, j]) - F_west * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+    else
+        dy_c = const_wrap(grid.dy)
+        # North face = interface j+1, South face = interface j
+        F_north = _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j + 1, o)
+        F_south = _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j, o)
+        expr = -(F_north * wrap(dy_c[p, i, j + 1]) - F_south * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+    end
+
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
+end
+
+"""
+    flux_to_tendency_arrayop(flux, grid, dim)
+
+ArrayOp for converting interface fluxes to cell tendencies via FV divergence [6, Nc, Nc].
+
+    tendency[p,i,j] = -(F_{i+1} * edge_length_{i+1} - F_i * edge_length_i) / area
+"""
+function flux_to_tendency_arrayop(flux, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    flux_c = const_wrap(unwrap(flux))
+    A_c = const_wrap(grid.area)
+
+    if dim == :xi
+        dx_c = const_wrap(grid.dx)
+        expr = -(wrap(flux_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+                 wrap(flux_c[p, i, j]) * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+    else
+        dy_c = const_wrap(grid.dy)
+        expr = -(wrap(flux_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+                 wrap(flux_c[p, i, j]) * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+    end
+
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
+end
+
+"""
+    advective_tendency_arrayop(tend_flux, q, vel, grid, dim)
+
+ArrayOp for advective-form tendency [6, Nc, Nc].
+
+Converts a flux-form tendency to advective form by adding the velocity
+convergence correction: tend_adv = tend_flux + q · C_def
+where C_def = δ(v · edge_length) / area.
+"""
+function advective_tendency_arrayop(tend_flux, q, vel, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    tf_c = const_wrap(unwrap(tend_flux))
+    q_c = const_wrap(unwrap(q))
+    v_c = const_wrap(unwrap(vel))
+    A_c = const_wrap(grid.area)
+
+    if dim == :xi
+        dx_c = const_wrap(grid.dx)
+        c_def = (wrap(v_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+                 wrap(v_c[p, i, j]) * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+    else
+        dy_c = const_wrap(grid.dy)
+        c_def = (wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+                 wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+    end
+
+    expr = wrap(tf_c[p, i, j]) + wrap(q_c[p, i, j]) * c_def
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end

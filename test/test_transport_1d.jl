@@ -4,12 +4,12 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "1D Lax-Friedrichs flux of constant field is zero" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "1D Lax-Friedrichs flux of constant field with zero velocity is zero" setup=[Transport1DSetup] tags=[:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
     q = fill(3.0, 6, Nc, Nc)
-    courant = fill(0.1, 6, Nc, Nc)
+    courant = fill(0.0, 6, Nc, Nc)
 
     ao = flux_1d(q, courant, grid, :xi)
     tendency = evaluate_arrayop(ao)
