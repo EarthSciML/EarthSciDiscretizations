@@ -66,6 +66,97 @@ function fill_ghost_cells!(q_ext, q, grid::CubedSphereGrid, loc::VarLocation = C
     return q_ext
 end
 
+"""
+    fill_ghost_cells_vector!(uξ_ext, uη_ext, uξ, uη, grid, loc)
+
+Fill ghost cells for a contravariant vector field (uξ, uη), applying the
+proper rotation when crossing panel boundaries so that components are expressed
+in the local panel's (ξ, η) basis.
+
+The rotation matrix for each edge is precomputed in `grid.rotation_matrices`.
+"""
+function fill_ghost_cells_vector!(uξ_ext, uη_ext, uξ, uη, grid::CubedSphereGrid,
+                                   loc::VarLocation = CellCenter)
+    Nc = grid.Nc; Ng = grid.Ng
+    ni, nj = grid_size(loc, Nc)
+
+    # Copy interior
+    for p in 1:6, i in 1:ni, j in 1:nj
+        uξ_ext[p, i + Ng, j + Ng] = uξ[p, i, j]
+        uη_ext[p, i + Ng, j + Ng] = uη[p, i, j]
+    end
+
+    # Fill edge ghost cells with rotation
+    for p in 1:6, dir in (West, East, South, North)
+        nb = PANEL_CONNECTIVITY[p][dir]
+        M11, M12, M21, M22 = grid.rotation_matrices[(p, dir)]
+
+        if dir == West
+            for g in 1:Ng, j in 1:nj
+                i_nb, j_nb = transform_ghost_index(nb, Ng + 1 - g, j, ni, nj, dir)
+                i_nb = clamp(i_nb, 1, ni); j_nb = clamp(j_nb, 1, nj)
+                vξ = uξ[nb.neighbor_panel, i_nb, j_nb]
+                vη = uη[nb.neighbor_panel, i_nb, j_nb]
+                uξ_ext[p, g, j + Ng] = M11 * vξ + M12 * vη
+                uη_ext[p, g, j + Ng] = M21 * vξ + M22 * vη
+            end
+        elseif dir == East
+            for g in 1:Ng, j in 1:nj
+                i_nb, j_nb = transform_ghost_index(nb, g, j, ni, nj, dir)
+                i_nb = clamp(i_nb, 1, ni); j_nb = clamp(j_nb, 1, nj)
+                vξ = uξ[nb.neighbor_panel, i_nb, j_nb]
+                vη = uη[nb.neighbor_panel, i_nb, j_nb]
+                uξ_ext[p, ni + Ng + g, j + Ng] = M11 * vξ + M12 * vη
+                uη_ext[p, ni + Ng + g, j + Ng] = M21 * vξ + M22 * vη
+            end
+        elseif dir == South
+            for i in 1:ni, g in 1:Ng
+                i_nb, j_nb = transform_ghost_index(nb, Ng + 1 - g, i, ni, nj, dir)
+                i_nb = clamp(i_nb, 1, ni); j_nb = clamp(j_nb, 1, nj)
+                vξ = uξ[nb.neighbor_panel, i_nb, j_nb]
+                vη = uη[nb.neighbor_panel, i_nb, j_nb]
+                uξ_ext[p, i + Ng, g] = M11 * vξ + M12 * vη
+                uη_ext[p, i + Ng, g] = M21 * vξ + M22 * vη
+            end
+        else  # North
+            for i in 1:ni, g in 1:Ng
+                i_nb, j_nb = transform_ghost_index(nb, g, i, ni, nj, dir)
+                i_nb = clamp(i_nb, 1, ni); j_nb = clamp(j_nb, 1, nj)
+                vξ = uξ[nb.neighbor_panel, i_nb, j_nb]
+                vη = uη[nb.neighbor_panel, i_nb, j_nb]
+                uξ_ext[p, i + Ng, nj + Ng + g] = M11 * vξ + M12 * vη
+                uη_ext[p, i + Ng, nj + Ng + g] = M21 * vξ + M22 * vη
+            end
+        end
+    end
+
+    # Corner ghost cells: copy from nearest edge ghost (already rotated)
+    for p in 1:6
+        for gi in 1:Ng, gj in 1:Ng
+            uξ_ext[p, gi, gj] = uξ_ext[p, gi, Ng + 1]
+            uη_ext[p, gi, gj] = uη_ext[p, gi, Ng + 1]
+            uξ_ext[p, ni + Ng + gi, gj] = uξ_ext[p, ni + Ng + gi, Ng + 1]
+            uη_ext[p, ni + Ng + gi, gj] = uη_ext[p, ni + Ng + gi, Ng + 1]
+            uξ_ext[p, gi, nj + Ng + gj] = uξ_ext[p, gi, nj + Ng]
+            uη_ext[p, gi, nj + Ng + gj] = uη_ext[p, gi, nj + Ng]
+            uξ_ext[p, ni + Ng + gi, nj + Ng + gj] = uξ_ext[p, ni + Ng + gi, nj + Ng]
+            uη_ext[p, ni + Ng + gi, nj + Ng + gj] = uη_ext[p, ni + Ng + gi, nj + Ng]
+        end
+    end
+
+    return (uξ_ext, uη_ext)
+end
+
+function extend_with_ghosts_vector(uξ, uη, grid::CubedSphereGrid, loc::VarLocation = CellCenter)
+    Nc = grid.Nc; Ng = grid.Ng
+    ni, nj = grid_size(loc, Nc)
+    T = promote_type(eltype(uξ), eltype(uη))
+    uξ_ext = zeros(T, 6, ni + 2Ng, nj + 2Ng)
+    uη_ext = zeros(T, 6, ni + 2Ng, nj + 2Ng)
+    fill_ghost_cells_vector!(uξ_ext, uη_ext, uξ, uη, grid, loc)
+    return (uξ_ext, uη_ext)
+end
+
 function extend_with_ghosts(q, grid::CubedSphereGrid, loc::VarLocation = CellCenter)
     Nc = grid.Nc; Ng = grid.Ng
     ni, nj = grid_size(loc, Nc)

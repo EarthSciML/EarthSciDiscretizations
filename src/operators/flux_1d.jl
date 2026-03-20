@@ -94,6 +94,12 @@ Arguments:
 - `grid`: CubedSphereGrid
 - `dim`: :xi or :eta
 - `dt`: time step
+
+!!! note "Conservation at panel boundaries"
+    At shared panel edges, fluxes are computed independently by each panel using
+    ghost cell data. The resulting fluxes agree to machine precision since both
+    panels access the same underlying data through ghost cells. For strict
+    bitwise conservation, an explicit flux-sharing step would be needed.
 """
 function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
     Nc = grid.Nc

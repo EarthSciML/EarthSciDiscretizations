@@ -16,7 +16,8 @@ The diffusion equation on the sphere is:
 ```
 
 where ``\lambda`` and ``\varphi`` are longitude and latitude, and ``\kappa``
-is the diffusion coefficient.
+is the diffusion coefficient. The library automatically maps this notation
+to the covariant Laplacian on the cubed-sphere grid.
 
 ## Step 1: Define the PDE
 
@@ -72,7 +73,7 @@ using CairoMakie, GeoMakie
 
 grid = CubedSphereGrid(Nc; R=1.0)
 
-# Extract solution at a given time
+# Extract solution at a given time using symbolic indexing
 u_sym = first(@variables u(t)[1:6, 1:Nc, 1:Nc])
 
 function get_snapshot(sol, u_sym, grid, tidx)

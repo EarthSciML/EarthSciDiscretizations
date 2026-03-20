@@ -10,6 +10,9 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     area::Array{T,3}; dx::Array{T,3}; dy::Array{T,3}
     dξ::T; dη::T
     rotation_angles::Dict{Tuple{Int,EdgeDirection},Float64}
+    # 2×2 rotation matrices for vector field ghost cell filling:
+    # (M11, M12, M21, M22) transforming neighbor (u_ξ, u_η) to local basis
+    rotation_matrices::Dict{Tuple{Int,EdgeDirection},NTuple{4,Float64}}
     # Metric tensor components at cell centers
     J::Array{T,3}           # Jacobian
     ginv_ξξ::Array{T,3}     # Inverse metric g^{ξξ}
@@ -27,6 +30,9 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     d2η_dlon2::Array{T,3}
     d2η_dlondlat::Array{T,3}
     d2η_dlat2::Array{T,3}
+    # Derivatives of J·g^{ξη} for the Laplacian cross-metric correction
+    dJgxe_dξ::Array{T,3}   # ∂(J·g^{ξη})/∂ξ at cell centers
+    dJgxe_dη::Array{T,3}   # ∂(J·g^{ξη})/∂η at cell centers
     # Center-to-center physical distances
     dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
     dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
@@ -64,9 +70,11 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
     end
 
     rotation_angles = Dict{Tuple{Int,EdgeDirection},Float64}()
+    rotation_matrices = Dict{Tuple{Int,EdgeDirection},NTuple{4,Float64}}()
     for p in 1:6, dir in (West, East, South, North)
         nb = PANEL_CONNECTIVITY[p][dir]
         rotation_angles[(p, dir)] = compute_rotation_angle(p, dir, nb.neighbor_panel, nb.neighbor_edge)
+        rotation_matrices[(p, dir)] = compute_edge_rotation_matrix(p, dir)
     end
 
     # Precompute metric tensor and its inverse at cell centers
@@ -111,6 +119,31 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         d2η_dlon2_arr[p, i, j] = jac2.d2η_dlon2
         d2η_dlondlat_arr[p, i, j] = jac2.d2η_dlondlat
         d2η_dlat2_arr[p, i, j] = jac2.d2η_dlat2
+    end
+
+    # Precompute ∂(J·g^{ξη})/∂ξ and ∂(J·g^{ξη})/∂η for the Laplacian cross-metric correction.
+    # Uses analytical gnomonic_metric at ξ±h and η±h stencil points.
+    dJgxe_dξ_arr = zeros(T, 6, Nc, Nc)
+    dJgxe_dη_arr = zeros(T, 6, Nc, Nc)
+    h_metric = T(1e-7)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        ξc = ξ_centers[i]; ηc = η_centers[j]
+        # Jg^{ξη} at (ξ±h, η) for ∂/∂ξ
+        Jp, gxx_p, gee_p, gxe_p = gnomonic_metric(ξc + h_metric, ηc, R)
+        Jm, gxx_m, gee_m, gxe_m = gnomonic_metric(ξc - h_metric, ηc, R)
+        det_gp = gxx_p * gee_p - gxe_p^2
+        det_gm = gxx_m * gee_m - gxe_m^2
+        Jgxe_p = Jp * (-gxe_p / det_gp)
+        Jgxe_m = Jm * (-gxe_m / det_gm)
+        dJgxe_dξ_arr[p, i, j] = (Jgxe_p - Jgxe_m) / (2 * h_metric)
+        # Jg^{ξη} at (ξ, η±h) for ∂/∂η
+        Jp2, gxx_p2, gee_p2, gxe_p2 = gnomonic_metric(ξc, ηc + h_metric, R)
+        Jm2, gxx_m2, gee_m2, gxe_m2 = gnomonic_metric(ξc, ηc - h_metric, R)
+        det_gp2 = gxx_p2 * gee_p2 - gxe_p2^2
+        det_gm2 = gxx_m2 * gee_m2 - gxe_m2^2
+        Jgxe_p2 = Jp2 * (-gxe_p2 / det_gp2)
+        Jgxe_m2 = Jm2 * (-gxe_m2 / det_gm2)
+        dJgxe_dη_arr[p, i, j] = (Jgxe_p2 - Jgxe_m2) / (2 * h_metric)
     end
 
     # Precompute center-to-center physical distances
@@ -160,11 +193,12 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
     end
 
     CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
-        lon, lat, area, dx, dy, dξ, dη, rotation_angles,
+        lon, lat, area, dx, dy, dξ, dη, rotation_angles, rotation_matrices,
         J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
         d2ξ_dlon2_arr, d2ξ_dlondlat_arr, d2ξ_dlat2_arr,
         d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
+        dJgxe_dξ_arr, dJgxe_dη_arr,
         dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd)
 end
 

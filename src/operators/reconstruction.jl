@@ -133,6 +133,10 @@ function ppm_flux_integral(ql, qr, qi, courant)
     if c < 1e-15
         return 0.0
     end
+    if c > 1.0
+        @warn "CFL violation: |Courant| = $c > 1. PPM flux integral requires |Courant| < 1." maxlog=1
+        c = min(c, 1.0)  # Clamp to prevent extrapolation beyond cell
+    end
     # Integrate from the upwind edge
     if courant >= 0
         # Integrate from x = 1-c to x = 1 (right portion of upwind cell)
