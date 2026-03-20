@@ -5,8 +5,10 @@ Two variants are provided:
 
 1. **Corner-point vorticity** (`fv_vorticity`): Vorticity at cell corners
    (vertices), computed by interpolating the exact cell-mean values to
-   corner positions (average of 4 surrounding cells). This is the natural
-   staggering for the momentum equation's potential vorticity flux.
+   corner positions (average of 4 surrounding cells). Boundary corners
+   use ghost-extended cell-mean vorticity from neighboring panels via
+   `extend_with_ghosts`. This is the natural staggering for the momentum
+   equation's potential vorticity flux.
    Output shape: (6, Nc+1, Nc+1) with Corner staggering.
 
 2. **Cell-mean vorticity** (`fv_vorticity_cellmean`): Computes area-averaged
@@ -37,34 +39,35 @@ Reference: Harris et al. (2021), GFDL FV3 Technical Memorandum, Sections 3, 5, 6
 Compute corner-point relative vorticity by interpolating exact cell-mean
 values to corner positions.
 
-For each interior corner (i,j), the vorticity is the average of the four
+For each corner (i,j), the vorticity is the average of the four
 surrounding cell-mean values:
 
     ζ_corner[i,j] = (ω[i-1,j-1] + ω[i,j-1] + ω[i-1,j] + ω[i,j]) / 4
 
 where ω is the exact cell-mean vorticity from Stokes' theorem.
 
-Output has Corner staggering: shape (6, Nc+1, Nc+1). Interior corners
-(i ∈ 2:Nc, j ∈ 2:Nc) are computed. Boundary corners are set to zero;
-accurate boundary values require cross-panel communication.
-
-Note: FV3's production corner vorticity uses C-grid contravariant winds
-with higher-order D→A→C interpolation. This simplified version is
-second-order accurate and sufficient for most applications.
+Output has Corner staggering: shape (6, Nc+1, Nc+1). All corners including
+boundary corners are computed. Boundary corners use ghost-extended cell-mean
+vorticity from neighboring panels via `extend_with_ghosts`, which handles
+cross-panel scalar ghost cell fill including cube-vertex corners where three
+panels meet.
 """
 function fv_vorticity!(omega, u_d, v_d, grid::CubedSphereGrid)
     Nc = grid.Nc
+    Ng = grid.Ng
 
     # Compute exact cell-mean vorticity
     omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
 
-    # Zero out all values (boundary corners will remain zero)
-    fill!(omega, 0)
+    # Ghost-extend cell-mean vorticity for cross-panel boundary corner values
+    omega_ext = extend_with_ghosts(omega_cell, grid)
 
-    # Interpolate to corners by averaging 4 surrounding cell-mean values
-    for p in 1:6, i in 2:Nc, j in 2:Nc
-        omega[p, i, j] = 0.25 * (omega_cell[p, i - 1, j - 1] + omega_cell[p, i, j - 1] +
-                                  omega_cell[p, i - 1, j] + omega_cell[p, i, j])
+    # Interpolate to ALL corners (including boundary) by averaging 4 surrounding cell-mean values
+    for p in 1:6, i in 1:Nc+1, j in 1:Nc+1
+        ie = i - 1 + Ng  # extended index for cell (i-1)
+        je = j - 1 + Ng  # extended index for cell (j-1)
+        omega[p, i, j] = 0.25 * (omega_ext[p, ie, je] + omega_ext[p, ie + 1, je] +
+                                  omega_ext[p, ie, je + 1] + omega_ext[p, ie + 1, je + 1])
     end
 
     return omega
@@ -193,4 +196,77 @@ function fv_absolute_vorticity(u_d, v_d, grid::CubedSphereGrid; Omega_rot = 7.29
     omega_abs = zeros(T, 6, Nc, Nc)
     fv_absolute_vorticity!(omega_abs, u_d, v_d, grid; Omega_rot)
     return omega_abs
+end
+
+# =========================================================================
+# ArrayOp: Corner-point vorticity (ghost-extended interpolation)
+# =========================================================================
+
+"""
+    fv_vorticity_arrayop(u_d, v_d, grid)
+
+ArrayOp version of corner-point vorticity. Computes cell-mean vorticity,
+ghost-extends it via `extend_with_ghosts`, then builds an ArrayOp that
+interpolates to all corners (including boundary) by averaging 4 surrounding
+cell-mean values from the ghost-extended array.
+
+Returns an ArrayOp{SymReal} of shape [6, Nc+1, Nc+1].
+"""
+function fv_vorticity_arrayop(u_d, v_d, grid::CubedSphereGrid)
+    Nc = grid.Nc; Ng = grid.Ng
+
+    # First compute cell-mean vorticity
+    omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
+
+    # Ghost-extend
+    omega_ext = extend_with_ghosts(omega_cell, grid)
+
+    # Build ArrayOp for corner interpolation
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    o_c = const_wrap(omega_ext)
+    o = Ng  # offset; corner (i,j) maps to extended cells (i-1+Ng, j-1+Ng) through (i+Ng, j+Ng)
+
+    expr = (wrap(o_c[p, i - 1 + o, j - 1 + o]) + wrap(o_c[p, i + o, j - 1 + o]) +
+            wrap(o_c[p, i - 1 + o, j + o]) + wrap(o_c[p, i + o, j + o])) / 4
+
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc+1), j => 1:1:(Nc+1)))
+end
+
+# =========================================================================
+# ArrayOp: Absolute vorticity (cell-mean + Coriolis)
+# =========================================================================
+
+"""
+    fv_absolute_vorticity_arrayop(u_d, v_d, grid; Omega_rot=7.292e-5)
+
+ArrayOp version of cell-mean absolute vorticity: ω_abs = ω_rel + f,
+where f = 2Ω sin(lat) is the Coriolis parameter.
+
+Returns an ArrayOp{SymReal} of shape [6, Nc, Nc].
+"""
+function fv_absolute_vorticity_arrayop(u_d, v_d, grid::CubedSphereGrid; Omega_rot = 7.292e-5)
+    Nc = grid.Nc
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+
+    # Cell-mean vorticity ArrayOp
+    u_c = const_wrap(unwrap(u_d)); v_c = const_wrap(unwrap(v_d))
+    A_c = const_wrap(grid.area)
+    dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
+
+    circ = wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j]) +
+           wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+           wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+           wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
+
+    omega_rel = circ / wrap(A_c[p, i, j])
+
+    # Precompute Coriolis parameter
+    f_arr = zeros(6, Nc, Nc)
+    for pp in 1:6, ii in 1:Nc, jj in 1:Nc
+        f_arr[pp, ii, jj] = 2 * Omega_rot * sin(grid.lat[pp, ii, jj])
+    end
+    f_c = const_wrap(f_arr)
+
+    expr = omega_rel + wrap(f_c[p, i, j])
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end

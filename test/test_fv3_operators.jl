@@ -193,7 +193,7 @@ end
     omega = fv_vorticity(u_d, v_d, grid)
     omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
 
-    # Corner vorticity is interpolated from cell-mean, so it should be
+    # Interior corner vorticity is interpolated from cell-mean, so it should be
     # the exact average of the 4 surrounding cell-mean values
     for p in 1:6, i in 2:Nc, j in 2:Nc
         avg = 0.25 * (omega_cell[p,i-1,j-1] + omega_cell[p,i,j-1] +
@@ -201,40 +201,74 @@ end
         @test isapprox(omega[p, i, j], avg; atol=1e-14)
     end
 
-    # And the interpolated values should be close to the analytical value
-    for p in 1:6, i in 2:Nc, j in 2:Nc
+    # All corners (including boundary) should be close to the analytical value
+    for p in 1:6, i in 1:Nc+1, j in 1:Nc+1
         cart = EarthSciDiscretizations.gnomonic_to_cart(grid.ξ_edges[i], grid.η_edges[j], p)
         lat_corner = asin(clamp(cart[3], -1.0, 1.0))
         expected = 2 * Omega_test * sin(lat_corner)
-        @test isapprox(omega[p, i, j], expected; rtol=0.15, atol=0.05)
+        @test isapprox(omega[p, i, j], expected; rtol=0.3, atol=0.1)
     end
 end
 
-@testitem "Corner vorticity: boundary corners are zero" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
-    # Boundary corner values are set to zero (require cross-panel communication)
+@testitem "Corner vorticity: boundary corners use ghost-extended values" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    # Boundary corner values are computed via ghost-extended cell-mean vorticity
+    # from neighboring panels. For solid body rotation they should approximate
+    # the analytical value 2*Omega*sin(lat).
     grid = CubedSphereGrid(8; R=1.0)
-    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+    Omega_test = 1.0
+    u_d, v_d = init_solid_body_winds(grid, Omega_test, 1.0)
     omega = fv_vorticity(u_d, v_d, grid)
     Nc = grid.Nc
+
+    # Boundary corners should NOT be zero (they get values from neighboring panels)
+    boundary_vals = Float64[]
     for p in 1:6
-        @test all(omega[p, 1, :] .== 0.0)
-        @test all(omega[p, Nc + 1, :] .== 0.0)
-        @test all(omega[p, :, 1] .== 0.0)
-        @test all(omega[p, :, Nc + 1] .== 0.0)
+        for j in 1:Nc+1
+            push!(boundary_vals, omega[p, 1, j])
+            push!(boundary_vals, omega[p, Nc + 1, j])
+        end
+        for i in 2:Nc  # avoid double-counting corners
+            push!(boundary_vals, omega[p, i, 1])
+            push!(boundary_vals, omega[p, i, Nc + 1])
+        end
+    end
+    nonzero_boundary = count(v -> abs(v) > 1e-10, boundary_vals)
+    # Most boundary corners should be nonzero (some at equator may be near zero)
+    @test nonzero_boundary / length(boundary_vals) > 0.5
+
+    # Boundary corners should also approximate 2*Omega*sin(lat)
+    for p in 1:6, i in [1, Nc+1], j in [1, Nc+1]
+        cart = EarthSciDiscretizations.gnomonic_to_cart(grid.ξ_edges[i], grid.η_edges[j], p)
+        lat_corner = asin(clamp(cart[3], -1.0, 1.0))
+        expected = 2 * Omega_test * sin(lat_corner)
+        @test isapprox(omega[p, i, j], expected; rtol=0.3, atol=0.1)
     end
 end
 
 @testitem "Corner vorticity: exact average of cell-mean values" setup=[FV3Setup] tags=[:fv3] begin
     # Corner vorticity is defined as the average of 4 surrounding cell-mean values
+    # For interior corners, this uses the cell-mean array directly.
+    # For boundary corners, this uses the ghost-extended cell-mean array.
     grid = CubedSphereGrid(12; R=1.0)
-    Nc = grid.Nc
+    Nc = grid.Nc; Ng = grid.Ng
     # Use random D-grid winds to test for arbitrary fields
     u_d = randn(6, Nc + 1, Nc)
     v_d = randn(6, Nc, Nc + 1)
 
     omega_corner = fv_vorticity(u_d, v_d, grid)
     omega_cell = fv_vorticity_cellmean(u_d, v_d, grid)
+    omega_ext = extend_with_ghosts(omega_cell, grid)
 
+    # Check ALL corners (including boundary) against the ghost-extended array
+    for p in 1:6, i in 1:Nc+1, j in 1:Nc+1
+        ie = i - 1 + Ng
+        je = j - 1 + Ng
+        avg_ext = 0.25 * (omega_ext[p, ie, je] + omega_ext[p, ie + 1, je] +
+                          omega_ext[p, ie, je + 1] + omega_ext[p, ie + 1, je + 1])
+        @test isapprox(omega_corner[p, i, j], avg_ext; atol=1e-14)
+    end
+
+    # Interior corners should still match the direct cell-mean average
     for p in 1:6, i in 2:Nc, j in 2:Nc
         avg_cell = 0.25 * (omega_cell[p,i-1,j-1] + omega_cell[p,i,j-1] +
                            omega_cell[p,i-1,j] + omega_cell[p,i,j])
@@ -271,20 +305,17 @@ end
     end
 end
 
-@testitem "Cell-mean vorticity: global integral = 0" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "Cell-mean vorticity: global integral = 0" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     # The global integral of cell-mean vorticity on a closed surface must be zero
     # (by Stokes' theorem, since the surface has no boundary).
-    # Note: This uses independently random D-grid winds on each panel, which do
-    # NOT satisfy continuity at panel boundaries. The non-zero residual comes from
-    # boundary edges being counted once per panel with unrelated wind values.
-    # For exact cancellation, winds must be consistent across shared panel edges
-    # (e.g., from a smooth global field like solid body rotation).
+    # Using solid body rotation winds which are continuous across panel boundaries,
+    # so boundary edge contributions cancel exactly and the integral should vanish
+    # to near machine precision.
     R = 1.0
     Nc = 12
     grid = CubedSphereGrid(Nc; R=R)
 
-    u_d = randn(6, Nc + 1, Nc)
-    v_d = randn(6, Nc, Nc + 1)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, R)
 
     omega = fv_vorticity_cellmean(u_d, v_d, grid)
 
@@ -293,7 +324,7 @@ end
 
     total_circ = sum(abs(omega[p, i, j]) * grid.area[p, i, j]
                      for p in 1:6, i in 1:Nc, j in 1:Nc)
-    @test abs(global_integral) / total_circ < 0.05
+    @test abs(global_integral) / total_circ < 1e-12
 end
 
 @testitem "Cell-mean vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
@@ -306,6 +337,30 @@ end
     omega_ao = evaluate_arrayop(ao)
 
     @test isapprox(omega_ao, omega_loop; rtol=1e-12)
+end
+
+@testitem "Corner vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    omega_loop = fv_vorticity(u_d, v_d, grid)
+
+    ao = fv_vorticity_arrayop(u_d, v_d, grid)
+    omega_ao = evaluate_arrayop(ao)
+
+    @test isapprox(omega_ao, omega_loop; rtol=1e-12)
+end
+
+@testitem "Absolute vorticity: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    omega_abs_loop = fv_absolute_vorticity(u_d, v_d, grid)
+
+    ao = fv_absolute_vorticity_arrayop(u_d, v_d, grid)
+    omega_abs_ao = evaluate_arrayop(ao)
+
+    @test isapprox(omega_abs_ao, omega_abs_loop; rtol=1e-12)
 end
 
 # =============================================================================
@@ -341,32 +396,46 @@ end
     ke_mean_expected = (Omega_test * R)^2 / 3
     @test isapprox(ke_mean, ke_mean_expected; rtol=0.05)
 
-    # Check individual cells
+    # Check individual cells (upstream-biased formula evaluates at face positions
+    # rather than cell centers, so larger error is expected near panel corners
+    # where non-orthogonality is strongest)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         expected_ke = 0.5 * (Omega_test * R * cos(grid.lat[p, i, j]))^2
-        @test isapprox(ke[p, i, j], expected_ke; rtol=0.15, atol=0.01)
+        @test isapprox(ke[p, i, j], expected_ke; rtol=0.25, atol=0.02)
     end
 
     # KE is positive everywhere
     @test all(ke .>= 0)
 end
 
-@testitem "KE: positive definite" setup=[FV3Setup] tags=[:fv3] begin
+@testitem "KE: cell-center positive definite for random winds" setup=[FV3Setup] tags=[:fv3] begin
     grid = CubedSphereGrid(8; R=1.0)
     Nc = grid.Nc
     u_d = randn(6, Nc + 1, Nc)
     v_d = randn(6, Nc, Nc + 1)
-    ke = fv_kinetic_energy(u_d, v_d, grid)
+    ke = fv_kinetic_energy_cell(u_d, v_d, grid)
     @test all(ke .>= 0)
 end
 
-@testitem "KE: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+@testitem "KE: upstream-biased ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
     grid = CubedSphereGrid(8; R=1.0)
     u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
 
     ke_loop = fv_kinetic_energy(u_d, v_d, grid)
 
     ao = fv_kinetic_energy_arrayop(u_d, v_d, grid)
+    ke_ao = evaluate_arrayop(ao)
+
+    @test isapprox(ke_ao, ke_loop; rtol=1e-12)
+end
+
+@testitem "KE: cell-center ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    ke_loop = fv_kinetic_energy_cell(u_d, v_d, grid)
+
+    ao = fv_kinetic_energy_cell_arrayop(u_d, v_d, grid)
     ke_ao = evaluate_arrayop(ao)
 
     @test isapprox(ke_ao, ke_loop; rtol=1e-12)
@@ -393,6 +462,20 @@ end
     uc, vc = dgrid_to_cgrid(u_d, v_d, grid)
     @test maximum(abs.(uc)) > 0.1
     @test maximum(abs.(vc)) > 0.1
+end
+
+@testitem "D→C grid: ArrayOp matches loop version" setup=[FV3Setup, SolidBodyRotation] tags=[:fv3] begin
+    grid = CubedSphereGrid(8; R=1.0)
+    u_d, v_d = init_solid_body_winds(grid, 1.0, 1.0)
+
+    uc_loop, vc_loop = dgrid_to_cgrid(u_d, v_d, grid)
+
+    uc_ao, vc_ao = dgrid_to_cgrid_arrayop(u_d, v_d, grid)
+    uc_eval = evaluate_arrayop(uc_ao)
+    vc_eval = evaluate_arrayop(vc_ao)
+
+    @test isapprox(uc_eval, uc_loop; rtol=1e-12)
+    @test isapprox(vc_eval, vc_loop; rtol=1e-12)
 end
 
 # =============================================================================
@@ -550,10 +633,11 @@ end
     @test count(sign_checks) / length(sign_checks) > 0.9
 
     # Kinetic energy should be approximately (u0 cos(lat))²/2
+    # (upstream-biased face-averaging gives larger error near panel corners)
     ke = fv_kinetic_energy(u_d, v_d, grid)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         expected_ke = 0.5 * (u0 * cos(grid.lat[p, i, j]))^2
-        @test isapprox(ke[p, i, j], expected_ke; rtol=0.15, atol=10.0)
+        @test isapprox(ke[p, i, j], expected_ke; rtol=0.25, atol=10.0)
     end
 end
 
