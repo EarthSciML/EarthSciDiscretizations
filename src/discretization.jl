@@ -116,29 +116,17 @@ function fv_laplacian_extended(u_ext, grid::CubedSphereGrid)
     idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
 
     u_c = const_wrap(u_ext)
-    A_c = const_wrap(grid.area)
     J_c = const_wrap(grid.J)
     gxe_c = const_wrap(grid.ginv_ξη)
     dJgxe_dξ_c = const_wrap(grid.dJgxe_dξ)
     dJgxe_dη_c = const_wrap(grid.dJgxe_dη)
-
-    # For the orthogonal stencil, we need center-to-center distances.
-    # Use dξ * √(g_ξξ) as the effective distance (consistent with the metric).
-    # This is equivalent to the physical distance for equispaced gnomonic cells.
     ginv_ξξ_c = const_wrap(grid.ginv_ξξ)
     ginv_ηη_c = const_wrap(grid.ginv_ηη)
-
-    # Orthogonal FV Laplacian using the covariant form:
-    # (1/J) [∂/∂ξ(J g^{ξξ} ∂φ/∂ξ) + ∂/∂η(J g^{ηη} ∂φ/∂η)]
-    # Discretized with half-point metric averaging.
+    dJgxx_dξ_c = const_wrap(grid.dJgxx_dξ)
+    dJgyy_dη_c = const_wrap(grid.dJgyy_dη)
 
     # Access via extended indices: cell (i,j) → extended position (i+Ng, j+Ng)
     o = Ng  # offset
-
-    # Half-point metric values for the ξ-direction
-    # East face (i+1/2): average J*g^{ξξ} at cells i and i+1
-    # J*g^{ξξ} at cell i
-    Jgxx_i = wrap(J_c[p, i, j]) * wrap(ginv_ξξ_c[p, i, j])
 
     u_center = wrap(u_c[p, i + o, j + o])
     u_east   = wrap(u_c[p, i + o + 1, j + o])
@@ -154,11 +142,13 @@ function fv_laplacian_extended(u_ext, grid::CubedSphereGrid)
     du_dξ = (u_east - u_west) / (2 * dξ)
     du_dη = (u_north - u_south) / (2 * dη)
 
-    # Covariant Laplacian orthogonal part:
-    # (1/J) ∂/∂ξ(J g^{ξξ} ∂u/∂ξ) ≈ g^{ξξ} ∂²u/∂ξ² + (1/J) ∂(Jg^{ξξ})/∂ξ · ∂u/∂ξ
-    # For simplicity, use: g^{ξξ} ∂²u/∂ξ² + g^{ηη} ∂²u/∂η²
-    # (the first-derivative corrections from ∂(Jg^{ξξ})/∂ξ are small on uniform gnomonic grids)
-    orthogonal = wrap(ginv_ξξ_c[p, i, j]) * d2u_dξ2 + wrap(ginv_ηη_c[p, i, j]) * d2u_dη2
+    # Full covariant Laplacian orthogonal part:
+    # (1/J) ∂/∂ξ(J g^{ξξ} ∂u/∂ξ) = g^{ξξ} ∂²u/∂ξ² + (1/J) ∂(Jg^{ξξ})/∂ξ · ∂u/∂ξ
+    # (1/J) ∂/∂η(J g^{ηη} ∂u/∂η) = g^{ηη} ∂²u/∂η² + (1/J) ∂(Jg^{ηη})/∂η · ∂u/∂η
+    orthogonal = wrap(ginv_ξξ_c[p, i, j]) * d2u_dξ2 + wrap(ginv_ηη_c[p, i, j]) * d2u_dη2 +
+        wrap(1 / J_c[p, i, j]) * (
+            wrap(dJgxx_dξ_c[p, i, j]) * du_dξ +
+            wrap(dJgyy_dη_c[p, i, j]) * du_dη)
 
     # Mixed derivative
     u_ne = wrap(u_c[p, i + o + 1, j + o + 1])

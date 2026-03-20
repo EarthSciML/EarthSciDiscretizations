@@ -101,6 +101,56 @@ end
     end
 end
 
+@testitem "Connectivity geometric verification" setup=[GridSetup] tags=[:grid] begin
+    # Verify that ghost cell mapping produces the correct geometric neighbor
+    # by comparing 3D Cartesian positions of boundary cells with their ghost-mapped targets.
+    using LinearAlgebra: norm
+    Nc = 8
+    grid = CubedSphereGrid(Nc)
+    Ng = grid.Ng
+
+    # Create fields storing the 3D Cartesian position of each cell center
+    q_x = zeros(6, Nc, Nc)
+    q_y = zeros(6, Nc, Nc)
+    q_z = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        v = gnomonic_to_cart(grid.ξ_centers[i], grid.η_centers[j], p)
+        q_x[p, i, j] = v[1]
+        q_y[p, i, j] = v[2]
+        q_z[p, i, j] = v[3]
+    end
+
+    qx_ext = extend_with_ghosts(q_x, grid)
+    qy_ext = extend_with_ghosts(q_y, grid)
+    qz_ext = extend_with_ghosts(q_z, grid)
+
+    # Helper: get ghost position and expected position for a given boundary cell
+    function _check_ghost(p, dir, k, qx_ext, qy_ext, qz_ext, grid, Nc, Ng)
+        if dir == West
+            ghost_pos = [qx_ext[p, Ng, k + Ng], qy_ext[p, Ng, k + Ng], qz_ext[p, Ng, k + Ng]]
+        elseif dir == East
+            ghost_pos = [qx_ext[p, Nc + Ng + 1, k + Ng], qy_ext[p, Nc + Ng + 1, k + Ng], qz_ext[p, Nc + Ng + 1, k + Ng]]
+        elseif dir == South
+            ghost_pos = [qx_ext[p, k + Ng, Ng], qy_ext[p, k + Ng, Ng], qz_ext[p, k + Ng, Ng]]
+        else # North
+            ghost_pos = [qx_ext[p, k + Ng, Nc + Ng + 1], qy_ext[p, k + Ng, Nc + Ng + 1], qz_ext[p, k + Ng, Nc + Ng + 1]]
+        end
+        nb = PANEL_CONNECTIVITY[p][dir]
+        along_k = (dir == West || dir == East) ? k : k
+        i_nb, j_nb = EarthSciDiscretizations.transform_ghost_index(nb, 1, along_k, Nc, Nc, dir)
+        i_nb = clamp(i_nb, 1, Nc); j_nb = clamp(j_nb, 1, Nc)
+        actual = gnomonic_to_cart(grid.ξ_centers[i_nb], grid.η_centers[j_nb], nb.neighbor_panel)
+        return norm(ghost_pos - actual)
+    end
+
+    # For each edge ghost cell, verify the ghost-stored 3D position matches
+    # the actual position of the source cell on the neighbor panel.
+    for p in 1:6, dir in (West, East, South, North), k in 1:Nc
+        err = _check_ghost(p, dir, k, qx_ext, qy_ext, qz_ext, grid, Nc, Ng)
+        @test err < 1e-12
+    end
+end
+
 @testitem "Positive cell areas" setup=[GridSetup] tags=[:grid] begin
     grid = CubedSphereGrid(8)
     @test all(grid.area .> 0)

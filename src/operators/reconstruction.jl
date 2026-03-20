@@ -24,13 +24,9 @@ function ppm_reconstruction!(q_left, q_right, q, grid::CubedSphereGrid, dim::Sym
                 ifaces[i] = (7.0 / 12.0) * (q[p, i, j] + q[p, i - 1, j]) -
                             (1.0 / 12.0) * (q[p, max(1, i - 2), j] + q[p, min(Nc, i + 1), j])
             end
-            # Boundary interfaces: use simple average
-            ifaces[1] = (q[p, 1, j] + q[p, 1, j]) / 2  # extrapolate
-            ifaces[Nc + 1] = (q[p, Nc, j] + q[p, Nc, j]) / 2
-            if Nc >= 2
-                ifaces[1] = q[p, 1, j]  # cell edge value
-                ifaces[Nc + 1] = q[p, Nc, j]
-            end
+            # Boundary interfaces: use cell center value as edge estimate
+            ifaces[1] = q[p, 1, j]
+            ifaces[Nc + 1] = q[p, Nc, j]
 
             # Step 2: Assign left/right edges and apply CW84 limiter
             for i in 3:Nc-2
