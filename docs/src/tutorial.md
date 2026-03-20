@@ -114,28 +114,29 @@ fig
 ## Step 4: Animate
 
 ```@example tutorial
+# Collect all cell-center coordinates for scatter plot animation
+lons_all = [rad2deg(grid.lon[p, i, j]) for p in 1:6 for i in 1:Nc for j in 1:Nc]
+lats_all = [rad2deg(grid.lat[p, i, j]) for p in 1:6 for i in 1:Nc for j in 1:Nc]
+
 fig = Figure(size=(900, 500))
 ga = GeoAxis(fig[1, 1]; dest="+proj=robin")
 
-color_obs = [Observable(q_initial[p, :, :]) for p in 1:6]
-for p in 1:6
-    surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
-             zeros(Nc, Nc); color=color_obs[p], shading=NoShading,
-             colormap=:viridis, colorrange=(0, 1))
-end
+color_obs = Observable(vec(q_initial))
+scatter!(ga, lons_all, lats_all; color=color_obs, colormap=:viridis,
+         colorrange=(0, 1), markersize=8)
 lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
 Colorbar(fig[1, 2]; colormap=:viridis, colorrange=(0, 1), label="u")
-# Sample frames from the solution
+
 frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round .|> Int |> unique
 
-record(fig, "diffusion.gif", frame_indices; framerate=5) do tidx
+record(fig, joinpath(@__DIR__, "diffusion.gif"), frame_indices; framerate=5) do tidx
     q = get_snapshot(sol, u_sym, grid, tidx)
-    for p in 1:6
-        color_obs[p][] = q[p, :, :]
-    end
+    color_obs[] = vec(q)
 end
 nothing # hide
 ```
+
+![Diffusion on the sphere](diffusion.gif)
 
 ## What happened under the hood
 
