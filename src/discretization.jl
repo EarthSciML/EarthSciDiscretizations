@@ -66,13 +66,27 @@ function _build_symbolic_ghost_extension(u_sym, grid::CubedSphereGrid)
         end
     end
 
-    # Fill corner ghost cells (copy from nearest edge ghost)
+    # Fill corner ghost cells by tracing through two panel boundary crossings
+    # using _neighbor_index, which resolves one boundary and clamps the other.
+    # This places corner ghost values on the correct neighbor panel, unlike the
+    # previous approach which just copied from the nearest edge ghost (same panel).
     for p in 1:6
         for gi in 1:Ng, gj in 1:Ng
-            u_ext[p, gi, gj] = u_ext[p, gi, Ng + 1]
-            u_ext[p, ni + Ng + gi, gj] = u_ext[p, ni + Ng + gi, Ng + 1]
-            u_ext[p, gi, nj + Ng + gj] = u_ext[p, gi, nj + Ng]
-            u_ext[p, ni + Ng + gi, nj + Ng + gj] = u_ext[p, ni + Ng + gi, nj + Ng]
+            # SW corner: physical (i,j) = (gi-Ng, gj-Ng), both out of range
+            pij = _neighbor_index(grid, p, gi - Ng, gj - Ng)
+            u_ext[p, gi, gj] = unwrap(u_sym[pij[1], pij[2], pij[3]])
+
+            # SE corner: physical (i,j) = (ni+gi, gj-Ng)
+            pij = _neighbor_index(grid, p, ni + gi, gj - Ng)
+            u_ext[p, ni + Ng + gi, gj] = unwrap(u_sym[pij[1], pij[2], pij[3]])
+
+            # NW corner: physical (i,j) = (gi-Ng, nj+gj)
+            pij = _neighbor_index(grid, p, gi - Ng, nj + gj)
+            u_ext[p, gi, nj + Ng + gj] = unwrap(u_sym[pij[1], pij[2], pij[3]])
+
+            # NE corner: physical (i,j) = (ni+gi, nj+gj)
+            pij = _neighbor_index(grid, p, ni + gi, nj + gj)
+            u_ext[p, ni + Ng + gi, nj + Ng + gj] = unwrap(u_sym[pij[1], pij[2], pij[3]])
         end
     end
 
@@ -336,7 +350,7 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
         end
     end
 
-    # Second derivative → build FV stencil expression INLINE
+    # Second derivative → chain-rule transformation
     if op isa Differential
         dim = identify_dimension(Symbol(op.x))
         inner = args[1]
@@ -345,74 +359,54 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
             inner_dim = identify_dimension(Symbol(operation(inner).x))
             innermost = arguments(inner)[1]
 
-            dv = _match_dv(innermost, dvs)
-            if dv !== nothing && dim == inner_dim
-                # Each ∂²u/∂x² maps to the full covariant Laplacian.
-                # Scale by 1/n_spatial so that the conventional sum
-                # ∂²u/∂lon² + ∂²u/∂lat² produces exactly one Laplacian.
-                n_spatial = length(spatial_ivs)
+            # Evaluate innermost expression at 9 stencil points
+            f_c  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, 0, o)
+            f_e  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, 0, o)
+            f_w  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, 0, o)
+            f_n  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, +1, o)
+            f_s  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, -1, o)
+            f_ne = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, +1, o)
+            f_nw = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, +1, o)
+            f_se = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, -1, o)
+            f_sw = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, -1, o)
 
-                u_c = const_wrap(ext_vars[dv])
+            d2f_dξ2   = (f_e - 2*f_c + f_w) / dξ^2
+            d2f_dη2   = (f_n - 2*f_c + f_s) / dη^2
+            d2f_dξdη  = (f_ne - f_nw - f_se + f_sw) / (4*dξ*dη)
+            df_dξ     = (f_e - f_w) / (2*dξ)
+            df_dη     = (f_n - f_s) / (2*dη)
 
-                # Build the covariant Laplacian stencil inline using shared idx vars.
-                # Access ghost-extended array at position (i+o, j+o) for interior cell (i, j).
-                ginv_ξξ_c = const_wrap(grid.ginv_ξξ)
-                ginv_ηη_c = const_wrap(grid.ginv_ηη)
-                gxe_c = const_wrap(grid.ginv_ξη)
-                J_c = const_wrap(grid.J)
-                dJgxe_dξ_c = const_wrap(grid.dJgxe_dξ)
-                dJgxe_dη_c = const_wrap(grid.dJgxe_dη)
+            a_ξ_o, a_η_o = _arrayop_chain_coeffs(dim, grid, idx)
+            a_ξ_i, a_η_i = _arrayop_chain_coeffs(inner_dim, grid, idx)
+            b_ξ, b_η = _arrayop_second_chain_coeffs(dim, inner_dim, grid, idx)
 
-                uc = wrap(u_c[p, i+o, j+o])
-                ue = wrap(u_c[p, i+o+1, j+o])
-                uw = wrap(u_c[p, i+o-1, j+o])
-                un = wrap(u_c[p, i+o, j+o+1])
-                us = wrap(u_c[p, i+o, j+o-1])
-                une = wrap(u_c[p, i+o+1, j+o+1])
-                unw = wrap(u_c[p, i+o-1, j+o+1])
-                use = wrap(u_c[p, i+o+1, j+o-1])
-                usw = wrap(u_c[p, i+o-1, j+o-1])
+            result = a_ξ_o * a_ξ_i * d2f_dξ2 +
+                     (a_ξ_o * a_η_i + a_η_o * a_ξ_i) * d2f_dξdη +
+                     a_η_o * a_η_i * d2f_dη2 +
+                     b_ξ * df_dξ + b_η * df_dη
 
-                d2u_dξ2 = (ue - 2*uc + uw) / dξ^2
-                d2u_dη2 = (un - 2*uc + us) / dη^2
-                du_dξ = (ue - uw) / (2*dξ)
-                du_dη = (un - us) / (2*dη)
-                d2u_dξdη = (une - unw - use + usw) / (4*dξ*dη)
-
-                orth = wrap(ginv_ξξ_c[p, i, j]) * d2u_dξ2 +
-                       wrap(ginv_ηη_c[p, i, j]) * d2u_dη2
-
-                cross = 2 * wrap(gxe_c[p, i, j]) * d2u_dξdη +
-                    wrap(1 / J_c[p, i, j]) * (
-                        wrap(dJgxe_dξ_c[p, i, j]) * du_dη +
-                        wrap(dJgxe_dη_c[p, i, j]) * du_dξ)
-
-                return (coeff / n_spatial) * (orth + cross)
-            end
+            return coeff * result
         end
 
-        # First derivative → build gradient stencil inline
-        dv = _match_dv(inner, dvs)
-        if dv !== nothing
-            u_c = const_wrap(ext_vars[dv])
-            du_dξ = (wrap(u_c[p, i+o+1, j+o]) - wrap(u_c[p, i+o-1, j+o])) / (2*dξ)
-            du_dη = (wrap(u_c[p, i+o, j+o+1]) - wrap(u_c[p, i+o, j+o-1])) / (2*dη)
+        # First derivative of general expression
+        f_ip1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, +1, 0, o)
+        f_im1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, -1, 0, o)
+        f_jp1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, 0, +1, o)
+        f_jm1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, 0, -1, o)
 
-            if dim in (:lon, :xi)
-                if dim == :lon
-                    dξ_dx = const_wrap(grid.dξ_dlon); dη_dx = const_wrap(grid.dη_dlon)
-                    return coeff * (wrap(dξ_dx[p, i, j]) * du_dξ + wrap(dη_dx[p, i, j]) * du_dη)
-                else
-                    return coeff * du_dξ
-                end
-            elseif dim in (:lat, :eta)
-                if dim == :lat
-                    dξ_dy = const_wrap(grid.dξ_dlat); dη_dy = const_wrap(grid.dη_dlat)
-                    return coeff * (wrap(dξ_dy[p, i, j]) * du_dξ + wrap(dη_dy[p, i, j]) * du_dη)
-                else
-                    return coeff * du_dη
-                end
-            end
+        df_dξ = (f_ip1 - f_im1) / (2*dξ)
+        df_dη = (f_jp1 - f_jm1) / (2*dη)
+
+        if dim == :lon
+            dξ_dx = const_wrap(grid.dξ_dlon); dη_dx = const_wrap(grid.dη_dlon)
+            return coeff * (wrap(dξ_dx[p, i, j]) * df_dξ + wrap(dη_dx[p, i, j]) * df_dη)
+        elseif dim == :lat
+            dξ_dy = const_wrap(grid.dξ_dlat); dη_dy = const_wrap(grid.dη_dlat)
+            return coeff * (wrap(dξ_dy[p, i, j]) * df_dξ + wrap(dη_dy[p, i, j]) * df_dη)
+        elseif dim == :xi
+            return coeff * df_dξ
+        elseif dim == :eta
+            return coeff * df_dη
         end
     end
 
@@ -425,6 +419,70 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
 
     # Fallback: return as numeric constant
     return coeff * wrap(expr)
+end
+
+"""
+Evaluate a symbolic expression at a grid point offset (di, dj) from the
+current cell, by replacing each dependent variable with its ghost-extended
+array value at the offset position.
+"""
+function _eval_at_gridpoint(expr, dvs, ext_vars, idx, di, dj, o)
+    p, i, j = idx[1], idx[2], idx[3]
+    ex = unwrap(expr)
+
+    if !iscall(ex)
+        return wrap(ex)
+    end
+
+    dv = _match_dv(ex, dvs)
+    if dv !== nothing
+        u_c = const_wrap(ext_vars[dv])
+        return wrap(u_c[p, i + di + o, j + dj + o])
+    end
+
+    # Recurse into arguments for nonlinear expressions (u^2, u*v, sin(u), etc.)
+    op = operation(ex); args = arguments(ex)
+    new_args = [unwrap(_eval_at_gridpoint(wrap(a), dvs, ext_vars, idx, di, dj, o)) for a in args]
+    return wrap(op(new_args...))
+end
+
+"""
+Return (coeff_ξ, coeff_η) chain-rule coefficients for dimension `dim` as ArrayOp expressions.
+For computational coordinates: (1,0) or (0,1). For physical coordinates: uses coordinate Jacobian.
+"""
+function _arrayop_chain_coeffs(dim, grid, idx)
+    p, i, j = idx[1], idx[2], idx[3]
+    if dim == :lon
+        return (wrap(const_wrap(grid.dξ_dlon)[p, i, j]),
+                wrap(const_wrap(grid.dη_dlon)[p, i, j]))
+    elseif dim == :lat
+        return (wrap(const_wrap(grid.dξ_dlat)[p, i, j]),
+                wrap(const_wrap(grid.dη_dlat)[p, i, j]))
+    elseif dim == :xi
+        return (wrap(Symbolics.value(1.0)), wrap(Symbolics.value(0.0)))
+    elseif dim == :eta
+        return (wrap(Symbolics.value(0.0)), wrap(Symbolics.value(1.0)))
+    end
+end
+
+"""
+Return (coeff_ξ, coeff_η) for the second-derivative chain-rule correction
+(∂²ξ/∂x∂y, ∂²η/∂x∂y) terms from the nonlinear coordinate mapping.
+"""
+function _arrayop_second_chain_coeffs(dim_outer, dim_inner, grid, idx)
+    p, i, j = idx[1], idx[2], idx[3]
+    if dim_outer == :lon && dim_inner == :lon
+        return (wrap(const_wrap(grid.d2ξ_dlon2)[p, i, j]),
+                wrap(const_wrap(grid.d2η_dlon2)[p, i, j]))
+    elseif dim_outer == :lat && dim_inner == :lat
+        return (wrap(const_wrap(grid.d2ξ_dlat2)[p, i, j]),
+                wrap(const_wrap(grid.d2η_dlat2)[p, i, j]))
+    elseif (dim_outer == :lon && dim_inner == :lat) || (dim_outer == :lat && dim_inner == :lon)
+        return (wrap(const_wrap(grid.d2ξ_dlondlat)[p, i, j]),
+                wrap(const_wrap(grid.d2η_dlondlat)[p, i, j]))
+    else
+        return (wrap(Symbolics.value(0.0)), wrap(Symbolics.value(0.0)))
+    end
 end
 
 function _match_dv(expr, dvs)
