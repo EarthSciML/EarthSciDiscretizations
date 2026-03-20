@@ -18,8 +18,9 @@ function transport_2d(q, courant_xi, courant_eta, grid::CubedSphereGrid)
     Nc = grid.Nc
     idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
     q_c = const_wrap(unwrap(q)); cxi = const_wrap(unwrap(courant_xi)); ceta = const_wrap(unwrap(courant_eta))
-    dξ = grid.dξ; dη = grid.dη
+    A_c = const_wrap(grid.area); dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
 
+    # Index (p,i,j) maps to physical cell (p, i+1, j+1)
     F_e_a = wrap(cxi[p, i + 2, j + 1]) * (wrap(q_c[p, i + 1, j + 1]) + wrap(q_c[p, i + 2, j + 1])) / 2
     F_e_d = abs(wrap(cxi[p, i + 2, j + 1])) * (wrap(q_c[p, i + 2, j + 1]) - wrap(q_c[p, i + 1, j + 1])) / 2
     F_w_a = wrap(cxi[p, i + 1, j + 1]) * (wrap(q_c[p, i, j + 1]) + wrap(q_c[p, i + 1, j + 1])) / 2
@@ -29,7 +30,12 @@ function transport_2d(q, courant_xi, courant_eta, grid::CubedSphereGrid)
     G_s_a = wrap(ceta[p, i + 1, j + 1]) * (wrap(q_c[p, i + 1, j]) + wrap(q_c[p, i + 1, j + 1])) / 2
     G_s_d = abs(wrap(ceta[p, i + 1, j + 1])) * (wrap(q_c[p, i + 1, j + 1]) - wrap(q_c[p, i + 1, j])) / 2
 
-    expr = -((F_e_a - F_e_d) - (F_w_a - F_w_d)) / dξ - ((G_n_a - G_n_d) - (G_s_a - G_s_d)) / dη
+    F_east = F_e_a - F_e_d; F_west = F_w_a - F_w_d
+    G_north = G_n_a - G_n_d; G_south = G_s_a - G_s_d
+    # Use proper FV divergence with physical edge lengths and cell areas
+    xi_contrib = -(F_east * wrap(dx_c[p, i + 2, j + 1]) - F_west * wrap(dx_c[p, i + 1, j + 1])) / wrap(A_c[p, i + 1, j + 1])
+    eta_contrib = -(G_north * wrap(dy_c[p, i + 1, j + 2]) - G_south * wrap(dy_c[p, i + 1, j + 1])) / wrap(A_c[p, i + 1, j + 1])
+    expr = xi_contrib + eta_contrib
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc - 2), j => 1:1:(Nc - 2)))
 end
 

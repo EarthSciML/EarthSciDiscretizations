@@ -82,6 +82,10 @@ export vertical_remap, vertical_remap_tendency
 # Exports: Numerical transport operators
 export flux_1d_ppm!, transport_2d_linrood!
 
+# Exports: ArrayOp-based PPM transport operators
+export flux_1d_ppm_arrayop, flux_to_tendency_arrayop, advective_tendency_arrayop
+export compute_courant_numbers
+
 # Exports: Precomputed stencils
 export FVLaplacianStencil, FVGradientStencil
 export precompute_laplacian_stencil, precompute_gradient_stencil

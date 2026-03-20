@@ -98,6 +98,30 @@ function _ppm_limit_cw84(ql, qr, qi)
     return (ql, qr)
 end
 
+"""
+    _ppm_limit_cw84_sym(ql, qr, qi)
+
+Symbolic (ifelse-based) CW84 PPM limiter for use in ArrayOp expressions.
+Equivalent to `_ppm_limit_cw84` but uses `ifelse` instead of `if` for
+compatibility with symbolic tracing.
+"""
+function _ppm_limit_cw84_sym(ql, qr, qi)
+    # Step 1: Local extremum detection — flatten to qi
+    is_extremum = (qr - qi) * (qi - ql) <= 0
+    ql1 = ifelse(is_extremum, qi, ql)
+    qr1 = ifelse(is_extremum, qi, qr)
+
+    # Step 2: Overshoot correction (mutually exclusive conditions)
+    dq = qr1 - ql1
+    q6 = 6.0 * (qi - 0.5 * (ql1 + qr1))
+    overshoot_left = dq * q6 > dq^2
+    overshoot_right = -dq^2 > dq * q6
+    ql2 = ifelse(overshoot_left, 3.0 * qi - 2.0 * qr1, ql1)
+    qr2 = ifelse(overshoot_right, 3.0 * qi - 2.0 * ql1, qr1)
+
+    return (ql2, qr2)
+end
+
 function ppm_reconstruction(q, grid::CubedSphereGrid, dim::Symbol)
     Nc = grid.Nc; T = eltype(q)
     if dim == :xi
