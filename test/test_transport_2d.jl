@@ -185,3 +185,134 @@ end
 
     @test isapprox(tend_ao, tend_loop; rtol=1e-12)
 end
+
+@testitem "compute_courant_numbers_arrayop matches loop version" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+    dt = 0.01
+
+    # ξ-direction
+    vel_xi = randn(6, Nc + 1, Nc) * 0.1
+    courant_loop = compute_courant_numbers(vel_xi, dt, grid, :xi)
+    ao_xi = compute_courant_numbers_arrayop(vel_xi, dt, grid, :xi)
+    courant_ao = evaluate_arrayop(ao_xi)
+    @test isapprox(courant_ao, courant_loop; rtol=1e-12)
+
+    # η-direction
+    vel_eta = randn(6, Nc, Nc + 1) * 0.1
+    courant_loop_eta = compute_courant_numbers(vel_eta, dt, grid, :eta)
+    ao_eta = compute_courant_numbers_arrayop(vel_eta, dt, grid, :eta)
+    courant_ao_eta = evaluate_arrayop(ao_eta)
+    @test isapprox(courant_ao_eta, courant_loop_eta; rtol=1e-12)
+end
+
+@testitem "transport_2d_ppm_arrayop of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    q = fill(5.0, 6, Nc, Nc)
+    vel_xi = fill(0.0, 6, Nc + 1, Nc)
+    vel_eta = fill(0.0, 6, Nc, Nc + 1)
+    dt = 0.01
+
+    q_ext = extend_with_ghosts(q, grid)
+    courant_xi = compute_courant_numbers(vel_xi, dt, grid, :xi)
+    courant_eta = compute_courant_numbers(vel_eta, dt, grid, :eta)
+
+    ao = transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta, grid)
+    tendency = evaluate_arrayop(ao)
+
+    @test size(tendency) == (6, Nc, Nc)
+    @test all(abs.(tendency) .< 1e-10)
+end
+
+@testitem "transport_2d_ppm_arrayop matches sum of 1D PPM ArrayOps" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    # Smooth non-trivial field
+    q = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        q[p, i, j] = 1.0 + 0.5 * sin(2π * grid.ξ_centers[i] / (π / 2)) *
+                            cos(2π * grid.η_centers[j] / (π / 2))
+    end
+
+    vel_xi = fill(0.3, 6, Nc + 1, Nc)
+    vel_eta = fill(0.2, 6, Nc, Nc + 1)
+    dt = 0.01
+
+    q_ext = extend_with_ghosts(q, grid)
+    courant_xi = compute_courant_numbers(vel_xi, dt, grid, :xi)
+    courant_eta = compute_courant_numbers(vel_eta, dt, grid, :eta)
+
+    # 2D ArrayOp
+    ao_2d = transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta, grid)
+    tend_2d = evaluate_arrayop(ao_2d)
+
+    # Sum of 1D ArrayOps
+    ao_xi = flux_1d_ppm_arrayop(q_ext, courant_xi, vel_xi, grid, :xi)
+    ao_eta = flux_1d_ppm_arrayop(q_ext, courant_eta, vel_eta, grid, :eta)
+    tend_xi = evaluate_arrayop(ao_xi)
+    tend_eta = evaluate_arrayop(ao_eta)
+
+    @test isapprox(tend_2d, tend_xi + tend_eta; rtol=1e-10)
+end
+
+@testitem "ppm_reconstruction_arrayop produces ArrayOp types" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+    using SymbolicUtils: isarrayop
+
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    q = randn(6, Nc, Nc)
+    q_ext = extend_with_ghosts(q, grid)
+
+    ql_ao, qr_ao = ppm_reconstruction_arrayop(q_ext, grid, :xi)
+    @test isarrayop(ql_ao)
+    @test isarrayop(qr_ao)
+
+    ql_ao_eta, qr_ao_eta = ppm_reconstruction_arrayop(q_ext, grid, :eta)
+    @test isarrayop(ql_ao_eta)
+    @test isarrayop(qr_ao_eta)
+end
+
+@testitem "ppm_reconstruction_arrayop matches loop-based on interior" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+    Nc = 12
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    # Smooth field for well-behaved PPM
+    q = zeros(6, Nc, Nc)
+    for p in 1:6, i in 1:Nc, j in 1:Nc
+        q[p, i, j] = 1.0 + 0.3 * sin(2π * grid.ξ_centers[i] / (π / 2))
+    end
+
+    q_ext = extend_with_ghosts(q, grid)
+
+    # ArrayOp reconstruction
+    ql_ao, qr_ao = ppm_reconstruction_arrayop(q_ext, grid, :xi)
+    ql_vals = evaluate_arrayop(ql_ao)
+    qr_vals = evaluate_arrayop(qr_ao)
+
+    # Loop-based reconstruction (only covers cells 3:Nc-2 mapped to 1:Nc-4)
+    ql_loop, qr_loop = ppm_reconstruction(q, grid, :xi)
+
+    # Compare on overlapping interior cells: loop indices 1:Nc-4 map to cells 3:Nc-2
+    # ArrayOp indices 3:Nc-2 also map to cells 3:Nc-2
+    for p in 1:6, ii in 1:Nc-4, j in 1:Nc
+        i_phys = ii + 2  # physical cell index
+        @test isapprox(ql_vals[p, i_phys, j], ql_loop[p, ii, j]; rtol=1e-10)
+        @test isapprox(qr_vals[p, i_phys, j], qr_loop[p, ii, j]; rtol=1e-10)
+    end
+end
+
+@testitem "ghost_fill_arrayop returns extended array" setup=[Transport2DSetup] tags=[:transport] begin
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R=1.0)
+
+    q = randn(6, Nc, Nc)
+    q_ext = ghost_fill_arrayop(q, grid)
+    q_ext_ref = extend_with_ghosts(q, grid)
+
+    @test size(q_ext) == size(q_ext_ref)
+    @test q_ext ≈ q_ext_ref
+end

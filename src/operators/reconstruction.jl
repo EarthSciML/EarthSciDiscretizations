@@ -134,6 +134,61 @@ function ppm_reconstruction(q, grid::CubedSphereGrid, dim::Symbol)
 end
 
 """
+    ppm_reconstruction_arrayop(q_ext, grid, dim)
+
+ArrayOp for PPM reconstruction with CW84 limiting on a ghost-extended field.
+
+Returns `(q_left_ao, q_right_ao)` — two ArrayOps of size [6, Nc, Nc] giving
+the limited left and right edge values for each cell.
+
+Uses the 4th-order interface interpolation formula and the Colella-Woodward
+(1984) monotonicity limiter via `ifelse` for ArrayOp compatibility.
+
+Arguments:
+- `q_ext`: ghost-extended scalar field (6, Nc+2Ng, Nc+2Ng)
+- `grid`: CubedSphereGrid
+- `dim`: `:xi` or `:eta`
+"""
+function ppm_reconstruction_arrayop(q_ext, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc; Ng = grid.Ng; o = Ng
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    q_c = const_wrap(q_ext)
+
+    if dim == :xi
+        ie = i + o; je = j + o
+        # Stencil for cell (i,j): values at ie-2..ie+2
+        qm2 = wrap(q_c[p, ie - 2, je])
+        qm1 = wrap(q_c[p, ie - 1, je])
+        q0  = wrap(q_c[p, ie, je])
+        qp1 = wrap(q_c[p, ie + 1, je])
+        qp2 = wrap(q_c[p, ie + 2, je])
+
+        # Left edge: interface between cell i-1 and cell i
+        ql_raw = (7.0 / 12.0) * (qm1 + q0) - (1.0 / 12.0) * (qm2 + qp1)
+        # Right edge: interface between cell i and cell i+1
+        qr_raw = (7.0 / 12.0) * (q0 + qp1) - (1.0 / 12.0) * (qm1 + qp2)
+    else  # :eta
+        ie = i + o; je = j + o
+        qm2 = wrap(q_c[p, ie, je - 2])
+        qm1 = wrap(q_c[p, ie, je - 1])
+        q0  = wrap(q_c[p, ie, je])
+        qp1 = wrap(q_c[p, ie, je + 1])
+        qp2 = wrap(q_c[p, ie, je + 2])
+
+        ql_raw = (7.0 / 12.0) * (qm1 + q0) - (1.0 / 12.0) * (qm2 + qp1)
+        qr_raw = (7.0 / 12.0) * (q0 + qp1) - (1.0 / 12.0) * (qm1 + qp2)
+    end
+
+    ql_lim, qr_lim = _ppm_limit_cw84_sym(ql_raw, qr_raw, q0)
+
+    ranges = Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc)
+    q_left_ao = make_arrayop(idx, unwrap(ql_lim), ranges)
+    q_right_ao = make_arrayop(idx, unwrap(qr_lim), ranges)
+
+    return (q_left_ao, q_right_ao)
+end
+
+"""
     ppm_flux_integral(ql, qr, qi, courant)
 
 Compute the PPM flux integral: the area-averaged value swept through an
