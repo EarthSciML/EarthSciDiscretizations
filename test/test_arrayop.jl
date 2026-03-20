@@ -23,7 +23,21 @@ end
     @test isarrayop(flux_1d(phi, c_xi, grid, :xi))
     @test isarrayop(flux_1d(phi, c_eta, grid, :eta))
     @test isarrayop(transport_2d(phi, c_xi, c_eta, grid))
-    @test isarrayop(ghost_fill_arrayop(phi, grid))
+
+    # ghost_fill_arrayop returns a ghost-extended array (not an ArrayOp)
+    q_ext = ghost_fill_arrayop(phi, grid)
+    Ng = grid.Ng
+    @test size(q_ext) == (6, Nc + 2Ng, Nc + 2Ng)
+
+    # New ArrayOp operators
+    courant_xi = compute_courant_numbers(c_xi, 0.01, grid, :xi)
+    courant_eta = compute_courant_numbers(c_eta, 0.01, grid, :eta)
+    @test isarrayop(compute_courant_numbers_arrayop(c_xi, 0.01, grid, :xi))
+    @test isarrayop(compute_courant_numbers_arrayop(c_eta, 0.01, grid, :eta))
+    @test isarrayop(transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, c_xi, c_eta, grid))
+    ql, qr = ppm_reconstruction_arrayop(q_ext, grid, :xi)
+    @test isarrayop(ql)
+    @test isarrayop(qr)
 end
 
 @testitem "evaluate_arrayop round-trips Const data" setup=[ArrayOpSetup] tags=[:arrayop] begin

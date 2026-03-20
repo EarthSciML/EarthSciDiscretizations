@@ -132,3 +132,54 @@ function transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid::CubedSphereGr
 
     return tendency
 end
+
+"""
+    transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta, grid)
+
+ArrayOp for unsplit 2D PPM transport tendency [6, Nc, Nc].
+
+Combines ξ and η PPM flux-form tendencies into a single ArrayOp expression.
+Uses the ghost-extended scalar field `q_ext` with precomputed Courant numbers
+and velocities at interfaces for both directions.
+
+This is the unsplit (method-of-lines) form suitable for use with an ODE solver:
+    dq/dt = -div_ξ(F_ξ) - div_η(F_η)
+
+For dimension-split transport with higher accuracy at large Courant numbers,
+use `transport_2d_linrood!` instead.
+
+Arguments:
+- `q_ext`: ghost-extended scalar field (6, Nc+2Ng, Nc+2Ng)
+- `courant_xi`: Courant numbers at ξ-interfaces (6, Nc+1, Nc)
+- `courant_eta`: Courant numbers at η-interfaces (6, Nc, Nc+1)
+- `vel_xi`: ξ-velocity at interfaces (6, Nc+1, Nc)
+- `vel_eta`: η-velocity at interfaces (6, Nc, Nc+1)
+- `grid`: CubedSphereGrid
+"""
+function transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta,
+                                   grid::CubedSphereGrid)
+    Nc = grid.Nc; Ng = grid.Ng; o = Ng
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+
+    q_c = const_wrap(q_ext)
+    cxi_c = const_wrap(unwrap(courant_xi))
+    ceta_c = const_wrap(unwrap(courant_eta))
+    vxi_c = const_wrap(unwrap(vel_xi))
+    veta_c = const_wrap(unwrap(vel_eta))
+    A_c = const_wrap(grid.area)
+    dx_c = const_wrap(grid.dx)
+    dy_c = const_wrap(grid.dy)
+
+    # ξ-direction: East face = interface i+1, West face = interface i
+    F_east = _build_ppm_face_expr_xi(q_c, cxi_c, vxi_c, p, i + 1, j, o)
+    F_west = _build_ppm_face_expr_xi(q_c, cxi_c, vxi_c, p, i, j, o)
+    tend_xi = -(F_east * wrap(dx_c[p, i + 1, j]) - F_west * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+
+    # η-direction: North face = interface j+1, South face = interface j
+    F_north = _build_ppm_face_expr_eta(q_c, ceta_c, veta_c, p, i, j + 1, o)
+    F_south = _build_ppm_face_expr_eta(q_c, ceta_c, veta_c, p, i, j, o)
+    tend_eta = -(F_north * wrap(dy_c[p, i, j + 1]) - F_south * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+
+    expr = tend_xi + tend_eta
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
+end

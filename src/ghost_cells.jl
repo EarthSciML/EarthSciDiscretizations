@@ -258,11 +258,18 @@ function ghost_fill_indices(grid::CubedSphereGrid, loc::VarLocation = CellCenter
     return (src_panel, src_i, src_j)
 end
 
+"""
+    ghost_fill_arrayop(u_interior, grid, loc=CellCenter)
+
+Extend `u_interior` with ghost cells from neighbor panels, returning the
+ghost-extended array suitable for use with ArrayOp-based operators.
+
+This is the recommended entry point for preparing data for ArrayOp operators
+like `flux_1d_ppm_arrayop`, `fv_laplacian_extended`, and
+`transport_2d_ppm_arrayop`, which expect ghost-extended input arrays.
+
+Returns the extended array of size (6, ni+2Ng, nj+2Ng).
+"""
 function ghost_fill_arrayop(u_interior, grid::CubedSphereGrid, loc::VarLocation = CellCenter)
-    ni, nj = grid_size(loc, grid.Nc)
-    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
-    u_c = const_wrap(unwrap(u_interior))
-    expr = wrap(u_c[p, i, j])
-    ranges = Dict(p => 1:1:6, i => 1:1:ni, j => 1:1:nj)
-    return make_arrayop(idx, unwrap(expr), ranges)
+    return extend_with_ghosts(u_interior, grid, loc)
 end

@@ -84,7 +84,9 @@ export flux_1d_ppm!, transport_2d_linrood!
 
 # Exports: ArrayOp-based PPM transport operators
 export flux_1d_ppm_arrayop, flux_to_tendency_arrayop, advective_tendency_arrayop
-export compute_courant_numbers
+export compute_courant_numbers, compute_courant_numbers_arrayop
+export transport_2d_ppm_arrayop
+export ppm_reconstruction_arrayop
 
 # Exports: Precomputed stencils
 export FVLaplacianStencil, FVGradientStencil

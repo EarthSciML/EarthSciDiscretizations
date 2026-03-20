@@ -478,6 +478,63 @@ function compute_courant_numbers(vel, dt, grid::CubedSphereGrid, dim::Symbol)
 end
 
 """
+    _build_interface_distances(grid, dim)
+
+Build a single array of center-to-center distances at all cell interfaces,
+combining interior distances and cross-panel boundary distances.
+
+Returns (6, Nc+1, Nc) for `:xi` or (6, Nc, Nc+1) for `:eta`.
+"""
+function _build_interface_distances(grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    if dim == :xi
+        dist = zeros(6, Nc + 1, Nc)
+        for p in 1:6, j in 1:Nc
+            dist[p, 1, j] = grid.dist_xi_bnd[p, 1, j]
+            for i in 2:Nc
+                dist[p, i, j] = grid.dist_xi[p, i - 1, j]
+            end
+            dist[p, Nc + 1, j] = grid.dist_xi_bnd[p, 2, j]
+        end
+        return dist
+    else
+        dist = zeros(6, Nc, Nc + 1)
+        for p in 1:6, i in 1:Nc
+            dist[p, i, 1] = grid.dist_eta_bnd[p, i, 1]
+            for j in 2:Nc
+                dist[p, i, j] = grid.dist_eta[p, i, j - 1]
+            end
+            dist[p, i, Nc + 1] = grid.dist_eta_bnd[p, i, 2]
+        end
+        return dist
+    end
+end
+
+"""
+    compute_courant_numbers_arrayop(vel, dt, grid, dim)
+
+ArrayOp for Courant numbers at all cell interfaces [6, Nc+1, Nc] for `:xi`
+or [6, Nc, Nc+1] for `:eta`.
+
+Uses precomputed interface distances to express the Courant number as a single
+ArrayOp: `courant[p,i,j] = vel[p,i,j] * dt / dist[p,i,j]`.
+"""
+function compute_courant_numbers_arrayop(vel, dt, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    dist = _build_interface_distances(grid, dim)
+    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
+    v_c = const_wrap(unwrap(vel))
+    d_c = const_wrap(dist)
+    expr = wrap(v_c[p, i, j]) * dt / wrap(d_c[p, i, j])
+    if dim == :xi
+        ranges = Dict(p => 1:1:6, i => 1:1:(Nc + 1), j => 1:1:Nc)
+    else
+        ranges = Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:(Nc + 1))
+    end
+    return make_arrayop(idx, unwrap(expr), ranges)
+end
+
+"""
     _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i_face, j, o)
 
 Build a symbolic expression for the PPM flux at a single ξ-interface.
