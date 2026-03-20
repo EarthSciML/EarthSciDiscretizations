@@ -15,6 +15,7 @@ import DomainSets
 include("grids/abstract_grid.jl")
 include("grids/panel_connectivity.jl")
 include("grids/metric_tensors.jl")
+include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
 
 # Staggering and discrete space
@@ -33,6 +34,12 @@ include("operators/reconstruction.jl")
 include("operators/flux_1d.jl")
 include("operators/transport_2d.jl")
 include("operators/vertical_remap.jl")
+
+# FV3-specific operators
+include("operators/wind_ops.jl")
+include("operators/vorticity.jl")
+include("operators/kinetic_energy.jl")
+include("operators/ppm_edge.jl")
 
 # Precomputed FV stencils
 include("fv_stencil.jl")
@@ -85,6 +92,26 @@ export flux_1d_ppm!, transport_2d_linrood!
 # Exports: ArrayOp-based PPM transport operators
 export flux_1d_ppm_arrayop, flux_to_tendency_arrayop, advective_tendency_arrayop
 export compute_courant_numbers
+
+# Exports: FV3 super-grid
+export compute_super_grid, compute_super_grid!, compute_angle_at_point
+
+# Exports: FV3 wind operators
+export covariant_to_contravariant, contravariant_to_covariant
+export dgrid_to_cgrid!, dgrid_to_cgrid, dgrid_to_cgrid_arrayop
+export compute_flux_with_sinsg!, compute_flux_with_sinsg
+export compute_flux_with_sinsg_xi_arrayop, compute_flux_with_sinsg_eta_arrayop
+
+# Exports: FV3 vorticity and kinetic energy
+export fv_vorticity!, fv_vorticity, fv_vorticity_arrayop
+export fv_vorticity_cellmean!, fv_vorticity_cellmean, fv_vorticity_cellmean_arrayop
+export fv_absolute_vorticity!, fv_absolute_vorticity, fv_absolute_vorticity_arrayop
+export fv_kinetic_energy!, fv_kinetic_energy, fv_kinetic_energy_arrayop
+export fv_kinetic_energy_cell!, fv_kinetic_energy_cell, fv_kinetic_energy_cell_arrayop
+
+# Exports: FV3 two-sided PPM
+export ppm_edge_value_twosided, ppm_edge_value_twosided_limited
+export flux_1d_ppm_twosided!
 
 # Exports: Precomputed stencils
 export FVLaplacianStencil, FVGradientStencil

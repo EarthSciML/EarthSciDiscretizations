@@ -41,6 +41,10 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     # Boundary distances: cross-panel center-to-center distances at panel edges
     dist_xi_bnd::Array{T,3} # (6, 2, Nc): [p, 1=west/2=east, j] boundary distances in ξ
     dist_eta_bnd::Array{T,3}# (6, Nc, 2): [p, i, 1=south/2=north] boundary distances in η
+    # FV3 super-grid angular values: sin/cos of angle between e_ξ and e_η
+    # at 9 sub-positions per cell (see super_grid.jl for position numbering)
+    sin_sg::Array{T,4}      # (6, Nc, Nc, 9)
+    cos_sg::Array{T,4}      # (6, Nc, Nc, 9)
 end
 
 function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
@@ -217,14 +221,20 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dist_eta_bnd[p, i, 2] = R * acos(clamp(dot(v_loc, v_nb), -1.0, 1.0))
     end
 
-    CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
+    grid = CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
         lon, lat, area, dx, dy, dξ, dη, rotation_angles, rotation_matrices,
         J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
         d2ξ_dlon2_arr, d2ξ_dlondlat_arr, d2ξ_dlat2_arr,
         d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
         dJgxe_dξ_arr, dJgxe_dη_arr, dJgxx_dξ_arr, dJgyy_dη_arr,
-        dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd)
+        dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd,
+        zeros(T, 6, Nc, Nc, 9), zeros(T, 6, Nc, Nc, 9))
+
+    # Compute FV3 super-grid angular values
+    compute_super_grid!(grid.sin_sg, grid.cos_sg, grid)
+
+    return grid
 end
 
 total_area(grid::CubedSphereGrid) = sum(grid.area)
