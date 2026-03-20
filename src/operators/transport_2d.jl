@@ -109,9 +109,18 @@ function transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid::CubedSphereGr
     @. q_lambda = q + 0.5 * dt * tend_adv
 
     # Step 3: Full step with FLUX form (for conservation)
-    # tendency = F[u*, dt, q^θ] + G[v*, dt, q^λ]
-    flux_1d_ppm!(tend_xi, q_theta, vel_xi, grid, :xi, dt)
-    flux_1d_ppm!(tend_eta, q_lambda, vel_eta, grid, :eta, dt)
+    # Compute raw fluxes for both directions
+    raw_flux_xi = zeros(6, Nc + 1, Nc)
+    raw_flux_eta = zeros(6, Nc, Nc + 1)
+    _compute_ppm_fluxes!(raw_flux_xi, q_theta, vel_xi, grid, :xi, dt)
+    _compute_ppm_fluxes!(raw_flux_eta, q_lambda, vel_eta, grid, :eta, dt)
+
+    # Match fluxes at rotated panel boundaries for conservation
+    _match_rotated_boundary_fluxes!(raw_flux_xi, raw_flux_eta, grid)
+
+    # Convert matched fluxes to tendencies
+    _flux_to_tendency!(tend_xi, raw_flux_xi, grid, :xi)
+    _flux_to_tendency!(tend_eta, raw_flux_eta, grid, :eta)
 
     @. tendency = tend_xi + tend_eta
 

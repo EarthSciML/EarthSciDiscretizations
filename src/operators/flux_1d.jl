@@ -74,34 +74,29 @@ function _get_courant_eta(vel, dt, grid::CubedSphereGrid, p, i, j)
 end
 
 """
-    flux_1d_ppm!(tendency, q, vel, grid, dim, dt)
+    _compute_ppm_fluxes!(flux, q, vel, grid, dim, dt)
 
-PPM-based 1D flux-form transport. Computes the tendency for `q` transported
-by velocity `vel` in dimension `dim` (:xi or :eta).
+Compute PPM fluxes at cell interfaces without converting to tendencies.
+Returns the flux array directly for external flux matching.
 
 Uses PPM reconstruction with the Colella-Woodward (1984) limiter for
 high-order, monotone transport. The flux through each interface is computed
 by integrating the parabolic profile over the swept volume.
 
-At panel boundaries, fluxes are matched between adjacent panels to ensure
-exact conservation: for same-direction connections, the flux is averaged
-between both panels' independently computed values.
+At panel boundaries, same-direction fluxes (ξ-to-ξ or η-to-η) are matched
+between adjacent panels to ensure conservation. For rotated panel boundary
+connections, use `_match_rotated_boundary_fluxes!` after computing both
+ξ and η fluxes.
 
 Arguments:
-- `tendency`: output array (6, Nc, Nc), modified in-place
+- `flux`: output flux array, (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
 - `q`: scalar field (6, Nc, Nc)
 - `vel`: velocity field at cell edges (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
 - `grid`: CubedSphereGrid
 - `dim`: :xi or :eta
 - `dt`: time step
-
-!!! note "Conservation at panel boundaries"
-    At shared panel edges, fluxes are computed independently by each panel using
-    ghost cell data. The resulting fluxes agree to machine precision since both
-    panels access the same underlying data through ghost cells. For strict
-    bitwise conservation, an explicit flux-sharing step would be needed.
 """
-function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
+function _compute_ppm_fluxes!(flux, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
     Nc = grid.Nc
 
     # Extend q with ghost cells for stencil access at boundaries
@@ -111,7 +106,6 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
     if dim == :xi
         # Compute interface fluxes in the ξ-direction
         # Interface at edge i sits between cell i-1 and cell i
-        flux = zeros(6, Nc + 1, Nc)
         for p in 1:6, j in 1:Nc
             for i in 1:Nc+1
                 # Cells adjacent to this interface (in extended array)
@@ -149,14 +143,7 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
 
         # Match boundary fluxes for same-direction panel connections
         _match_boundary_fluxes_xi!(flux, grid)
-
-        # Compute tendency: -(F_{i+1} - F_i) / (A * dξ)
-        for p in 1:6, i in 1:Nc, j in 1:Nc
-            tendency[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                                   flux[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
-        end
     else  # dim == :eta
-        flux = zeros(6, Nc, Nc + 1)
         for p in 1:6, i in 1:Nc
             for j in 1:Nc+1
                 ie = i + Ng; je = j + Ng
@@ -186,13 +173,76 @@ function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
 
         # Match boundary fluxes for same-direction panel connections
         _match_boundary_fluxes_eta!(flux, grid)
+    end
 
+    return flux
+end
+
+"""
+    _flux_to_tendency!(tendency, flux, grid, dim)
+
+Convert a flux array to tendency by computing the divergence:
+    tendency[p,i,j] = -(F_{i+1} * edge_length_{i+1} - F_i * edge_length_i) / area
+
+Arguments:
+- `tendency`: output array (6, Nc, Nc), modified in-place
+- `flux`: flux array, (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
+- `grid`: CubedSphereGrid
+- `dim`: :xi or :eta
+"""
+function _flux_to_tendency!(tendency, flux, grid::CubedSphereGrid, dim::Symbol)
+    Nc = grid.Nc
+    if dim == :xi
+        for p in 1:6, i in 1:Nc, j in 1:Nc
+            tendency[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                                   flux[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+        end
+    else
         for p in 1:6, i in 1:Nc, j in 1:Nc
             tendency[p, i, j] = -(flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
                                    flux[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
         end
     end
+    return tendency
+end
 
+"""
+    flux_1d_ppm!(tendency, q, vel, grid, dim, dt)
+
+PPM-based 1D flux-form transport. Computes the tendency for `q` transported
+by velocity `vel` in dimension `dim` (:xi or :eta).
+
+Uses PPM reconstruction with the Colella-Woodward (1984) limiter for
+high-order, monotone transport. The flux through each interface is computed
+by integrating the parabolic profile over the swept volume.
+
+At panel boundaries, fluxes are matched between adjacent panels to ensure
+exact conservation: for same-direction connections, the flux is averaged
+between both panels' independently computed values.
+
+Arguments:
+- `tendency`: output array (6, Nc, Nc), modified in-place
+- `q`: scalar field (6, Nc, Nc)
+- `vel`: velocity field at cell edges (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
+- `grid`: CubedSphereGrid
+- `dim`: :xi or :eta
+- `dt`: time step
+
+!!! note "Conservation at panel boundaries"
+    Same-direction boundary fluxes (ξ-to-ξ, η-to-η) are matched within this
+    function. For rotated boundary connections (ξ-to-η or η-to-ξ), use
+    `_compute_ppm_fluxes!` to get the raw flux arrays, then call
+    `_match_rotated_boundary_fluxes!` before converting to tendencies.
+"""
+function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
+    Nc = grid.Nc
+    if dim == :xi
+        flux = zeros(6, Nc + 1, Nc)
+    else
+        flux = zeros(6, Nc, Nc + 1)
+    end
+    _compute_ppm_fluxes!(flux, q, vel, grid, dim, dt)
+    _flux_to_tendency!(tendency, flux, grid, dim)
     return tendency
 end
 
@@ -243,6 +293,141 @@ function _match_boundary_fluxes_eta!(flux, grid::CubedSphereGrid)
                 avg = 0.5 * (flux[p, i, Nc + 1] + flux[nb.neighbor_panel, i_nb, 1])
                 flux[p, i, Nc + 1] = avg
                 flux[nb.neighbor_panel, i_nb, 1] = avg
+            end
+        end
+    end
+end
+
+"""
+    _get_boundary_mass_flux(flux_xi, flux_eta, grid, p, edge, k)
+
+Get the outward mass flux through the k-th cell interface on `edge` of panel `p`.
+Positive return value means flow OUT of panel p.
+
+- For East: mass_flux = flux_xi[p, Nc+1, k] * dx[p, Nc+1, k]
+- For West: mass_flux = -flux_xi[p, 1, k] * dx[p, 1, k]  (positive xi = inward)
+- For North: mass_flux = flux_eta[p, k, Nc+1] * dy[p, k, Nc+1]
+- For South: mass_flux = -flux_eta[p, k, 1] * dy[p, k, 1]  (positive eta = inward)
+"""
+function _get_boundary_mass_flux(flux_xi, flux_eta, grid::CubedSphereGrid, p, edge::EdgeDirection, k)
+    Nc = grid.Nc
+    if edge == East
+        return flux_xi[p, Nc + 1, k] * grid.dx[p, Nc + 1, k]
+    elseif edge == West
+        return -flux_xi[p, 1, k] * grid.dx[p, 1, k]
+    elseif edge == North
+        return flux_eta[p, k, Nc + 1] * grid.dy[p, k, Nc + 1]
+    else  # South
+        return -flux_eta[p, k, 1] * grid.dy[p, k, 1]
+    end
+end
+
+"""
+    _set_boundary_mass_flux!(flux_xi, flux_eta, grid, p, edge, k, mass_flux_out)
+
+Set the boundary flux value such that the outward mass flux equals `mass_flux_out`.
+
+Inverts the sign convention from `_get_boundary_mass_flux`:
+- East: flux_xi[p, Nc+1, k] = mass_flux_out / dx
+- West: flux_xi[p, 1, k] = -mass_flux_out / dx
+- North: flux_eta[p, k, Nc+1] = mass_flux_out / dy
+- South: flux_eta[p, k, 1] = -mass_flux_out / dy
+"""
+function _set_boundary_mass_flux!(flux_xi, flux_eta, grid::CubedSphereGrid, p, edge::EdgeDirection, k, mass_flux_out)
+    Nc = grid.Nc
+    if edge == East
+        flux_xi[p, Nc + 1, k] = mass_flux_out / grid.dx[p, Nc + 1, k]
+    elseif edge == West
+        flux_xi[p, 1, k] = -mass_flux_out / grid.dx[p, 1, k]
+    elseif edge == North
+        flux_eta[p, k, Nc + 1] = mass_flux_out / grid.dy[p, k, Nc + 1]
+    else  # South
+        flux_eta[p, k, 1] = -mass_flux_out / grid.dy[p, k, 1]
+    end
+end
+
+"""
+    _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid)
+
+Match fluxes at panel boundaries that are NOT handled by the same-direction
+matchers `_match_boundary_fluxes_xi!` and `_match_boundary_fluxes_eta!`.
+
+This includes:
+- Rotated connections where a ξ-edge of one panel connects to an η-edge
+  of its neighbor (or vice versa)
+- Anti-parallel same-direction connections (e.g., North-to-North, South-to-South)
+
+For conservation, the mass flux leaving one panel through a shared edge must
+equal the mass flux entering the adjacent panel through that same edge.
+Each shared edge is processed exactly once by using panel ordering to avoid
+double-processing.
+
+The outward mass flux convention is:
+- East:  +flux_xi[p, Nc+1, k] * dx   (positive ξ-flux = outward)
+- West:  -flux_xi[p, 1, k] * dx      (positive ξ-flux = inward, so negate)
+- North: +flux_eta[p, k, Nc+1] * dy  (positive η-flux = outward)
+- South: -flux_eta[p, k, 1] * dy     (positive η-flux = inward, so negate)
+
+At a shared edge: M_out_p + M_out_q = 0 (outflow from p = inflow to q).
+We average: avg = 0.5 * (M_out_p - M_out_q), then set M_out_p = avg, M_out_q = -avg.
+"""
+function _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid::CubedSphereGrid)
+    Nc = grid.Nc
+
+    # Track which physical edges have been processed to avoid double-processing.
+    # Key: (min_panel, max_panel, min_edge, max_edge) or similar unique identifier.
+    processed = Set{Tuple{Int,EdgeDirection,Int,EdgeDirection}}()
+
+    for p in 1:6
+        for edge_p in (East, West, North, South)
+            nb = PANEL_CONNECTIVITY[p][edge_p]
+            nb_panel = nb.neighbor_panel
+            nb_edge = nb.neighbor_edge
+
+            # Skip same-direction connections already handled:
+            # East→West handled by _match_boundary_fluxes_xi!
+            # West→East is the reverse side of an East→West (also handled)
+            # North→South handled by _match_boundary_fluxes_eta!
+            # South→North is the reverse side of a North→South (also handled)
+            if (edge_p == East && nb_edge == West) ||
+               (edge_p == West && nb_edge == East) ||
+               (edge_p == North && nb_edge == South) ||
+               (edge_p == South && nb_edge == North)
+                continue
+            end
+
+            # Create a canonical key for this physical edge to avoid double-processing
+            edge_key = if p < nb_panel
+                (p, edge_p, nb_panel, nb_edge)
+            elseif p > nb_panel
+                (nb_panel, nb_edge, p, edge_p)
+            else
+                # Same panel (shouldn't happen in standard cube, but handle it)
+                if edge_p <= nb_edge
+                    (p, edge_p, nb_panel, nb_edge)
+                else
+                    (nb_panel, nb_edge, p, edge_p)
+                end
+            end
+
+            edge_key in processed && continue
+            push!(processed, edge_key)
+
+            # Process each cell along this shared edge
+            for k in 1:Nc
+                k_nb = nb.reverse_index ? (Nc + 1 - k) : k
+
+                # Get outward mass fluxes from each panel's perspective
+                M_out_p = _get_boundary_mass_flux(flux_xi, flux_eta, grid, p, edge_p, k)
+                M_out_q = _get_boundary_mass_flux(flux_xi, flux_eta, grid, nb_panel, nb_edge, k_nb)
+
+                # For conservation: M_out_p + M_out_q = 0
+                # Average the two independent estimates
+                avg = 0.5 * (M_out_p - M_out_q)
+
+                # Set the matched fluxes
+                _set_boundary_mass_flux!(flux_xi, flux_eta, grid, p, edge_p, k, avg)
+                _set_boundary_mass_flux!(flux_xi, flux_eta, grid, nb_panel, nb_edge, k_nb, -avg)
             end
         end
     end
