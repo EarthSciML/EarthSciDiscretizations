@@ -49,6 +49,9 @@ include("discretization.jl")
 include("equation_discretizer.jl")
 include("bc_handler.jl")
 
+# Discretization rule catalog (parser delegator; ESS integration pending)
+include("rules.jl")
+
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
 export total_area
@@ -125,5 +128,8 @@ export FVCubedSphere
 export fv_laplacian_extended, fv_gradient_extended
 export project_initial_condition
 export identify_dimension
+
+# Exports: Rule catalog
+export RuleFile, load_rules
 
 end # module
