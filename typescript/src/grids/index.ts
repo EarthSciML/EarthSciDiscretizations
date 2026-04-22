@@ -14,3 +14,10 @@ export type {
   NeighborRef,
   MetricName,
 } from "./cubed_sphere.js";
+export { duo } from "./duo.js";
+export type {
+  DuoOpts,
+  DuoGrid,
+  DuoLoader,
+  DuoMetricName,
+} from "./duo.js";
