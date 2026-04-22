@@ -21,3 +21,14 @@ export type {
   DuoLoader,
   DuoMetricName,
 } from "./duo.js";
+export { mpas, mpasMeshData, checkMesh } from "./mpas.js";
+export type {
+  MpasOpts,
+  MPASGrid,
+  MpasLoader,
+  MpasReader,
+  MpasCheck,
+  MpasMeshInput,
+  MPASMeshData,
+  MpasMetricName,
+} from "./mpas.js";
