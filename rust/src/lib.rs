@@ -10,6 +10,10 @@ pub use error::{GridError, Result};
 pub use grids::duo;
 pub use traits::{Dtype, Grid};
 
+// Re-export per-family modules at the crate root so the documented
+// `earthsci_grids::<family>::builder()` call form works.
+pub use grids::cubed_sphere;
+
 mod error {
     use thiserror::Error;
 
