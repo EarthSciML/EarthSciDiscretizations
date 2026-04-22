@@ -1,0 +1,63 @@
+name: "Rust"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-'
+    paths:
+      - 'rust/**'
+      - '.github/workflows/Rust.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'rust/**'
+      - '.github/workflows/Rust.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    working-directory: rust
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-test:
+    name: "Build & test (${{ matrix.toolchain }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, "1.75"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Install Rust ${{ matrix.toolchain }}"
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: "Format"
+        if: matrix.toolchain == 'stable'
+        run: cargo fmt --all -- --check
+
+      - name: "Clippy"
+        if: matrix.toolchain == 'stable'
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: "Build"
+        run: cargo build --all-targets
+
+      - name: "Test"
+        run: cargo test --all-targets
