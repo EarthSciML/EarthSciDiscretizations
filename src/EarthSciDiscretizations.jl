@@ -25,6 +25,9 @@ include("staggering.jl")
 include("discrete_space.jl")
 include("ghost_cells.jl")
 
+# Arakawa staggering runtime (depends on VarLocation from staggering.jl)
+include("grids/arakawa.jl")
+
 # Operator utilities
 include("operators/arrayop_utils.jl")
 
@@ -137,5 +140,54 @@ export identify_dimension
 
 # Exports: Rule catalog
 export RuleFile, load_rules
+
+# Exports: Arakawa staggering runtime
+export ArakawaGrid, ArakawaStagger
+export ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
+export ArakawaBaseGrid, CartesianBase
+export cell_centers, u_face, v_face, corners, neighbors, metric_eval
+export arakawa_variable_locations, arakawa_location_shape, arakawa_shape, variable_shape
+export to_esm
+
+# -----------------------------------------------------------------------------
+# `EarthSciDiscretizations.grids.<family>` generator namespace (GRIDS_API.md §2.3).
+#
+# Each family is exposed as a keyword-only function; the arakawa family is the
+# first to land here. Future families (cartesian, lat_lon, cubed_sphere, …)
+# add siblings in this submodule as their phase beads complete.
+# -----------------------------------------------------------------------------
+module grids
+
+using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
+    ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
+
+"""
+    EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
+        -> ArakawaGrid
+
+Construct an Arakawa-staggered grid over an underlying `base` grid. `stagger`
+accepts an `ArakawaStagger` value or the symbol literal `:A`, `:B`, `:C`,
+`:D`, `:E`. See `GRIDS_API.md` §2.3.
+"""
+function arakawa(; base::Union{ArakawaBaseGrid, Nothing} = nothing,
+                   stagger::Union{ArakawaStagger, Symbol, Nothing} = nothing,
+                   ghosts::Int = 0,
+                   dtype::Type = Float64)
+    base === nothing && throw(ArgumentError("arakawa: keyword argument `base` is required"))
+    stagger === nothing && throw(ArgumentError("arakawa: keyword argument `stagger` is required"))
+    s = stagger isa ArakawaStagger ? stagger : _parse_stagger(stagger)
+    ArakawaGrid(base, s; ghosts = ghosts, dtype = dtype)
+end
+
+function _parse_stagger(s::Symbol)
+    s === :A ? ArakawaA :
+    s === :B ? ArakawaB :
+    s === :C ? ArakawaC :
+    s === :D ? ArakawaD :
+    s === :E ? ArakawaE :
+    throw(DomainError(s, "Unknown Arakawa stagger; expected :A, :B, :C, :D, or :E"))
+end
+
+end # module grids
 
 end # module
