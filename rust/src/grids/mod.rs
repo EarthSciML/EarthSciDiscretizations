@@ -5,4 +5,5 @@
 //! `pub use grids::<family>` so the documented call form
 //! `earthsci_grids::<family>::builder()` works at the crate level.
 
+pub mod cubed_sphere;
 pub mod duo;
