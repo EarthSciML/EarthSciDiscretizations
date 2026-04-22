@@ -17,6 +17,8 @@ include("grids/panel_connectivity.jl")
 include("grids/metric_tensors.jl")
 include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
+include("grids/duo.jl")
+include("grids/grids_api.jl")
 
 # Staggering and discrete space
 include("staggering.jl")
@@ -55,6 +57,10 @@ include("rules.jl")
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
 export total_area
+# DUO icosahedral family (GRIDS_API §1 row 7, §10 loader-backed)
+export DuoGrid, DuoLoader, build_duo_grid
+export cell_centers, neighbors, metric_eval
+export n_cells, n_vertices, n_edges, to_esm, family
 
 # Exports: Connectivity
 export EdgeDirection, West, East, South, North
