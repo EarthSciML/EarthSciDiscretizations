@@ -7,6 +7,7 @@
 pub mod grids;
 
 pub use error::{GridError, Result};
+pub use grids::duo;
 pub use traits::{Dtype, Grid};
 
 mod error {

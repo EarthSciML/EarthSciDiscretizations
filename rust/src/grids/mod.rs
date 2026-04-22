@@ -4,3 +4,5 @@
 //! `docs/GRIDS_API.md` §2.5. The crate root re-exports families via
 //! `pub use grids::<family>` so the documented call form
 //! `earthsci_grids::<family>::builder()` works at the crate level.
+
+pub mod duo;
