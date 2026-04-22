@@ -6,5 +6,6 @@ returning a `Grid` object per `docs/GRIDS_API.md` §2.4, §3.2.
 """
 
 from .cubed_sphere import CubedSphereGrid, cubed_sphere
+from .duo import DuoGrid, DuoLoader, duo
 
-__all__ = ["cubed_sphere", "CubedSphereGrid"]
+__all__ = ["cubed_sphere", "CubedSphereGrid", "duo", "DuoGrid", "DuoLoader"]
