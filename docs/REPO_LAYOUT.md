@@ -1,13 +1,17 @@
 # Repository Layout
 
-EarthSciDiscretizations holds two things:
+EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 
-1. A Julia package (`src/`, `test/`) that implements discretization operators
-   and the discretization pipeline.
-2. A catalog of authoritative discretization **rule files** (`discretizations/`)
-   that declaratively describe how continuous PDE operators map onto discrete
-   stencils. Rule files are validated against the EarthSciSerialization
-   discretization schema (§7) and executed by the ESS rule engine.
+1. A Julia package at the repo root (`src/`, `test/`, `Project.toml`) that
+   implements discretization operators and the discretization pipeline.
+2. Sibling package trees for the Python, Rust, and TypeScript bindings
+   (`python/`, `rust/`, `typescript/`) that implement the cross-binding
+   grid accessor runtime defined in [`GRIDS_API.md`](GRIDS_API.md).
+3. A catalog of authoritative discretization **rule files**
+   (`discretizations/`) that declaratively describe how continuous PDE
+   operators map onto discrete stencils. Rule files are validated against
+   the EarthSciSerialization discretization schema (§7) and executed by
+   the ESS rule engine.
 
 ## Top-level layout
 
@@ -15,15 +19,44 @@ EarthSciDiscretizations holds two things:
 .
 ├── src/                  Julia package source
 ├── test/                 Julia package tests
-├── docs/                 Documenter.jl documentation sources
+├── Project.toml          Julia package manifest
+├── python/               Python binding (earthsci-toolkit)
+│   ├── pyproject.toml
+│   ├── src/earthsci_toolkit/
+│   └── tests/
+├── rust/                 Rust binding (earthsci_grids crate)
+│   ├── Cargo.toml
+│   ├── src/
+│   └── tests/
+├── typescript/           TypeScript binding (@earthsci/grids)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── src/
+│   └── tests/
+├── docs/                 Documenter.jl docs + cross-binding specs (GRIDS_API.md, …)
 ├── discretizations/      Discretization rule JSON files (catalog)
 │   ├── finite_difference/
 │   ├── finite_volume/
 │   └── spectral/
-├── .github/workflows/    CI workflows (Tests, Documentation, …)
-├── Project.toml          Julia package manifest
+├── .github/workflows/    CI workflows (Tests, Python, Rust, TypeScript, …)
 └── README.md
 ```
+
+## Per-binding CI
+
+Each language subtree has its own GitHub Actions workflow, scoped by path
+filters so a PR touching only `python/` doesn't rebuild the Rust crate and
+vice-versa:
+
+| Binding     | Subtree         | Workflow                           |
+|-------------|-----------------|------------------------------------|
+| Julia       | `src/`, `test/` | `.github/workflows/Tests.yml`      |
+| Python      | `python/`       | `.github/workflows/Python.yml`     |
+| Rust        | `rust/`         | `.github/workflows/Rust.yml`       |
+| TypeScript  | `typescript/`   | `.github/workflows/TypeScript.yml` |
+
+See [`GRIDS_API.md`](GRIDS_API.md) for the cross-binding API contract every
+generator (Julia / Python / Rust / TypeScript) must conform to.
 
 ## `discretizations/` convention
 
