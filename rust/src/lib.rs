@@ -14,6 +14,7 @@ pub use traits::{Dtype, Grid};
 // `earthsci_grids::<family>::builder()` call form works.
 pub use grids::arakawa;
 pub use grids::cubed_sphere;
+pub use grids::lat_lon;
 
 mod error {
     use thiserror::Error;
