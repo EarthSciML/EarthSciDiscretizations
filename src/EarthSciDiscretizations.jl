@@ -19,6 +19,7 @@ include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
 include("grids/grids_api.jl")
+include("grids/cartesian.jl")
 
 # Staggering and discrete space
 include("staggering.jl")
@@ -64,6 +65,9 @@ export total_area
 export DuoGrid, DuoLoader, build_duo_grid
 export cell_centers, neighbors, metric_eval
 export n_cells, n_vertices, n_edges, to_esm, family
+
+# Exports: Cartesian grid family (GRIDS_API.md §2.3)
+export CartesianGrid, cell_widths, cell_volume
 
 # Exports: Connectivity
 export EdgeDirection, West, East, South, North
@@ -160,6 +164,19 @@ module grids
 
 using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
     ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
+import ..EarthSciDiscretizations: _cartesian
+
+"""
+    EarthSciDiscretizations.grids.cartesian(; nx, ny=nothing, nz=nothing,
+                                              extent=nothing, edges=nothing,
+                                              dtype=Float64, ghosts=0)
+        -> CartesianGrid{T,N}
+
+Construct a 1D / 2D / 3D Cartesian grid (uniform via `extent` + `nx`[/`ny`/`nz`]
+or non-uniform via per-axis `edges`). See `GRIDS_API.md` §2.3 for the
+cross-binding API contract.
+"""
+const cartesian = _cartesian
 
 """
     EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
