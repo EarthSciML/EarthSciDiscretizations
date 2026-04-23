@@ -15,6 +15,7 @@ pub use traits::{Dtype, Grid};
 pub use grids::arakawa;
 pub use grids::cubed_sphere;
 pub use grids::lat_lon;
+pub use grids::mpas;
 
 mod error {
     use thiserror::Error;
