@@ -4,7 +4,7 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "Gradient of constant is zero" setup=[GradSetup] tags=[:operators] begin
+@testitem "Gradient of constant is zero" setup = [GradSetup] tags = [:operators] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -16,15 +16,15 @@ end
     grad_xi = evaluate_arrayop(ao_xi)
     grad_eta = evaluate_arrayop(ao_eta)
 
-    @test all(abs.(grad_xi) .< 1e-12)
-    @test all(abs.(grad_eta) .< 1e-12)
+    @test all(abs.(grad_xi) .< 1.0e-12)
+    @test all(abs.(grad_eta) .< 1.0e-12)
 end
 
-@testitem "Gradient convergence" setup=[GradSetup] tags=[:operators] begin
+@testitem "Gradient convergence" setup = [GradSetup] tags = [:operators] begin
     # Gradient of a smooth function should converge with resolution
     errors_xi = Float64[]
     for Nc in [8, 16, 32]
-        grid = CubedSphereGrid(Nc; R=1.0)
+        grid = CubedSphereGrid(Nc; R = 1.0)
         phi = zeros(6, Nc, Nc)
         for p in 1:6, i in 1:Nc, j in 1:Nc
             phi[p, i, j] = cos(2 * grid.ξ_centers[i]) * cos(2 * grid.η_centers[j])
@@ -36,7 +36,7 @@ end
     @test errors_xi[end] < errors_xi[1] * 2.0
 end
 
-@testitem "Gradient is linear" setup=[GradSetup] tags=[:operators] begin
+@testitem "Gradient is linear" setup = [GradSetup] tags = [:operators] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -52,5 +52,5 @@ end
     g2 = evaluate_arrayop(ao2)
     g_sum = evaluate_arrayop(ao_sum)
 
-    @test isapprox(g_sum, g1 + alpha * g2; rtol=1e-12)
+    @test isapprox(g_sum, g1 + alpha * g2; rtol = 1.0e-12)
 end

@@ -3,7 +3,7 @@
     using EarthSciDiscretizations
 end
 
-@testitem "Arakawa stagger -> variable locations" setup=[ArakawaSetup] tags=[:arakawa] begin
+@testitem "Arakawa stagger -> variable locations" setup = [ArakawaSetup] tags = [:arakawa] begin
     # A: all colocated at cell centers.
     @test arakawa_variable_locations(ArakawaA) === (CellCenter, CellCenter, CellCenter)
     # B: h at center, u/v at corners.
@@ -16,49 +16,49 @@ end
     @test arakawa_variable_locations(ArakawaE) === (CellCenter, Corner, Corner)
 end
 
-@testitem "Arakawa location shape" setup=[ArakawaSetup] tags=[:arakawa] begin
+@testitem "Arakawa location shape" setup = [ArakawaSetup] tags = [:arakawa] begin
     @test arakawa_location_shape(CellCenter, 10, 20) == (10, 20)
-    @test arakawa_location_shape(UEdge,      10, 20) == (11, 20)
-    @test arakawa_location_shape(VEdge,      10, 20) == (10, 21)
-    @test arakawa_location_shape(Corner,     10, 20) == (11, 21)
+    @test arakawa_location_shape(UEdge, 10, 20) == (11, 20)
+    @test arakawa_location_shape(VEdge, 10, 20) == (10, 21)
+    @test arakawa_location_shape(Corner, 10, 20) == (11, 21)
 end
 
-@testitem "CartesianBase constructor validates inputs" setup=[ArakawaSetup] tags=[:arakawa] begin
-    @test_throws DomainError CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=0, ny=4)
-    @test_throws DomainError CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=-1)
-    @test_throws DomainError CartesianBase(xlo=1.0, xhi=0.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    @test_throws DomainError CartesianBase(xlo=0.0, xhi=1.0, ylo=1.0, yhi=1.0, nx=4, ny=4)
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
+@testitem "CartesianBase constructor validates inputs" setup = [ArakawaSetup] tags = [:arakawa] begin
+    @test_throws DomainError CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 0, ny = 4)
+    @test_throws DomainError CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = -1)
+    @test_throws DomainError CartesianBase(xlo = 1.0, xhi = 0.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    @test_throws DomainError CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 1.0, yhi = 1.0, nx = 4, ny = 4)
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
     @test b.nx == 4 && b.ny == 4
 end
 
-@testitem "ArakawaGrid keyword generator" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=2.0, nx=10, ny=20)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C)
+@testitem "ArakawaGrid keyword generator" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 2.0, nx = 10, ny = 20)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C)
     @test g isa ArakawaGrid
     @test g.stagger === ArakawaC
     @test g.ghosts == 0
     @test eltype(g) === Float64
 
     # ArakawaStagger value form works too.
-    g2 = EarthSciDiscretizations.grids.arakawa(base=b, stagger=ArakawaB, ghosts=3, dtype=Float32)
+    g2 = EarthSciDiscretizations.grids.arakawa(base = b, stagger = ArakawaB, ghosts = 3, dtype = Float32)
     @test g2.stagger === ArakawaB
     @test g2.ghosts == 3
     @test eltype(g2) === Float32
 end
 
-@testitem "ArakawaGrid generator error contract" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
+@testitem "ArakawaGrid generator error contract" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
     # Missing required options → ArgumentError (per GRIDS_API.md §9, Julia row).
-    @test_throws ArgumentError EarthSciDiscretizations.grids.arakawa(stagger=:C)
-    @test_throws ArgumentError EarthSciDiscretizations.grids.arakawa(base=b)
+    @test_throws ArgumentError EarthSciDiscretizations.grids.arakawa(stagger = :C)
+    @test_throws ArgumentError EarthSciDiscretizations.grids.arakawa(base = b)
     # Invalid option value → DomainError.
-    @test_throws DomainError EarthSciDiscretizations.grids.arakawa(base=b, stagger=:Q)
+    @test_throws DomainError EarthSciDiscretizations.grids.arakawa(base = b, stagger = :Q)
 end
 
-@testitem "Arakawa C-grid accessors recover Cartesian coordinates" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=10, ny=10)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C)
+@testitem "Arakawa C-grid accessors recover Cartesian coordinates" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 10, ny = 10)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C)
 
     # Cell center (1,1) sits at half-cell from the lower corner.
     cx, cy = cell_centers(g, 1, 1)
@@ -93,9 +93,9 @@ end
     @test corners(g, 11, 11) == (1.0, 1.0)
 end
 
-@testitem "Arakawa A-grid colocates u and v at cell centers" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:A)
+@testitem "Arakawa A-grid colocates u and v at cell centers" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :A)
     # h, u, v all live at (nx, ny) cell-centers.
     @test variable_shape(g, :h) == (4, 4)
     @test variable_shape(g, :u) == (4, 4)
@@ -105,9 +105,9 @@ end
     @test v_face(g, 2, 3) == cell_centers(g, 2, 3)
 end
 
-@testitem "Arakawa B-grid puts u,v at corners" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:B)
+@testitem "Arakawa B-grid puts u,v at corners" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :B)
     @test variable_shape(g, :h) == (4, 4)
     @test variable_shape(g, :u) == (5, 5)
     @test variable_shape(g, :v) == (5, 5)
@@ -115,10 +115,10 @@ end
     @test v_face(g, 3, 2) == corners(g, 3, 2)
 end
 
-@testitem "Arakawa D-grid swaps C's u/v faces" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=2.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    gC = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C)
-    gD = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:D)
+@testitem "Arakawa D-grid swaps C's u/v faces" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 2.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    gC = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C)
+    gD = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :D)
     # D's u lives where C's v lives; D's v where C's u lives.
     @test variable_shape(gD, :u) == variable_shape(gC, :v)
     @test variable_shape(gD, :v) == variable_shape(gC, :u)
@@ -126,9 +126,9 @@ end
     @test v_face(gD, 1, 1) == u_face(gC, 1, 1)
 end
 
-@testitem "Arakawa neighbors bound-check and boundary handling" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C)
+@testitem "Arakawa neighbors bound-check and boundary handling" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C)
 
     # Interior cell has all four neighbors.
     w, e, s, n = neighbors(g, 2, 2)
@@ -156,9 +156,9 @@ end
     @test s === (UEdge, 5, 3)
 end
 
-@testitem "Arakawa metric_eval yields consistent Cartesian spacing" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=2.0, ylo=0.0, yhi=6.0, nx=4, ny=3)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C)
+@testitem "Arakawa metric_eval yields consistent Cartesian spacing" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 2.0, ylo = 0.0, yhi = 6.0, nx = 4, ny = 3)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C)
     # dx = 2/4 = 0.5; dy = 6/3 = 2.0; area = 1.0.
     @test metric_eval(g, :dx, 1, 1) ≈ 0.5
     @test metric_eval(g, :dy, 1, 1) ≈ 2.0
@@ -167,18 +167,18 @@ end
     @test_throws DomainError metric_eval(g, :dx, 5, 1)
 end
 
-@testitem "Arakawa dtype propagates through metrics" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    g32 = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C, dtype=Float32)
+@testitem "Arakawa dtype propagates through metrics" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    g32 = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C, dtype = Float32)
     @test metric_eval(g32, :dx, 1, 1) isa Float32
 end
 
-@testitem "Arakawa to_esm produces schema-valid declarative config" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=5, ny=5)
-    g = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:C, ghosts=2)
+@testitem "Arakawa to_esm produces schema-valid declarative config" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 5, ny = 5)
+    g = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :C, ghosts = 2)
     d = to_esm(g)
 
-    @test d isa Dict{String,Any}
+    @test d isa Dict{String, Any}
     @test d["family"] == "arakawa"
     @test d["stagger"] == "C"
     @test d["dtype"] == "float64"
@@ -199,10 +199,10 @@ end
     @test base["extent"] == [[0.0, 0.0], [1.0, 1.0]]
 end
 
-@testitem "Arakawa E carries a rotated flag" setup=[ArakawaSetup] tags=[:arakawa] begin
-    b = CartesianBase(xlo=0.0, xhi=1.0, ylo=0.0, yhi=1.0, nx=4, ny=4)
-    gE = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:E)
-    gB = EarthSciDiscretizations.grids.arakawa(base=b, stagger=:B)
+@testitem "Arakawa E carries a rotated flag" setup = [ArakawaSetup] tags = [:arakawa] begin
+    b = CartesianBase(xlo = 0.0, xhi = 1.0, ylo = 0.0, yhi = 1.0, nx = 4, ny = 4)
+    gE = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :E)
+    gB = EarthSciDiscretizations.grids.arakawa(base = b, stagger = :B)
     dE = to_esm(gE)
     dB = to_esm(gB)
     @test dE["stagger"] == "E"

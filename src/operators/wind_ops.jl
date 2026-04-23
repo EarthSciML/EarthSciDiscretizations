@@ -151,13 +151,13 @@ function dgrid_to_cgrid!(uc, vc, u_d, v_d, grid::CubedSphereGrid)
 
     # Step 4: Interpolate A-grid to C-grid
     # uc at UEdge(i, j): between cell (i-1, j) and cell (i, j)
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
+    for p in 1:6, i in 1:(Nc + 1), j in 1:Nc
         ie = i - 1 + Ng; je = j + Ng
         uc[p, i, j] = 0.5 * (ua_ext[p, ie, je] + ua_ext[p, ie + 1, je])
     end
 
     # vc at VEdge(i, j): between cell (i, j-1) and cell (i, j)
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
+    for p in 1:6, i in 1:Nc, j in 1:(Nc + 1)
         ie = i + Ng; je = j - 1 + Ng
         vc[p, i, j] = 0.5 * (va_ext[p, ie, je] + va_ext[p, ie, je + 1])
     end
@@ -201,12 +201,14 @@ correct sin(α) is the sub-grid value at the interface itself:
 - South boundary (j=1, positive flow): position 2 of cell 1
 - North boundary (j=Nc+1, negative flow): position 4 of cell Nc
 """
-function compute_flux_with_sinsg!(flux_xi, flux_eta, vel_xi, vel_eta,
-                                   grid::CubedSphereGrid, dt)
+function compute_flux_with_sinsg!(
+        flux_xi, flux_eta, vel_xi, vel_eta,
+        grid::CubedSphereGrid, dt
+    )
     Nc = grid.Nc
 
     # ξ-direction fluxes at UEdge positions
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
+    for p in 1:6, i in 1:(Nc + 1), j in 1:Nc
         if vel_xi[p, i, j] > 0
             if i - 1 >= 1
                 # Interior: upwind cell i-1, use its east mid-edge (pos 3)
@@ -228,7 +230,7 @@ function compute_flux_with_sinsg!(flux_xi, flux_eta, vel_xi, vel_eta,
     end
 
     # η-direction fluxes at VEdge positions
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
+    for p in 1:6, i in 1:Nc, j in 1:(Nc + 1)
         if vel_eta[p, i, j] > 0
             if j - 1 >= 1
                 # Interior: upwind cell j-1, use its north mid-edge (pos 4)
@@ -286,7 +288,7 @@ function _precompute_sinsg_xi(grid::CubedSphereGrid)
     sin_pos = zeros(6, Nc + 1, Nc)
     sin_neg = zeros(6, Nc + 1, Nc)
 
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
+    for p in 1:6, i in 1:(Nc + 1), j in 1:Nc
         # Positive flow: upwind is cell (i-1)
         if i - 1 >= 1
             sin_pos[p, i, j] = grid.sin_sg[p, i - 1, j, 3]
@@ -325,7 +327,7 @@ function _precompute_sinsg_eta(grid::CubedSphereGrid)
     sin_pos = zeros(6, Nc, Nc + 1)
     sin_neg = zeros(6, Nc, Nc + 1)
 
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
+    for p in 1:6, i in 1:Nc, j in 1:(Nc + 1)
         # Positive flow: upwind is cell (j-1)
         if j - 1 >= 1
             sin_pos[p, i, j] = grid.sin_sg[p, i, j - 1, 4]
@@ -371,9 +373,11 @@ function compute_flux_with_sinsg_xi_arrayop(vel_xi, grid::CubedSphereGrid, dt)
     sn_c = const_wrap(sin_neg)
 
     v = wrap(vel_c[p, i, j])
-    flux_expr = ((v + abs(v)) * wrap(sp_c[p, i, j]) +
-                 (v - abs(v)) * wrap(sn_c[p, i, j])) / 2 *
-                wrap(dx_c[p, i, j]) * dt
+    flux_expr = (
+        (v + abs(v)) * wrap(sp_c[p, i, j]) +
+            (v - abs(v)) * wrap(sn_c[p, i, j])
+    ) / 2 *
+        wrap(dx_c[p, i, j]) * dt
 
     return make_arrayop(idx, unwrap(flux_expr), Dict(p => 1:1:6, i => 1:1:(Nc + 1), j => 1:1:Nc))
 end
@@ -401,9 +405,11 @@ function compute_flux_with_sinsg_eta_arrayop(vel_eta, grid::CubedSphereGrid, dt)
     sn_c = const_wrap(sin_neg)
 
     v = wrap(vel_c[p, i, j])
-    flux_expr = ((v + abs(v)) * wrap(sp_c[p, i, j]) +
-                 (v - abs(v)) * wrap(sn_c[p, i, j])) / 2 *
-                wrap(dy_c[p, i, j]) * dt
+    flux_expr = (
+        (v + abs(v)) * wrap(sp_c[p, i, j]) +
+            (v - abs(v)) * wrap(sn_c[p, i, j])
+    ) / 2 *
+        wrap(dy_c[p, i, j]) * dt
 
     return make_arrayop(idx, unwrap(flux_expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:(Nc + 1)))
 end

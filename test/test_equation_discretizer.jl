@@ -11,8 +11,8 @@
     using OrdinaryDiffEqDefault
 end
 
-@testitem "Ghost cell neighbor index resolution" setup=[DiscretizerSetup] tags=[:discretizer] begin
-    grid = CubedSphereGrid(8; R=1.0)
+@testitem "Ghost cell neighbor index resolution" setup = [DiscretizerSetup] tags = [:discretizer] begin
+    grid = CubedSphereGrid(8; R = 1.0)
     Nc = grid.Nc
 
     # Interior indices should pass through unchanged
@@ -64,7 +64,7 @@ end
     end
 end
 
-@testitem "LHS DV identification" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "LHS DV identification" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..) v(..)
 
@@ -79,7 +79,7 @@ end
     @test _identify_lhs_dv(lhs_v, dvs) === dvs[2]
 end
 
-@testitem "Dimension identification" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Dimension identification" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @test identify_dimension(:t) == :t
     @test identify_dimension(:lon) == :lon
     @test identify_dimension(:lat) == :lat
@@ -93,7 +93,7 @@ end
     @test identify_dimension(:φ) == :lat
 end
 
-@testitem "Multi-variable discretization" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Multi-variable discretization" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..) v(..)
     Dlon = Differential(lon)
@@ -102,15 +102,21 @@ end
     eq1 = D(u(t, lon, lat)) ~ v(t, lon, lat)
     eq2 = D(v(t, lon, lat)) ~ -u(t, lon, lat)
 
-    bcs = [u(0, lon, lat) ~ cos(lat),
-           v(0, lon, lat) ~ 0.0]
-    domains = [t ∈ Interval(0.0, 1.0),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem([eq1, eq2], bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat), v(t, lon, lat)])
+    bcs = [
+        u(0, lon, lat) ~ cos(lat),
+        v(0, lon, lat) ~ 0.0,
+    ]
+    domains = [
+        t ∈ Interval(0.0, 1.0),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        [eq1, eq2], bcs, domains,
+        [t, lon, lat], [u(t, lon, lat), v(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(4; R=1.0)
+    disc = FVCubedSphere(4; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     @test prob isa ODEProblem
@@ -121,7 +127,7 @@ end
     @test sol.retcode == SciMLBase.ReturnCode.Success
 end
 
-@testitem "Nonlinear derivative terms" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Nonlinear derivative terms" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..)
     Dlon = Differential(lon)
@@ -129,13 +135,17 @@ end
     # PDE with nonlinear term: du/dt = d(u^2)/dlon
     eq = [D(u(t, lon, lat)) ~ Dlon(u(t, lon, lat)^2)]
     bcs = [u(0, lon, lat) ~ 1.0 + 0.1 * cos(lon)]
-    domains = [t ∈ Interval(0.0, 0.01),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem(eq, bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat)])
+    domains = [
+        t ∈ Interval(0.0, 0.01),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        eq, bcs, domains,
+        [t, lon, lat], [u(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(4; R=1.0)
+    disc = FVCubedSphere(4; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     @test prob isa ODEProblem
@@ -146,7 +156,7 @@ end
     @test !all(iszero, du)
 end
 
-@testitem "Coupled variable stencils" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Coupled variable stencils" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..) v(..)
     Dlon = Differential(lon)
@@ -155,15 +165,21 @@ end
     eq1 = D(u(t, lon, lat)) ~ Dlon(v(t, lon, lat))
     eq2 = D(v(t, lon, lat)) ~ Dlon(u(t, lon, lat))
 
-    bcs = [u(0, lon, lat) ~ cos(lon) * cos(lat),
-           v(0, lon, lat) ~ sin(lon) * cos(lat)]
-    domains = [t ∈ Interval(0.0, 0.01),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem([eq1, eq2], bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat), v(t, lon, lat)])
+    bcs = [
+        u(0, lon, lat) ~ cos(lon) * cos(lat),
+        v(0, lon, lat) ~ sin(lon) * cos(lat),
+    ]
+    domains = [
+        t ∈ Interval(0.0, 0.01),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        [eq1, eq2], bcs, domains,
+        [t, lon, lat], [u(t, lon, lat), v(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(4; R=1.0)
+    disc = FVCubedSphere(4; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     @test prob isa ODEProblem
@@ -174,7 +190,7 @@ end
     @test !all(iszero, du)
 end
 
-@testitem "Metric-corrected Laplacian of constant is zero" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Metric-corrected Laplacian of constant is zero" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..)
     Dlon = Differential(lon)
@@ -183,21 +199,25 @@ end
     # Laplacian of a constant should be zero even with metric corrections
     eq = [D(u(t, lon, lat)) ~ Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat)))]
     bcs = [u(0, lon, lat) ~ 42.0]  # Constant IC
-    domains = [t ∈ Interval(0.0, 1.0),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem(eq, bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat)])
+    domains = [
+        t ∈ Interval(0.0, 1.0),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        eq, bcs, domains,
+        [t, lon, lat], [u(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(8; R=1.0)
+    disc = FVCubedSphere(8; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     # Evaluate RHS at t=0 with constant field
     du = prob.f(prob.u0, prob.p, 0.0)
-    @test maximum(abs, du) < 1e-10
+    @test maximum(abs, du) < 1.0e-10
 end
 
-@testitem "Mixed derivative discretization" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Mixed derivative discretization" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..)
     Dlon = Differential(lon)
@@ -206,13 +226,17 @@ end
     # PDE with mixed derivative: du/dt = d²u/(dlon dlat)
     eq = [D(u(t, lon, lat)) ~ Dlon(Dlat(u(t, lon, lat)))]
     bcs = [u(0, lon, lat) ~ sin(lon) * sin(lat)]
-    domains = [t ∈ Interval(0.0, 0.01),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem(eq, bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat)])
+    domains = [
+        t ∈ Interval(0.0, 0.01),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        eq, bcs, domains,
+        [t, lon, lat], [u(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(8; R=1.0)
+    disc = FVCubedSphere(8; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     @test prob isa ODEProblem
@@ -222,7 +246,7 @@ end
     @test !all(iszero, du)
 end
 
-@testitem "IC identification with multiple BCs" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "IC identification with multiple BCs" setup = [DiscretizerSetup] tags = [:discretizer] begin
     @parameters lon lat
     @variables u(..)
     Dlon = Differential(lon)
@@ -231,24 +255,30 @@ end
     eq = [D(u(t, lon, lat)) ~ 0.01 * (Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat))))]
 
     # Multiple BCs — IC is listed second
-    bcs = [u(t, 0, lat) ~ 0.0,        # Spatial BC (not an IC)
-           u(0, lon, lat) ~ cos(lat)]   # IC
+    bcs = [
+        u(t, 0, lat) ~ 0.0,        # Spatial BC (not an IC)
+        u(0, lon, lat) ~ cos(lat),
+    ]   # IC
 
-    domains = [t ∈ Interval(0.0, 1.0),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem(eq, bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat)])
+    domains = [
+        t ∈ Interval(0.0, 1.0),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        eq, bcs, domains,
+        [t, lon, lat], [u(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(4; R=1.0)
+    disc = FVCubedSphere(4; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     # Should use the cos(lat) IC, not the zero BC
     @test maximum(prob.u0) > 0.5
 end
 
-@testitem "Grid has metric tensor arrays" setup=[DiscretizerSetup] tags=[:discretizer] begin
-    grid = CubedSphereGrid(8; R=1.0)
+@testitem "Grid has metric tensor arrays" setup = [DiscretizerSetup] tags = [:discretizer] begin
+    grid = CubedSphereGrid(8; R = 1.0)
     Nc = grid.Nc
 
     @test size(grid.J) == (6, Nc, Nc)
@@ -275,14 +305,16 @@ end
     # and cross-term should be zero
     center = Nc ÷ 2
     for p in 1:6
-        @test isapprox(grid.ginv_ξξ[p, center, center],
-                       grid.ginv_ηη[p, center, center]; rtol=0.1)
+        @test isapprox(
+            grid.ginv_ξξ[p, center, center],
+            grid.ginv_ηη[p, center, center]; rtol = 0.1
+        )
         @test abs(grid.ginv_ξη[p, center, center]) < 0.1
     end
 end
 
-@testitem "Forward Jacobian is well-conditioned everywhere" setup=[DiscretizerSetup] tags=[:discretizer] begin
-    grid = CubedSphereGrid(16; R=1.0)
+@testitem "Forward Jacobian is well-conditioned everywhere" setup = [DiscretizerSetup] tags = [:discretizer] begin
+    grid = CubedSphereGrid(16; R = 1.0)
     Nc = grid.Nc
 
     for p in 1:6, i in 1:Nc, j in 1:Nc
@@ -304,7 +336,7 @@ end
     end
 end
 
-@testitem "Second-derivative chain rule: Laplacian of cos(lat) on equatorial panel" setup=[DiscretizerSetup] tags=[:discretizer] begin
+@testitem "Second-derivative chain rule: Laplacian of cos(lat) on equatorial panel" setup = [DiscretizerSetup] tags = [:discretizer] begin
     # Test that ∂²cos(lat)/∂lon² + ∂²cos(lat)/∂lat² gives the correct value.
     # For f = cos(lat):
     #   ∂f/∂lon = 0, so ∂²f/∂lon² = 0
@@ -316,13 +348,17 @@ end
 
     eq = [D(u(t, lon, lat)) ~ Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat)))]
     bcs = [u(0, lon, lat) ~ cos(lat)]
-    domains = [t ∈ Interval(0.0, 0.01),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
-    @named sys = PDESystem(eq, bcs, domains,
-                           [t, lon, lat], [u(t, lon, lat)])
+    domains = [
+        t ∈ Interval(0.0, 0.01),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
+    @named sys = PDESystem(
+        eq, bcs, domains,
+        [t, lon, lat], [u(t, lon, lat)]
+    )
 
-    disc = FVCubedSphere(8; R=1.0)
+    disc = FVCubedSphere(8; R = 1.0)
     prob = SciMLBase.discretize(sys, disc)
 
     du = prob.f(prob.u0, prob.p, 0.0)

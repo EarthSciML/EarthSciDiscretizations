@@ -27,19 +27,19 @@ Staggering conventions (2-D, horizontal):
 
 # Variable-to-location table per stagger. Returns (h_loc, u_loc, v_loc).
 function arakawa_variable_locations(s::ArakawaStagger)
-    s === ArakawaA ? (CellCenter, CellCenter, CellCenter) :
-    s === ArakawaB ? (CellCenter, Corner, Corner) :
-    s === ArakawaC ? (CellCenter, UEdge, VEdge) :
-    s === ArakawaD ? (CellCenter, VEdge, UEdge) :
-    (CellCenter, Corner, Corner)  # ArakawaE: like B, rotated 45°
+    return s === ArakawaA ? (CellCenter, CellCenter, CellCenter) :
+        s === ArakawaB ? (CellCenter, Corner, Corner) :
+        s === ArakawaC ? (CellCenter, UEdge, VEdge) :
+        s === ArakawaD ? (CellCenter, VEdge, UEdge) :
+        (CellCenter, Corner, Corner)  # ArakawaE: like B, rotated 45°
 end
 
 # Location shape in (ni, nj) on a base grid of (nx, ny) interior cells.
 function arakawa_location_shape(loc::VarLocation, nx::Int, ny::Int)
-    loc === CellCenter ? (nx, ny) :
-    loc === UEdge      ? (nx + 1, ny) :
-    loc === VEdge      ? (nx, ny + 1) :
-    (nx + 1, ny + 1)   # Corner
+    return loc === CellCenter ? (nx, ny) :
+        loc === UEdge ? (nx + 1, ny) :
+        loc === VEdge ? (nx, ny + 1) :
+        (nx + 1, ny + 1)   # Corner
 end
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ function CartesianBase(; xlo::Real, xhi::Real, ylo::Real, yhi::Real, nx::Int, ny
     xhi > xlo || throw(DomainError(xhi, "xhi must be greater than xlo"))
     yhi > ylo || throw(DomainError(yhi, "yhi must be greater than ylo"))
     T = promote_type(typeof(xlo), typeof(xhi), typeof(ylo), typeof(yhi))
-    CartesianBase{T}(T(xlo), T(xhi), T(ylo), T(yhi), nx, ny)
+    return CartesianBase{T}(T(xlo), T(xhi), T(ylo), T(yhi), nx, ny)
 end
 
 arakawa_nx(b::CartesianBase) = b.nx
@@ -79,26 +79,34 @@ arakawa_dx(b::CartesianBase{T}) where {T} = (b.xhi - b.xlo) / T(b.nx)
 arakawa_dy(b::CartesianBase{T}) where {T} = (b.yhi - b.ylo) / T(b.ny)
 
 function arakawa_cell_center(b::CartesianBase{T}, i::Int, j::Int) where {T}
-    (b.xlo + (T(i) - T(0.5)) * arakawa_dx(b),
-     b.ylo + (T(j) - T(0.5)) * arakawa_dy(b))
+    return (
+        b.xlo + (T(i) - T(0.5)) * arakawa_dx(b),
+        b.ylo + (T(j) - T(0.5)) * arakawa_dy(b),
+    )
 end
 
 function arakawa_x_edge(b::CartesianBase{T}, i::Int, j::Int) where {T}
-    (b.xlo + T(i - 1) * arakawa_dx(b),
-     b.ylo + (T(j) - T(0.5)) * arakawa_dy(b))
+    return (
+        b.xlo + T(i - 1) * arakawa_dx(b),
+        b.ylo + (T(j) - T(0.5)) * arakawa_dy(b),
+    )
 end
 
 function arakawa_y_edge(b::CartesianBase{T}, i::Int, j::Int) where {T}
-    (b.xlo + (T(i) - T(0.5)) * arakawa_dx(b),
-     b.ylo + T(j - 1) * arakawa_dy(b))
+    return (
+        b.xlo + (T(i) - T(0.5)) * arakawa_dx(b),
+        b.ylo + T(j - 1) * arakawa_dy(b),
+    )
 end
 
 function arakawa_corner(b::CartesianBase{T}, i::Int, j::Int) where {T}
-    (b.xlo + T(i - 1) * arakawa_dx(b),
-     b.ylo + T(j - 1) * arakawa_dy(b))
+    return (
+        b.xlo + T(i - 1) * arakawa_dx(b),
+        b.ylo + T(j - 1) * arakawa_dy(b),
+    )
 end
 
-_arakawa_base_esm(b::CartesianBase) = Dict{String,Any}(
+_arakawa_base_esm(b::CartesianBase) = Dict{String, Any}(
     "family" => "cartesian",
     "nx" => b.nx,
     "ny" => b.ny,
@@ -115,10 +123,12 @@ struct ArakawaGrid{T, B <: ArakawaBaseGrid} <: AbstractGrid
     ghosts::Int
 end
 
-function ArakawaGrid(base::B, stagger::ArakawaStagger;
-                     ghosts::Int = 0, dtype::Type{T} = Float64) where {T, B <: ArakawaBaseGrid}
+function ArakawaGrid(
+        base::B, stagger::ArakawaStagger;
+        ghosts::Int = 0, dtype::Type{T} = Float64
+    ) where {T, B <: ArakawaBaseGrid}
     ghosts >= 0 || throw(DomainError(ghosts, "ghosts must be non-negative"))
-    ArakawaGrid{T, B}(base, stagger, ghosts)
+    return ArakawaGrid{T, B}(base, stagger, ghosts)
 end
 
 Base.eltype(::Type{ArakawaGrid{T, B}}) where {T, B} = T
@@ -136,10 +146,10 @@ arakawa_shape(g::ArakawaGrid, loc::VarLocation) =
 function variable_shape(g::ArakawaGrid, var::Symbol)
     h_loc, u_loc, v_loc = arakawa_variable_locations(g.stagger)
     loc = var === :h ? h_loc :
-          var === :u ? u_loc :
-          var === :v ? v_loc :
-          throw(ArgumentError("Unknown arakawa variable $var; expected :h, :u, or :v"))
-    arakawa_shape(g, loc)
+        var === :u ? u_loc :
+        var === :v ? v_loc :
+        throw(ArgumentError("Unknown arakawa variable $var; expected :h, :u, or :v"))
+    return arakawa_shape(g, loc)
 end
 
 # ---------------------------------------------------------------------------
@@ -154,7 +164,7 @@ Coordinate of cell-centre `(i, j)` (`1`-based). `(i, j)` must satisfy
 """
 function cell_centers(g::ArakawaGrid, i::Int, j::Int)
     _check_bounds(g, CellCenter, i, j)
-    arakawa_cell_center(g.base, i, j)
+    return arakawa_cell_center(g.base, i, j)
 end
 
 """
@@ -166,7 +176,7 @@ stagger. Valid index range depends on the stagger (see `variable_shape`).
 function u_face(g::ArakawaGrid, i::Int, j::Int)
     _, u_loc, _ = arakawa_variable_locations(g.stagger)
     _check_bounds(g, u_loc, i, j)
-    _coord_at(g, u_loc, i, j)
+    return _coord_at(g, u_loc, i, j)
 end
 
 """
@@ -178,7 +188,7 @@ stagger.
 function v_face(g::ArakawaGrid, i::Int, j::Int)
     _, _, v_loc = arakawa_variable_locations(g.stagger)
     _check_bounds(g, v_loc, i, j)
-    _coord_at(g, v_loc, i, j)
+    return _coord_at(g, v_loc, i, j)
 end
 
 """
@@ -188,19 +198,19 @@ Coordinate of cell-corner `(i, j)` (`1 ≤ i ≤ nx+1`, `1 ≤ j ≤ ny+1`).
 """
 function corners(g::ArakawaGrid, i::Int, j::Int)
     _check_bounds(g, Corner, i, j)
-    arakawa_corner(g.base, i, j)
+    return arakawa_corner(g.base, i, j)
 end
 
 function _coord_at(g::ArakawaGrid, loc::VarLocation, i::Int, j::Int)
-    loc === CellCenter ? arakawa_cell_center(g.base, i, j) :
-    loc === UEdge      ? arakawa_x_edge(g.base, i, j) :
-    loc === VEdge      ? arakawa_y_edge(g.base, i, j) :
-    arakawa_corner(g.base, i, j)
+    return loc === CellCenter ? arakawa_cell_center(g.base, i, j) :
+        loc === UEdge ? arakawa_x_edge(g.base, i, j) :
+        loc === VEdge ? arakawa_y_edge(g.base, i, j) :
+        arakawa_corner(g.base, i, j)
 end
 
 function _check_bounds(g::ArakawaGrid, loc::VarLocation, i::Int, j::Int)
     ni, nj = arakawa_shape(g, loc)
-    (1 <= i <= ni && 1 <= j <= nj) ||
+    return (1 <= i <= ni && 1 <= j <= nj) ||
         throw(DomainError((i, j), "index out of bounds for location $loc with shape ($ni, $nj)"))
 end
 
@@ -215,11 +225,11 @@ reported via `g.ghosts` but not expanded into the index range here).
 function neighbors(g::ArakawaGrid, loc::VarLocation, i::Int, j::Int)
     _check_bounds(g, loc, i, j)
     ni, nj = arakawa_shape(g, loc)
-    west  = i > 1  ? (loc, i - 1, j) : nothing
-    east  = i < ni ? (loc, i + 1, j) : nothing
-    south = j > 1  ? (loc, i, j - 1) : nothing
+    west = i > 1 ? (loc, i - 1, j) : nothing
+    east = i < ni ? (loc, i + 1, j) : nothing
+    south = j > 1 ? (loc, i, j - 1) : nothing
     north = j < nj ? (loc, i, j + 1) : nothing
-    (west, east, south, north)
+    return (west, east, south, north)
 end
 
 neighbors(g::ArakawaGrid, i::Int, j::Int) = neighbors(g, CellCenter, i, j)
@@ -240,7 +250,7 @@ function metric_eval(g::ArakawaGrid{T}, name::Symbol, i::Int, j::Int) where {T}
     _check_bounds(g, CellCenter, i, j)
     dx = T(arakawa_dx(g.base))
     dy = T(arakawa_dy(g.base))
-    if name === :dx
+    return if name === :dx
         dx
     elseif name === :dy
         dy
@@ -263,23 +273,23 @@ small config — `family`, `stagger`, `base`, `dtype`, `ghosts`, `n_cells`,
 `topology` — without any inline geometry arrays.
 """
 function to_esm(g::ArakawaGrid{T}) where {T}
-    Dict{String,Any}(
-        "family"   => "arakawa",
-        "dtype"    => _dtype_string(T),
+    return Dict{String, Any}(
+        "family" => "arakawa",
+        "dtype" => _dtype_string(T),
         "topology" => "block_structured",
-        "ghosts"   => g.ghosts,
-        "n_cells"  => arakawa_nx(g) * arakawa_ny(g),
-        "stagger"  => _stagger_string(g.stagger),
-        "rotated"  => g.stagger === ArakawaE,
-        "base"     => _arakawa_base_esm(g.base),
+        "ghosts" => g.ghosts,
+        "n_cells" => arakawa_nx(g) * arakawa_ny(g),
+        "stagger" => _stagger_string(g.stagger),
+        "rotated" => g.stagger === ArakawaE,
+        "base" => _arakawa_base_esm(g.base),
     )
 end
 
 function _stagger_string(s::ArakawaStagger)
-    s === ArakawaA ? "A" :
-    s === ArakawaB ? "B" :
-    s === ArakawaC ? "C" :
-    s === ArakawaD ? "D" : "E"
+    return s === ArakawaA ? "A" :
+        s === ArakawaB ? "B" :
+        s === ArakawaC ? "C" :
+        s === ArakawaD ? "D" : "E"
 end
 
 _dtype_string(::Type{Float64}) = "float64"

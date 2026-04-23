@@ -76,11 +76,11 @@ function compute_super_grid!(sin_sg, cos_sg, grid)
         sin_sg[p, i, j, 2] = s; cos_sg[p, i, j, 2] = c
 
         # Position 3: east mid-edge (ξ_{i+1/2}, η_j)
-        s, c = compute_angle_at_point(ξe[i+1], ηc[j], R)
+        s, c = compute_angle_at_point(ξe[i + 1], ηc[j], R)
         sin_sg[p, i, j, 3] = s; cos_sg[p, i, j, 3] = c
 
         # Position 4: north mid-edge (ξ_i, η_{j+1/2})
-        s, c = compute_angle_at_point(ξc[i], ηe[j+1], R)
+        s, c = compute_angle_at_point(ξc[i], ηe[j + 1], R)
         sin_sg[p, i, j, 4] = s; cos_sg[p, i, j, 4] = c
 
         # Position 5: cell center (ξ_i, η_j)
@@ -92,15 +92,15 @@ function compute_super_grid!(sin_sg, cos_sg, grid)
         sin_sg[p, i, j, 6] = s; cos_sg[p, i, j, 6] = c
 
         # Position 7: SE corner (ξ_{i+1/2}, η_{j-1/2})
-        s, c = compute_angle_at_point(ξe[i+1], ηe[j], R)
+        s, c = compute_angle_at_point(ξe[i + 1], ηe[j], R)
         sin_sg[p, i, j, 7] = s; cos_sg[p, i, j, 7] = c
 
         # Position 8: NE corner (ξ_{i+1/2}, η_{j+1/2})
-        s, c = compute_angle_at_point(ξe[i+1], ηe[j+1], R)
+        s, c = compute_angle_at_point(ξe[i + 1], ηe[j + 1], R)
         sin_sg[p, i, j, 8] = s; cos_sg[p, i, j, 8] = c
 
         # Position 9: NW corner (ξ_{i-1/2}, η_{j+1/2})
-        s, c = compute_angle_at_point(ξe[i], ηe[j+1], R)
+        s, c = compute_angle_at_point(ξe[i], ηe[j + 1], R)
         sin_sg[p, i, j, 9] = s; cos_sg[p, i, j, 9] = c
     end
     return (sin_sg, cos_sg)

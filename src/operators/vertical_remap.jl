@@ -72,7 +72,7 @@ function _remap_column!(q_new, q_old, dp_old, dp_new, Nk)
         p_top = p_new[k_new + 1]
         dp = p_top - p_bot
 
-        if dp < 1e-30
+        if dp < 1.0e-30
             q_new[k_new] = q_old[min(k_old, Nk)]
             continue
         end
@@ -80,16 +80,16 @@ function _remap_column!(q_new, q_old, dp_old, dp_new, Nk)
         integral = 0.0
         p_lo = p_bot
 
-        while p_lo < p_top - 1e-30
+        while p_lo < p_top - 1.0e-30
             # Find which old layer contains p_lo
-            while k_old < Nk && p_old[k_old + 1] <= p_lo + 1e-30
+            while k_old < Nk && p_old[k_old + 1] <= p_lo + 1.0e-30
                 k_old += 1
             end
 
             p_hi = min(p_top, p_old[k_old + 1])
             dp_old_k = dp_old[k_old]
 
-            if dp_old_k < 1e-30
+            if dp_old_k < 1.0e-30
                 integral += q_old[k_old] * (p_hi - p_lo)
             else
                 # Integrate PPM parabola over [p_lo, p_hi] within old layer k_old

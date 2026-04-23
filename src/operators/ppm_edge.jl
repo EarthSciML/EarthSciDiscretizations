@@ -107,7 +107,7 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
         end
 
         for p in 1:6, j in 1:Nc
-            for i in 1:Nc+1
+            for i in 1:(Nc + 1)
                 ie = i + Ng  # extended index for interface between cell ie-1 and ie
 
                 # Determine if this interface is near a panel boundary
@@ -116,7 +116,7 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                 # Get stencil values from extended array
                 qim2 = q_ext[p, ie - 2, j + Ng]
                 qim1 = q_ext[p, ie - 1, j + Ng]
-                qi   = q_ext[p, ie,     j + Ng]
+                qi = q_ext[p, ie, j + Ng]
                 qip1 = q_ext[p, ie + 1, j + Ng]
 
                 if near_boundary
@@ -124,7 +124,8 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                     # Interface between cell ie-1 (q0=qim1) and cell ie (q1=qi)
                     qi_half = ppm_edge_value_twosided_limited(
                         qim1, qi, qip1, qim2,
-                        dxc[p, ie - 1], dxc[p, ie], dxc[p, ie + 1], dxc[p, ie - 2])
+                        dxc[p, ie - 1], dxc[p, ie], dxc[p, ie + 1], dxc[p, ie - 2]
+                    )
                 else
                     # Standard 4th-order formula for interior
                     qi_half = (7.0 / 12.0) * (qim1 + qi) - (1.0 / 12.0) * (qim2 + qip1)
@@ -139,7 +140,8 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                     if near_boundary || i <= 3
                         ql_left = ppm_edge_value_twosided_limited(
                             qim2, qim1, qi, qim3,
-                            dxc[p, ie - 2], dxc[p, ie - 1], dxc[p, ie], dxc[p, ie - 3])
+                            dxc[p, ie - 2], dxc[p, ie - 1], dxc[p, ie], dxc[p, ie - 3]
+                        )
                     else
                         ql_left = (7.0 / 12.0) * (qim2 + qim1) - (1.0 / 12.0) * (qim3 + qi)
                     end
@@ -153,7 +155,8 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                     if near_boundary || i >= Nc - 1
                         qr_right = ppm_edge_value_twosided_limited(
                             qi, qip1, qip2, qim1,
-                            dxc[p, ie], dxc[p, ie + 1], dxc[p, ie + 2], dxc[p, ie - 1])
+                            dxc[p, ie], dxc[p, ie + 1], dxc[p, ie + 2], dxc[p, ie - 1]
+                        )
                     else
                         qr_right = (7.0 / 12.0) * (qi + qip1) - (1.0 / 12.0) * (qim1 + qip2)
                     end
@@ -166,8 +169,10 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
         _match_boundary_fluxes_xi!(flux, grid)
 
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            tendency[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                                   flux[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+            tendency[p, i, j] = -(
+                flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                    flux[p, i, j] * grid.dx[p, i, j]
+            ) / grid.area[p, i, j]
         end
 
     else  # dim == :eta
@@ -185,20 +190,21 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
         end
 
         for p in 1:6, i in 1:Nc
-            for j in 1:Nc+1
+            for j in 1:(Nc + 1)
                 je = j + Ng
 
                 near_boundary = (j <= 2) || (j >= Nc)
 
                 qjm2 = q_ext[p, i + Ng, je - 2]
                 qjm1 = q_ext[p, i + Ng, je - 1]
-                qj   = q_ext[p, i + Ng, je]
+                qj = q_ext[p, i + Ng, je]
                 qjp1 = q_ext[p, i + Ng, je + 1]
 
                 if near_boundary
                     qj_half = ppm_edge_value_twosided_limited(
                         qjm1, qj, qjp1, qjm2,
-                        dxc[p, je - 1], dxc[p, je], dxc[p, je + 1], dxc[p, je - 2])
+                        dxc[p, je - 1], dxc[p, je], dxc[p, je + 1], dxc[p, je - 2]
+                    )
                 else
                     qj_half = (7.0 / 12.0) * (qjm1 + qj) - (1.0 / 12.0) * (qjm2 + qjp1)
                 end
@@ -210,7 +216,8 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                     if near_boundary || j <= 3
                         ql_left = ppm_edge_value_twosided_limited(
                             qjm2, qjm1, qj, qjm3,
-                            dxc[p, je - 2], dxc[p, je - 1], dxc[p, je], dxc[p, je - 3])
+                            dxc[p, je - 2], dxc[p, je - 1], dxc[p, je], dxc[p, je - 3]
+                        )
                     else
                         ql_left = (7.0 / 12.0) * (qjm2 + qjm1) - (1.0 / 12.0) * (qjm3 + qj)
                     end
@@ -223,7 +230,8 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
                     if near_boundary || j >= Nc - 1
                         qr_right = ppm_edge_value_twosided_limited(
                             qj, qjp1, qjp2, qjm1,
-                            dxc[p, je], dxc[p, je + 1], dxc[p, je + 2], dxc[p, je - 1])
+                            dxc[p, je], dxc[p, je + 1], dxc[p, je + 2], dxc[p, je - 1]
+                        )
                     else
                         qr_right = (7.0 / 12.0) * (qj + qjp1) - (1.0 / 12.0) * (qjm1 + qjp2)
                     end
@@ -236,8 +244,10 @@ function flux_1d_ppm_twosided!(tendency, q, vel, grid::CubedSphereGrid, dim::Sym
         _match_boundary_fluxes_eta!(flux, grid)
 
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            tendency[p, i, j] = -(flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
-                                   flux[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
+            tendency[p, i, j] = -(
+                flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
+                    flux[p, i, j] * grid.dy[p, i, j]
+            ) / grid.area[p, i, j]
         end
     end
 

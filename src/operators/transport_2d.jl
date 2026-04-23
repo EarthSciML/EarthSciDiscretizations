@@ -54,14 +54,18 @@ function _advective_tendency!(tend_adv, tend_flux, q, vel, grid::CubedSphereGrid
     Nc = grid.Nc
     if dim == :xi
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            c_def = (vel[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                     vel[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+            c_def = (
+                vel[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                    vel[p, i, j] * grid.dx[p, i, j]
+            ) / grid.area[p, i, j]
             tend_adv[p, i, j] = tend_flux[p, i, j] + q[p, i, j] * c_def
         end
     else  # :eta
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            c_def = (vel[p, i, j + 1] * grid.dy[p, i, j + 1] -
-                     vel[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
+            c_def = (
+                vel[p, i, j + 1] * grid.dy[p, i, j + 1] -
+                    vel[p, i, j] * grid.dy[p, i, j]
+            ) / grid.area[p, i, j]
             tend_adv[p, i, j] = tend_flux[p, i, j] + q[p, i, j] * c_def
         end
     end
@@ -156,8 +160,10 @@ Arguments:
 - `vel_eta`: η-velocity at interfaces (6, Nc, Nc+1)
 - `grid`: CubedSphereGrid
 """
-function transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta,
-                                   grid::CubedSphereGrid)
+function transport_2d_ppm_arrayop(
+        q_ext, courant_xi, courant_eta, vel_xi, vel_eta,
+        grid::CubedSphereGrid
+    )
     Nc = grid.Nc; Ng = grid.Ng; o = Ng
     idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
 

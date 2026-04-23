@@ -18,11 +18,11 @@ At each cell (p,i,j), the Laplacian is:
 """
 struct FVLaplacianStencil
     # Stencil weights: (6, Nc, Nc, 9)
-    weights::Array{Float64,4}
+    weights::Array{Float64, 4}
     # Neighbor panel indices: (6, Nc, Nc, 9) — Int arrays
-    nb_p::Array{Int,4}
-    nb_i::Array{Int,4}
-    nb_j::Array{Int,4}
+    nb_p::Array{Int, 4}
+    nb_i::Array{Int, 4}
+    nb_j::Array{Int, 4}
 end
 
 # Stencil point ordering:
@@ -53,10 +53,10 @@ function precompute_laplacian_stencil(grid::CubedSphereGrid)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         # Resolve all 9 neighbor indices (handles cross-panel)
         center = (p, i, j)
-        east   = _neighbor_index(grid, p, i + 1, j)
-        west   = _neighbor_index(grid, p, i - 1, j)
-        north  = _neighbor_index(grid, p, i, j + 1)
-        south  = _neighbor_index(grid, p, i, j - 1)
+        east = _neighbor_index(grid, p, i + 1, j)
+        west = _neighbor_index(grid, p, i - 1, j)
+        north = _neighbor_index(grid, p, i, j + 1)
+        south = _neighbor_index(grid, p, i, j - 1)
         # Diagonal neighbors (rotation-aware)
         ne = _diagonal_neighbor(grid, p, i, j, +1, 0, +1, east)
         nw = _diagonal_neighbor(grid, p, i, j, -1, 0, +1, west)
@@ -148,12 +148,12 @@ coordinates, using the chain-rule transformation.
 struct FVGradientStencil
     # Weights for ∂φ/∂x using centered differences: (6, Nc, Nc, 5)
     # Points: center=1, east=2, west=3, north=4, south=5
-    weights_lon::Array{Float64,4}
-    weights_lat::Array{Float64,4}
+    weights_lon::Array{Float64, 4}
+    weights_lat::Array{Float64, 4}
     # Same neighbor indices as Laplacian (first 5 only)
-    nb_p::Array{Int,4}
-    nb_i::Array{Int,4}
-    nb_j::Array{Int,4}
+    nb_p::Array{Int, 4}
+    nb_i::Array{Int, 4}
+    nb_j::Array{Int, 4}
 end
 
 function precompute_gradient_stencil(grid::CubedSphereGrid)
@@ -168,10 +168,10 @@ function precompute_gradient_stencil(grid::CubedSphereGrid)
 
     for p in 1:6, i in 1:Nc, j in 1:Nc
         center = (p, i, j)
-        east   = _neighbor_index(grid, p, i + 1, j)
-        west   = _neighbor_index(grid, p, i - 1, j)
-        north  = _neighbor_index(grid, p, i, j + 1)
-        south  = _neighbor_index(grid, p, i, j - 1)
+        east = _neighbor_index(grid, p, i + 1, j)
+        west = _neighbor_index(grid, p, i - 1, j)
+        north = _neighbor_index(grid, p, i, j + 1)
+        south = _neighbor_index(grid, p, i, j - 1)
 
         nbs = [center, east, west, north, south]
         for k in 1:nstencil
@@ -217,7 +217,7 @@ function apply_laplacian!(du, u, stencil::FVLaplacianStencil)
         val = 0.0
         for k in 1:9
             val += stencil.weights[p, i, j, k] *
-                   u[stencil.nb_p[p, i, j, k], stencil.nb_i[p, i, j, k], stencil.nb_j[p, i, j, k]]
+                u[stencil.nb_p[p, i, j, k], stencil.nb_i[p, i, j, k], stencil.nb_j[p, i, j, k]]
         end
         du[p, i, j] = val
     end

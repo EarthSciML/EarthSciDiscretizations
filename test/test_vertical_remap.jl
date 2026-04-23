@@ -3,17 +3,17 @@
     using EarthSciDiscretizations
 end
 
-@testitem "Vertical remap of constant is exact" setup=[VertRemapSetup] tags=[:vertical] begin
+@testitem "Vertical remap of constant is exact" setup = [VertRemapSetup] tags = [:vertical] begin
     Nk = 10; Nc = 4
     q = fill(3.0, 6, Nc, Nc, Nk)
     dp_old = fill(100.0, 6, Nc, Nc, Nk)
     dp_new = fill(100.0, 6, Nc, Nc, Nk)
 
     q_new = vertical_remap(q, dp_old, dp_new, Nk)
-    @test isapprox(q_new, q; atol=1e-12)
+    @test isapprox(q_new, q; atol = 1.0e-12)
 end
 
-@testitem "Vertical remap conservation" setup=[VertRemapSetup] tags=[:vertical] begin
+@testitem "Vertical remap conservation" setup = [VertRemapSetup] tags = [:vertical] begin
     Nk = 10; Nc = 4
     q = zeros(6, Nc, Nc, Nk)
     dp_old = zeros(6, Nc, Nc, Nk)
@@ -38,11 +38,11 @@ end
     for p in 1:6, i in 1:Nc, j in 1:Nc
         mass_old = sum(q[p, i, j, k] * dp_old[p, i, j, k] for k in 1:Nk)
         mass_new = sum(q_new[p, i, j, k] * dp_new[p, i, j, k] for k in 1:Nk)
-        @test isapprox(mass_old, mass_new; rtol=1e-10)
+        @test isapprox(mass_old, mass_new; rtol = 1.0e-10)
     end
 end
 
-@testitem "Vertical remap monotonicity" setup=[VertRemapSetup] tags=[:vertical] begin
+@testitem "Vertical remap monotonicity" setup = [VertRemapSetup] tags = [:vertical] begin
     Nk = 20; Nc = 2
     q = zeros(6, Nc, Nc, Nk)
     dp_old = fill(100.0, 6, Nc, Nc, Nk)

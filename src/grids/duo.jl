@@ -16,8 +16,10 @@ struct DuoLoader
     check::String
 end
 
-DuoLoader(; path::AbstractString, reader::AbstractString = "auto",
-          check::AbstractString = "strict") =
+DuoLoader(;
+    path::AbstractString, reader::AbstractString = "auto",
+    check::AbstractString = "strict"
+) =
     DuoLoader(String(path), String(reader), String(check))
 
 """
@@ -57,7 +59,7 @@ struct DuoGrid{T} <: AbstractGrid
     edges::Matrix{Int}
     cell_neighbors::Matrix{Int}
     vertex_faces::Vector{Vector{Int}}
-    provenance::Dict{String,Any}
+    provenance::Dict{String, Any}
     loader::DuoLoader
 end
 
@@ -78,13 +80,13 @@ function _icosahedron_vertices(::Type{T}) where {T}
         0  1 -φ;
         0 -1 -φ;
         1  φ  0;
-       -1  φ  0;
+        -1  φ  0;
         1 -φ  0;
-       -1 -φ  0;
+        -1 -φ  0;
         φ  0  1;
         φ  0 -1;
-       -φ  0  1;
-       -φ  0 -1;
+        -φ  0  1;
+        -φ  0 -1;
     ]
     V = Matrix{T}(undef, 3, 12)
     for i in 1:12
@@ -114,16 +116,16 @@ function _icosahedron_faces()
         9  7  2;
         2  7  8;
         2  8 11;
-       11  8 12;
-       11 12  6;
+        11  8 12;
+        11 12  6;
         6 12  3;
         6  3  5;
         5  3 10;
-       10  3  4;
-       10  4  7;
+        10  3  4;
+        10  4  7;
         7  4  8;
         8  4 12;
-       12  4  3;
+        12  4  3;
     ]
     return Matrix{Int}(F')
 end
@@ -131,8 +133,10 @@ end
 # --- Recursive subdivision ---------------------------------------------
 
 # Edge-midpoint cache keyed on sorted vertex-pair → new vertex index.
-function _midpoint!(V::Vector{NTuple{3,T}}, cache::Dict{Tuple{Int,Int},Int},
-                    a::Int, b::Int) where {T}
+function _midpoint!(
+        V::Vector{NTuple{3, T}}, cache::Dict{Tuple{Int, Int}, Int},
+        a::Int, b::Int
+    ) where {T}
     key = a < b ? (a, b) : (b, a)
     idx = get(cache, key, 0)
     if idx != 0
@@ -154,12 +158,12 @@ Subdivide the base icosahedron `level` times on the unit sphere. Returns
 function _subdivide_icosahedron(::Type{T}, level::Int) where {T}
     V0 = _icosahedron_vertices(T)
     F0 = _icosahedron_faces()
-    verts = NTuple{3,T}[(V0[1, i], V0[2, i], V0[3, i]) for i in 1:size(V0, 2)]
-    faces = Tuple{Int,Int,Int}[(F0[1, c], F0[2, c], F0[3, c]) for c in 1:size(F0, 2)]
+    verts = NTuple{3, T}[(V0[1, i], V0[2, i], V0[3, i]) for i in 1:size(V0, 2)]
+    faces = Tuple{Int, Int, Int}[(F0[1, c], F0[2, c], F0[3, c]) for c in 1:size(F0, 2)]
 
     for _ in 1:level
-        cache = Dict{Tuple{Int,Int},Int}()
-        new_faces = Tuple{Int,Int,Int}[]
+        cache = Dict{Tuple{Int, Int}, Int}()
+        new_faces = Tuple{Int, Int, Int}[]
         sizehint!(new_faces, 4 * length(faces))
         for (a, b, c) in faces
             ab = _midpoint!(verts, cache, a, b)
@@ -198,9 +202,9 @@ on near-degenerate triangles.
 """
 function _spherical_triangle_area(a, b, c)
     # Side lengths (great-circle arcs, on unit sphere).
-    da = acos(clamp(b[1]*c[1] + b[2]*c[2] + b[3]*c[3], -1.0, 1.0))
-    db = acos(clamp(c[1]*a[1] + c[2]*a[2] + c[3]*a[3], -1.0, 1.0))
-    dc = acos(clamp(a[1]*b[1] + a[2]*b[2] + a[3]*b[3], -1.0, 1.0))
+    da = acos(clamp(b[1] * c[1] + b[2] * c[2] + b[3] * c[3], -1.0, 1.0))
+    db = acos(clamp(c[1] * a[1] + c[2] * a[2] + c[3] * a[3], -1.0, 1.0))
+    dc = acos(clamp(a[1] * b[1] + a[2] * b[2] + a[3] * b[3], -1.0, 1.0))
     s = 0.5 * (da + db + dc)
     # L'Huilier: tan(E/4) = sqrt(tan(s/2) tan((s-a)/2) tan((s-b)/2) tan((s-c)/2))
     t = tan(s / 2) * tan((s - da) / 2) * tan((s - db) / 2) * tan((s - dc) / 2)
@@ -220,13 +224,13 @@ Return (edges, cell_neighbors) from a faces matrix (3, Nc).
 function _build_connectivity(faces::Matrix{Int})
     Nc = size(faces, 2)
     # edge_key (min,max) → Vector of (cell, local_edge_k)
-    edge_map = Dict{Tuple{Int,Int}, Vector{Tuple{Int,Int}}}()
+    edge_map = Dict{Tuple{Int, Int}, Vector{Tuple{Int, Int}}}()
     for c in 1:Nc
         v1 = faces[1, c]; v2 = faces[2, c]; v3 = faces[3, c]
         # Edge opposite vertex k=1 is (v2, v3); k=2 → (v3, v1); k=3 → (v1, v2)
         for (k, (a, b)) in enumerate(((v2, v3), (v3, v1), (v1, v2)))
             key = a < b ? (a, b) : (b, a)
-            list = get!(edge_map, key, Tuple{Int,Int}[])
+            list = get!(edge_map, key, Tuple{Int, Int}[])
             push!(list, (c, k))
         end
     end
@@ -277,7 +281,7 @@ function _parse_builtin_level(path::AbstractString)
     if !startswith(path, prefix)
         return nothing
     end
-    tail = path[length(prefix)+1:end]
+    tail = path[(length(prefix) + 1):end]
     lvl = tryparse(Int, tail)
     lvl === nothing && throw(ArgumentError("duo: cannot parse level from loader path $path"))
     lvl < 0 && throw(DomainError(lvl, "duo: subdivision level must be ≥ 0"))
@@ -295,10 +299,13 @@ function _resolve_loader_level(loader::DuoLoader)
         return lvl
     end
     if loader.reader == "duo_mesh" || loader.reader == "auto"
-        throw(ArgumentError(
-            "duo: .duo mesh-file reader not yet implemented — pending " *
-            "EarthSciSerialization file-format spec. Use " *
-            "builtin://icosahedral/<level> in the meantime."))
+        throw(
+            ArgumentError(
+                "duo: .duo mesh-file reader not yet implemented — pending " *
+                    "EarthSciSerialization file-format spec. Use " *
+                    "builtin://icosahedral/<level> in the meantime."
+            )
+        )
     end
     throw(ArgumentError("duo: unrecognized loader path $(loader.path) with reader=$(loader.reader)"))
 end
@@ -314,10 +321,12 @@ NamedTuple/Dict with keys `(path, reader, check)` per GRIDS_API §10.
 Only `builtin://icosahedral/<level>` loader paths are accepted today;
 `.duo` file readers land with the ESS file-format spec (future bead).
 """
-function build_duo_grid(; loader,
-                        R::Real = 6.371e6,
-                        dtype = Float64,
-                        ghosts::Int = 0)
+function build_duo_grid(;
+        loader,
+        R::Real = 6.371e6,
+        dtype = Float64,
+        ghosts::Int = 0
+    )
     ghosts >= 0 || throw(DomainError(ghosts, "duo: ghosts must be ≥ 0"))
     if !(dtype === Float64 || dtype === Float32)
         throw(ArgumentError("duo: dtype must be Float64 or Float32, got $dtype"))
@@ -371,21 +380,23 @@ function build_duo_grid(; loader,
     edges, cell_neighbors = _build_connectivity(F)
     vf = _vertex_faces(F, Nv)
 
-    provenance = Dict{String,Any}(
-        "binding"  => "julia",
-        "family"   => "duo",
-        "version"  => _DUO_FAMILY_VERSION,
-        "level"    => level,
-        "reader"   => ldr.reader,
-        "path"     => ldr.path,
-        "check"    => ldr.check,
-        "dtype"    => dtype === Float64 ? "float64" : "float32",
+    provenance = Dict{String, Any}(
+        "binding" => "julia",
+        "family" => "duo",
+        "version" => _DUO_FAMILY_VERSION,
+        "level" => level,
+        "reader" => ldr.reader,
+        "path" => ldr.path,
+        "check" => ldr.check,
+        "dtype" => dtype === Float64 ? "float64" : "float32",
     )
 
     dtype_str = dtype === Float64 ? "float64" : "float32"
-    return DuoGrid{T}(level, R_T, dtype_str, ghosts,
+    return DuoGrid{T}(
+        level, R_T, dtype_str, ghosts,
         V_scaled, F, lon, lat, cell_cart, area,
-        edges, cell_neighbors, vf, provenance, ldr)
+        edges, cell_neighbors, vf, provenance, ldr
+    )
 end
 
 # Accept NamedTuple / Dict / DuoLoader as loader input.
@@ -394,18 +405,18 @@ function _coerce_loader(ldr::NamedTuple)
     path = get(ldr, :path, nothing)
     path === nothing && throw(ArgumentError("duo: loader.path is required"))
     return DuoLoader(;
-        path   = path,
+        path = path,
         reader = String(get(ldr, :reader, "auto")),
-        check  = String(get(ldr, :check, "strict")),
+        check = String(get(ldr, :check, "strict")),
     )
 end
 function _coerce_loader(ldr::AbstractDict)
     path = get(ldr, "path", get(ldr, :path, nothing))
     path === nothing && throw(ArgumentError("duo: loader.path is required"))
     return DuoLoader(;
-        path   = String(path),
+        path = String(path),
         reader = String(get(ldr, "reader", get(ldr, :reader, "auto"))),
-        check  = String(get(ldr, "check",  get(ldr, :check,  "strict"))),
+        check = String(get(ldr, "check", get(ldr, :check, "strict"))),
     )
 end
 
@@ -470,21 +481,21 @@ Returns a §6-schema-valid declarative config: family + level +
 loader ref + tolerances + provenance. No inline geometry arrays.
 """
 function to_esm(g::DuoGrid)
-    return Dict{String,Any}(
-        "family"     => "duo",
-        "topology"   => "unstructured",
-        "dtype"      => g.dtype,
-        "ghosts"     => g.ghosts,
-        "n_cells"    => n_cells(g),
+    return Dict{String, Any}(
+        "family" => "duo",
+        "topology" => "unstructured",
+        "dtype" => g.dtype,
+        "ghosts" => g.ghosts,
+        "n_cells" => n_cells(g),
         "n_vertices" => n_vertices(g),
-        "n_edges"    => n_edges(g),
-        "options" => Dict{String,Any}(
-            "R"      => g.R,
-            "level"  => g.level,
-            "loader" => Dict{String,Any}(
-                "path"   => g.loader.path,
+        "n_edges" => n_edges(g),
+        "options" => Dict{String, Any}(
+            "R" => g.R,
+            "level" => g.level,
+            "loader" => Dict{String, Any}(
+                "path" => g.loader.path,
                 "reader" => g.loader.reader,
-                "check"  => g.loader.check,
+                "check" => g.loader.check,
             ),
         ),
         "provenance" => g.provenance,

@@ -14,22 +14,22 @@ limited left and right interface values for each interior cell.
 """
 function ppm_reconstruction!(q_left, q_right, q, grid::CubedSphereGrid, dim::Symbol)
     Nc = grid.Nc
-    if dim == :xi
+    return if dim == :xi
         for p in 1:6, j in 1:Nc
             # Step 1: Compute 4th-order interface values at all half-points
             # Interface i+1/2 is between cell i and cell i+1
             ifaces = Vector{Float64}(undef, Nc + 1)
             # Use 4th-order formula for interior interfaces (need i-1,i,i+1,i+2)
-            for i in 2:Nc-1
+            for i in 2:(Nc - 1)
                 ifaces[i] = (7.0 / 12.0) * (q[p, i, j] + q[p, i - 1, j]) -
-                            (1.0 / 12.0) * (q[p, max(1, i - 2), j] + q[p, min(Nc, i + 1), j])
+                    (1.0 / 12.0) * (q[p, max(1, i - 2), j] + q[p, min(Nc, i + 1), j])
             end
             # Boundary interfaces: use cell center value as edge estimate
             ifaces[1] = q[p, 1, j]
             ifaces[Nc + 1] = q[p, Nc, j]
 
             # Step 2: Assign left/right edges and apply CW84 limiter
-            for i in 3:Nc-2
+            for i in 3:(Nc - 2)
                 ql = ifaces[i]      # left edge of cell i (interface i-1/2)
                 qr = ifaces[i + 1]  # right edge of cell i (interface i+1/2)
                 qi = q[p, i, j]
@@ -43,16 +43,16 @@ function ppm_reconstruction!(q_left, q_right, q, grid::CubedSphereGrid, dim::Sym
     elseif dim == :eta
         for p in 1:6, i in 1:Nc
             ifaces = Vector{Float64}(undef, Nc + 1)
-            for jj in 2:Nc-1
+            for jj in 2:(Nc - 1)
                 ifaces[jj] = (7.0 / 12.0) * (q[p, i, jj] + q[p, i, jj - 1]) -
-                             (1.0 / 12.0) * (q[p, i, max(1, jj - 2)] + q[p, i, min(Nc, jj + 1)])
+                    (1.0 / 12.0) * (q[p, i, max(1, jj - 2)] + q[p, i, min(Nc, jj + 1)])
             end
             if Nc >= 2
                 ifaces[1] = q[p, i, 1]
                 ifaces[Nc + 1] = q[p, i, Nc]
             end
 
-            for jj in 3:Nc-2
+            for jj in 3:(Nc - 2)
                 ql = ifaces[jj]
                 qr = ifaces[jj + 1]
                 qi = q[p, i, jj]
@@ -159,7 +159,7 @@ function ppm_reconstruction_arrayop(q_ext, grid::CubedSphereGrid, dim::Symbol)
         # Stencil for cell (i,j): values at ie-2..ie+2
         qm2 = wrap(q_c[p, ie - 2, je])
         qm1 = wrap(q_c[p, ie - 1, je])
-        q0  = wrap(q_c[p, ie, je])
+        q0 = wrap(q_c[p, ie, je])
         qp1 = wrap(q_c[p, ie + 1, je])
         qp2 = wrap(q_c[p, ie + 2, je])
 
@@ -171,7 +171,7 @@ function ppm_reconstruction_arrayop(q_ext, grid::CubedSphereGrid, dim::Symbol)
         ie = i + o; je = j + o
         qm2 = wrap(q_c[p, ie, je - 2])
         qm1 = wrap(q_c[p, ie, je - 1])
-        q0  = wrap(q_c[p, ie, je])
+        q0 = wrap(q_c[p, ie, je])
         qp1 = wrap(q_c[p, ie, je + 1])
         qp2 = wrap(q_c[p, ie, je + 2])
 
@@ -205,11 +205,11 @@ function ppm_flux_integral(ql, qr, qi, courant)
     dq = qr - ql
     q6 = 6.0 * (qi - 0.5 * (ql + qr))
     c = abs(courant)
-    if c < 1e-15
+    if c < 1.0e-15
         return 0.0
     end
     if c > 1.0
-        @warn "CFL violation: |Courant| = $c > 1. PPM flux integral requires |Courant| < 1." maxlog=1
+        @warn "CFL violation: |Courant| = $c > 1. PPM flux integral requires |Courant| < 1." maxlog = 1
         c = min(c, 1.0)  # Clamp to prevent extrapolation beyond cell
     end
     # Integrate from the upwind edge

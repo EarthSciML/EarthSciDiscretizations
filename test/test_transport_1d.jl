@@ -4,7 +4,7 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "1D Lax-Friedrichs flux of constant field with zero velocity is zero" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "1D Lax-Friedrichs flux of constant field with zero velocity is zero" setup = [Transport1DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -15,10 +15,10 @@ end
     tendency = evaluate_arrayop(ao)
 
     @test size(tendency) == (6, Nc - 2, Nc)
-    @test all(abs.(tendency) .< 1e-12)
+    @test all(abs.(tendency) .< 1.0e-12)
 end
 
-@testitem "1D Lax-Friedrichs flux sign for uniform positive flow" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "1D Lax-Friedrichs flux sign for uniform positive flow" setup = [Transport1DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -38,7 +38,7 @@ end
     @test all(tendency .< 0.0)
 end
 
-@testitem "1D Lax-Friedrichs flux is linear in q" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "1D Lax-Friedrichs flux is linear in q" setup = [Transport1DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -54,12 +54,12 @@ end
     t2 = evaluate_arrayop(ao2)
     t_sum = evaluate_arrayop(ao_sum)
 
-    @test isapprox(t_sum, t1 + t2; rtol=1e-10)
+    @test isapprox(t_sum, t1 + t2; rtol = 1.0e-10)
 end
 
-@testitem "PPM 1D flux of constant field with zero velocity is zero" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "PPM 1D flux of constant field with zero velocity is zero" setup = [Transport1DSetup] tags = [:transport] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = fill(3.0, 6, Nc, Nc)
     vel_xi = fill(0.0, 6, Nc + 1, Nc)
@@ -68,12 +68,12 @@ end
     tendency = zeros(6, Nc, Nc)
     flux_1d_ppm!(tendency, q, vel_xi, grid, :xi, dt)
 
-    @test all(abs.(tendency) .< 1e-14)
+    @test all(abs.(tendency) .< 1.0e-14)
 end
 
-@testitem "PPM 1D flux conservation" setup=[Transport1DSetup] tags=[:transport] begin
+@testitem "PPM 1D flux conservation" setup = [Transport1DSetup] tags = [:transport] begin
     Nc = 16
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Smooth field
     q = zeros(6, Nc, Nc)

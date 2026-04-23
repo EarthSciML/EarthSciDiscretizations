@@ -16,6 +16,7 @@ function fv_divergence(F_xi, F_eta, grid::CubedSphereGrid)
     Fxi_c = const_wrap(unwrap(F_xi)); Feta_c = const_wrap(unwrap(F_eta))
     expr = wrap(1 / A_c[p, i, j]) * (
         wrap(Fxi_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) - wrap(Fxi_c[p, i, j]) * wrap(dx_c[p, i, j]) +
-        wrap(Feta_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) - wrap(Feta_c[p, i, j]) * wrap(dy_c[p, i, j]))
+            wrap(Feta_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) - wrap(Feta_c[p, i, j]) * wrap(dy_c[p, i, j])
+    )
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end

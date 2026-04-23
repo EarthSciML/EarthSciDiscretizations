@@ -3,7 +3,7 @@
     using EarthSciDiscretizations
 end
 
-@testitem "PPM reproduces linear functions" setup=[PPMSetup] tags=[:ppm] begin
+@testitem "PPM reproduces linear functions" setup = [PPMSetup] tags = [:ppm] begin
     Nc = 16
     grid = CubedSphereGrid(Nc)
 
@@ -21,14 +21,14 @@ end
     for p in 1:6, k in 1:(Nc - 4), j in 1:Nc
         ic = k + 2  # physical cell index
         # For a linear function, reconstructed values should be bounded
-        @test q_left[p, k, j] >= min(q[p, ic - 1, j], q[p, ic, j]) - 1e-10
-        @test q_left[p, k, j] <= max(q[p, ic - 1, j], q[p, ic, j]) + 1e-10
-        @test q_right[p, k, j] >= min(q[p, ic, j], q[p, ic + 1, j]) - 1e-10
-        @test q_right[p, k, j] <= max(q[p, ic, j], q[p, ic + 1, j]) + 1e-10
+        @test q_left[p, k, j] >= min(q[p, ic - 1, j], q[p, ic, j]) - 1.0e-10
+        @test q_left[p, k, j] <= max(q[p, ic - 1, j], q[p, ic, j]) + 1.0e-10
+        @test q_right[p, k, j] >= min(q[p, ic, j], q[p, ic + 1, j]) - 1.0e-10
+        @test q_right[p, k, j] <= max(q[p, ic, j], q[p, ic + 1, j]) + 1.0e-10
     end
 end
 
-@testitem "PPM handles quadratic functions" setup=[PPMSetup] tags=[:ppm] begin
+@testitem "PPM handles quadratic functions" setup = [PPMSetup] tags = [:ppm] begin
     Nc = 16
     grid = CubedSphereGrid(Nc)
 
@@ -53,11 +53,11 @@ end
         ql = q_left[p, k, j]; qr = q_right[p, k, j]
         dq = qr - ql; q6 = 6.0 * (qi - 0.5 * (ql + qr))
         integral = ql + dq / 2 + q6 / 6
-        @test isapprox(integral, qi; atol=1e-12)
+        @test isapprox(integral, qi; atol = 1.0e-12)
     end
 end
 
-@testitem "PPM monotonicity (CW84 limiter)" setup=[PPMSetup] tags=[:ppm] begin
+@testitem "PPM monotonicity (CW84 limiter)" setup = [PPMSetup] tags = [:ppm] begin
     using EarthSciDiscretizations: _ppm_limit_cw84
 
     Nc = 16
@@ -81,18 +81,18 @@ end
         ql = q_left[p, k, j]; qr = q_right[p, k, j]
         # Cell average is preserved
         dq = qr - ql; q6 = 6.0 * (qi - 0.5 * (ql + qr))
-        @test isapprox(ql + dq / 2 + q6 / 6, qi; atol=1e-12)
+        @test isapprox(ql + dq / 2 + q6 / 6, qi; atol = 1.0e-12)
     end
 
     # In uniform regions (far from the step), values should be exactly qi
     # Check cells at i=3 (well inside the 0-region, physical index=5 in output index=3)
     for p in 1:6, j in 1:Nc
-        @test isapprox(q_left[p, 1, j], 0.0; atol=1e-12)
-        @test isapprox(q_right[p, 1, j], 0.0; atol=1e-12)
+        @test isapprox(q_left[p, 1, j], 0.0; atol = 1.0e-12)
+        @test isapprox(q_right[p, 1, j], 0.0; atol = 1.0e-12)
     end
 end
 
-@testitem "PPM CW84 limiter preserves cell average" setup=[PPMSetup] tags=[:ppm] begin
+@testitem "PPM CW84 limiter preserves cell average" setup = [PPMSetup] tags = [:ppm] begin
     using EarthSciDiscretizations: _ppm_limit_cw84
 
     # For the CW84 limiter, the integral of the parabola should equal
@@ -105,7 +105,7 @@ end
             q6 = 6.0 * (qi - 0.5 * (ql + qr))
             # Integral over [0,1]: ql + dq/2 + q6/2 - q6/3 = ql + dq/2 + q6/6
             integral = ql + dq / 2 + q6 / 6
-            @test isapprox(integral, qi; atol=1e-12)
+            @test isapprox(integral, qi; atol = 1.0e-12)
         end
     end
 end

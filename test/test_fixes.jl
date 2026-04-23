@@ -8,7 +8,7 @@ end
 # Task 1: Analytical Jacobian
 # ============================================================
 
-@testitem "Analytical Jacobian matches finite differences" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Analytical Jacobian matches finite differences" setup = [FixesSetup] tags = [:fixes] begin
     # The analytical forward Jacobian should agree with finite-difference
     # computation to high precision (within FD truncation error)
     for panel in 1:6
@@ -16,13 +16,17 @@ end
             fwd = compute_forward_jacobian(ξ, η, panel)
 
             # Finite-difference reference
-            h = 1e-7
+            h = 1.0e-7
             lon_p, lat_p = gnomonic_to_lonlat(ξ + h, η, panel)
             lon_m, lat_m = gnomonic_to_lonlat(ξ - h, η, panel)
             dlon = lon_p - lon_m
             # Wrap to [-π, π] to handle anti-meridian crossings
-            while dlon > π; dlon -= 2π; end
-            while dlon < -π; dlon += 2π; end
+            while dlon > π
+                dlon -= 2π
+            end
+            while dlon < -π
+                dlon += 2π
+            end
             dlon_dξ_fd = dlon / (2h)
             dlat_dξ_fd = (lat_p - lat_m) / (2h)
 
@@ -30,36 +34,40 @@ end
             lon_m, lat_m = gnomonic_to_lonlat(ξ, η - h, panel)
             dlon = lon_p - lon_m
             # Wrap to [-π, π] to handle anti-meridian crossings
-            while dlon > π; dlon -= 2π; end
-            while dlon < -π; dlon += 2π; end
+            while dlon > π
+                dlon -= 2π
+            end
+            while dlon < -π
+                dlon += 2π
+            end
             dlon_dη_fd = dlon / (2h)
             dlat_dη_fd = (lat_p - lat_m) / (2h)
 
             # At the poles (panels 3,6 at center), longitude is undefined and
             # the forward Jacobian is correctly singular. Skip lon assertions there.
             _, lat_c = gnomonic_to_lonlat(ξ, η, panel)
-            near_pole = abs(abs(lat_c) - π/2) < 0.1
+            near_pole = abs(abs(lat_c) - π / 2) < 0.1
             if !near_pole
-                @test isapprox(fwd.dlon_dξ, dlon_dξ_fd, atol=1e-5)
-                @test isapprox(fwd.dlon_dη, dlon_dη_fd, atol=1e-5)
+                @test isapprox(fwd.dlon_dξ, dlon_dξ_fd, atol = 1.0e-5)
+                @test isapprox(fwd.dlon_dη, dlon_dη_fd, atol = 1.0e-5)
             end
-            @test isapprox(fwd.dlat_dξ, dlat_dξ_fd, atol=1e-5)
-            @test isapprox(fwd.dlat_dη, dlat_dη_fd, atol=1e-5)
+            @test isapprox(fwd.dlat_dξ, dlat_dξ_fd, atol = 1.0e-5)
+            @test isapprox(fwd.dlat_dη, dlat_dη_fd, atol = 1.0e-5)
         end
     end
 end
 
-@testitem "Analytical Jacobian at panel center" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Analytical Jacobian at panel center" setup = [FixesSetup] tags = [:fixes] begin
     # Panel 1 center (0,0): lon = 0, lat = 0
     # dlon/dξ = 1, dlon/dη = 0, dlat/dξ = 0, dlat/dη = 1
     fwd = compute_forward_jacobian(0.0, 0.0, 1)
-    @test isapprox(fwd.dlon_dξ, 1.0, atol=1e-12)
-    @test isapprox(fwd.dlon_dη, 0.0, atol=1e-12)
-    @test isapprox(fwd.dlat_dξ, 0.0, atol=1e-12)
-    @test isapprox(fwd.dlat_dη, 1.0, atol=1e-12)
+    @test isapprox(fwd.dlon_dξ, 1.0, atol = 1.0e-12)
+    @test isapprox(fwd.dlon_dη, 0.0, atol = 1.0e-12)
+    @test isapprox(fwd.dlat_dξ, 0.0, atol = 1.0e-12)
+    @test isapprox(fwd.dlat_dη, 1.0, atol = 1.0e-12)
 end
 
-@testitem "Coordinate Jacobian inverse is consistent" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Coordinate Jacobian inverse is consistent" setup = [FixesSetup] tags = [:fixes] begin
     # Verify J_fwd * J_inv = I (away from poles)
     for panel in [1, 2, 4, 5]  # skip pole panels 3, 6
         for (ξ, η) in [(0.0, 0.0), (0.3, -0.2)]
@@ -73,10 +81,10 @@ end
             I21 = fwd.dlat_dξ * inv.dξ_dlon + fwd.dlat_dη * inv.dη_dlon
             I22 = fwd.dlat_dξ * inv.dξ_dlat + fwd.dlat_dη * inv.dη_dlat
 
-            @test isapprox(I11, 1.0, atol=1e-8)
-            @test isapprox(I12, 0.0, atol=1e-8)
-            @test isapprox(I21, 0.0, atol=1e-8)
-            @test isapprox(I22, 1.0, atol=1e-8)
+            @test isapprox(I11, 1.0, atol = 1.0e-8)
+            @test isapprox(I12, 0.0, atol = 1.0e-8)
+            @test isapprox(I21, 0.0, atol = 1.0e-8)
+            @test isapprox(I22, 1.0, atol = 1.0e-8)
         end
     end
 end
@@ -85,21 +93,21 @@ end
 # Task 3: Vector field rotation at panel boundaries
 # ============================================================
 
-@testitem "Rotation matrices are orthogonal" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Rotation matrices are orthogonal" setup = [FixesSetup] tags = [:fixes] begin
     grid = CubedSphereGrid(8)
     for p in 1:6, dir in (West, East, South, North)
         M11, M12, M21, M22 = grid.rotation_matrices[(p, dir)]
         # Orthogonality: M * M^T = I
-        @test isapprox(M11^2 + M12^2, 1.0, atol=1e-10)
-        @test isapprox(M21^2 + M22^2, 1.0, atol=1e-10)
-        @test isapprox(M11*M21 + M12*M22, 0.0, atol=1e-10)
+        @test isapprox(M11^2 + M12^2, 1.0, atol = 1.0e-10)
+        @test isapprox(M21^2 + M22^2, 1.0, atol = 1.0e-10)
+        @test isapprox(M11 * M21 + M12 * M22, 0.0, atol = 1.0e-10)
         # det = ±1
-        det = M11*M22 - M12*M21
-        @test isapprox(abs(det), 1.0, atol=1e-10)
+        det = M11 * M22 - M12 * M21
+        @test isapprox(abs(det), 1.0, atol = 1.0e-10)
     end
 end
 
-@testitem "Vector ghost cells preserve uniform rotation field" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Vector ghost cells preserve uniform rotation field" setup = [FixesSetup] tags = [:fixes] begin
     # A solid body rotation velocity field should be smooth across panel boundaries.
     # Test: create a uniform angular velocity field and check ghost cell continuity.
     Nc = 8
@@ -129,8 +137,8 @@ end
 
     # Interior values should be preserved
     for p in 1:6, i in 1:Nc, j in 1:Nc
-        @test uξ_ext[p, i+Ng, j+Ng] == uξ[p, i, j]
-        @test uη_ext[p, i+Ng, j+Ng] == uη[p, i, j]
+        @test uξ_ext[p, i + Ng, j + Ng] == uξ[p, i, j]
+        @test uη_ext[p, i + Ng, j + Ng] == uη[p, i, j]
     end
 end
 
@@ -138,16 +146,16 @@ end
 # Task 2: Laplacian cross-metric correction
 # ============================================================
 
-@testitem "Laplacian of constant is zero (with cross-metric fix)" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Laplacian of constant is zero (with cross-metric fix)" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     phi = ones(6, Nc, Nc) * 42.0
     lapl = fv_laplacian(phi, grid)
     result = evaluate_arrayop(lapl)
-    @test all(abs.(result) .< 1e-10)
+    @test all(abs.(result) .< 1.0e-10)
 end
 
-@testitem "Laplacian convergence improves with resolution" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Laplacian convergence improves with resolution" setup = [FixesSetup] tags = [:fixes] begin
     errors = Float64[]
     for Nc in [8, 16, 32]
         grid = CubedSphereGrid(Nc)
@@ -169,15 +177,15 @@ end
 # Task 4: Diagonal neighbor resolution
 # ============================================================
 
-@testitem "Diagonal neighbors at panel boundaries are on correct physical location" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Diagonal neighbors at panel boundaries are on correct physical location" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
     # Test at the east boundary of panel 1 (i=Nc)
     p = 1; i = Nc; j = Nc ÷ 2
 
-    pip1 = EarthSciDiscretizations._neighbor_index(grid, p, i+1, j)
-    pim1 = EarthSciDiscretizations._neighbor_index(grid, p, i-1, j)
+    pip1 = EarthSciDiscretizations._neighbor_index(grid, p, i + 1, j)
+    pim1 = EarthSciDiscretizations._neighbor_index(grid, p, i - 1, j)
 
     # Diagonal neighbor: (i+1, j+1) — should be physically NE of cell (p,i,j)
     pip1jp1 = EarthSciDiscretizations._diagonal_neighbor(grid, p, i, j, +1, 0, +1, pip1)
@@ -201,7 +209,7 @@ end
 # Task 5: PPM Courant number
 # ============================================================
 
-@testitem "PPM CFL warning fires for large Courant" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "PPM CFL warning fires for large Courant" setup = [FixesSetup] tags = [:fixes] begin
     # ppm_flux_integral should warn when |Courant| > 1
     ql = 1.0; qr = 2.0; qi = 1.5
     @test_logs (:warn, r"CFL violation") EarthSciDiscretizations.ppm_flux_integral(ql, qr, qi, 1.5)
@@ -213,7 +221,7 @@ end
 # Task 7: Precomputed FV stencils
 # ============================================================
 
-@testitem "Precomputed Laplacian stencil has correct structure" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Precomputed Laplacian stencil has correct structure" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     stencil = precompute_laplacian_stencil(grid)
@@ -234,7 +242,7 @@ end
     end
 end
 
-@testitem "Precomputed Laplacian of constant is zero" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Precomputed Laplacian of constant is zero" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     stencil = precompute_laplacian_stencil(grid)
@@ -243,10 +251,10 @@ end
     du = zeros(6, Nc, Nc)
     apply_laplacian!(du, u, stencil)
 
-    @test maximum(abs.(du)) < 1e-10
+    @test maximum(abs.(du)) < 1.0e-10
 end
 
-@testitem "Precomputed gradient stencil basic test" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Precomputed gradient stencil basic test" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     stencil = precompute_gradient_stencil(grid)
@@ -259,15 +267,15 @@ end
     du_lon = zeros(6, Nc, Nc)
     du_lat = zeros(6, Nc, Nc)
     apply_gradient!(du_lon, du_lat, u, stencil)
-    @test maximum(abs.(du_lon)) < 1e-10
-    @test maximum(abs.(du_lat)) < 1e-10
+    @test maximum(abs.(du_lon)) < 1.0e-10
+    @test maximum(abs.(du_lat)) < 1.0e-10
 end
 
 # ============================================================
 # Task 7: Ghost-extended ArrayOp Laplacian
 # ============================================================
 
-@testitem "Extended Laplacian of constant is zero" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Extended Laplacian of constant is zero" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     phi = ones(6, Nc, Nc) * 7.0
@@ -275,10 +283,10 @@ end
     lapl = fv_laplacian_extended(phi_ext, grid)
     result = evaluate_arrayop(lapl)
     @test size(result) == (6, Nc, Nc)
-    @test maximum(abs.(result)) < 1e-10
+    @test maximum(abs.(result)) < 1.0e-10
 end
 
-@testitem "Extended Laplacian covers all cells including boundaries" setup=[FixesSetup] tags=[:fixes] begin
+@testitem "Extended Laplacian covers all cells including boundaries" setup = [FixesSetup] tags = [:fixes] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     phi = zeros(6, Nc, Nc)
@@ -294,14 +302,14 @@ end
     # All values should be finite
     @test all(isfinite, result)
     # Should not be zero everywhere
-    @test maximum(abs.(result)) > 1e-3
+    @test maximum(abs.(result)) > 1.0e-3
 end
 
 # ============================================================
 # Task 8: Double-Laplacian deduplication
 # ============================================================
 
-@testitem "Chain-rule second derivatives are correct" setup=[FixesSetup] begin
+@testitem "Chain-rule second derivatives are correct" setup = [FixesSetup] begin
     using ModelingToolkit
     using ModelingToolkit: t_nounits as t, D_nounits as D
     using Symbolics
@@ -318,13 +326,15 @@ end
     # With u₀ = cos(lat), du/dt = ∂²u/∂lat² should give tendency ≈ -cos(lat)
     eq = [D(u(t, lon, lat)) ~ Dlat(Dlat(u(t, lon, lat)))]
     bcs = [u(0, lon, lat) ~ cos(lat)]
-    domains = [t ∈ Interval(0.0, 0.01),
-               lon ∈ Interval(-π, π),
-               lat ∈ Interval(-π/2, π/2)]
+    domains = [
+        t ∈ Interval(0.0, 0.01),
+        lon ∈ Interval(-π, π),
+        lat ∈ Interval(-π / 2, π / 2),
+    ]
     @named sys = PDESystem(eq, bcs, domains, [t, lon, lat], [u(t, lon, lat)])
 
     Nc = 8
-    disc = FVCubedSphere(Nc; R=1.0)
+    disc = FVCubedSphere(Nc; R = 1.0)
     prob = discretize(sys, disc)
 
     du = prob.f(prob.u0, prob.p, 0.0)

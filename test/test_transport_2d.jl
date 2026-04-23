@@ -4,7 +4,7 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "2D Lax-Friedrichs transport of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "2D Lax-Friedrichs transport of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -16,10 +16,10 @@ end
     tendency = evaluate_arrayop(ao)
 
     @test size(tendency) == (6, Nc - 2, Nc - 2)
-    @test all(abs.(tendency) .< 1e-12)
+    @test all(abs.(tendency) .< 1.0e-12)
 end
 
-@testitem "2D Lax-Friedrichs transport is linear in q" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "2D Lax-Friedrichs transport is linear in q" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
 
@@ -36,12 +36,12 @@ end
     t2 = evaluate_arrayop(ao2)
     t_sum = evaluate_arrayop(ao_sum)
 
-    @test isapprox(t_sum, t1 + t2; rtol=1e-10)
+    @test isapprox(t_sum, t1 + t2; rtol = 1.0e-10)
 end
 
-@testitem "Lin-Rood 2D transport of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "Lin-Rood 2D transport of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = fill(5.0, 6, Nc, Nc)
     vel_xi = fill(0.0, 6, Nc + 1, Nc)
@@ -51,18 +51,18 @@ end
     tendency = zeros(6, Nc, Nc)
     transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
 
-    @test all(abs.(tendency) .< 1e-14)
+    @test all(abs.(tendency) .< 1.0e-14)
 end
 
-@testitem "Lin-Rood 2D transport conserves mass" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "Lin-Rood 2D transport conserves mass" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 16
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Non-trivial smooth initial condition
     q = zeros(6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         q[p, i, j] = 1.0 + 0.5 * cos(2π * grid.ξ_centers[i] / (π / 2)) *
-                            cos(2π * grid.η_centers[j] / (π / 2))
+            cos(2π * grid.η_centers[j] / (π / 2))
     end
 
     # Non-zero velocity in both directions
@@ -76,14 +76,14 @@ end
     # Total mass tendency should be zero (conservation on closed sphere)
     # All boundary fluxes are matched, so this should hold to machine precision
     total = sum(tendency[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    @test abs(total) < 1e-10
+    @test abs(total) < 1.0e-10
 end
 
-@testitem "PPM ArrayOp produces ArrayOp type" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "PPM ArrayOp produces ArrayOp type" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     using SymbolicUtils: isarrayop
 
     Nc = 4
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = zeros(6, Nc, Nc)
     vel_xi = fill(0.1, 6, Nc + 1, Nc)
@@ -96,9 +96,9 @@ end
     @test isarrayop(ao)
 end
 
-@testitem "PPM ArrayOp of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "PPM ArrayOp of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = fill(3.0, 6, Nc, Nc)
     vel_xi = fill(0.0, 6, Nc + 1, Nc)
@@ -111,12 +111,12 @@ end
     tendency = evaluate_arrayop(ao)
 
     @test size(tendency) == (6, Nc, Nc)
-    @test all(abs.(tendency) .< 1e-10)
+    @test all(abs.(tendency) .< 1.0e-10)
 end
 
-@testitem "PPM ArrayOp matches loop-based PPM" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "PPM ArrayOp matches loop-based PPM" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Smooth non-trivial field
     q = zeros(6, Nc, Nc)
@@ -139,14 +139,14 @@ end
 
     # Interior cells should match (boundary cells may differ due to ghost handling)
     # Compare cells that are well away from panel boundaries
-    for p in 1:6, i in 3:Nc-2, j in 3:Nc-2
-        @test isapprox(tend_arrayop[p, i, j], tend_loop[p, i, j]; rtol=1e-10)
+    for p in 1:6, i in 3:(Nc - 2), j in 3:(Nc - 2)
+        @test isapprox(tend_arrayop[p, i, j], tend_loop[p, i, j]; rtol = 1.0e-10)
     end
 end
 
-@testitem "flux_to_tendency_arrayop matches loop version" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "flux_to_tendency_arrayop matches loop version" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Create some flux data
     flux = randn(6, Nc + 1, Nc)
@@ -157,16 +157,18 @@ end
     # Compare with loop-based version
     tend_loop = zeros(6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
-        tend_loop[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                                flux[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+        tend_loop[p, i, j] = -(
+            flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                flux[p, i, j] * grid.dx[p, i, j]
+        ) / grid.area[p, i, j]
     end
 
-    @test isapprox(tend_ao, tend_loop; rtol=1e-12)
+    @test isapprox(tend_ao, tend_loop; rtol = 1.0e-12)
 end
 
-@testitem "advective_tendency_arrayop matches loop version" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "advective_tendency_arrayop matches loop version" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     tend_flux = randn(6, Nc, Nc)
     q = randn(6, Nc, Nc)
@@ -178,17 +180,19 @@ end
     # Compare with loop-based version
     tend_loop = zeros(6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
-        c_def = (vel[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                 vel[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+        c_def = (
+            vel[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                vel[p, i, j] * grid.dx[p, i, j]
+        ) / grid.area[p, i, j]
         tend_loop[p, i, j] = tend_flux[p, i, j] + q[p, i, j] * c_def
     end
 
-    @test isapprox(tend_ao, tend_loop; rtol=1e-12)
+    @test isapprox(tend_ao, tend_loop; rtol = 1.0e-12)
 end
 
-@testitem "compute_courant_numbers_arrayop matches loop version" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "compute_courant_numbers_arrayop matches loop version" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
     dt = 0.01
 
     # ξ-direction
@@ -196,19 +200,19 @@ end
     courant_loop = compute_courant_numbers(vel_xi, dt, grid, :xi)
     ao_xi = compute_courant_numbers_arrayop(vel_xi, dt, grid, :xi)
     courant_ao = evaluate_arrayop(ao_xi)
-    @test isapprox(courant_ao, courant_loop; rtol=1e-12)
+    @test isapprox(courant_ao, courant_loop; rtol = 1.0e-12)
 
     # η-direction
     vel_eta = randn(6, Nc, Nc + 1) * 0.1
     courant_loop_eta = compute_courant_numbers(vel_eta, dt, grid, :eta)
     ao_eta = compute_courant_numbers_arrayop(vel_eta, dt, grid, :eta)
     courant_ao_eta = evaluate_arrayop(ao_eta)
-    @test isapprox(courant_ao_eta, courant_loop_eta; rtol=1e-12)
+    @test isapprox(courant_ao_eta, courant_loop_eta; rtol = 1.0e-12)
 end
 
-@testitem "transport_2d_ppm_arrayop of constant field with zero velocity is zero" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "transport_2d_ppm_arrayop of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = fill(5.0, 6, Nc, Nc)
     vel_xi = fill(0.0, 6, Nc + 1, Nc)
@@ -223,18 +227,18 @@ end
     tendency = evaluate_arrayop(ao)
 
     @test size(tendency) == (6, Nc, Nc)
-    @test all(abs.(tendency) .< 1e-10)
+    @test all(abs.(tendency) .< 1.0e-10)
 end
 
-@testitem "transport_2d_ppm_arrayop matches sum of 1D PPM ArrayOps" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "transport_2d_ppm_arrayop matches sum of 1D PPM ArrayOps" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Smooth non-trivial field
     q = zeros(6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         q[p, i, j] = 1.0 + 0.5 * sin(2π * grid.ξ_centers[i] / (π / 2)) *
-                            cos(2π * grid.η_centers[j] / (π / 2))
+            cos(2π * grid.η_centers[j] / (π / 2))
     end
 
     vel_xi = fill(0.3, 6, Nc + 1, Nc)
@@ -255,14 +259,14 @@ end
     tend_xi = evaluate_arrayop(ao_xi)
     tend_eta = evaluate_arrayop(ao_eta)
 
-    @test isapprox(tend_2d, tend_xi + tend_eta; rtol=1e-10)
+    @test isapprox(tend_2d, tend_xi + tend_eta; rtol = 1.0e-10)
 end
 
-@testitem "ppm_reconstruction_arrayop produces ArrayOp types" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "ppm_reconstruction_arrayop produces ArrayOp types" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     using SymbolicUtils: isarrayop
 
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = randn(6, Nc, Nc)
     q_ext = extend_with_ghosts(q, grid)
@@ -276,9 +280,9 @@ end
     @test isarrayop(qr_ao_eta)
 end
 
-@testitem "ppm_reconstruction_arrayop matches loop-based on interior" setup=[Transport2DSetup] tags=[:transport, :arrayop] begin
+@testitem "ppm_reconstruction_arrayop matches loop-based on interior" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 12
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Smooth field for well-behaved PPM
     q = zeros(6, Nc, Nc)
@@ -298,16 +302,16 @@ end
 
     # Compare on overlapping interior cells: loop indices 1:Nc-4 map to cells 3:Nc-2
     # ArrayOp indices 3:Nc-2 also map to cells 3:Nc-2
-    for p in 1:6, ii in 1:Nc-4, j in 1:Nc
+    for p in 1:6, ii in 1:(Nc - 4), j in 1:Nc
         i_phys = ii + 2  # physical cell index
-        @test isapprox(ql_vals[p, i_phys, j], ql_loop[p, ii, j]; rtol=1e-10)
-        @test isapprox(qr_vals[p, i_phys, j], qr_loop[p, ii, j]; rtol=1e-10)
+        @test isapprox(ql_vals[p, i_phys, j], ql_loop[p, ii, j]; rtol = 1.0e-10)
+        @test isapprox(qr_vals[p, i_phys, j], qr_loop[p, ii, j]; rtol = 1.0e-10)
     end
 end
 
-@testitem "ghost_fill_arrayop returns extended array" setup=[Transport2DSetup] tags=[:transport] begin
+@testitem "ghost_fill_arrayop returns extended array" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     q = randn(6, Nc, Nc)
     q_ext = ghost_fill_arrayop(q, grid)

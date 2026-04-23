@@ -63,11 +63,13 @@ function fv_vorticity!(omega, u_d, v_d, grid::CubedSphereGrid)
     omega_ext = extend_with_ghosts(omega_cell, grid)
 
     # Interpolate to ALL corners (including boundary) by averaging 4 surrounding cell-mean values
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc+1
+    for p in 1:6, i in 1:(Nc + 1), j in 1:(Nc + 1)
         ie = i - 1 + Ng  # extended index for cell (i-1)
         je = j - 1 + Ng  # extended index for cell (j-1)
-        omega[p, i, j] = 0.25 * (omega_ext[p, ie, je] + omega_ext[p, ie + 1, je] +
-                                  omega_ext[p, ie, je + 1] + omega_ext[p, ie + 1, je + 1])
+        omega[p, i, j] = 0.25 * (
+            omega_ext[p, ie, je] + omega_ext[p, ie + 1, je] +
+                omega_ext[p, ie, je + 1] + omega_ext[p, ie + 1, je + 1]
+        )
     end
 
     return omega
@@ -152,9 +154,9 @@ function fv_vorticity_cellmean_arrayop(u_d, v_d, grid::CubedSphereGrid)
     dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
 
     circ = wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j]) +
-           wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
-           wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
-           wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
+        wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+        wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+        wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
 
     expr = circ / wrap(A_c[p, i, j])
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
@@ -172,8 +174,10 @@ Compute cell-mean absolute vorticity: ω_abs = ω_rel + f
 where f = 2Ω sin(lat) is the Coriolis parameter and Ω is the planetary
 rotation rate. Uses cell-mean vorticity (CellCenter staggering).
 """
-function fv_absolute_vorticity!(omega_abs, u_d, v_d, grid::CubedSphereGrid;
-                                 Omega_rot = 7.292e-5)
+function fv_absolute_vorticity!(
+        omega_abs, u_d, v_d, grid::CubedSphereGrid;
+        Omega_rot = 7.292e-5
+    )
     fv_vorticity_cellmean!(omega_abs, u_d, v_d, grid)
     Nc = grid.Nc
 
@@ -226,10 +230,12 @@ function fv_vorticity_arrayop(u_d, v_d, grid::CubedSphereGrid)
     o_c = const_wrap(omega_ext)
     o = Ng  # offset; corner (i,j) maps to extended cells (i-1+Ng, j-1+Ng) through (i+Ng, j+Ng)
 
-    expr = (wrap(o_c[p, i - 1 + o, j - 1 + o]) + wrap(o_c[p, i + o, j - 1 + o]) +
-            wrap(o_c[p, i - 1 + o, j + o]) + wrap(o_c[p, i + o, j + o])) / 4
+    expr = (
+        wrap(o_c[p, i - 1 + o, j - 1 + o]) + wrap(o_c[p, i + o, j - 1 + o]) +
+            wrap(o_c[p, i - 1 + o, j + o]) + wrap(o_c[p, i + o, j + o])
+    ) / 4
 
-    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc+1), j => 1:1:(Nc+1)))
+    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc + 1), j => 1:1:(Nc + 1)))
 end
 
 # =========================================================================
@@ -254,9 +260,9 @@ function fv_absolute_vorticity_arrayop(u_d, v_d, grid::CubedSphereGrid; Omega_ro
     dx_c = const_wrap(grid.dx); dy_c = const_wrap(grid.dy)
 
     circ = wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j]) +
-           wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
-           wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
-           wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
+        wrap(u_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+        wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+        wrap(u_c[p, i, j]) * wrap(dx_c[p, i, j])
 
     omega_rel = circ / wrap(A_c[p, i, j])
 

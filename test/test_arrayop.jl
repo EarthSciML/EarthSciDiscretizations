@@ -6,9 +6,9 @@
     using Symbolics: unwrap, wrap
 end
 
-@testitem "All operators return ArrayOps" setup=[ArrayOpSetup] tags=[:arrayop] begin
+@testitem "All operators return ArrayOps" setup = [ArrayOpSetup] tags = [:arrayop] begin
     Nc = 4
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     F_xi = zeros(6, Nc + 1, Nc)
     F_eta = zeros(6, Nc, Nc + 1)
@@ -40,7 +40,7 @@ end
     @test isarrayop(qr)
 end
 
-@testitem "evaluate_arrayop round-trips Const data" setup=[ArrayOpSetup] tags=[:arrayop] begin
+@testitem "evaluate_arrayop round-trips Const data" setup = [ArrayOpSetup] tags = [:arrayop] begin
     arr = rand(3, 4)
     c = const_wrap(arr)
     idx = get_idx_vars(2)
@@ -48,5 +48,5 @@ end
     expr = unwrap(wrap(c[i, j]))
     ao = make_arrayop([i, j], expr, Dict(i => 1:1:3, j => 1:1:4))
     result = evaluate_arrayop(ao)
-    @test isapprox(result, arr; rtol=1e-14)
+    @test isapprox(result, arr; rtol = 1.0e-14)
 end

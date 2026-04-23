@@ -16,25 +16,31 @@ struct PanelNeighbor
     reverse_index::Bool
 end
 
-const PANEL_CONNECTIVITY = Dict{Int,Dict{EdgeDirection,PanelNeighbor}}(
+const PANEL_CONNECTIVITY = Dict{Int, Dict{EdgeDirection, PanelNeighbor}}(
     1 => Dict(
         West => PanelNeighbor(5, East, false), East => PanelNeighbor(2, West, false),
-        South => PanelNeighbor(6, North, false), North => PanelNeighbor(3, South, false)),
+        South => PanelNeighbor(6, North, false), North => PanelNeighbor(3, South, false)
+    ),
     2 => Dict(
         West => PanelNeighbor(1, East, false), East => PanelNeighbor(4, West, false),
-        South => PanelNeighbor(6, East, true), North => PanelNeighbor(3, East, false)),
+        South => PanelNeighbor(6, East, true), North => PanelNeighbor(3, East, false)
+    ),
     3 => Dict(
         West => PanelNeighbor(5, North, true), East => PanelNeighbor(2, North, false),
-        South => PanelNeighbor(1, North, false), North => PanelNeighbor(4, North, true)),
+        South => PanelNeighbor(1, North, false), North => PanelNeighbor(4, North, true)
+    ),
     4 => Dict(
         West => PanelNeighbor(2, East, false), East => PanelNeighbor(5, West, false),
-        South => PanelNeighbor(6, South, true), North => PanelNeighbor(3, North, true)),
+        South => PanelNeighbor(6, South, true), North => PanelNeighbor(3, North, true)
+    ),
     5 => Dict(
         West => PanelNeighbor(4, East, false), East => PanelNeighbor(1, West, false),
-        South => PanelNeighbor(6, West, false), North => PanelNeighbor(3, West, true)),
+        South => PanelNeighbor(6, West, false), North => PanelNeighbor(3, West, true)
+    ),
     6 => Dict(
         West => PanelNeighbor(5, South, false), East => PanelNeighbor(2, South, true),
-        South => PanelNeighbor(4, South, true), North => PanelNeighbor(1, South, false)),
+        South => PanelNeighbor(4, South, true), North => PanelNeighbor(1, South, false)
+    ),
 )
 
 function transform_indices(neighbor::PanelNeighbor, i, j, Nc)

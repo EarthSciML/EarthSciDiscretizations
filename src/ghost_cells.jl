@@ -75,8 +75,10 @@ in the local panel's (ξ, η) basis.
 
 The rotation matrix for each edge is precomputed in `grid.rotation_matrices`.
 """
-function fill_ghost_cells_vector!(uξ_ext, uη_ext, uξ, uη, grid::CubedSphereGrid,
-                                   loc::VarLocation = CellCenter)
+function fill_ghost_cells_vector!(
+        uξ_ext, uη_ext, uξ, uη, grid::CubedSphereGrid,
+        loc::VarLocation = CellCenter
+    )
     Nc = grid.Nc; Ng = grid.Ng
     ni, nj = grid_size(loc, Nc)
 
@@ -175,7 +177,7 @@ Resolve a ghost cell position that may require crossing two panel boundaries
 or [1:nj]. Each recursive call crosses one panel boundary, mapping the
 out-of-range index to a position on the neighbor panel.
 """
-function _resolve_corner_value(q, p, i_virt, j_virt, ni, nj, max_depth=2)
+function _resolve_corner_value(q, p, i_virt, j_virt, ni, nj, max_depth = 2)
     if 1 <= i_virt <= ni && 1 <= j_virt <= nj
         return q[p, i_virt, j_virt]
     end

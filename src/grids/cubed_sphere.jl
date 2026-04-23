@@ -6,54 +6,54 @@ struct CubedSphereGrid{T} <: AbstractCubedSphereGrid
     Nc::Int; Ng::Int; R::T
     ξ_centers::Vector{T}; η_centers::Vector{T}
     ξ_edges::Vector{T}; η_edges::Vector{T}
-    lon::Array{T,3}; lat::Array{T,3}
-    area::Array{T,3}; dx::Array{T,3}; dy::Array{T,3}
+    lon::Array{T, 3}; lat::Array{T, 3}
+    area::Array{T, 3}; dx::Array{T, 3}; dy::Array{T, 3}
     dξ::T; dη::T
-    rotation_angles::Dict{Tuple{Int,EdgeDirection},Float64}
+    rotation_angles::Dict{Tuple{Int, EdgeDirection}, Float64}
     # 2×2 rotation matrices for vector field ghost cell filling:
     # (M11, M12, M21, M22) transforming neighbor (u_ξ, u_η) to local basis
-    rotation_matrices::Dict{Tuple{Int,EdgeDirection},NTuple{4,Float64}}
+    rotation_matrices::Dict{Tuple{Int, EdgeDirection}, NTuple{4, Float64}}
     # Metric tensor components at cell centers
-    J::Array{T,3}           # Jacobian
-    ginv_ξξ::Array{T,3}     # Inverse metric g^{ξξ}
-    ginv_ηη::Array{T,3}     # Inverse metric g^{ηη}
-    ginv_ξη::Array{T,3}     # Inverse metric g^{ξη}
+    J::Array{T, 3}           # Jacobian
+    ginv_ξξ::Array{T, 3}     # Inverse metric g^{ξξ}
+    ginv_ηη::Array{T, 3}     # Inverse metric g^{ηη}
+    ginv_ξη::Array{T, 3}     # Inverse metric g^{ξη}
     # Physical-to-computational coordinate Jacobian: d(ξ,η)/d(lon,lat)
-    dξ_dlon::Array{T,3}
-    dξ_dlat::Array{T,3}
-    dη_dlon::Array{T,3}
-    dη_dlat::Array{T,3}
+    dξ_dlon::Array{T, 3}
+    dξ_dlat::Array{T, 3}
+    dη_dlon::Array{T, 3}
+    dη_dlat::Array{T, 3}
     # Second-derivative coordinate Jacobian: d²(ξ,η)/d(lon,lat)²
-    d2ξ_dlon2::Array{T,3}
-    d2ξ_dlondlat::Array{T,3}
-    d2ξ_dlat2::Array{T,3}
-    d2η_dlon2::Array{T,3}
-    d2η_dlondlat::Array{T,3}
-    d2η_dlat2::Array{T,3}
+    d2ξ_dlon2::Array{T, 3}
+    d2ξ_dlondlat::Array{T, 3}
+    d2ξ_dlat2::Array{T, 3}
+    d2η_dlon2::Array{T, 3}
+    d2η_dlondlat::Array{T, 3}
+    d2η_dlat2::Array{T, 3}
     # Derivatives of J·g^{ab} for the Laplacian metric corrections
-    dJgxe_dξ::Array{T,3}   # ∂(J·g^{ξη})/∂ξ at cell centers
-    dJgxe_dη::Array{T,3}   # ∂(J·g^{ξη})/∂η at cell centers
-    dJgxx_dξ::Array{T,3}   # ∂(J·g^{ξξ})/∂ξ at cell centers
-    dJgyy_dη::Array{T,3}   # ∂(J·g^{ηη})/∂η at cell centers
+    dJgxe_dξ::Array{T, 3}   # ∂(J·g^{ξη})/∂ξ at cell centers
+    dJgxe_dη::Array{T, 3}   # ∂(J·g^{ξη})/∂η at cell centers
+    dJgxx_dξ::Array{T, 3}   # ∂(J·g^{ξξ})/∂ξ at cell centers
+    dJgyy_dη::Array{T, 3}   # ∂(J·g^{ηη})/∂η at cell centers
     # Center-to-center physical distances
-    dist_xi::Array{T,3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
-    dist_eta::Array{T,3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
+    dist_xi::Array{T, 3}     # (6, Nc-1, Nc): distance between cell (i,j) and (i+1,j)
+    dist_eta::Array{T, 3}    # (6, Nc, Nc-1): distance between cell (i,j) and (i,j+1)
     # Boundary distances: cross-panel center-to-center distances at panel edges
-    dist_xi_bnd::Array{T,3} # (6, 2, Nc): [p, 1=west/2=east, j] boundary distances in ξ
-    dist_eta_bnd::Array{T,3}# (6, Nc, 2): [p, i, 1=south/2=north] boundary distances in η
+    dist_xi_bnd::Array{T, 3} # (6, 2, Nc): [p, 1=west/2=east, j] boundary distances in ξ
+    dist_eta_bnd::Array{T, 3} # (6, Nc, 2): [p, i, 1=south/2=north] boundary distances in η
     # FV3 super-grid angular values: sin/cos of angle between e_ξ and e_η
     # at 9 sub-positions per cell (see super_grid.jl for position numbering)
-    sin_sg::Array{T,4}      # (6, Nc, Nc, 9)
-    cos_sg::Array{T,4}      # (6, Nc, Nc, 9)
+    sin_sg::Array{T, 4}      # (6, Nc, Nc, 9)
+    cos_sg::Array{T, 4}      # (6, Nc, Nc, 9)
 end
 
 function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
     T = typeof(float(R))
     dξ = T(π / 2) / Nc; dη = dξ
-    ξ_edges = [T(-π / 4) + (i - 1) * dξ for i in 1:Nc+1]
-    η_edges = [T(-π / 4) + (j - 1) * dη for j in 1:Nc+1]
-    ξ_centers = [(ξ_edges[i] + ξ_edges[i+1]) / 2 for i in 1:Nc]
-    η_centers = [(η_edges[j] + η_edges[j+1]) / 2 for j in 1:Nc]
+    ξ_edges = [T(-π / 4) + (i - 1) * dξ for i in 1:(Nc + 1)]
+    η_edges = [T(-π / 4) + (j - 1) * dη for j in 1:(Nc + 1)]
+    ξ_centers = [(ξ_edges[i] + ξ_edges[i + 1]) / 2 for i in 1:Nc]
+    η_centers = [(η_edges[j] + η_edges[j + 1]) / 2 for j in 1:Nc]
 
     lon = zeros(T, 6, Nc, Nc); lat = zeros(T, 6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
@@ -63,20 +63,20 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
 
     area = zeros(T, 6, Nc, Nc)
     for p in 1:6, i in 1:Nc, j in 1:Nc
-        area[p, i, j] = compute_cell_area((ξ_edges[i], ξ_edges[i+1]), (η_edges[j], η_edges[j+1]), R, p)
+        area[p, i, j] = compute_cell_area((ξ_edges[i], ξ_edges[i + 1]), (η_edges[j], η_edges[j + 1]), R, p)
     end
 
     dx = zeros(T, 6, Nc + 1, Nc)
-    for p in 1:6, i in 1:Nc+1, j in 1:Nc
-        dx[p, i, j] = compute_edge_length(ξ_edges[i], η_edges[j], ξ_edges[i], η_edges[j+1], R, p)
+    for p in 1:6, i in 1:(Nc + 1), j in 1:Nc
+        dx[p, i, j] = compute_edge_length(ξ_edges[i], η_edges[j], ξ_edges[i], η_edges[j + 1], R, p)
     end
     dy = zeros(T, 6, Nc, Nc + 1)
-    for p in 1:6, i in 1:Nc, j in 1:Nc+1
-        dy[p, i, j] = compute_edge_length(ξ_edges[i], η_edges[j], ξ_edges[i+1], η_edges[j], R, p)
+    for p in 1:6, i in 1:Nc, j in 1:(Nc + 1)
+        dy[p, i, j] = compute_edge_length(ξ_edges[i], η_edges[j], ξ_edges[i + 1], η_edges[j], R, p)
     end
 
-    rotation_angles = Dict{Tuple{Int,EdgeDirection},Float64}()
-    rotation_matrices = Dict{Tuple{Int,EdgeDirection},NTuple{4,Float64}}()
+    rotation_angles = Dict{Tuple{Int, EdgeDirection}, Float64}()
+    rotation_matrices = Dict{Tuple{Int, EdgeDirection}, NTuple{4, Float64}}()
     for p in 1:6, dir in (West, East, South, North)
         nb = PANEL_CONNECTIVITY[p][dir]
         rotation_angles[(p, dir)] = compute_rotation_angle(p, dir, nb.neighbor_panel, nb.neighbor_edge)
@@ -131,7 +131,7 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
     # Uses analytical gnomonic_metric at ξ±h and η±h stencil points.
     dJgxe_dξ_arr = zeros(T, 6, Nc, Nc)
     dJgxe_dη_arr = zeros(T, 6, Nc, Nc)
-    h_metric = T(1e-7)
+    h_metric = T(1.0e-7)
     for p in 1:6, i in 1:Nc, j in 1:Nc
         ξc = ξ_centers[i]; ηc = η_centers[j]
         # Jg^{ξη} at (ξ±h, η) for ∂/∂ξ
@@ -177,15 +177,15 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
 
     # Precompute center-to-center physical distances
     dist_xi = zeros(T, 6, Nc - 1, Nc)
-    for p in 1:6, i in 1:Nc-1, j in 1:Nc
+    for p in 1:6, i in 1:(Nc - 1), j in 1:Nc
         v1 = gnomonic_to_cart(ξ_centers[i], η_centers[j], p)
-        v2 = gnomonic_to_cart(ξ_centers[i+1], η_centers[j], p)
+        v2 = gnomonic_to_cart(ξ_centers[i + 1], η_centers[j], p)
         dist_xi[p, i, j] = R * acos(clamp(dot(v1, v2), -1.0, 1.0))
     end
     dist_eta = zeros(T, 6, Nc, Nc - 1)
-    for p in 1:6, i in 1:Nc, j in 1:Nc-1
+    for p in 1:6, i in 1:Nc, j in 1:(Nc - 1)
         v1 = gnomonic_to_cart(ξ_centers[i], η_centers[j], p)
-        v2 = gnomonic_to_cart(ξ_centers[i], η_centers[j+1], p)
+        v2 = gnomonic_to_cart(ξ_centers[i], η_centers[j + 1], p)
         dist_eta[p, i, j] = R * acos(clamp(dot(v1, v2), -1.0, 1.0))
     end
 
@@ -221,7 +221,8 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         dist_eta_bnd[p, i, 2] = R * acos(clamp(dot(v_loc, v_nb), -1.0, 1.0))
     end
 
-    grid = CubedSphereGrid{T}(Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
+    grid = CubedSphereGrid{T}(
+        Nc, Ng, R, ξ_centers, η_centers, ξ_edges, η_edges,
         lon, lat, area, dx, dy, dξ, dη, rotation_angles, rotation_matrices,
         J_arr, ginv_ξξ, ginv_ηη, ginv_ξη,
         dξ_dlon_arr, dξ_dlat_arr, dη_dlon_arr, dη_dlat_arr,
@@ -229,7 +230,8 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
         d2η_dlon2_arr, d2η_dlondlat_arr, d2η_dlat2_arr,
         dJgxe_dξ_arr, dJgxe_dη_arr, dJgxx_dξ_arr, dJgyy_dη_arr,
         dist_xi, dist_eta, dist_xi_bnd, dist_eta_bnd,
-        zeros(T, 6, Nc, Nc, 9), zeros(T, 6, Nc, Nc, 9))
+        zeros(T, 6, Nc, Nc, 9), zeros(T, 6, Nc, Nc, 9)
+    )
 
     # Compute FV3 super-grid angular values
     compute_super_grid!(grid.sin_sg, grid.cos_sg, grid)

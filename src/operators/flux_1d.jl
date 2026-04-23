@@ -114,7 +114,7 @@ function _compute_ppm_fluxes!(flux, q, vel, grid::CubedSphereGrid, dim::Symbol, 
         # Compute interface fluxes in the ξ-direction
         # Interface at edge i sits between cell i-1 and cell i
         for p in 1:6, j in 1:Nc
-            for i in 1:Nc+1
+            for i in 1:(Nc + 1)
                 # Cells adjacent to this interface (in extended array)
                 ie = i + Ng  # extended array index for cell i (or edge i)
                 je = j + Ng
@@ -122,7 +122,7 @@ function _compute_ppm_fluxes!(flux, q, vel, grid::CubedSphereGrid, dim::Symbol, 
                 # PPM reconstruction for the upwind cell
                 # We need cell values: ie-2, ie-1, ie, ie+1, ie+2 in extended array
                 qim2 = q_ext[p, ie - 2, je]; qim1 = q_ext[p, ie - 1, je]
-                qi   = q_ext[p, ie, je];     qip1 = q_ext[p, ie + 1, je]
+                qi = q_ext[p, ie, je];     qip1 = q_ext[p, ie + 1, je]
                 qip2 = q_ext[p, ie + 2, je]
 
                 # Interface value at i-1/2 (between cell i-1 and cell i)
@@ -152,11 +152,11 @@ function _compute_ppm_fluxes!(flux, q, vel, grid::CubedSphereGrid, dim::Symbol, 
         _match_boundary_fluxes_xi!(flux, grid)
     else  # dim == :eta
         for p in 1:6, i in 1:Nc
-            for j in 1:Nc+1
+            for j in 1:(Nc + 1)
                 ie = i + Ng; je = j + Ng
 
                 qjm2 = q_ext[p, ie, je - 2]; qjm1 = q_ext[p, ie, je - 1]
-                qj   = q_ext[p, ie, je];     qjp1 = q_ext[p, ie, je + 1]
+                qj = q_ext[p, ie, je];     qjp1 = q_ext[p, ie, je + 1]
                 qjp2 = q_ext[p, ie, je + 2]
 
                 qj_half = (7.0 / 12.0) * (qjm1 + qj) - (1.0 / 12.0) * (qjm2 + qjp1)
@@ -201,13 +201,17 @@ function _flux_to_tendency!(tendency, flux, grid::CubedSphereGrid, dim::Symbol)
     Nc = grid.Nc
     if dim == :xi
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            tendency[p, i, j] = -(flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
-                                   flux[p, i, j] * grid.dx[p, i, j]) / grid.area[p, i, j]
+            tendency[p, i, j] = -(
+                flux[p, i + 1, j] * grid.dx[p, i + 1, j] -
+                    flux[p, i, j] * grid.dx[p, i, j]
+            ) / grid.area[p, i, j]
         end
     else
         for p in 1:6, i in 1:Nc, j in 1:Nc
-            tendency[p, i, j] = -(flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
-                                   flux[p, i, j] * grid.dy[p, i, j]) / grid.area[p, i, j]
+            tendency[p, i, j] = -(
+                flux[p, i, j + 1] * grid.dy[p, i, j + 1] -
+                    flux[p, i, j] * grid.dy[p, i, j]
+            ) / grid.area[p, i, j]
         end
     end
     return tendency
@@ -285,6 +289,7 @@ function _match_boundary_fluxes_xi!(flux, grid::CubedSphereGrid)
             end
         end
     end
+    return
 end
 
 """
@@ -314,6 +319,7 @@ function _match_boundary_fluxes_eta!(flux, grid::CubedSphereGrid)
             end
         end
     end
+    return
 end
 
 """
@@ -353,7 +359,7 @@ Inverts the sign convention from `_get_boundary_mass_flux`:
 """
 function _set_boundary_mass_flux!(flux_xi, flux_eta, grid::CubedSphereGrid, p, edge::EdgeDirection, k, mass_flux_out)
     Nc = grid.Nc
-    if edge == East
+    return if edge == East
         flux_xi[p, Nc + 1, k] = mass_flux_out / grid.dx[p, Nc + 1, k]
     elseif edge == West
         flux_xi[p, 1, k] = -mass_flux_out / grid.dx[p, 1, k]
@@ -394,7 +400,7 @@ function _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid::CubedSphereGri
 
     # Track which physical edges have been processed to avoid double-processing.
     # Key: (min_panel, max_panel, min_edge, max_edge) or similar unique identifier.
-    processed = Set{Tuple{Int,EdgeDirection,Int,EdgeDirection}}()
+    processed = Set{Tuple{Int, EdgeDirection, Int, EdgeDirection}}()
 
     for p in 1:6
         for edge_p in (East, West, North, South)
@@ -408,9 +414,9 @@ function _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid::CubedSphereGri
             # North→South handled by _match_boundary_fluxes_eta!
             # South→North is the reverse side of a North→South (also handled)
             if (edge_p == East && nb_edge == West) ||
-               (edge_p == West && nb_edge == East) ||
-               (edge_p == North && nb_edge == South) ||
-               (edge_p == South && nb_edge == North)
+                    (edge_p == West && nb_edge == East) ||
+                    (edge_p == North && nb_edge == South) ||
+                    (edge_p == South && nb_edge == North)
                 continue
             end
 
@@ -449,6 +455,7 @@ function _match_rotated_boundary_fluxes!(flux_xi, flux_eta, grid::CubedSphereGri
             end
         end
     end
+    return
 end
 
 # ============================================================================
@@ -465,12 +472,12 @@ function compute_courant_numbers(vel, dt, grid::CubedSphereGrid, dim::Symbol)
     Nc = grid.Nc
     if dim == :xi
         courant = zeros(6, Nc + 1, Nc)
-        for p in 1:6, i in 1:Nc+1, j in 1:Nc
+        for p in 1:6, i in 1:(Nc + 1), j in 1:Nc
             courant[p, i, j] = _get_courant_xi(vel, dt, grid, p, i, j)
         end
     else
         courant = zeros(6, Nc, Nc + 1)
-        for p in 1:6, i in 1:Nc, j in 1:Nc+1
+        for p in 1:6, i in 1:Nc, j in 1:(Nc + 1)
             courant[p, i, j] = _get_courant_eta(vel, dt, grid, p, i, j)
         end
     end
@@ -558,7 +565,7 @@ function _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i_face, j, o)
     qm3 = wrap(q_c[p, ie - 3, je])
     qm2 = wrap(q_c[p, ie - 2, je])
     qm1 = wrap(q_c[p, ie - 1, je])  # left cell (i_face - 1)
-    q0  = wrap(q_c[p, ie, je])       # right cell (i_face)
+    q0 = wrap(q_c[p, ie, je])       # right cell (i_face)
     qp1 = wrap(q_c[p, ie + 1, je])
     qp2 = wrap(q_c[p, ie + 2, je])
 
@@ -610,7 +617,7 @@ function _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j_face, o)
     qm3 = wrap(q_c[p, ie, je - 3])
     qm2 = wrap(q_c[p, ie, je - 2])
     qm1 = wrap(q_c[p, ie, je - 1])  # bottom cell (j_face - 1)
-    q0  = wrap(q_c[p, ie, je])       # top cell (j_face)
+    q0 = wrap(q_c[p, ie, je])       # top cell (j_face)
     qp1 = wrap(q_c[p, ie, je + 1])
     qp2 = wrap(q_c[p, ie, je + 2])
 
@@ -697,12 +704,16 @@ function flux_to_tendency_arrayop(flux, grid::CubedSphereGrid, dim::Symbol)
 
     if dim == :xi
         dx_c = const_wrap(grid.dx)
-        expr = -(wrap(flux_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
-                 wrap(flux_c[p, i, j]) * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+        expr = -(
+            wrap(flux_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+                wrap(flux_c[p, i, j]) * wrap(dx_c[p, i, j])
+        ) / wrap(A_c[p, i, j])
     else
         dy_c = const_wrap(grid.dy)
-        expr = -(wrap(flux_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
-                 wrap(flux_c[p, i, j]) * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+        expr = -(
+            wrap(flux_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+                wrap(flux_c[p, i, j]) * wrap(dy_c[p, i, j])
+        ) / wrap(A_c[p, i, j])
     end
 
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
@@ -727,12 +738,16 @@ function advective_tendency_arrayop(tend_flux, q, vel, grid::CubedSphereGrid, di
 
     if dim == :xi
         dx_c = const_wrap(grid.dx)
-        c_def = (wrap(v_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
-                 wrap(v_c[p, i, j]) * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
+        c_def = (
+            wrap(v_c[p, i + 1, j]) * wrap(dx_c[p, i + 1, j]) -
+                wrap(v_c[p, i, j]) * wrap(dx_c[p, i, j])
+        ) / wrap(A_c[p, i, j])
     else
         dy_c = const_wrap(grid.dy)
-        c_def = (wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
-                 wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
+        c_def = (
+            wrap(v_c[p, i, j + 1]) * wrap(dy_c[p, i, j + 1]) -
+                wrap(v_c[p, i, j]) * wrap(dy_c[p, i, j])
+        ) / wrap(A_c[p, i, j])
     end
 
     expr = wrap(tf_c[p, i, j]) + wrap(q_c[p, i, j]) * c_def

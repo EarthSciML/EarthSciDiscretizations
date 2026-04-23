@@ -3,19 +3,19 @@
     using EarthSciDiscretizations
 end
 
-@testitem "Williamson test case: grid area" setup=[ShallowWaterSetup] tags=[:shallow_water] begin
+@testitem "Williamson test case: grid area" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
     R = 6.371e6
     for Nc in [8, 16]
-        grid = CubedSphereGrid(Nc; R=R)
+        grid = CubedSphereGrid(Nc; R = R)
         @test grid.Nc == Nc
-        @test isapprox(total_area(grid), 4pi * R^2; rtol=1e-10)
+        @test isapprox(total_area(grid), 4pi * R^2; rtol = 1.0e-10)
     end
 end
 
-@testitem "Williamson case 1: cosine bell initial condition" setup=[ShallowWaterSetup] tags=[:shallow_water] begin
+@testitem "Williamson case 1: cosine bell initial condition" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
     R = 6.371e6
     Nc = 16
-    grid = CubedSphereGrid(Nc; R=R)
+    grid = CubedSphereGrid(Nc; R = R)
 
     # Cosine bell centered at (lon0, lat0) = (0, 0)
     r0 = R / 3  # bell radius
@@ -39,10 +39,10 @@ end
     @test total_mass > 0
 end
 
-@testitem "Williamson case 1: solid body rotation transport" setup=[ShallowWaterSetup] tags=[:shallow_water] begin
+@testitem "Williamson case 1: solid body rotation transport" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
     R = 1.0  # unit sphere for simplicity
     Nc = 16
-    grid = CubedSphereGrid(Nc; R=R)
+    grid = CubedSphereGrid(Nc; R = R)
 
     # Solid-body rotation velocity: u = u0 cos(lat), v = 0 (along equator)
     u0 = 1.0
@@ -54,13 +54,13 @@ end
     tend = zeros(6, Nc, Nc)
 
     flux_1d_ppm!(tend, q_const, vel_xi, grid, :xi, 0.01)
-    @test maximum(abs.(tend)) < 1e-12
+    @test maximum(abs.(tend)) < 1.0e-12
 end
 
-@testitem "Williamson: mass conservation under PPM transport" setup=[ShallowWaterSetup] tags=[:shallow_water] begin
+@testitem "Williamson: mass conservation under PPM transport" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
     R = 1.0
     Nc = 16
-    grid = CubedSphereGrid(Nc; R=R)
+    grid = CubedSphereGrid(Nc; R = R)
 
     # Create a smooth field and non-trivial velocity
     q = zeros(6, Nc, Nc)
@@ -80,5 +80,5 @@ end
     mass_change = sum(tend[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
     total_mass = sum(q[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
     # Cross-direction panel connections limit single-direction conservation
-    @test abs(mass_change / total_mass) < 1e-2
+    @test abs(mass_change / total_mass) < 1.0e-2
 end

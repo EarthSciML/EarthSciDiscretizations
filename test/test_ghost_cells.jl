@@ -3,7 +3,7 @@
     using EarthSciDiscretizations
 end
 
-@testitem "Ghost cell extension" setup=[GhostSetup] tags=[:ghost] begin
+@testitem "Ghost cell extension" setup = [GhostSetup] tags = [:ghost] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     Ng = grid.Ng
@@ -45,7 +45,7 @@ end
     end
 end
 
-@testitem "Ghost cells with smooth field" setup=[GhostSetup] tags=[:ghost] begin
+@testitem "Ghost cells with smooth field" setup = [GhostSetup] tags = [:ghost] begin
     Nc = 16
     grid = CubedSphereGrid(Nc)
     Ng = grid.Ng
@@ -71,7 +71,7 @@ end
     end
 end
 
-@testitem "Stagger-aware grid sizes" setup=[GhostSetup] tags=[:ghost] begin
+@testitem "Stagger-aware grid sizes" setup = [GhostSetup] tags = [:ghost] begin
     Nc = 8; Ng = 3
     @test grid_size(CellCenter, Nc) == (Nc, Nc)
     @test grid_size(UEdge, Nc) == (Nc + 1, Nc)
@@ -86,7 +86,7 @@ end
     @test ghost_array_size(UEdge, Nc, Ng) == (6, Nc + 1 + 2Ng, Nc + 2Ng)
 end
 
-@testitem "Corner ghost cells are filled" setup=[GhostSetup] tags=[:ghost] begin
+@testitem "Corner ghost cells are filled" setup = [GhostSetup] tags = [:ghost] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
     Ng = grid.Ng
@@ -120,14 +120,16 @@ end
     end
 end
 
-@testitem "Discrete space creation" setup=[GhostSetup] tags=[:ghost] begin
+@testitem "Discrete space creation" setup = [GhostSetup] tags = [:ghost] begin
     Nc = 8
     grid = CubedSphereGrid(Nc)
-    space = CubedSphereDiscreteSpace(grid, [
-        :q => CellCenter,
-        :u => UEdge,
-        :v => VEdge,
-    ])
+    space = CubedSphereDiscreteSpace(
+        grid, [
+            :q => CellCenter,
+            :u => UEdge,
+            :v => VEdge,
+        ]
+    )
 
     @test length(space.var_names) == 3
 

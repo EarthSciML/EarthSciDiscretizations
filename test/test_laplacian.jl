@@ -3,22 +3,22 @@
     using EarthSciDiscretizations
 end
 
-@testitem "Laplacian of constant is zero" setup=[LapSetup] tags=[:operators] begin
+@testitem "Laplacian of constant is zero" setup = [LapSetup] tags = [:operators] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
     phi = fill(7.0, 6, Nc, Nc)
     lap = evaluate_arrayop(fv_laplacian(phi, grid))
     @test size(lap) == (6, Nc - 2, Nc - 2)
-    @test all(abs.(lap) .< 1e-10)
+    @test all(abs.(lap) .< 1.0e-10)
 end
 
-@testitem "Laplacian second-order convergence" setup=[LapSetup] tags=[:operators] begin
+@testitem "Laplacian second-order convergence" setup = [LapSetup] tags = [:operators] begin
     # Test with φ = cos(2ξ)·cos(2η), for which the analytical covariant Laplacian
     # can be computed. We verify that the error converges at second order.
     errors = Float64[]
     resolutions = [8, 16, 32]
     for Nc in resolutions
-        grid = CubedSphereGrid(Nc; R=1.0)
+        grid = CubedSphereGrid(Nc; R = 1.0)
 
         # Set up test field and compute analytical Laplacian
         phi = zeros(6, Nc, Nc)
@@ -31,8 +31,8 @@ end
         #                          ∂/∂η(Jg^{ξη}∂φ/∂ξ + Jg^{ηη}∂φ/∂η)]
         # Compute analytically using metric at cell centers via finite differences
         # with very fine step for the analytical reference
-        h = 1e-6
-        for ii in 1:Nc-2, jj in 1:Nc-2
+        h = 1.0e-6
+        for ii in 1:(Nc - 2), jj in 1:(Nc - 2)
             ic = ii + 1; jc = jj + 1  # physical cell indices
             ξc = grid.ξ_centers[ic]; ηc = grid.η_centers[jc]
 
@@ -69,9 +69,9 @@ end
 
             # Full covariant Laplacian
             lap_val = ginv_ξξ * d2f_dξ2(ξc, ηc) + ginv_ηη * d2f_dη2(ξc, ηc) +
-                      (1/J) * (dJgxx_dξ * df_dξ(ξc, ηc) + dJgyy_dη * df_dη(ξc, ηc)) +
-                      2 * ginv_ξη * d2f_dξdη(ξc, ηc) +
-                      (1/J) * (dJgxe_dξ * df_dη(ξc, ηc) + dJgxe_dη * df_dξ(ξc, ηc))
+                (1 / J) * (dJgxx_dξ * df_dξ(ξc, ηc) + dJgyy_dη * df_dη(ξc, ηc)) +
+                2 * ginv_ξη * d2f_dξdη(ξc, ηc) +
+                (1 / J) * (dJgxe_dξ * df_dη(ξc, ηc) + dJgxe_dη * df_dξ(ξc, ηc))
 
             for p in 1:6
                 lap_exact[p, ii, jj] = lap_val
@@ -84,24 +84,24 @@ end
 
     # Verify second-order convergence: error ratio should be ~4 for 2x refinement
     for k in 2:length(errors)
-        ratio = errors[k-1] / errors[k]
+        ratio = errors[k - 1] / errors[k]
         @test ratio > 2.0  # expect ~4 for 2nd order; pre-asymptotic effects at coarse Nc
     end
 end
 
-@testitem "Laplacian is linear" setup=[LapSetup] tags=[:operators] begin
+@testitem "Laplacian is linear" setup = [LapSetup] tags = [:operators] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
     a = rand(6, Nc, Nc); b = rand(6, Nc, Nc); α = 3.5
     la = evaluate_arrayop(fv_laplacian(a, grid))
     lb = evaluate_arrayop(fv_laplacian(b, grid))
     lab = evaluate_arrayop(fv_laplacian(a + α * b, grid))
-    @test isapprox(lab, la + α * lb; rtol=1e-10)
+    @test isapprox(lab, la + α * lb; rtol = 1.0e-10)
 end
 
-@testitem "fv_laplacian matches fv_laplacian_extended" setup=[LapSetup] tags=[:operators] begin
+@testitem "fv_laplacian matches fv_laplacian_extended" setup = [LapSetup] tags = [:operators] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
 
     # Non-trivial test field
     phi = zeros(6, Nc, Nc)
@@ -119,14 +119,14 @@ end
     # Compare on the shared interior region: fv_laplacian index (p,i,j) maps to
     # physical cell (p, i+1, j+1), while fv_laplacian_extended index (p,i,j)
     # maps to physical cell (p, i, j)
-    for p in 1:6, i in 1:Nc-2, j in 1:Nc-2
-        @test isapprox(lap1[p, i, j], lap2[p, i + 1, j + 1]; rtol=1e-10)
+    for p in 1:6, i in 1:(Nc - 2), j in 1:(Nc - 2)
+        @test isapprox(lap1[p, i, j], lap2[p, i + 1, j + 1]; rtol = 1.0e-10)
     end
 end
 
-@testitem "Precomputed stencil matches ArrayOp Laplacian" setup=[LapSetup] tags=[:operators] begin
+@testitem "Precomputed stencil matches ArrayOp Laplacian" setup = [LapSetup] tags = [:operators] begin
     Nc = 8
-    grid = CubedSphereGrid(Nc; R=1.0)
+    grid = CubedSphereGrid(Nc; R = 1.0)
     stencil = precompute_laplacian_stencil(grid)
 
     phi = zeros(6, Nc, Nc)
@@ -144,7 +144,7 @@ end
 
     # They should agree at interior cells (boundary cells may differ due to
     # different ghost cell handling)
-    for p in 1:6, i in 2:Nc-1, j in 2:Nc-1
-        @test isapprox(du_stencil[p, i, j], du_ext[p, i, j]; rtol=1e-6)
+    for p in 1:6, i in 2:(Nc - 1), j in 2:(Nc - 1)
+        @test isapprox(du_stencil[p, i, j], du_ext[p, i, j]; rtol = 1.0e-6)
     end
 end

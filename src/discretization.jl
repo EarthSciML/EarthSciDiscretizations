@@ -22,8 +22,8 @@ struct FVCubedSphere
     transport_scheme::Symbol
 end
 
-function FVCubedSphere(Nc::Int; Nk::Int=0, R::Float64=6.371e6, Ng::Int=3, transport::Symbol=:upwind)
-    FVCubedSphere(Nc, Nk, R, Ng, transport)
+function FVCubedSphere(Nc::Int; Nk::Int = 0, R::Float64 = 6.371e6, Ng::Int = 3, transport::Symbol = :upwind)
+    return FVCubedSphere(Nc, Nk, R, Ng, transport)
 end
 
 """
@@ -129,10 +129,10 @@ function fv_laplacian_extended(u_ext, grid::CubedSphereGrid)
     o = Ng  # offset
 
     u_center = wrap(u_c[p, i + o, j + o])
-    u_east   = wrap(u_c[p, i + o + 1, j + o])
-    u_west   = wrap(u_c[p, i + o - 1, j + o])
-    u_north  = wrap(u_c[p, i + o, j + o + 1])
-    u_south  = wrap(u_c[p, i + o, j + o - 1])
+    u_east = wrap(u_c[p, i + o + 1, j + o])
+    u_west = wrap(u_c[p, i + o - 1, j + o])
+    u_north = wrap(u_c[p, i + o, j + o + 1])
+    u_south = wrap(u_c[p, i + o, j + o - 1])
 
     # Second derivatives in computational coordinates (simple centered)
     d2u_dξ2 = (u_east - 2 * u_center + u_west) / dξ^2
@@ -147,8 +147,9 @@ function fv_laplacian_extended(u_ext, grid::CubedSphereGrid)
     # (1/J) ∂/∂η(J g^{ηη} ∂u/∂η) = g^{ηη} ∂²u/∂η² + (1/J) ∂(Jg^{ηη})/∂η · ∂u/∂η
     orthogonal = wrap(ginv_ξξ_c[p, i, j]) * d2u_dξ2 + wrap(ginv_ηη_c[p, i, j]) * d2u_dη2 +
         wrap(1 / J_c[p, i, j]) * (
-            wrap(dJgxx_dξ_c[p, i, j]) * du_dξ +
-            wrap(dJgyy_dη_c[p, i, j]) * du_dη)
+        wrap(dJgxx_dξ_c[p, i, j]) * du_dξ +
+            wrap(dJgyy_dη_c[p, i, j]) * du_dη
+    )
 
     # Mixed derivative
     u_ne = wrap(u_c[p, i + o + 1, j + o + 1])
@@ -160,8 +161,9 @@ function fv_laplacian_extended(u_ext, grid::CubedSphereGrid)
     # Full cross-metric correction
     cross_term = 2 * wrap(gxe_c[p, i, j]) * d2u_dξdη +
         wrap(1 / J_c[p, i, j]) * (
-            wrap(dJgxe_dξ_c[p, i, j]) * du_dη +
-            wrap(dJgxe_dη_c[p, i, j]) * du_dξ)
+        wrap(dJgxe_dξ_c[p, i, j]) * du_dη +
+            wrap(dJgxe_dη_c[p, i, j]) * du_dξ
+    )
 
     expr = orthogonal + cross_term
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
@@ -208,7 +210,7 @@ ArrayOp element (simple weighted sum with numerical coefficients) rather
 than a complex chain-rule expression, dramatically reducing compile time.
 """
 function SciMLBase.discretize(sys::PDESystem, disc::FVCubedSphere; kwargs...)
-    grid = CubedSphereGrid(disc.Nc; R=disc.R, Ng=disc.Ng)
+    grid = CubedSphereGrid(disc.Nc; R = disc.R, Ng = disc.Ng)
     Nc = grid.Nc
 
     # Identify time vs spatial IVs
@@ -223,15 +225,15 @@ function SciMLBase.discretize(sys::PDESystem, disc::FVCubedSphere; kwargs...)
     ndvs = length(dvs)
 
     # Create discrete state arrays
-    disc_vars = Dict{Any,Any}()
+    disc_vars = Dict{Any, Any}()
     for dv in dvs
-        name = Symbol(Symbolics.tosymbol(dv, escape=false))
+        name = Symbol(Symbolics.tosymbol(dv, escape = false))
         arr = first(Symbolics.@variables $name(mtk_t)[1:6, 1:Nc, 1:Nc])
         disc_vars[dv] = arr
     end
 
     # Build ghost-extended symbolic arrays for each DV
-    ext_vars = Dict{Any,Any}()
+    ext_vars = Dict{Any, Any}()
     for dv in dvs
         ext_vars[dv] = _build_symbolic_ghost_extension(disc_vars[dv], grid)
     end
@@ -244,8 +246,10 @@ function SciMLBase.discretize(sys::PDESystem, disc::FVCubedSphere; kwargs...)
         lhs_arr = disc_vars[lhs_dv]
 
         # Build the RHS ArrayOp by analyzing the PDE structure
-        rhs_arrayop = _build_rhs_arrayop(eq.rhs, dvs, spatial_ivs,
-                                          disc_vars, ext_vars, grid)
+        rhs_arrayop = _build_rhs_arrayop(
+            eq.rhs, dvs, spatial_ivs,
+            disc_vars, ext_vars, grid
+        )
 
         # Scalarize the ArrayOp to create per-cell equations
         rhs_scalar = Symbolics.scalarize(wrap(rhs_arrayop))
@@ -280,8 +284,10 @@ function _build_rhs_arrayop(rhs, dvs, spatial_ivs, disc_vars, ext_vars, grid)
     idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
 
     # Accumulate the RHS ArrayOp expression
-    rhs_expr = _rhs_to_arrayop_expr(unwrap(rhs), dvs, spatial_ivs,
-                                      disc_vars, ext_vars, grid, idx, 1.0)
+    rhs_expr = _rhs_to_arrayop_expr(
+        unwrap(rhs), dvs, spatial_ivs,
+        disc_vars, ext_vars, grid, idx, 1.0
+    )
 
     return make_arrayop(idx, unwrap(rhs_expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end
@@ -350,30 +356,30 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
             innermost = arguments(inner)[1]
 
             # Evaluate innermost expression at 9 stencil points
-            f_c  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, 0, o)
-            f_e  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, 0, o)
-            f_w  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, 0, o)
-            f_n  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, +1, o)
-            f_s  = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, -1, o)
+            f_c = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, 0, o)
+            f_e = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, 0, o)
+            f_w = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, 0, o)
+            f_n = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, +1, o)
+            f_s = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, 0, -1, o)
             f_ne = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, +1, o)
             f_nw = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, +1, o)
             f_se = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, +1, -1, o)
             f_sw = _eval_at_gridpoint(innermost, dvs, ext_vars, idx, -1, -1, o)
 
-            d2f_dξ2   = (f_e - 2*f_c + f_w) / dξ^2
-            d2f_dη2   = (f_n - 2*f_c + f_s) / dη^2
-            d2f_dξdη  = (f_ne - f_nw - f_se + f_sw) / (4*dξ*dη)
-            df_dξ     = (f_e - f_w) / (2*dξ)
-            df_dη     = (f_n - f_s) / (2*dη)
+            d2f_dξ2 = (f_e - 2 * f_c + f_w) / dξ^2
+            d2f_dη2 = (f_n - 2 * f_c + f_s) / dη^2
+            d2f_dξdη = (f_ne - f_nw - f_se + f_sw) / (4 * dξ * dη)
+            df_dξ = (f_e - f_w) / (2 * dξ)
+            df_dη = (f_n - f_s) / (2 * dη)
 
             a_ξ_o, a_η_o = _arrayop_chain_coeffs(dim, grid, idx)
             a_ξ_i, a_η_i = _arrayop_chain_coeffs(inner_dim, grid, idx)
             b_ξ, b_η = _arrayop_second_chain_coeffs(dim, inner_dim, grid, idx)
 
             result = a_ξ_o * a_ξ_i * d2f_dξ2 +
-                     (a_ξ_o * a_η_i + a_η_o * a_ξ_i) * d2f_dξdη +
-                     a_η_o * a_η_i * d2f_dη2 +
-                     b_ξ * df_dξ + b_η * df_dη
+                (a_ξ_o * a_η_i + a_η_o * a_ξ_i) * d2f_dξdη +
+                a_η_o * a_η_i * d2f_dη2 +
+                b_ξ * df_dξ + b_η * df_dη
 
             return coeff * result
         end
@@ -384,8 +390,8 @@ function _rhs_to_arrayop_expr(expr, dvs, spatial_ivs, disc_vars, ext_vars, grid,
         f_jp1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, 0, +1, o)
         f_jm1 = _eval_at_gridpoint(inner, dvs, ext_vars, idx, 0, -1, o)
 
-        df_dξ = (f_ip1 - f_im1) / (2*dξ)
-        df_dη = (f_jp1 - f_jm1) / (2*dη)
+        df_dξ = (f_ip1 - f_im1) / (2 * dξ)
+        df_dη = (f_jp1 - f_jm1) / (2 * dη)
 
         if dim == :lon
             dξ_dx = const_wrap(grid.dξ_dlon); dη_dx = const_wrap(grid.dη_dlon)
@@ -443,11 +449,15 @@ For computational coordinates: (1,0) or (0,1). For physical coordinates: uses co
 function _arrayop_chain_coeffs(dim, grid, idx)
     p, i, j = idx[1], idx[2], idx[3]
     if dim == :lon
-        return (wrap(const_wrap(grid.dξ_dlon)[p, i, j]),
-                wrap(const_wrap(grid.dη_dlon)[p, i, j]))
+        return (
+            wrap(const_wrap(grid.dξ_dlon)[p, i, j]),
+            wrap(const_wrap(grid.dη_dlon)[p, i, j]),
+        )
     elseif dim == :lat
-        return (wrap(const_wrap(grid.dξ_dlat)[p, i, j]),
-                wrap(const_wrap(grid.dη_dlat)[p, i, j]))
+        return (
+            wrap(const_wrap(grid.dξ_dlat)[p, i, j]),
+            wrap(const_wrap(grid.dη_dlat)[p, i, j]),
+        )
     elseif dim == :xi
         return (wrap(Symbolics.value(1.0)), wrap(Symbolics.value(0.0)))
     elseif dim == :eta
@@ -462,14 +472,20 @@ Return (coeff_ξ, coeff_η) for the second-derivative chain-rule correction
 function _arrayop_second_chain_coeffs(dim_outer, dim_inner, grid, idx)
     p, i, j = idx[1], idx[2], idx[3]
     if dim_outer == :lon && dim_inner == :lon
-        return (wrap(const_wrap(grid.d2ξ_dlon2)[p, i, j]),
-                wrap(const_wrap(grid.d2η_dlon2)[p, i, j]))
+        return (
+            wrap(const_wrap(grid.d2ξ_dlon2)[p, i, j]),
+            wrap(const_wrap(grid.d2η_dlon2)[p, i, j]),
+        )
     elseif dim_outer == :lat && dim_inner == :lat
-        return (wrap(const_wrap(grid.d2ξ_dlat2)[p, i, j]),
-                wrap(const_wrap(grid.d2η_dlat2)[p, i, j]))
+        return (
+            wrap(const_wrap(grid.d2ξ_dlat2)[p, i, j]),
+            wrap(const_wrap(grid.d2η_dlat2)[p, i, j]),
+        )
     elseif (dim_outer == :lon && dim_inner == :lat) || (dim_outer == :lat && dim_inner == :lon)
-        return (wrap(const_wrap(grid.d2ξ_dlondlat)[p, i, j]),
-                wrap(const_wrap(grid.d2η_dlondlat)[p, i, j]))
+        return (
+            wrap(const_wrap(grid.d2ξ_dlondlat)[p, i, j]),
+            wrap(const_wrap(grid.d2η_dlondlat)[p, i, j]),
+        )
     else
         return (wrap(Symbolics.value(0.0)), wrap(Symbolics.value(0.0)))
     end
@@ -482,9 +498,9 @@ function _match_dv(expr, dvs)
         end
     end
     if iscall(expr)
-        name = Symbol(Symbolics.tosymbol(wrap(expr), escape=false))
+        name = Symbol(Symbolics.tosymbol(wrap(expr), escape = false))
         for dv in dvs
-            dv_name = Symbol(Symbolics.tosymbol(dv, escape=false))
+            dv_name = Symbol(Symbolics.tosymbol(dv, escape = false))
             if name == dv_name
                 return dv
             end
@@ -540,8 +556,8 @@ function _is_initial_condition(bc, dv, t0)
         return false
     end
     args = arguments(lhs)
-    lhs_name = Symbol(Symbolics.tosymbol(wrap(lhs), escape=false))
-    dv_name = Symbol(Symbolics.tosymbol(dv, escape=false))
+    lhs_name = Symbol(Symbolics.tosymbol(wrap(lhs), escape = false))
+    dv_name = Symbol(Symbolics.tosymbol(dv, escape = false))
     if lhs_name != dv_name
         return false
     end
@@ -555,7 +571,7 @@ function _is_initial_condition(bc, dv, t0)
 end
 
 function _eval_ic(rhs, spatial_ivs, grid, p, i, j)
-    subs = Dict{Any,Any}()
+    subs = Dict{Any, Any}()
     if length(spatial_ivs) >= 1
         subs[spatial_ivs[1]] = grid.lon[p, i, j]
     end

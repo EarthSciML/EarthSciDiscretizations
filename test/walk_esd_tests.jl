@@ -142,10 +142,10 @@ Main entry point. Discovers rules under `catalog`, runs layers A/B/C per rule,
 prints a report to stdout, and optionally writes JUnit XML.
 """
 function walk_esd_tests(;
-    catalog::AbstractString,
-    junit_path::Union{Nothing,AbstractString} = nothing,
-    io::IO = stdout,
-)
+        catalog::AbstractString,
+        junit_path::Union{Nothing, AbstractString} = nothing,
+        io::IO = stdout,
+    )
     rules = discover_rules(catalog)
     results = Vector{RuleResult}()
     for rule in rules
@@ -186,7 +186,7 @@ function print_report(io::IO, catalog, results::Vector{RuleResult})
     npass = sum(count_outcome(r, LAYER_PASS) for r in results; init = 0)
     nfail = sum(count_outcome(r, LAYER_FAIL) for r in results; init = 0)
     nskip = sum(count_outcome(r, LAYER_SKIP) for r in results; init = 0)
-    println(io, "summary: $total cases  pass=$npass  fail=$nfail  skip=$nskip")
+    return println(io, "summary: $total cases  pass=$npass  fail=$nfail  skip=$nskip")
 end
 
 function count_outcome(r::RuleResult, target::LayerOutcome)

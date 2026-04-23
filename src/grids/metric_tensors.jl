@@ -4,13 +4,20 @@ Metric tensors and geometric quantities for the gnomonic cubed-sphere projection
 
 function gnomonic_to_lonlat(ξ, η, panel)
     X = tan(ξ); Y = tan(η); R = sqrt(1 + X^2 + Y^2)
-    if panel == 1;     x3d = 1/R;  y3d = X/R;  z3d = Y/R
-    elseif panel == 2; x3d = -X/R; y3d = 1/R;  z3d = Y/R
-    elseif panel == 3; x3d = -Y/R; y3d = X/R;  z3d = 1/R
-    elseif panel == 4; x3d = -1/R; y3d = -X/R; z3d = Y/R
-    elseif panel == 5; x3d = X/R;  y3d = -1/R; z3d = Y/R
-    elseif panel == 6; x3d = Y/R;  y3d = X/R;  z3d = -1/R
-    else error("Invalid panel: $panel")
+    if panel == 1
+        x3d = 1 / R;  y3d = X / R;  z3d = Y / R
+    elseif panel == 2
+        x3d = -X / R; y3d = 1 / R;  z3d = Y / R
+    elseif panel == 3
+        x3d = -Y / R; y3d = X / R;  z3d = 1 / R
+    elseif panel == 4
+        x3d = -1 / R; y3d = -X / R; z3d = Y / R
+    elseif panel == 5
+        x3d = X / R;  y3d = -1 / R; z3d = Y / R
+    elseif panel == 6
+        x3d = Y / R;  y3d = X / R;  z3d = -1 / R
+    else
+        error("Invalid panel: $panel")
     end
     return (atan(y3d, x3d), asin(clamp(z3d, -1.0, 1.0)))
 end
@@ -27,19 +34,27 @@ end
 
 function gnomonic_to_cart(ξ, η, panel)
     X = tan(ξ); Y = tan(η); R = sqrt(1 + X^2 + Y^2)
-    if panel == 1;     return [1/R, X/R, Y/R]
-    elseif panel == 2; return [-X/R, 1/R, Y/R]
-    elseif panel == 3; return [-Y/R, X/R, 1/R]
-    elseif panel == 4; return [-1/R, -X/R, Y/R]
-    elseif panel == 5; return [X/R, -1/R, Y/R]
-    elseif panel == 6; return [Y/R, X/R, -1/R]
+    if panel == 1
+        return [1 / R, X / R, Y / R]
+    elseif panel == 2
+        return [-X / R, 1 / R, Y / R]
+    elseif panel == 3
+        return [-Y / R, X / R, 1 / R]
+    elseif panel == 4
+        return [-1 / R, -X / R, Y / R]
+    elseif panel == 5
+        return [X / R, -1 / R, Y / R]
+    elseif panel == 6
+        return [Y / R, X / R, -1 / R]
     end
 end
 
 function compute_cell_area(ξ_edges, η_edges, R, panel)
     ξw, ξe = ξ_edges; ηs, ηn = η_edges
-    corners = [gnomonic_to_cart(ξw, ηs, panel), gnomonic_to_cart(ξe, ηs, panel),
-               gnomonic_to_cart(ξe, ηn, panel), gnomonic_to_cart(ξw, ηn, panel)]
+    corners = [
+        gnomonic_to_cart(ξw, ηs, panel), gnomonic_to_cart(ξe, ηs, panel),
+        gnomonic_to_cart(ξe, ηn, panel), gnomonic_to_cart(ξw, ηn, panel),
+    ]
     n = 4
     angles = Float64[]
     for k in 1:n
@@ -47,7 +62,7 @@ function compute_cell_area(ξ_edges, η_edges, R, panel)
         t1 = cross(v_curr, cross(v_prev - v_curr, v_curr))
         t2 = cross(v_curr, cross(v_next - v_curr, v_curr))
         n1 = norm(t1); n2 = norm(t2)
-        push!(angles, (n1 < 1e-15 || n2 < 1e-15) ? π / 2 : acos(clamp(dot(t1, t2) / (n1 * n2), -1.0, 1.0)))
+        push!(angles, (n1 < 1.0e-15 || n2 < 1.0e-15) ? π / 2 : acos(clamp(dot(t1, t2) / (n1 * n2), -1.0, 1.0)))
     end
     return R^2 * (sum(angles) - (n - 2) * π)
 end
@@ -63,7 +78,7 @@ function compute_rotation_angle(panel_src, edge_src, panel_dst, edge_dst)
         return 0.0
     else
         if (edge_src == North && edge_dst == East) || (edge_src == East && edge_dst == North) ||
-           (edge_src == South && edge_dst == West) || (edge_src == West && edge_dst == South)
+                (edge_src == South && edge_dst == West) || (edge_src == West && edge_dst == South)
             return π / 2
         else
             return -π / 2
@@ -82,17 +97,17 @@ Returns (a, b, c, da_dX, da_dY, db_dX, db_dY, dc_dX, dc_dY).
 """
 function _panel_abc(X, Y, panel)
     if panel == 1     # (a,b,c) = (1, X, Y)
-        return ( 1.0,  X,    Y,    0.0, 0.0,  1.0, 0.0,  0.0, 1.0)
+        return (1.0, X, Y, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0)
     elseif panel == 2 # (a,b,c) = (-X, 1, Y)
-        return (-X,    1.0,  Y,   -1.0, 0.0,  0.0, 0.0,  0.0, 1.0)
+        return (-X, 1.0, Y, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
     elseif panel == 3 # (a,b,c) = (-Y, X, 1)
-        return (-Y,    X,    1.0,  0.0,-1.0,  1.0, 0.0,  0.0, 0.0)
+        return (-Y, X, 1.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0)
     elseif panel == 4 # (a,b,c) = (-1, -X, Y)
-        return (-1.0, -X,    Y,    0.0, 0.0, -1.0, 0.0,  0.0, 1.0)
+        return (-1.0, -X, Y, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0)
     elseif panel == 5 # (a,b,c) = (X, -1, Y)
-        return ( X,   -1.0,  Y,    1.0, 0.0,  0.0, 0.0,  0.0, 1.0)
+        return (X, -1.0, Y, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
     elseif panel == 6 # (a,b,c) = (Y, X, -1)
-        return ( Y,    X,   -1.0,  0.0, 1.0,  1.0, 0.0,  0.0, 0.0)
+        return (Y, X, -1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0)
     else
         error("Invalid panel: $panel")
     end
@@ -125,8 +140,8 @@ function compute_forward_jacobian(ξ, η, panel)
 
     # At the poles ab2 → 0: lon is undefined, return zero Jacobian.
     # The inverse Jacobian (compute_coord_jacobian) handles this gracefully.
-    if ab2 < 1e-30
-        return (dlon_dξ=0.0, dlon_dη=0.0, dlat_dξ=0.0, dlat_dη=0.0)
+    if ab2 < 1.0e-30
+        return (dlon_dξ = 0.0, dlon_dη = 0.0, dlat_dξ = 0.0, dlat_dη = 0.0)
     end
 
     sqrt_ab2 = sqrt(ab2)
@@ -139,7 +154,7 @@ function compute_forward_jacobian(ξ, η, panel)
     dlat_dξ = sx * (dc_dX * δ - c * X) / (δ * sqrt_ab2)
     dlat_dη = sy * (dc_dY * δ - c * Y) / (δ * sqrt_ab2)
 
-    return (dlon_dξ=dlon_dξ, dlon_dη=dlon_dη, dlat_dξ=dlat_dξ, dlat_dη=dlat_dη)
+    return (dlon_dξ = dlon_dξ, dlon_dη = dlon_dη, dlat_dξ = dlat_dξ, dlat_dη = dlat_dη)
 end
 
 """
@@ -168,19 +183,19 @@ function compute_coord_jacobian(ξ, η, panel)
     # Smooth regularization near poles: use det² / (det² + ε²) scaling to
     # avoid a hard clamp discontinuity. For |det| >> ε this is ~1; for
     # |det| → 0 the result smoothly approaches zero.
-    ε_reg = 1e-14
-    if abs(det) < 1e-10
+    ε_reg = 1.0e-14
+    if abs(det) < 1.0e-10
         scale = det / (det^2 + ε_reg)  # = 1/det · det²/(det² + ε) ≈ 1/det for |det| >> √ε
     else
         scale = 1.0 / det
     end
 
-    dξ_dlon =  dlat_dη * scale
+    dξ_dlon = dlat_dη * scale
     dξ_dlat = -dlon_dη * scale
     dη_dlon = -dlat_dξ * scale
-    dη_dlat =  dlon_dξ * scale
+    dη_dlat = dlon_dξ * scale
 
-    return (dξ_dlon=dξ_dlon, dξ_dlat=dξ_dlat, dη_dlon=dη_dlon, dη_dlat=dη_dlat)
+    return (dξ_dlon = dξ_dlon, dξ_dlat = dξ_dlat, dη_dlon = dη_dlon, dη_dlat = dη_dlat)
 end
 
 """
@@ -195,7 +210,7 @@ via the chain rule:
     d²ξ/dlon² = (dξ/dlon)·∂(dξ/dlon)/∂ξ + (dη/dlon)·∂(dξ/dlon)/∂η
 """
 function compute_second_coord_jacobian(ξ, η, panel)
-    h = 1e-6
+    h = 1.0e-6
 
     # Evaluate the analytical inverse Jacobian at stencil points
     jac_xp = compute_coord_jacobian(ξ + h, η, panel)
@@ -217,15 +232,17 @@ function compute_second_coord_jacobian(ξ, η, panel)
     jac0 = compute_coord_jacobian(ξ, η, panel)
 
     # Second derivatives via chain rule
-    d2ξ_dlon2    = jac0.dξ_dlon * d_dξdlon_dξ  + jac0.dη_dlon * d_dξdlon_dη
-    d2ξ_dlat2    = jac0.dξ_dlat * d_dξdlat_dξ  + jac0.dη_dlat * d_dξdlat_dη
-    d2ξ_dlondlat = jac0.dξ_dlon * d_dξdlat_dξ  + jac0.dη_dlon * d_dξdlat_dη
-    d2η_dlon2    = jac0.dξ_dlon * d_dηdlon_dξ  + jac0.dη_dlon * d_dηdlon_dη
-    d2η_dlat2    = jac0.dξ_dlat * d_dηdlat_dξ  + jac0.dη_dlat * d_dηdlat_dη
-    d2η_dlondlat = jac0.dξ_dlon * d_dηdlat_dξ  + jac0.dη_dlon * d_dηdlat_dη
+    d2ξ_dlon2 = jac0.dξ_dlon * d_dξdlon_dξ + jac0.dη_dlon * d_dξdlon_dη
+    d2ξ_dlat2 = jac0.dξ_dlat * d_dξdlat_dξ + jac0.dη_dlat * d_dξdlat_dη
+    d2ξ_dlondlat = jac0.dξ_dlon * d_dξdlat_dξ + jac0.dη_dlon * d_dξdlat_dη
+    d2η_dlon2 = jac0.dξ_dlon * d_dηdlon_dξ + jac0.dη_dlon * d_dηdlon_dη
+    d2η_dlat2 = jac0.dξ_dlat * d_dηdlat_dξ + jac0.dη_dlat * d_dηdlat_dη
+    d2η_dlondlat = jac0.dξ_dlon * d_dηdlat_dξ + jac0.dη_dlon * d_dηdlat_dη
 
-    return (d2ξ_dlon2=d2ξ_dlon2, d2ξ_dlondlat=d2ξ_dlondlat, d2ξ_dlat2=d2ξ_dlat2,
-            d2η_dlon2=d2η_dlon2, d2η_dlondlat=d2η_dlondlat, d2η_dlat2=d2η_dlat2)
+    return (
+        d2ξ_dlon2 = d2ξ_dlon2, d2ξ_dlondlat = d2ξ_dlondlat, d2ξ_dlat2 = d2ξ_dlat2,
+        d2η_dlon2 = d2η_dlon2, d2η_dlondlat = d2η_dlondlat, d2η_dlat2 = d2η_dlat2,
+    )
 end
 
 """
@@ -240,12 +257,16 @@ function tangent_vectors_3d(ξ, η, panel)
     δ = 1 + X^2 + Y^2
     denom = δ^(3 / 2)
     a, b, c, da_dX, da_dY, db_dX, db_dY, dc_dX, dc_dY = _panel_abc(X, Y, panel)
-    e_ξ = [sx * (da_dX * δ - a * X) / denom,
-           sx * (db_dX * δ - b * X) / denom,
-           sx * (dc_dX * δ - c * X) / denom]
-    e_η = [sy * (da_dY * δ - a * Y) / denom,
-           sy * (db_dY * δ - b * Y) / denom,
-           sy * (dc_dY * δ - c * Y) / denom]
+    e_ξ = [
+        sx * (da_dX * δ - a * X) / denom,
+        sx * (db_dX * δ - b * X) / denom,
+        sx * (dc_dX * δ - c * X) / denom,
+    ]
+    e_η = [
+        sy * (da_dY * δ - a * Y) / denom,
+        sy * (db_dY * δ - b * Y) / denom,
+        sy * (dc_dY * δ - c * Y) / denom,
+    ]
     return (e_ξ, e_η)
 end
 
@@ -269,13 +290,13 @@ function compute_edge_rotation_matrix(panel, dir)
     nb_edge = nb.neighbor_edge
 
     # Representative midpoint on the shared edge (along-edge coord = 0)
-    _edge_point(d) = d == West  ? (-π / 4, 0.0) :
-                     d == East  ? ( π / 4, 0.0) :
-                     d == South ? (0.0, -π / 4) :
-                                  (0.0,  π / 4)
+    _edge_point(d) = d == West ? (-π / 4, 0.0) :
+        d == East ? (π / 4, 0.0) :
+        d == South ? (0.0, -π / 4) :
+        (0.0, π / 4)
 
     ξ_loc, η_loc = _edge_point(dir)
-    ξ_nb,  η_nb  = _edge_point(nb_edge)
+    ξ_nb, η_nb = _edge_point(nb_edge)
 
     e_ξ_l, e_η_l = tangent_vectors_3d(ξ_loc, η_loc, panel)
     e_ξ_n, e_η_n = tangent_vectors_3d(ξ_nb, η_nb, nb_panel)
@@ -297,7 +318,11 @@ end
 Wrap angle difference to [-π, π].
 """
 function _wrap_angle(dθ)
-    while dθ > π; dθ -= 2π; end
-    while dθ < -π; dθ += 2π; end
+    while dθ > π
+        dθ -= 2π
+    end
+    while dθ < -π
+        dθ += 2π
+    end
     return dθ
 end

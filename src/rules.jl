@@ -37,11 +37,13 @@ function load_rules(path::AbstractString)
         isdir(family_dir) || continue
         for file in sort(readdir(family_dir))
             endswith(file, ".json") || continue
-            push!(rules, RuleFile(
-                Symbol(family_entry),
-                String(chop(file; tail = length(".json"))),
-                abspath(joinpath(family_dir, file)),
-            ))
+            push!(
+                rules, RuleFile(
+                    Symbol(family_entry),
+                    String(chop(file; tail = length(".json"))),
+                    abspath(joinpath(family_dir, file)),
+                )
+            )
         end
     end
     return rules

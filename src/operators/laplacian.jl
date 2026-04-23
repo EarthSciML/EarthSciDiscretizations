@@ -38,10 +38,14 @@ function fv_laplacian(phi, grid::CubedSphereGrid)
     dξ = grid.dξ; dη = grid.dη
 
     # Second derivatives in computational coordinates (centered)
-    d2phi_dξ2 = (wrap(phi_c[p, i + 2, j + 1]) - 2 * wrap(phi_c[p, i + 1, j + 1]) +
-                 wrap(phi_c[p, i, j + 1])) / dξ^2
-    d2phi_dη2 = (wrap(phi_c[p, i + 1, j + 2]) - 2 * wrap(phi_c[p, i + 1, j + 1]) +
-                 wrap(phi_c[p, i + 1, j])) / dη^2
+    d2phi_dξ2 = (
+        wrap(phi_c[p, i + 2, j + 1]) - 2 * wrap(phi_c[p, i + 1, j + 1]) +
+            wrap(phi_c[p, i, j + 1])
+    ) / dξ^2
+    d2phi_dη2 = (
+        wrap(phi_c[p, i + 1, j + 2]) - 2 * wrap(phi_c[p, i + 1, j + 1]) +
+            wrap(phi_c[p, i + 1, j])
+    ) / dη^2
 
     # First derivatives (centered)
     dphi_dξ = (wrap(phi_c[p, i + 2, j + 1]) - wrap(phi_c[p, i, j + 1])) / (2 * dξ)
@@ -51,21 +55,25 @@ function fv_laplacian(phi, grid::CubedSphereGrid)
     # (1/J)∂/∂ξ(Jg^{ξξ}∂φ/∂ξ) = g^{ξξ}·∂²φ/∂ξ² + (1/J)·∂(Jg^{ξξ})/∂ξ·∂φ/∂ξ
     # (1/J)∂/∂η(Jg^{ηη}∂φ/∂η) = g^{ηη}·∂²φ/∂η² + (1/J)·∂(Jg^{ηη})/∂η·∂φ/∂η
     orthogonal = wrap(ginv_ξξ_c[p, i + 1, j + 1]) * d2phi_dξ2 +
-                 wrap(ginv_ηη_c[p, i + 1, j + 1]) * d2phi_dη2 +
+        wrap(ginv_ηη_c[p, i + 1, j + 1]) * d2phi_dη2 +
         wrap(1 / J_c[p, i + 1, j + 1]) * (
-            wrap(dJgxx_dξ_c[p, i + 1, j + 1]) * dphi_dξ +
-            wrap(dJgyy_dη_c[p, i + 1, j + 1]) * dphi_dη)
+        wrap(dJgxx_dξ_c[p, i + 1, j + 1]) * dphi_dξ +
+            wrap(dJgyy_dη_c[p, i + 1, j + 1]) * dphi_dη
+    )
 
     # Mixed derivative ∂²φ/(∂ξ∂η) via 4-point cross stencil
-    d2phi_dξdη = (wrap(phi_c[p, i + 2, j + 2]) - wrap(phi_c[p, i + 2, j]) -
-                  wrap(phi_c[p, i, j + 2]) + wrap(phi_c[p, i, j])) / (4 * dξ * dη)
+    d2phi_dξdη = (
+        wrap(phi_c[p, i + 2, j + 2]) - wrap(phi_c[p, i + 2, j]) -
+            wrap(phi_c[p, i, j + 2]) + wrap(phi_c[p, i, j])
+    ) / (4 * dξ * dη)
 
     # Cross-metric correction:
     # 2·g^{ξη}·∂²φ/(∂ξ∂η) + (1/J)·∂(Jg^{ξη})/∂ξ·∂φ/∂η + (1/J)·∂(Jg^{ξη})/∂η·∂φ/∂ξ
     cross_term = 2 * wrap(gxe_c[p, i + 1, j + 1]) * d2phi_dξdη +
         wrap(1 / J_c[p, i + 1, j + 1]) * (
-            wrap(dJgxe_dξ_c[p, i + 1, j + 1]) * dphi_dη +
-            wrap(dJgxe_dη_c[p, i + 1, j + 1]) * dphi_dξ)
+        wrap(dJgxe_dξ_c[p, i + 1, j + 1]) * dphi_dη +
+            wrap(dJgxe_dη_c[p, i + 1, j + 1]) * dphi_dξ
+    )
 
     expr = orthogonal + cross_term
     return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:(Nc - 2), j => 1:1:(Nc - 2)))

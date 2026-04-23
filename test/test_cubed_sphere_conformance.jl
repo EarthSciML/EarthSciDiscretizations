@@ -9,7 +9,7 @@ end
 # because Julia's CubedSphereGrid does not yet expose a first-class
 # `neighbors(p, i, j)` accessor; the cross-language conformance contract is
 # verified by computing neighbors from the same `PANEL_CONNECTIVITY` table.
-@testitem "Cubed-sphere cross-language conformance" setup=[CubedSphereConformanceSetup] tags=[:conformance, :grid] begin
+@testitem "Cubed-sphere cross-language conformance" setup = [CubedSphereConformanceSetup] tags = [:conformance, :grid] begin
     HARNESS_DIR = joinpath(@__DIR__, "..", "tests", "conformance", "grids", "cubed_sphere")
     FIXTURES = JSON.parsefile(joinpath(HARNESS_DIR, "fixtures.json"))
     REL_TOL = Float64(FIXTURES["tolerance"]["relative"])

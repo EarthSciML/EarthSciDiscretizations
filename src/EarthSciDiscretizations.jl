@@ -162,48 +162,50 @@ export to_esm
 # -----------------------------------------------------------------------------
 module grids
 
-using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
-    ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
-import ..EarthSciDiscretizations: _cartesian
+    using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
+        ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
+    import ..EarthSciDiscretizations: _cartesian
 
-"""
-    EarthSciDiscretizations.grids.cartesian(; nx, ny=nothing, nz=nothing,
-                                              extent=nothing, edges=nothing,
-                                              dtype=Float64, ghosts=0)
-        -> CartesianGrid{T,N}
+    """
+        EarthSciDiscretizations.grids.cartesian(; nx, ny=nothing, nz=nothing,
+                                                  extent=nothing, edges=nothing,
+                                                  dtype=Float64, ghosts=0)
+            -> CartesianGrid{T,N}
 
-Construct a 1D / 2D / 3D Cartesian grid (uniform via `extent` + `nx`[/`ny`/`nz`]
-or non-uniform via per-axis `edges`). See `GRIDS_API.md` §2.3 for the
-cross-binding API contract.
-"""
-const cartesian = _cartesian
+    Construct a 1D / 2D / 3D Cartesian grid (uniform via `extent` + `nx`[/`ny`/`nz`]
+    or non-uniform via per-axis `edges`). See `GRIDS_API.md` §2.3 for the
+    cross-binding API contract.
+    """
+    const cartesian = _cartesian
 
-"""
-    EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
-        -> ArakawaGrid
+    """
+        EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
+            -> ArakawaGrid
 
-Construct an Arakawa-staggered grid over an underlying `base` grid. `stagger`
-accepts an `ArakawaStagger` value or the symbol literal `:A`, `:B`, `:C`,
-`:D`, `:E`. See `GRIDS_API.md` §2.3.
-"""
-function arakawa(; base::Union{ArakawaBaseGrid, Nothing} = nothing,
-                   stagger::Union{ArakawaStagger, Symbol, Nothing} = nothing,
-                   ghosts::Int = 0,
-                   dtype::Type = Float64)
-    base === nothing && throw(ArgumentError("arakawa: keyword argument `base` is required"))
-    stagger === nothing && throw(ArgumentError("arakawa: keyword argument `stagger` is required"))
-    s = stagger isa ArakawaStagger ? stagger : _parse_stagger(stagger)
-    ArakawaGrid(base, s; ghosts = ghosts, dtype = dtype)
-end
+    Construct an Arakawa-staggered grid over an underlying `base` grid. `stagger`
+    accepts an `ArakawaStagger` value or the symbol literal `:A`, `:B`, `:C`,
+    `:D`, `:E`. See `GRIDS_API.md` §2.3.
+    """
+    function arakawa(;
+            base::Union{ArakawaBaseGrid, Nothing} = nothing,
+            stagger::Union{ArakawaStagger, Symbol, Nothing} = nothing,
+            ghosts::Int = 0,
+            dtype::Type = Float64
+        )
+        base === nothing && throw(ArgumentError("arakawa: keyword argument `base` is required"))
+        stagger === nothing && throw(ArgumentError("arakawa: keyword argument `stagger` is required"))
+        s = stagger isa ArakawaStagger ? stagger : _parse_stagger(stagger)
+        return ArakawaGrid(base, s; ghosts = ghosts, dtype = dtype)
+    end
 
-function _parse_stagger(s::Symbol)
-    s === :A ? ArakawaA :
-    s === :B ? ArakawaB :
-    s === :C ? ArakawaC :
-    s === :D ? ArakawaD :
-    s === :E ? ArakawaE :
-    throw(DomainError(s, "Unknown Arakawa stagger; expected :A, :B, :C, :D, or :E"))
-end
+    function _parse_stagger(s::Symbol)
+        return s === :A ? ArakawaA :
+            s === :B ? ArakawaB :
+            s === :C ? ArakawaC :
+            s === :D ? ArakawaD :
+            s === :E ? ArakawaE :
+            throw(DomainError(s, "Unknown Arakawa stagger; expected :A, :B, :C, :D, or :E"))
+    end
 
 end # module grids
 

@@ -52,17 +52,21 @@ function discretize_equation(eq, disc_vars, dvs, spatial_ivs, grid, disc)
         pjp1 = _neighbor_index(grid, p, i, j + 1)
         pjm1 = _neighbor_index(grid, p, i, j - 1)
         # Corner neighbors for mixed derivatives, with rotation-aware offsets
-        pip1jp1 = _diagonal_neighbor(grid, p, i, j, +1,  0, +1, pip1)
-        pip1jm1 = _diagonal_neighbor(grid, p, i, j, +1,  0, -1, pip1)
-        pim1jp1 = _diagonal_neighbor(grid, p, i, j, -1,  0, +1, pim1)
-        pim1jm1 = _diagonal_neighbor(grid, p, i, j, -1,  0, -1, pim1)
+        pip1jp1 = _diagonal_neighbor(grid, p, i, j, +1, 0, +1, pip1)
+        pip1jm1 = _diagonal_neighbor(grid, p, i, j, +1, 0, -1, pip1)
+        pim1jp1 = _diagonal_neighbor(grid, p, i, j, -1, 0, +1, pim1)
+        pim1jm1 = _diagonal_neighbor(grid, p, i, j, -1, 0, -1, pim1)
 
-        neighbors = (pip1=pip1, pim1=pim1, pjp1=pjp1, pjm1=pjm1,
-                     pip1jp1=pip1jp1, pip1jm1=pip1jm1,
-                     pim1jp1=pim1jp1, pim1jm1=pim1jm1)
+        neighbors = (
+            pip1 = pip1, pim1 = pim1, pjp1 = pjp1, pjm1 = pjm1,
+            pip1jp1 = pip1jp1, pip1jm1 = pip1jm1,
+            pim1jp1 = pim1jp1, pim1jm1 = pim1jm1,
+        )
 
-        rhs_cell = _substitute_at_point(rhs, disc_vars, dvs, spatial_ivs,
-                                         p, i, j, neighbors, dξ, dη, grid)
+        rhs_cell = _substitute_at_point(
+            rhs, disc_vars, dvs, spatial_ivs,
+            p, i, j, neighbors, dξ, dη, grid
+        )
 
         push!(eqs, mtk_D(lhs_arr[p, i, j]) ~ rhs_cell)
     end
@@ -84,9 +88,9 @@ function _identify_lhs_dv(lhs, dvs)
             end
         end
         # Fall back to name matching
-        inner_name = Symbol(Symbolics.tosymbol(inner, escape=false))
+        inner_name = Symbol(Symbolics.tosymbol(inner, escape = false))
         for dv in dvs
-            dv_name = Symbol(Symbolics.tosymbol(dv, escape=false))
+            dv_name = Symbol(Symbolics.tosymbol(dv, escape = false))
             if inner_name == dv_name
                 return dv
             end
@@ -135,7 +139,7 @@ function _neighbor_index(grid::CubedSphereGrid, p::Int, i::Int, j::Int, di::Int,
 end
 
 # Unpack tuple form
-function _neighbor_index(grid::CubedSphereGrid, pij::Tuple{Int,Int,Int}, di::Int, dj::Int)
+function _neighbor_index(grid::CubedSphereGrid, pij::Tuple{Int, Int, Int}, di::Int, dj::Int)
     return _neighbor_index(grid, pij[1], pij[2] + di, pij[3] + dj)
 end
 
@@ -152,9 +156,11 @@ This fixes the issue where a naive offset in the neighbor panel's j-index
 does not correspond to the original panel's η-direction after a rotated
 panel crossing (e.g., panel 2 North → panel 3 East).
 """
-function _diagonal_neighbor(grid::CubedSphereGrid, p::Int, i::Int, j::Int,
-                             di_first::Int, di_rest::Int, dj_rest::Int,
-                             first_nb::Tuple{Int,Int,Int})
+function _diagonal_neighbor(
+        grid::CubedSphereGrid, p::Int, i::Int, j::Int,
+        di_first::Int, di_rest::Int, dj_rest::Int,
+        first_nb::Tuple{Int, Int, Int}
+    )
     Nc = grid.Nc
     i_step = i + di_first
 
@@ -216,8 +222,10 @@ Recursively walk a symbolic expression, replacing:
 - Mixed spatial derivatives → chain-rule-transformed cross-derivative
 - Nonlinear terms are preserved (arithmetic is recursed into)
 """
-function _substitute_at_point(expr, disc_vars, dvs, spatial_ivs,
-                               p, i, j, neighbors, dξ, dη, grid)
+function _substitute_at_point(
+        expr, disc_vars, dvs, spatial_ivs,
+        p, i, j, neighbors, dξ, dη, grid
+    )
     ex = unwrap(expr)
 
     if !iscall(ex)
@@ -245,18 +253,26 @@ function _substitute_at_point(expr, disc_vars, dvs, spatial_ivs,
             inner_dim = identify_dimension(Symbol(inner_op.x))
             innermost = arguments(inner)[1]
 
-            return _second_deriv(innermost, dim, inner_dim, disc_vars, dvs,
-                                 p, i, j, neighbors, dξ, dη, grid)
+            return _second_deriv(
+                innermost, dim, inner_dim, disc_vars, dvs,
+                p, i, j, neighbors, dξ, dη, grid
+            )
         end
 
         # First derivative
-        return _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
-                             p, i, j, neighbors, dξ, dη, grid)
+        return _first_deriv(
+            inner, dim, disc_vars, dvs, spatial_ivs,
+            p, i, j, neighbors, dξ, dη, grid
+        )
     end
 
     # For general operations: recurse into all arguments
-    new_args = [_substitute_at_point(wrap(a), disc_vars, dvs, spatial_ivs,
-                                      p, i, j, neighbors, dξ, dη, grid) for a in args]
+    new_args = [
+        _substitute_at_point(
+                wrap(a), disc_vars, dvs, spatial_ivs,
+                p, i, j, neighbors, dξ, dη, grid
+            ) for a in args
+    ]
     return wrap(op(unwrap.(new_args)...))
 end
 
@@ -269,8 +285,10 @@ For physical coordinates (lon, lat), applies:
 
 For computational coordinates (ξ, η), uses direct centered differences.
 """
-function _first_deriv(inner, dim, disc_vars, dvs, spatial_ivs,
-                       p, i, j, neighbors, dξ, dη, grid)
+function _first_deriv(
+        inner, dim, disc_vars, dvs, spatial_ivs,
+        p, i, j, neighbors, dξ, dη, grid
+    )
     pip1 = neighbors.pip1; pim1 = neighbors.pim1
     pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
 
@@ -312,8 +330,10 @@ for the ∂²u/∂ξ² and ∂²u/∂η² terms, as required by the chain rule.
 
 For computational coordinates, uses direct stencils.
 """
-function _second_deriv(innermost, dim_outer, dim_inner, disc_vars, dvs,
-                        p, i, j, neighbors, dξ, dη, grid)
+function _second_deriv(
+        innermost, dim_outer, dim_inner, disc_vars, dvs,
+        p, i, j, neighbors, dξ, dη, grid
+    )
     # Plain (non-metric-weighted) second differences in computational coords
     d2u_dξ2 = _plain_second_deriv_xi(innermost, disc_vars, dvs, p, i, j, neighbors, dξ)
     d2u_dη2 = _plain_second_deriv_eta(innermost, disc_vars, dvs, p, i, j, neighbors, dη)
@@ -339,10 +359,12 @@ function _second_deriv(innermost, dim_outer, dim_inner, disc_vars, dvs,
     # Full chain rule for second derivatives:
     # ∂²u/∂x∂y = Σ_k Σ_l (∂ξ_k/∂x)(∂ξ_l/∂y) ∂²u/(∂ξ_k ∂ξ_l)
     #           + Σ_k (∂²ξ_k/∂x∂y) ∂u/∂ξ_k
-    return (a_ξ_outer * a_ξ_inner * d2u_dξ2 +
+    return (
+        a_ξ_outer * a_ξ_inner * d2u_dξ2 +
             (a_ξ_outer * a_η_inner + a_η_outer * a_ξ_inner) * d2u_dξdη +
             a_η_outer * a_η_inner * d2u_dη2 +
-            b_ξ * du_dξ + b_η * du_dη)
+            b_ξ * du_dξ + b_η * du_dη
+    )
 end
 
 """
@@ -384,8 +406,10 @@ end
 Plain centered second difference in ξ: (u_{i+1} - 2u_i + u_{i-1}) / dξ².
 No metric weighting — this is the form required by the chain rule.
 """
-function _plain_second_deriv_xi(innermost, disc_vars, dvs,
-                                 p, i, j, neighbors, dξ)
+function _plain_second_deriv_xi(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dξ
+    )
     pip1 = neighbors.pip1; pim1 = neighbors.pim1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
@@ -397,8 +421,10 @@ end
 Plain centered second difference in η: (u_{j+1} - 2u_j + u_{j-1}) / dη².
 No metric weighting — this is the form required by the chain rule.
 """
-function _plain_second_deriv_eta(innermost, disc_vars, dvs,
-                                  p, i, j, neighbors, dη)
+function _plain_second_deriv_eta(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dη
+    )
     pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
@@ -411,8 +437,10 @@ Covariant second derivative in ξ:
     (1/J)·∂/∂ξ(J·g^{ξξ}·∂u/∂ξ) with half-point averaged metrics.
 Used by the covariant Laplacian (not the chain-rule path).
 """
-function _covariant_second_deriv_xi(innermost, disc_vars, dvs,
-                                     p, i, j, neighbors, dξ, grid)
+function _covariant_second_deriv_xi(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dξ, grid
+    )
     pip1 = neighbors.pip1; pim1 = neighbors.pim1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_ip1 = _get_dv_value(innermost, disc_vars, dvs, pip1...)
@@ -426,7 +454,7 @@ function _covariant_second_deriv_xi(innermost, disc_vars, dvs,
 
     return (1 / J_ij) * (
         J_ip * ginv_ip * (u_ip1 - u_ij) / dξ -
-        J_im * ginv_im * (u_ij - u_im1) / dξ
+            J_im * ginv_im * (u_ij - u_im1) / dξ
     ) / dξ
 end
 
@@ -435,8 +463,10 @@ Covariant second derivative in η:
     (1/J)·∂/∂η(J·g^{ηη}·∂u/∂η) with half-point averaged metrics.
 Used by the covariant Laplacian (not the chain-rule path).
 """
-function _covariant_second_deriv_eta(innermost, disc_vars, dvs,
-                                      p, i, j, neighbors, dη, grid)
+function _covariant_second_deriv_eta(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dη, grid
+    )
     pjp1 = neighbors.pjp1; pjm1 = neighbors.pjm1
     u_ij = _get_dv_value(innermost, disc_vars, dvs, p, i, j)
     u_jp1 = _get_dv_value(innermost, disc_vars, dvs, pjp1...)
@@ -450,7 +480,7 @@ function _covariant_second_deriv_eta(innermost, disc_vars, dvs,
 
     return (1 / J_ij) * (
         J_jp * ginv_jp * (u_jp1 - u_ij) / dη -
-        J_jm * ginv_jm * (u_ij - u_jm1) / dη
+            J_jm * ginv_jm * (u_ij - u_jm1) / dη
     ) / dη
 end
 
@@ -461,8 +491,10 @@ Covariant cross-derivative term for the Laplacian:
 Expands to:
     2·g^{ξη}·∂²u/(∂ξ∂η) + (1/J)·[∂(J·g^{ξη})/∂ξ·∂u/∂η + ∂(J·g^{ξη})/∂η·∂u/∂ξ]
 """
-function _covariant_cross_deriv(innermost, disc_vars, dvs,
-                                 p, i, j, neighbors, dξ, dη, grid)
+function _covariant_cross_deriv(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dξ, dη, grid
+    )
     d2u_dξdη = _comp_mixed_deriv(innermost, disc_vars, dvs, p, i, j, neighbors, dξ, dη)
 
     # First derivatives of u
@@ -492,8 +524,10 @@ end
 """
 Computational-coordinate mixed derivative ∂²u/(∂ξ∂η) using 4-point stencil.
 """
-function _comp_mixed_deriv(innermost, disc_vars, dvs,
-                            p, i, j, neighbors, dξ, dη)
+function _comp_mixed_deriv(
+        innermost, disc_vars, dvs,
+        p, i, j, neighbors, dξ, dη
+    )
     u_pp = _get_dv_value(innermost, disc_vars, dvs, neighbors.pip1jp1...)
     u_pm = _get_dv_value(innermost, disc_vars, dvs, neighbors.pip1jm1...)
     u_mp = _get_dv_value(innermost, disc_vars, dvs, neighbors.pim1jp1...)
