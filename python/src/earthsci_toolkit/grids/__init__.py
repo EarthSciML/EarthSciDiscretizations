@@ -9,6 +9,7 @@ from .arakawa import ArakawaGrid, BaseGrid, CartesianBase, arakawa
 from .cubed_sphere import CubedSphereGrid, cubed_sphere
 from .duo import DuoGrid, DuoLoader, duo
 from .lat_lon import LatLonGrid, lat_lon
+from .mpas import MpasGrid, MpasLoader, MpasMeshData, check_mesh, mpas, mpas_mesh_data
 from .vertical import VerticalGrid, vertical
 
 __all__ = [
@@ -23,6 +24,12 @@ __all__ = [
     "DuoLoader",
     "lat_lon",
     "LatLonGrid",
+    "mpas",
+    "MpasGrid",
+    "MpasLoader",
+    "MpasMeshData",
+    "mpas_mesh_data",
+    "check_mesh",
     "vertical",
     "VerticalGrid",
 ]
