@@ -22,6 +22,17 @@ export type {
   NeighborRef,
   MetricName,
 } from "./cubed_sphere.js";
+export { lat_lon } from "./lat_lon.js";
+export type {
+  LatLonOpts,
+  LatLonGrid,
+  LatLonVariant,
+  LatLonMetricName,
+  LatLonNeighborCell,
+  LatLonNeighborSet,
+  PolePolicy,
+  Direction,
+} from "./lat_lon.js";
 export { duo } from "./duo.js";
 export type {
   DuoOpts,
