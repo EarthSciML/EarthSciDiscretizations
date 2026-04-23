@@ -51,3 +51,21 @@ export type {
   MPASMeshData,
   MpasMetricName,
 } from "./mpas.js";
+export {
+  arakawa,
+  cartesianBase,
+  variableLocations,
+  locationShape,
+} from "./arakawa.js";
+export type {
+  ArakawaOpts,
+  ArakawaGrid,
+  ArakawaStagger,
+  ArakawaLocation,
+  ArakawaVariable,
+  ArakawaMetricName,
+  ArakawaNeighbors,
+  ArakawaBaseGrid,
+  CartesianBase,
+  CartesianBaseOpts,
+} from "./arakawa.js";
