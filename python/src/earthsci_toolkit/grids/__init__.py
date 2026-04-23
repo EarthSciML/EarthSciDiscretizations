@@ -5,12 +5,17 @@ family exposes a generator function `earthsci_toolkit.grids.<family>(**opts)`
 returning a `Grid` object per `docs/GRIDS_API.md` §2.4, §3.2.
 """
 
+from .arakawa import ArakawaGrid, BaseGrid, CartesianBase, arakawa
 from .cubed_sphere import CubedSphereGrid, cubed_sphere
 from .duo import DuoGrid, DuoLoader, duo
 from .lat_lon import LatLonGrid, lat_lon
 from .vertical import VerticalGrid, vertical
 
 __all__ = [
+    "arakawa",
+    "ArakawaGrid",
+    "BaseGrid",
+    "CartesianBase",
     "cubed_sphere",
     "CubedSphereGrid",
     "duo",
