@@ -26,6 +26,10 @@ using TestItems
     for seeded in ("centered_2nd_uniform", "periodic_bc", "upwind_1st")
         @test seeded in names
     end
+    # finite_volume/ppm_reconstruction (CW84 §1) joins the walker once landed.
+    @test "ppm_reconstruction" in names
+    ppm = first(filter(r -> r.name == "ppm_reconstruction", results))
+    @test ppm.family == :finite_volume
 
     # No fixtures authored yet, so every layer should skip cleanly. The
     # reason string must be non-empty so the JUnit consumer surfaces it.
@@ -47,6 +51,7 @@ using TestItems
     @test occursin("failures=\"0\"", xml)
     @test occursin("skipped=\"$total\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
+    @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("<skipped message=", xml)
 end

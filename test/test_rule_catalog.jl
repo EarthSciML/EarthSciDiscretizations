@@ -93,4 +93,8 @@ end
     @test "centered_2nd_uniform" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
+    # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
+    @test "ppm_reconstruction" in names
+    fv_rules = filter(r -> r.family == :finite_volume, rules)
+    @test "ppm_reconstruction" in Set(r.name for r in fv_rules)
 end

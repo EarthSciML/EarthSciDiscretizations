@@ -1,0 +1,41 @@
+{
+  "discretizations": {
+    "ppm_reconstruction": {
+      "applies_to": {
+        "op": "reconstruct",
+        "args": ["$q"],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "piecewise_parabolic",
+      "limiter": "none",
+      "accuracy": "O(dx^3)",
+      "reference": "Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.6)-(1.10)",
+      "outputs": ["q_left_edge", "q_right_edge", "q_parabola"],
+      "stencil": [
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": -2 }, "role": "support_left_edge" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "role": "support_both" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "role": "center" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "role": "support_both" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 2 }, "role": "support_right_edge" }
+      ],
+      "edge_value_stencil": {
+        "produces": "q_{i+1/2}",
+        "comment": "CW84 eq. (1.6): 4th-order interpolation of cell-averaged data to the cell edge.",
+        "stencil": [
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "coeff": { "op": "/", "args": [-1, 12] } },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [7, 12] } },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "coeff": { "op": "/", "args": [7, 12] } },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": 2 }, "coeff": { "op": "/", "args": [-1, 12] } }
+        ]
+      },
+      "parabola": {
+        "comment": "CW84 eqs. (1.5),(1.7),(1.10): a(xi) = a_L + xi*(da + a_6*(1-xi)), xi = (x - x_{i-1/2})/dx in [0,1].",
+        "a_L": "q_{i-1/2} (right limit of cell i-1, left edge of cell i)",
+        "a_R": "q_{i+1/2} (left limit of cell i+1, right edge of cell i)",
+        "da": "a_R - a_L",
+        "a_6": "6*(q_i - 0.5*(a_L + a_R))"
+      }
+    }
+  }
+}
