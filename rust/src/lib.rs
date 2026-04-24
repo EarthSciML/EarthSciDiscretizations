@@ -17,6 +17,7 @@ pub use grids::cartesian;
 pub use grids::cubed_sphere;
 pub use grids::lat_lon;
 pub use grids::mpas;
+pub use grids::vertical;
 
 mod error {
     use thiserror::Error;
