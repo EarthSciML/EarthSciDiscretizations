@@ -57,6 +57,14 @@ export {
   variableLocations,
   locationShape,
 } from "./arakawa.js";
+export { vertical } from "./vertical.js";
+export type {
+  VerticalOpts,
+  VerticalGrid,
+  VerticalCoordinate,
+  VerticalMetricName,
+  VerticalNeighbors,
+} from "./vertical.js";
 export type {
   ArakawaOpts,
   ArakawaGrid,
