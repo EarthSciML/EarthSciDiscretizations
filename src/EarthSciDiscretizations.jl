@@ -20,6 +20,7 @@ include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
 include("grids/cartesian.jl")
 include("grids/vertical.jl")
+include("grids/latlon.jl")
 
 # Staggering and discrete space
 include("staggering.jl")
@@ -71,6 +72,9 @@ export CartesianGrid, cell_widths, cell_volume
 
 # Exports: Vertical grid family (GRIDS_API.md §2.3; column topology)
 export VerticalGrid
+
+# Exports: Lat-lon grid family (GRIDS_API.md §2.3; rectilinear sphere surface)
+export LatLonGrid, nlon, nlon_uniform, row_offset, lon_edges, lon_centers, cell_area
 
 # Exports: Connectivity
 export EdgeDirection, West, East, South, North
@@ -167,7 +171,7 @@ module grids
 
     using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
         ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
-    import ..EarthSciDiscretizations: _cartesian, _vertical, build_duo_grid, DuoGrid, DuoLoader
+    import ..EarthSciDiscretizations: _cartesian, _vertical, _latlon, build_duo_grid, DuoGrid, DuoLoader
 
     """
         EarthSciDiscretizations.grids.duo(; loader, R=6.371e6, dtype=Float64, ghosts=0) -> DuoGrid
@@ -204,6 +208,21 @@ module grids
     coordinate-specific option table.
     """
     const vertical = _vertical
+
+    """
+        EarthSciDiscretizations.grids.lat_lon(; variant=:regular, nlon=nothing, nlat=nothing,
+                                                nlon_per_row=nothing, lat_edges=nothing,
+                                                lat_centers=nothing, R=6.371e6,
+                                                dtype=Float64, ghosts=0,
+                                                pole_policy=:none, lon_start=nothing)
+            -> LatLonGrid{T}
+
+    Construct a regular or reduced-Gaussian lat-lon grid on a sphere of radius
+    `R`. Only `pole_policy=:none` is implemented in this phase. See
+    `GRIDS_API.md` §2.3 and `src/grids/latlon.jl` for the option table and the
+    cross-binding signature contract.
+    """
+    const lat_lon = _latlon
 
     """
         EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
