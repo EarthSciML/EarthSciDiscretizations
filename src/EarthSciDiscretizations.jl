@@ -18,6 +18,7 @@ include("grids/metric_tensors.jl")
 include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
+include("grids/mpas.jl")
 include("grids/cartesian.jl")
 include("grids/vertical.jl")
 include("grids/latlon.jl")
@@ -66,6 +67,11 @@ export total_area
 export DuoGrid, DuoLoader, build_duo_grid
 export cell_centers, neighbors, metric_eval
 export n_cells, n_vertices, n_edges, to_esm, family
+
+# MPAS unstructured Voronoi family (GRIDS_API §1 row 6, §10 loader-backed)
+export MpasGrid, MpasLoader, MpasMeshData, build_mpas_grid, mpas_mesh_data
+export check_mesh, cell_area, edge_length, cell_distance, cell_center_cart
+export max_edges
 
 # Exports: Cartesian grid family (GRIDS_API.md §2.3)
 export CartesianGrid, cell_widths, cell_volume
@@ -171,7 +177,8 @@ module grids
 
     using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
         ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
-    import ..EarthSciDiscretizations: _cartesian, _vertical, _latlon, build_duo_grid, DuoGrid, DuoLoader
+    import ..EarthSciDiscretizations: _cartesian, _vertical, _latlon, build_duo_grid, DuoGrid, DuoLoader,
+        build_mpas_grid, MpasGrid, MpasLoader, MpasMeshData, mpas_mesh_data
 
     """
         EarthSciDiscretizations.grids.duo(; loader, R=6.371e6, dtype=Float64, ghosts=0) -> DuoGrid
@@ -181,6 +188,18 @@ module grids
     mesh files land with the ESS file-format spec.
     """
     duo(; kwargs...) = build_duo_grid(; kwargs...)
+
+    """
+        EarthSciDiscretizations.grids.mpas(; mesh=nothing, loader=nothing,
+                                             reader_fn=nothing,
+                                             R=6.371e6, dtype=Float64, ghosts=0)
+            -> MpasGrid
+
+    Loader-backed unstructured Voronoi grid (MPAS). Either `mesh`
+    (`MpasMeshData`) or `loader` + `reader_fn` is required per
+    GRIDS_API.md §10; NetCDF I/O is not bundled with this package.
+    """
+    mpas(; kwargs...) = build_mpas_grid(; kwargs...)
 
     """
         EarthSciDiscretizations.grids.cartesian(; nx, ny=nothing, nz=nothing,
