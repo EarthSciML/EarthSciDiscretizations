@@ -29,7 +29,7 @@ equality). If that ever breaks, investigate bindings before relaxing.
 - `../../../../typescript/tests/vertical.conformance.test.ts` — TypeScript
   runner.
 - `../../../../test/test_vertical_conformance.jl` — Julia runner.
-- Rust runner lands with `dsc-31p`.
+- `../../../../rust/tests/vertical_conformance.rs` — Rust runner.
 
 ## Fixtures
 
@@ -104,8 +104,17 @@ filter it.
 
 ### Rust
 
-Pending on `dsc-31p` (vertical accessor runtime for rust). The runner will
-land at `rust/tests/vertical_conformance.rs` as part of that bead.
+```bash
+cd rust && cargo test --test vertical_conformance
+```
+
+The runner lives at `rust/tests/vertical_conformance.rs`. Like the TypeScript
+and Julia runners it re-implements a minimal canonical JSON serializer (sorted
+keys, 2-space indent, integer-valued floats rendered as `N.0`) to match Python's
+`json.dumps(..., sort_keys=True, indent=2) + "\n"` byte-for-byte. Provenance
+stripping is line-based against the raw golden text rather than through
+`serde_json`'s parser, which would otherwise round long-digit values such as
+the `eta_hybrid_l12` synthesized-sigma interfaces by 1 ULP on reparse.
 
 ## Regenerating the golden
 
