@@ -18,7 +18,6 @@ include("grids/metric_tensors.jl")
 include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
-include("grids/grids_api.jl")
 include("grids/cartesian.jl")
 
 # Staggering and discrete space
@@ -164,7 +163,16 @@ module grids
 
     using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
         ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
-    import ..EarthSciDiscretizations: _cartesian
+    import ..EarthSciDiscretizations: _cartesian, build_duo_grid, DuoGrid, DuoLoader
+
+    """
+        EarthSciDiscretizations.grids.duo(; loader, R=6.371e6, dtype=Float64, ghosts=0) -> DuoGrid
+
+    Loader-backed icosahedral triangular grid (Heikes et al. 2023). Only
+    `builtin://icosahedral/<level>` loader paths are honored today; `.duo`
+    mesh files land with the ESS file-format spec.
+    """
+    duo(; kwargs...) = build_duo_grid(; kwargs...)
 
     """
         EarthSciDiscretizations.grids.cartesian(; nx, ny=nothing, nz=nothing,
