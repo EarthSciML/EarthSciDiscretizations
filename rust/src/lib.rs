@@ -13,6 +13,7 @@ pub use traits::{Dtype, Grid};
 // Re-export per-family modules at the crate root so the documented
 // `earthsci_grids::<family>::builder()` call form works.
 pub use grids::arakawa;
+pub use grids::cartesian;
 pub use grids::cubed_sphere;
 pub use grids::lat_lon;
 pub use grids::mpas;

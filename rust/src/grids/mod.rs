@@ -6,6 +6,7 @@
 //! `earthsci_grids::<family>::builder()` works at the crate level.
 
 pub mod arakawa;
+pub mod cartesian;
 pub mod cubed_sphere;
 pub mod duo;
 pub mod lat_lon;
