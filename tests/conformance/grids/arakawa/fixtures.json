@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "family": "arakawa",
+  "tolerance": {
+    "relative": 1e-14,
+    "notes": "Cartesian base geometry is pure linear arithmetic (base extents, dx, dy, cell_center/x_edge/y_edge/corner evaluate to single add+multiply chains), so 1e-14 is well within reach across all four libm/numeric stacks. A non-trivial drift here indicates an algorithm bug, not float-library jitter."
+  },
+  "reference_binding": "julia",
+  "scope": "Cartesian base only. The arakawa accessor runtime is parameterised over an ArakawaBaseGrid; all four bindings implement CartesianBase today. lat_lon-base composition has not landed in any binding (see discretizations/grids/arakawa/README.md — lat-lon fixtures are declaration-only). The harness exercises cell_centers, u_face, v_face, corners, the generic coord(loc, ...) accessor, neighbors(loc, ...), metric_eval, and per-stagger variable_location/variable_shape for all five staggers A/B/C/D/E.",
+  "fixtures": [
+    {
+      "name": "small",
+      "opts": {
+        "base": {
+          "family": "cartesian",
+          "xlo": 0.0,
+          "xhi": 1.0,
+          "ylo": 0.0,
+          "yhi": 1.0,
+          "nx": 16,
+          "ny": 16
+        },
+        "dtype": "float64",
+        "ghosts": 0
+      },
+      "staggers": ["A", "B", "C", "D", "E"],
+      "query_points": {
+        "cell_center": [
+          [0, 0], [15, 15], [0, 15], [15, 0],
+          [8, 8], [1, 2], [7, 3], [3, 12]
+        ],
+        "u_edge": [
+          [0, 0], [16, 0], [0, 15], [16, 15],
+          [8, 8], [1, 3]
+        ],
+        "v_edge": [
+          [0, 0], [0, 16], [15, 0], [15, 16],
+          [8, 8], [3, 1]
+        ],
+        "corner": [
+          [0, 0], [16, 16], [0, 16], [16, 0],
+          [8, 8], [2, 5]
+        ]
+      }
+    },
+    {
+      "name": "realistic",
+      "opts": {
+        "base": {
+          "family": "cartesian",
+          "xlo": -180.0,
+          "xhi": 180.0,
+          "ylo": -90.0,
+          "yhi": 90.0,
+          "nx": 256,
+          "ny": 256
+        },
+        "dtype": "float64",
+        "ghosts": 0
+      },
+      "staggers": ["A", "B", "C", "D", "E"],
+      "query_points": {
+        "cell_center": [
+          [0, 0], [255, 255], [0, 255], [255, 0],
+          [128, 128], [17, 43], [200, 200], [13, 251]
+        ],
+        "u_edge": [
+          [0, 0], [256, 0], [0, 255], [256, 255],
+          [128, 128], [17, 43]
+        ],
+        "v_edge": [
+          [0, 0], [0, 256], [255, 0], [255, 256],
+          [128, 128], [43, 17]
+        ],
+        "corner": [
+          [0, 0], [256, 256], [0, 256], [256, 0],
+          [128, 128], [43, 201]
+        ]
+      }
+    }
+  ]
+}
