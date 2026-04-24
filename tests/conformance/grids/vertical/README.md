@@ -28,7 +28,8 @@ equality). If that ever breaks, investigate bindings before relaxing.
 - `../../../../python/tests/test_vertical_conformance.py` — Python runner.
 - `../../../../typescript/tests/vertical.conformance.test.ts` — TypeScript
   runner.
-- Julia / Rust runners land with `dsc-79n` / `dsc-31p` respectively.
+- `../../../../test/test_vertical_conformance.jl` — Julia runner.
+- Rust runner lands with `dsc-31p`.
 
 ## Fixtures
 
@@ -93,10 +94,13 @@ cd typescript && npm test -- vertical.conformance
 
 ### Julia
 
-Pending on `dsc-79n` (vertical accessor runtime for julia). The runner will
-land at `test/test_vertical_conformance.jl` as part of that bead, using the
-same fixture + golden pair wired to its `@testitem` tag
-`tags = [:grid, :vertical, :conformance]`.
+```bash
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+The runner lives at `test/test_vertical_conformance.jl` and carries the
+`@testitem` tags `:grid`, `:vertical`, `:conformance` so the refinery can
+filter it.
 
 ### Rust
 
