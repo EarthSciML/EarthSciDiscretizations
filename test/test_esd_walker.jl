@@ -20,8 +20,12 @@ using TestItems
 
     results = WalkESDTests.walk_esd_tests(; catalog = catalog, junit_path = junit)
 
-    names = sort([r.name for r in results])
-    @test names == ["centered_2nd_uniform", "periodic_bc", "upwind_1st"]
+    names = Set(r.name for r in results)
+    # Superset: the catalog has grown with grid schemas and other families;
+    # only require that the three canonical FD rules remain walker-discovered.
+    for seeded in ("centered_2nd_uniform", "periodic_bc", "upwind_1st")
+        @test seeded in names
+    end
 
     # No fixtures authored yet, so every layer should skip cleanly. The
     # reason string must be non-empty so the JUnit consumer surfaces it.
@@ -36,9 +40,12 @@ using TestItems
     xml = read(junit, String)
     @test occursin("<testsuites>", xml)
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
-    @test occursin("tests=\"9\"", xml)
+    # Parametrize against actual catalog size: 3 layers (A/B/C) per rule, all
+    # skipping until fixtures + rule engine land.
+    total = length(results) * 3
+    @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"0\"", xml)
-    @test occursin("skipped=\"9\"", xml)
+    @test occursin("skipped=\"$total\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("<skipped message=", xml)

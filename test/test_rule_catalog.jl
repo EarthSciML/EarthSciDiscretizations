@@ -75,13 +75,22 @@ end
     @test occursin("\"mod\"", content)
 end
 
-@testitem "rule catalog exposes exactly the three seeded rules" begin
+@testitem "rule catalog exposes the three seeded finite-difference rules" begin
     using EarthSciDiscretizations: load_rules
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
     catalog = joinpath(repo_root, "discretizations")
     rules = load_rules(catalog)
-    names = sort([r.name for r in rules])
-    @test names == ["centered_2nd_uniform", "periodic_bc", "upwind_1st"]
-    @test all(r -> r.family == :finite_difference, rules)
+    names = Set(r.name for r in rules)
+    # Superset assertion: the catalog has grown with grid schemas and other
+    # families; only require that the three canonical FD rules remain
+    # discoverable under :finite_difference.
+    for seeded in ("centered_2nd_uniform", "periodic_bc", "upwind_1st")
+        @test seeded in names
+    end
+    fd_rules = filter(r -> r.family == :finite_difference, rules)
+    fd_names = Set(r.name for r in fd_rules)
+    @test "centered_2nd_uniform" in fd_names
+    @test "periodic_bc" in fd_names
+    @test "upwind_1st" in fd_names
 end
