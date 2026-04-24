@@ -19,6 +19,7 @@ include("grids/super_grid.jl")
 include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
 include("grids/cartesian.jl")
+include("grids/vertical.jl")
 
 # Staggering and discrete space
 include("staggering.jl")
@@ -67,6 +68,9 @@ export n_cells, n_vertices, n_edges, to_esm, family
 
 # Exports: Cartesian grid family (GRIDS_API.md §2.3)
 export CartesianGrid, cell_widths, cell_volume
+
+# Exports: Vertical grid family (GRIDS_API.md §2.3; column topology)
+export VerticalGrid
 
 # Exports: Connectivity
 export EdgeDirection, West, East, South, North
@@ -163,7 +167,7 @@ module grids
 
     using ..EarthSciDiscretizations: ArakawaGrid, ArakawaStagger, ArakawaBaseGrid,
         ArakawaA, ArakawaB, ArakawaC, ArakawaD, ArakawaE
-    import ..EarthSciDiscretizations: _cartesian, build_duo_grid, DuoGrid, DuoLoader
+    import ..EarthSciDiscretizations: _cartesian, _vertical, build_duo_grid, DuoGrid, DuoLoader
 
     """
         EarthSciDiscretizations.grids.duo(; loader, R=6.371e6, dtype=Float64, ghosts=0) -> DuoGrid
@@ -185,6 +189,21 @@ module grids
     cross-binding API contract.
     """
     const cartesian = _cartesian
+
+    """
+        EarthSciDiscretizations.grids.vertical(; coordinate, nz=nothing, levels=nothing,
+                                                 ak=nothing, bk=nothing, p0=1.0e5,
+                                                 transition=nothing,
+                                                 dtype=Float64, ghosts=0)
+            -> VerticalGrid{T}
+
+    Construct a 1D vertical column. Accepts coordinate kinds `:sigma`,
+    `:eta`, `:z`, `:theta`, `:hybrid_sigma_theta`, `:z_star` (or the
+    equivalent string literals). See `GRIDS_API.md` §2.3 for the
+    cross-binding API contract and `src/grids/vertical.jl` for the
+    coordinate-specific option table.
+    """
+    const vertical = _vertical
 
     """
         EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts=0, dtype=Float64)
