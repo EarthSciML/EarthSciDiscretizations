@@ -22,8 +22,15 @@ using TestItems
 
     names = Set(r.name for r in results)
     # Superset: the catalog has grown with grid schemas and other families;
-    # only require that the three canonical FD rules remain walker-discovered.
-    for seeded in ("centered_2nd_uniform", "periodic_bc", "upwind_1st")
+    # only require that the canonical FD rules remain walker-discovered.
+    # `centered_2nd_uniform_vertical` (dsc-mzu) is the first non-cartesian
+    # rule and a design probe for the per-family selector schema.
+    for seeded in (
+        "centered_2nd_uniform",
+        "centered_2nd_uniform_vertical",
+        "periodic_bc",
+        "upwind_1st",
+    )
         @test seeded in names
     end
     # finite_volume/ppm_reconstruction (CW84 §1) joins the walker once landed.
@@ -38,12 +45,14 @@ using TestItems
     # Layer A always skips (ESS canonical-form rule engine not yet wired).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
     # Layer B passes for rules with a runnable convergence fixture
-    # (centered_2nd_uniform, upwind_1st — linear stencils evaluated via the
-    # ESS AST evaluator). Rules whose convergence fixture declares
-    # applicable:false (limiters, reconstruction rules pending ESS harness
-    # extension, periodic_bc) skip with a fixture-declared reason. Rules
-    # with no convergence fixture at all also skip.
+    # (centered_2nd_uniform, centered_2nd_uniform_vertical, upwind_1st —
+    # linear stencils evaluated via the ESS AST evaluator). Rules whose
+    # convergence fixture declares applicable:false (limiters, reconstruction
+    # rules pending ESS harness extension, periodic_bc) skip with a
+    # fixture-declared reason. Rules with no convergence fixture at all also
+    # skip.
     pass_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
+                        ("finite_difference", "centered_2nd_uniform_vertical"),
                         ("finite_difference", "upwind_1st")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_volume", "ppm_reconstruction"),
@@ -74,15 +83,17 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 3 layers (A/B/C) per rule.
     total = length(results) * 3
-    # Two layer-B cases pass (centered_2nd_uniform, upwind_1st); the rest skip.
+    # Three layer-B cases pass (centered_2nd_uniform,
+    # centered_2nd_uniform_vertical, upwind_1st); the rest skip.
     passed = sum(1 for r in results
                  if (String(r.family), r.name) in pass_layer_b; init = 0)
     skipped = total - passed
-    @test passed == 2
+    @test passed == 3
     @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"0\"", xml)
     @test occursin("skipped=\"$skipped\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
+    @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("name=\"layer_A\"", xml)

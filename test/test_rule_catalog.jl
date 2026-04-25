@@ -75,7 +75,32 @@ end
     @test occursin("\"mod\"", content)
 end
 
-@testitem "rule catalog exposes the three seeded finite-difference rules" begin
+@testitem "centered_2nd_uniform_vertical scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_2nd_uniform_vertical", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"vertical\"", content)
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    # Vertical centered FD uses per-family selector kind and axis k.
+    @test occursin("\"kind\": \"vertical\"", content)
+    @test occursin("\"axis\": \"\$k\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 1", content)
+end
+
+@testitem "rule catalog exposes the seeded finite-difference rules" begin
     using EarthSciDiscretizations: load_rules
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -83,14 +108,20 @@ end
     rules = load_rules(catalog)
     names = Set(r.name for r in rules)
     # Superset assertion: the catalog has grown with grid schemas and other
-    # families; only require that the three canonical FD rules remain
-    # discoverable under :finite_difference.
-    for seeded in ("centered_2nd_uniform", "periodic_bc", "upwind_1st")
+    # families; only require that the canonical FD rules remain discoverable
+    # under :finite_difference.
+    for seeded in (
+        "centered_2nd_uniform",
+        "centered_2nd_uniform_vertical",
+        "periodic_bc",
+        "upwind_1st",
+    )
         @test seeded in names
     end
     fd_rules = filter(r -> r.family == :finite_difference, rules)
     fd_names = Set(r.name for r in fd_rules)
     @test "centered_2nd_uniform" in fd_names
+    @test "centered_2nd_uniform_vertical" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
