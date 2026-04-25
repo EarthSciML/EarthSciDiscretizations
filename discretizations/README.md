@@ -8,6 +8,14 @@ Rule files are validated against the EarthSciSerialization discretization
 schema (§7). Validation and application are performed by the ESS rule engine
 once it lands; until then, these files are parsed as opaque JSON.
 
+**AST-first authoring policy.** Express all math directly in the
+ExpressionNode AST (ESS §7; see `../AGENTS.md` "Authoring discretization
+rules" for the full policy). Coefficient and reconstruction terms
+evaluate via `EarthSciDiscretizations.eval_coeff`, a thin passthrough to
+the ESS tree-walk evaluator — ESD does not carry a shadow evaluator. If
+the formula fits on paper, it fits in the AST; reach for `{op: "call"}`
+only when the ESS `esm-spec.md` §9.2 decision tree says so.
+
 ## Layout
 
 - `finite_difference/` — finite-difference stencils on structured grids

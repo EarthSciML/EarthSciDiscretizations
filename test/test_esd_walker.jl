@@ -9,9 +9,10 @@ using TestItems
 # now they skip with descriptive reasons. Layer C is gated on
 # ESD_RUN_INTEGRATION=1 and skipped by default.
 
-@testitem "walker: discovers the three seeded rules and skips with reasons" begin
+@testitem "walker: discovers seeded rules; centered_2nd_uniform layer B passes via ESS evaluator" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
+    using EarthSciDiscretizations
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
     catalog = joinpath(repo_root, "discretizations")
@@ -31,12 +32,22 @@ using TestItems
     ppm = first(filter(r -> r.name == "ppm_reconstruction", results))
     @test ppm.family == :finite_volume
 
-    # No fixtures authored yet, so every layer should skip cleanly. The
-    # reason string must be non-empty so the JUnit consumer surfaces it.
+    # Layer A always skips (ESS canonical-form rule engine not yet wired).
+    # Layer C always skips unless ESD_RUN_INTEGRATION=1.
+    # Layer B passes for centered_2nd_uniform (convergence fixture authored,
+    # stencil coefficients evaluated via the ESS AST evaluator) and skips
+    # for all other rules with no convergence fixture authored yet.
     for r in results
-        for layer in (r.layer_a, r.layer_b, r.layer_c)
-            @test layer.outcome == WalkESDTests.LAYER_SKIP
-            @test !isempty(layer.reason)
+        @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+        @test !isempty(r.layer_a.reason)
+        @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
+        @test !isempty(r.layer_c.reason)
+        if r.family === :finite_difference && r.name == "centered_2nd_uniform"
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        else
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test !isempty(r.layer_b.reason)
         end
     end
 
@@ -44,12 +55,14 @@ using TestItems
     xml = read(junit, String)
     @test occursin("<testsuites>", xml)
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
-    # Parametrize against actual catalog size: 3 layers (A/B/C) per rule, all
-    # skipping until fixtures + rule engine land.
+    # Parametrize against actual catalog size: 3 layers (A/B/C) per rule.
     total = length(results) * 3
+    # Exactly one case passes (centered_2nd_uniform layer B) so skipped = total - 1.
+    passed = 1
+    skipped = total - passed
     @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"0\"", xml)
-    @test occursin("skipped=\"$total\"", xml)
+    @test occursin("skipped=\"$skipped\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("name=\"layer_A\"", xml)

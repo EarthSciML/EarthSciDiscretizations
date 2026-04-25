@@ -315,6 +315,18 @@ source-of-truth manifest.
 
 ---
 
+## Authoring policy (AST-first)
+
+All rule coefficients, edge interpolants, limiter ratios, and
+reconstruction expressions are authored **directly as ExpressionNode
+ASTs** (ESS §7). ESD evaluates them through
+`EarthSciDiscretizations.eval_coeff`, a thin passthrough to the
+EarthSciSerialization tree-walk evaluator — ESD does not carry a shadow
+evaluator. Rule authors MUST NOT introduce per-binding helper functions
+that reimplement math a rule should own. See `../AGENTS.md` "Authoring
+discretization rules" and ESS `esm-spec.md` §9.2 for the `call`-op
+decision tree.
+
 ## Cross-cutting notes for downstream beads
 
 1. **Cubed-sphere variant mismatch.** `src/grids/cubed_sphere.jl` uses

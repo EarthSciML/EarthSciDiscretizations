@@ -1,6 +1,7 @@
 module WalkESDTests
 
-using EarthSciDiscretizations: load_rules, RuleFile
+using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff
+using JSON
 
 export walk_esd_tests,
     discover_rules,
@@ -113,18 +114,90 @@ function run_layer_c(rule::RuleFile)
 end
 
 rule_engine_available() = false
-tree_walk_evaluator_available() = false
+# Layer B routes coefficient evaluation through EarthSciSerialization's tree-walk
+# evaluator (see src/rule_eval.jl). Layer A still needs the ESS rule engine
+# (canonical-form round-trip) which is a larger surface than the evaluator.
+tree_walk_evaluator_available() = true
 
 function apply_rule_and_diff(::RuleFile, ::AbstractString, ::AbstractString)
     return LayerResult(LAYER_SKIP, "layer A executor stub — rule engine not yet wired")
 end
 
-function run_mms_convergence(::RuleFile, ::AbstractString)
-    return LayerResult(LAYER_SKIP, "layer B executor stub — tree-walk evaluator not yet wired")
+"""
+    run_mms_convergence(rule, convergence_dir) -> LayerResult
+
+Dispatch MMS convergence on a rule using the ESS AST evaluator for all
+rule-side coefficient computations. Rule-specific appliers (stencil
+application, BC handling, manufactured-solution sampling) live in small
+per-rule drivers registered below. Rules without a registered driver skip
+with a descriptive reason — the walker keeps green.
+"""
+function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
+    input_path = joinpath(convergence_dir, "input.esm")
+    expected_path = joinpath(convergence_dir, "expected.esm")
+    if !(isfile(input_path) && isfile(expected_path))
+        return LayerResult(LAYER_FAIL, "convergence/ present but missing input.esm or expected.esm")
+    end
+    input = JSON.parse(read(input_path, String))
+    expected = JSON.parse(read(expected_path, String))
+
+    if rule.family === :finite_difference && rule.name == "centered_2nd_uniform"
+        return _mms_centered_2nd_uniform(rule, input, expected)
+    end
+    return LayerResult(LAYER_SKIP,
+        "no MMS driver registered for $(rule.family)/$(rule.name); fixture present but walker cannot apply it")
+end
+
+# Apply the centered-2nd finite-difference stencil to a smooth periodic
+# manufactured solution on a sequence of uniform grids. All stencil
+# coefficients come from the rule JSON via the ESS evaluator; the walker
+# does not reimplement `-1/(2*dx)` etc. in Julia.
+function _mms_centered_2nd_uniform(rule::RuleFile, input, expected)
+    raw = JSON.parse(read(rule.path, String))
+    spec = raw["discretizations"]["centered_2nd_uniform"]
+    stencil = spec["stencil"]
+    grids = [Int(g["n"]) for g in input["grids"]]
+    min_order = Float64(expected["expected_min_order"])
+
+    # Manufactured: u(x) = sin(2π x) on [0, 1] periodic; du/dx = 2π cos(2π x).
+    # Cell-center sampling: x_i = (i − 1/2) * dx, i = 1..n.
+    errs = Float64[]
+    for n in grids
+        dx = 1.0 / n
+        bindings = Dict("dx" => dx)
+        coeff_pairs = [
+            (Int(s["selector"]["offset"]), eval_coeff(s["coeff"], bindings))
+            for s in stencil
+        ]
+        u = [sin(2π * ((i - 0.5) * dx)) for i in 1:n]
+        du_num = zeros(n)
+        for i in 1:n
+            acc = 0.0
+            for (off, c) in coeff_pairs
+                j = mod1(i + off, n)  # periodic wrap
+                acc += c * u[j]
+            end
+            du_num[i] = acc
+        end
+        du_exact = [2π * cos(2π * ((i - 0.5) * dx)) for i in 1:n]
+        push!(errs, maximum(abs.(du_num .- du_exact)))
+    end
+
+    if any(!isfinite, errs) || any(e -> e <= 0, errs)
+        return LayerResult(LAYER_FAIL, "non-finite or zero error on some grid; errs=$(errs)")
+    end
+    orders = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
+    observed = minimum(orders)
+    if observed < min_order
+        return LayerResult(LAYER_FAIL,
+            "observed min order $(round(observed; digits=3)) below expected $(min_order); errs=$(errs)")
+    end
+    return LayerResult(LAYER_PASS,
+        "min order $(round(observed; digits=3)) >= $(min_order) on grids $(grids)")
 end
 
 function run_integration_benchmarks(::RuleFile, ::AbstractString)
-    return LayerResult(LAYER_SKIP, "layer C executor stub — tree-walk evaluator not yet wired")
+    return LayerResult(LAYER_SKIP, "layer C executor stub — integration harness not yet wired")
 end
 
 function relpath_from_repo(path::AbstractString)

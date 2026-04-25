@@ -60,6 +60,9 @@ include("bc_handler.jl")
 # Discretization rule catalog (parser delegator; ESS integration pending)
 include("rules.jl")
 
+# AST coefficient evaluator (thin passthrough to EarthSciSerialization)
+include("rule_eval.jl")
+
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
 export total_area
@@ -157,6 +160,7 @@ export identify_dimension
 
 # Exports: Rule catalog
 export RuleFile, load_rules
+export eval_coeff
 
 # Exports: Arakawa staggering runtime
 export ArakawaGrid, ArakawaStagger
