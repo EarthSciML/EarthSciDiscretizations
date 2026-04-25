@@ -28,6 +28,7 @@ using TestItems
     for seeded in (
         "centered_2nd_uniform",
         "centered_2nd_uniform_vertical",
+        "centered_2nd_uniform_latlon",
         "periodic_bc",
         "upwind_1st",
     )
@@ -55,6 +56,7 @@ using TestItems
                         ("finite_difference", "centered_2nd_uniform_vertical"),
                         ("finite_difference", "upwind_1st")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
+                                   ("finite_difference", "centered_2nd_uniform_latlon"),
                                    ("finite_volume", "ppm_reconstruction"),
                                    ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "flux_limiter_minmod"),
@@ -94,6 +96,7 @@ using TestItems
     @test occursin("skipped=\"$skipped\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
+    @test occursin("classname=\"finite_difference.centered_2nd_uniform_latlon\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("name=\"layer_A\"", xml)

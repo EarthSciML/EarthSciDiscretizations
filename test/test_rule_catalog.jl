@@ -100,6 +100,40 @@ end
     @test occursin("\"offset\": 1", content)
 end
 
+@testitem "centered_2nd_uniform_latlon scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_2nd_uniform_latlon", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"latlon\"", content)
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    # Latlon centered FD uses literal axis values "lon" / "lat" (per
+    # SELECTOR_KINDS.md decision #6) so different stencil entries can carry
+    # different metrics. Both axes have offsets -1 and 1.
+    @test occursin("\"kind\": \"latlon\"", content)
+    @test occursin("\"axis\": \"lon\"", content)
+    @test occursin("\"axis\": \"lat\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 1", content)
+    # Coefficient symbols: angular spacings dlon/dlat, sphere radius R, and
+    # the latitude metric cos_lat (lon-axis only) per decisions #7 and #8.
+    @test occursin("\"dlon\"", content)
+    @test occursin("\"dlat\"", content)
+    @test occursin("\"R\"", content)
+    @test occursin("\"cos_lat\"", content)
+end
+
 @testitem "rule catalog exposes the seeded finite-difference rules" begin
     using EarthSciDiscretizations: load_rules
 
@@ -113,6 +147,7 @@ end
     for seeded in (
         "centered_2nd_uniform",
         "centered_2nd_uniform_vertical",
+        "centered_2nd_uniform_latlon",
         "periodic_bc",
         "upwind_1st",
     )
@@ -122,6 +157,7 @@ end
     fd_names = Set(r.name for r in fd_rules)
     @test "centered_2nd_uniform" in fd_names
     @test "centered_2nd_uniform_vertical" in fd_names
+    @test "centered_2nd_uniform_latlon" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.

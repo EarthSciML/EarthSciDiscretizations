@@ -174,6 +174,14 @@ After §7.2 expansion at cell `c` (`$target → c`), this lowers to a single
   amendment to `esm-spec.md` is needed** for MPAS support; the structural
   selectors above lower to existing AST nodes only.
 
+## More structured-grid decisions (latlon)
+
+| # | Question | Decision | Pinned by |
+|---|---|---|---|
+| 10 | Selector `axis` for `latlon`: pattern variable (`$a`) vs literal (`"lon"`/`"lat"`). | **Literal**, when stencil entries for different axes carry different coefficients (e.g. lon needs `cos_lat`, lat does not). The rule lists 4 stencil entries — two per axis — and the rule engine picks the pair whose `axis` matches the operator's bound `dim`. Pattern-variable axes (`$a`) remain valid for grid families where every axis shares the same coefficient form (e.g. cartesian, vertical). | dsc-8ad |
+| 11 | Spacing symbol convention for `latlon`: angular (`dlon`/`dlat` in radians) vs physical (already multiplied by R). | **Angular**, with `R` as a separate binding. `dlon` and `dlat` are per-axis angular increments in radians; `R` is the sphere radius from the grid accessor; `cos_lat` is the per-cell latitude-metric. Coefficients combine them explicitly (e.g. `1/(2 R cos_lat dlon)`). This keeps the AST honest — every dimensional factor appears in the formula rather than being baked into the spacing symbol. | dsc-8ad |
+| 12 | Per-cell metric bindings (`cos_lat` for latlon, `dz_k` for stretched vertical). | **Per-family grid-accessor binding**. Per-cell metrics are evaluated against the grid accessor at stencil-application time — distinct from scalar bindings (`R`, `dlon`, `dlat`) which are constant across the sweep. The current ESS MMS harness only supports scalar bindings, so latlon's Layer B fixture marks `applicable: false` until the harness extension lands (follow-up bead dsc-7jc). | dsc-8ad |
+
 ## When to add a new selector kind
 
 Adding a new family (e.g. `latlon`, `cubed_sphere`):
