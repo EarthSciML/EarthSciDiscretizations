@@ -55,6 +55,12 @@ using TestItems
     @test "weno5_advection" in names
     weno = first(filter(r -> r.name == "weno5_advection", results))
     @test weno.family == :finite_volume
+    # finite_difference/covariant_laplacian_cubed_sphere (dsc-ap9) — first 2D
+    # multi-axis selector rule; declares applicable:false on Layer B until ESS
+    # extends the harness for cubed_sphere metric bindings.
+    @test "covariant_laplacian_cubed_sphere" in names
+    lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
+    @test lap.family == :finite_difference
 
     # Layer A: passes for centered_2nd_uniform (canonical fixture committed)
     # and skips for every other rule with reason "no canonical fixtures".
@@ -71,6 +77,7 @@ using TestItems
                         ("finite_difference", "upwind_1st")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "centered_2nd_uniform_latlon"),
+                                   ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_volume", "ppm_reconstruction"),
                                    ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "flux_limiter_minmod"),
@@ -124,6 +131,7 @@ using TestItems
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_latlon\"", xml)
+    @test occursin("classname=\"finite_difference.covariant_laplacian_cubed_sphere\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("name=\"layer_A\"", xml)

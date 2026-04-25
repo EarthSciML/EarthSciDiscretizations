@@ -21,8 +21,15 @@ Current variants:
   (uniform sigma; non-uniform vertical metrics are deferred — see
   `SELECTOR_KINDS.md` decision #3).
 - `centered_2nd_uniform_latlon.json` — latlon, axes `lon` / `lat` (literal
-  per `SELECTOR_KINDS.md` decision #6), angular spacings `dlon` / `dlat`,
+  per `SELECTOR_KINDS.md` decision #10), angular spacings `dlon` / `dlat`,
   sphere radius `R`, latitude metric `cos_lat`. The lon-axis coefficient
   carries `1/(R cos_lat dlon)`; the lat-axis coefficient carries `1/(R dlat)`.
   Layer B marks `applicable: false` pending ESS MMS-harness support for 2D
-  structured stencils + per-cell metric bindings (decision #8 + follow-up).
+  structured stencils + per-cell metric bindings (decision #12 + follow-up).
+- `covariant_laplacian_cubed_sphere.json` — cubed_sphere, axes `xi`/`eta`,
+  spacing `h`. First 2D in-panel rule: each stencil entry carries a
+  `selectors` array (one per axis) and pulls per-cell metric-tensor
+  bindings (`J`, `ginv_xi_xi`, `ginv_eta_eta`, `ginv_xi_eta`,
+  `dJgxx_dxi`, `dJgyy_deta`, `dJgxe_dxi`, `dJgxe_deta`). Cross-panel
+  ghost cells are resolved by the cubed_sphere grid accessor — selectors
+  do **not** carry a `panel` field. See `SELECTOR_KINDS.md` decision #13.

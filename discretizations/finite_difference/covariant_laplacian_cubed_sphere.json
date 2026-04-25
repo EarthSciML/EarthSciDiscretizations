@@ -1,0 +1,171 @@
+{
+  "discretizations": {
+    "covariant_laplacian_cubed_sphere": {
+      "applies_to": {
+        "op": "laplacian",
+        "args": ["$phi"]
+      },
+      "grid_family": "cubed_sphere",
+      "combine": "+",
+      "accuracy": "O(h^2)",
+      "reference": "src/operators/laplacian.jl (imperative reference); Putman & Lin (2007), JCP 227(1):55-78 — gnomonic cubed-sphere covariant FV operators.",
+      "notes": "Full covariant Laplacian on the gnomonic cubed sphere: ∇²φ = (1/J)[∂_ξ(J·g^{ξξ}·∂_ξφ + J·g^{ξη}·∂_ηφ) + ∂_η(J·g^{ξη}·∂_ξφ + J·g^{ηη}·∂_ηφ)]. Expanded into an orthogonal part (g^{ξξ}·∂²_ξφ + g^{ηη}·∂²_ηφ + metric-derivative first-derivative corrections) plus a cross-metric part (2·g^{ξη}·∂²_{ξη}φ + cross metric-derivative corrections). Discretized with 9-point centered second-order stencil (cells (0,0), (±1,0), (0,±1), (±1,±1)) on the in-panel (ξ,η) grid; cross-panel ghost cells at panel boundaries are resolved by the cubed_sphere grid accessor (see src/grids/panel_connectivity.jl) — the rule schema does NOT carry a `panel` selector field. Uniform isotropic spacing h = π/(2·Nc) = dξ = dη at all cell centers.",
+      "panel_handling": "lives in the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); the rule references in-panel (ξ,η) offsets only. Selectors do NOT carry a `panel` field — cross-panel ghost extension and basis rotation happen below the rule layer.",
+      "metric_bindings": {
+        "comment": "Per-cell metric quantities resolved by the cubed_sphere grid accessor at the central stencil cell (offset 0,0). Names match src/grids/cubed_sphere.jl field names so the accessor can wire them directly.",
+        "J": "Jacobian (sqrt(det g_{ab})·R²)",
+        "ginv_xi_xi": "g^{ξξ} (inverse metric)",
+        "ginv_eta_eta": "g^{ηη}",
+        "ginv_xi_eta": "g^{ξη}",
+        "dJgxx_dxi": "∂(J·g^{ξξ})/∂ξ",
+        "dJgyy_deta": "∂(J·g^{ηη})/∂η",
+        "dJgxe_dxi": "∂(J·g^{ξη})/∂ξ",
+        "dJgxe_deta": "∂(J·g^{ξη})/∂η",
+        "h": "uniform isotropic spacing dξ = dη"
+      },
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "*", "args": [-2, { "op": "+", "args": ["ginv_xi_xi", "ginv_eta_eta"] }] },
+              { "op": "^", "args": ["h", 2] }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "+",
+            "args": [
+              { "op": "/", "args": ["ginv_xi_xi", { "op": "^", "args": ["h", 2] }] },
+              {
+                "op": "/",
+                "args": [
+                  { "op": "+", "args": ["dJgxx_dxi", "dJgxe_deta"] },
+                  { "op": "*", "args": [2, "h", "J"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": -1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "-",
+            "args": [
+              { "op": "/", "args": ["ginv_xi_xi", { "op": "^", "args": ["h", 2] }] },
+              {
+                "op": "/",
+                "args": [
+                  { "op": "+", "args": ["dJgxx_dxi", "dJgxe_deta"] },
+                  { "op": "*", "args": [2, "h", "J"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 1 }
+          ],
+          "coeff": {
+            "op": "+",
+            "args": [
+              { "op": "/", "args": ["ginv_eta_eta", { "op": "^", "args": ["h", 2] }] },
+              {
+                "op": "/",
+                "args": [
+                  { "op": "+", "args": ["dJgyy_deta", "dJgxe_dxi"] },
+                  { "op": "*", "args": [2, "h", "J"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "-",
+            "args": [
+              { "op": "/", "args": ["ginv_eta_eta", { "op": "^", "args": ["h", 2] }] },
+              {
+                "op": "/",
+                "args": [
+                  { "op": "+", "args": ["dJgyy_deta", "dJgxe_dxi"] },
+                  { "op": "*", "args": [2, "h", "J"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              "ginv_xi_eta",
+              { "op": "*", "args": [2, { "op": "^", "args": ["h", 2] }] }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": -1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              "ginv_xi_eta",
+              { "op": "*", "args": [2, { "op": "^", "args": ["h", 2] }] }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "*", "args": [-1, "ginv_xi_eta"] },
+              { "op": "*", "args": [2, { "op": "^", "args": ["h", 2] }] }
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": -1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "*", "args": [-1, "ginv_xi_eta"] },
+              { "op": "*", "args": [2, { "op": "^", "args": ["h", 2] }] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
