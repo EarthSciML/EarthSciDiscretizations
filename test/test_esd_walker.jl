@@ -37,17 +37,31 @@ using TestItems
 
     # Layer A always skips (ESS canonical-form rule engine not yet wired).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
-    # Layer B passes for centered_2nd_uniform (convergence fixture authored,
-    # stencil coefficients evaluated via the ESS AST evaluator) and skips
-    # for all other rules with no convergence fixture authored yet.
+    # Layer B passes for rules with a runnable convergence fixture
+    # (centered_2nd_uniform, upwind_1st — linear stencils evaluated via the
+    # ESS AST evaluator). Rules whose convergence fixture declares
+    # applicable:false (limiters, reconstruction rules pending ESS harness
+    # extension, periodic_bc) skip with a fixture-declared reason. Rules
+    # with no convergence fixture at all also skip.
+    pass_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
+                        ("finite_difference", "upwind_1st")])
+    not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
+                                   ("finite_volume", "ppm_reconstruction"),
+                                   ("finite_volume", "weno5_advection"),
+                                   ("finite_volume", "flux_limiter_minmod"),
+                                   ("finite_volume", "flux_limiter_superbee")])
     for r in results
         @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_a.reason)
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
-        if r.family === :finite_difference && r.name == "centered_2nd_uniform"
+        key = (String(r.family), r.name)
+        if key in pass_layer_b
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif key in not_applicable_layer_b
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         else
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
@@ -60,9 +74,11 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 3 layers (A/B/C) per rule.
     total = length(results) * 3
-    # Exactly one case passes (centered_2nd_uniform layer B) so skipped = total - 1.
-    passed = 1
+    # Two layer-B cases pass (centered_2nd_uniform, upwind_1st); the rest skip.
+    passed = sum(1 for r in results
+                 if (String(r.family), r.name) in pass_layer_b; init = 0)
     skipped = total - passed
+    @test passed == 2
     @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"0\"", xml)
     @test occursin("skipped=\"$skipped\"", xml)

@@ -128,6 +128,16 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     input_json = JSON.parse(read(input_path, String))
     expected_json = JSON.parse(read(expected_path, String))
 
+    # Fixture-declared non-applicability: rules whose acceptance signature
+    # isn't a manufactured-solution convergence sweep (index-rewrite rules,
+    # TVD limiters, reconstruction-style rules pending ESS harness extension)
+    # ship an `applicable: false` + `skip_reason` marker so the walker
+    # surfaces a structured SKIP instead of a missing-fixture FAIL.
+    if get(input_json, "applicable", true) === false
+        reason = get(input_json, "skip_reason", "fixture declares applicable:false (no reason given)")
+        return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
+    end
+
     try
         result = verify_mms_convergence(rule_json, input_json, expected_json)
         observed = round(result.observed_min_order; digits = 3)
