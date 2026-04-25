@@ -97,4 +97,8 @@ end
     @test "ppm_reconstruction" in names
     fv_rules = filter(r -> r.family == :finite_volume, rules)
     @test "ppm_reconstruction" in Set(r.name for r in fv_rules)
+    # finite_volume/weno5_advection (Jiang-Shu 1996) — 5th-order WENO flux
+    # reconstruction, upwind-biased, 1D uniform Cartesian.
+    @test "weno5_advection" in names
+    @test "weno5_advection" in Set(r.name for r in fv_rules)
 end

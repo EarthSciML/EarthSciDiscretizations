@@ -31,6 +31,10 @@ using TestItems
     @test "ppm_reconstruction" in names
     ppm = first(filter(r -> r.name == "ppm_reconstruction", results))
     @test ppm.family == :finite_volume
+    # finite_volume/weno5_advection (Jiang-Shu 1996) joins the walker too.
+    @test "weno5_advection" in names
+    weno = first(filter(r -> r.name == "weno5_advection", results))
+    @test weno.family == :finite_volume
 
     # Layer A always skips (ESS canonical-form rule engine not yet wired).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
@@ -65,6 +69,7 @@ using TestItems
     @test occursin("skipped=\"$skipped\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
+    @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("<skipped message=", xml)
 end

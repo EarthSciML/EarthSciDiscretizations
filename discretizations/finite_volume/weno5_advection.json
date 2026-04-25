@@ -1,0 +1,120 @@
+{
+  "discretizations": {
+    "weno5_advection": {
+      "applies_to": {
+        "op": "advect",
+        "args": ["$q", "$u"],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "weighted_essentially_nonoscillatory",
+      "accuracy": "O(dx^5)",
+      "reference": "Jiang & Shu (1996), JCP 126(1):202-228, eqs. (2.5)-(2.10) and (2.16)-(2.18); Shu (1998) NASA/CR-97-206253 Lecture Notes §2.2",
+      "upwind_biased": true,
+      "outputs": ["q_left_edge", "q_right_edge"],
+      "stencil": [
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": -2 }, "role": "support_left_biased" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "role": "support_left_biased" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "role": "center" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "role": "support_right_biased" },
+        { "selector": { "kind": "cartesian", "axis": "$x", "offset": 2 }, "role": "support_right_biased" }
+      ],
+      "reconstruction_left_biased": {
+        "produces": "q_{i+1/2}^L",
+        "comment": "Left-biased reconstruction (for u > 0): convex combination of 3 candidate sub-stencil polynomials p0,p1,p2 evaluated at x_{i+1/2}. Coefficients per Shu (1998) eq. (2.11).",
+        "candidates": [
+          {
+            "name": "p0",
+            "support_offsets": [-2, -1, 0],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -2 }, "coeff": { "op": "/", "args": [1, 3] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "coeff": { "op": "/", "args": [-7, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [11, 6] } }
+            ]
+          },
+          {
+            "name": "p1",
+            "support_offsets": [-1, 0, 1],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "coeff": { "op": "/", "args": [-1, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [5, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "coeff": { "op": "/", "args": [1, 3] } }
+            ]
+          },
+          {
+            "name": "p2",
+            "support_offsets": [0, 1, 2],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [1, 3] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "coeff": { "op": "/", "args": [5, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 2 }, "coeff": { "op": "/", "args": [-1, 6] } }
+            ]
+          }
+        ],
+        "linear_weights": {
+          "comment": "Optimal (ideal) linear weights d_k that give 5th-order accuracy in smooth regions (Shu 1998 eq. 2.15).",
+          "d0": { "op": "/", "args": [1, 10] },
+          "d1": { "op": "/", "args": [6, 10] },
+          "d2": { "op": "/", "args": [3, 10] }
+        }
+      },
+      "reconstruction_right_biased": {
+        "produces": "q_{i-1/2}^R",
+        "comment": "Right-biased reconstruction (for u < 0): mirror image of left-biased, obtained by index reflection j -> -j. Equivalent to swapping d0<->d2 and reflecting candidate support.",
+        "candidates": [
+          {
+            "name": "p0",
+            "support_offsets": [2, 1, 0],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 2 }, "coeff": { "op": "/", "args": [1, 3] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "coeff": { "op": "/", "args": [-7, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [11, 6] } }
+            ]
+          },
+          {
+            "name": "p1",
+            "support_offsets": [1, 0, -1],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 }, "coeff": { "op": "/", "args": [-1, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [5, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "coeff": { "op": "/", "args": [1, 3] } }
+            ]
+          },
+          {
+            "name": "p2",
+            "support_offsets": [0, -1, -2],
+            "stencil": [
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 }, "coeff": { "op": "/", "args": [1, 3] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "coeff": { "op": "/", "args": [5, 6] } },
+              { "selector": { "kind": "cartesian", "axis": "$x", "offset": -2 }, "coeff": { "op": "/", "args": [-1, 6] } }
+            ]
+          }
+        ],
+        "linear_weights": {
+          "comment": "Mirror of left-biased linear weights.",
+          "d0": { "op": "/", "args": [1, 10] },
+          "d1": { "op": "/", "args": [6, 10] },
+          "d2": { "op": "/", "args": [3, 10] }
+        }
+      },
+      "smoothness_indicators": {
+        "comment": "Jiang-Shu (1996) beta_k per eq. (2.17). Quadratic forms in three consecutive cell averages; units of q^2. Identical for left- and right-biased reconstruction under index reflection.",
+        "beta0": "(13/12)*(q_{i-2} - 2*q_{i-1} + q_i)^2 + (1/4)*(q_{i-2} - 4*q_{i-1} + 3*q_i)^2",
+        "beta1": "(13/12)*(q_{i-1} - 2*q_i + q_{i+1})^2 + (1/4)*(q_{i-1} - q_{i+1})^2",
+        "beta2": "(13/12)*(q_i - 2*q_{i+1} + q_{i+2})^2 + (1/4)*(3*q_i - 4*q_{i+1} + q_{i+2})^2"
+      },
+      "nonlinear_weights": {
+        "comment": "Jiang-Shu (1996) eqs. (2.9)-(2.10). Ratio form is not yet encodable in the §7 stencil schema — see ESS schema-extension follow-up bead.",
+        "alpha_k": "d_k / (eps + beta_k)^2",
+        "omega_k": "alpha_k / (alpha_0 + alpha_1 + alpha_2)",
+        "eps": 1e-6,
+        "q_edge": "omega_0 * p0 + omega_1 * p1 + omega_2 * p2"
+      },
+      "flux_selection": {
+        "comment": "Upwind-biased: caller chooses which reconstruction to use based on local velocity sign.",
+        "rule": "if u_{i+1/2} > 0 use q_{i+1/2}^L else use q_{i+1/2}^R",
+        "flux_form": "F_{i+1/2} = u_{i+1/2} * q_{i+1/2}^{upwind}"
+      }
+    }
+  }
+}
