@@ -3,11 +3,10 @@ using TestItems
 
 # Tests for the three-layer CI walker that validates rule files under
 # discretizations/. The walker discovers rules via load_rules and runs three
-# layers per rule: (A) canonical-form byte-diff, (B) MMS convergence, (C)
-# integration benchmarks. Layers A and B require dependencies that have not
-# yet landed (ESS rule engine gt-b13f and the tree-walk evaluator), so for
-# now they skip with descriptive reasons. Layer C is gated on
-# ESD_RUN_INTEGRATION=1 and skipped by default.
+# layers per rule: (A) canonical-form byte-diff, (B) MMS convergence (driven
+# by EarthSciSerialization.verify_mms_convergence), (C) integration
+# benchmarks. Layer A skips until canonical-form fixtures are authored;
+# Layer C is gated on ESD_RUN_INTEGRATION=1 and skipped by default.
 
 @testitem "walker: discovers seeded rules; centered_2nd_uniform layer B passes via ESS evaluator" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))

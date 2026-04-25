@@ -5,11 +5,6 @@ using SymbolicUtils: SymReal, BSImpl, idxs_for_arrayop, @arrayop, @syms
 using SymbolicUtils
 using Symbolics: unwrap, wrap, Differential, iscall, operation, arguments, Num
 import Symbolics
-using ModelingToolkit: PDESystem, System, mtkcompile, ODEProblem, @named
-using ModelingToolkit: t_nounits as mtk_t, D_nounits as mtk_D
-import ModelingToolkit
-import SciMLBase
-import DomainSets
 
 # Grid infrastructure
 include("grids/abstract_grid.jl")
@@ -49,12 +44,7 @@ include("operators/vorticity.jl")
 include("operators/kinetic_energy.jl")
 include("operators/ppm_edge.jl")
 
-# Precomputed FV stencils
-include("fv_stencil.jl")
-
-# Discretization pipeline
-include("discretization.jl")
-include("equation_discretizer.jl")
+# Boundary-condition handler
 include("bc_handler.jl")
 
 # Discretization rule catalog (parser delegator; ESS integration pending)
@@ -159,16 +149,8 @@ export fv_kinetic_energy_cell!, fv_kinetic_energy_cell, fv_kinetic_energy_cell_a
 export ppm_edge_value_twosided, ppm_edge_value_twosided_limited
 export flux_1d_ppm_twosided!
 
-# Exports: Precomputed stencils
-export FVLaplacianStencil, FVGradientStencil
-export precompute_laplacian_stencil, precompute_gradient_stencil
-export apply_laplacian!, apply_gradient!
-
-# Exports: Discretization pipeline
-export FVCubedSphere
-export fv_laplacian_extended, fv_gradient_extended
+# Exports: Initial-condition projection
 export project_initial_condition
-export identify_dimension
 
 # Exports: Rule catalog
 export RuleFile, load_rules

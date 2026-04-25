@@ -5,8 +5,8 @@ using TestItems
 # that the three canonical rule files (centered_2nd_uniform, upwind_1st,
 # periodic_bc) are discoverable by load_rules and carry the expected
 # schema-level markers (§7 for schemes, §5.2 for rules; ESS discretization
-# RFC). Full rule-engine exercise lands once EarthSciSerialization's rule
-# engine (gt-b13f) is available.
+# RFC). The end-to-end rule-engine exercise (.esm → ESS.parse → ESS.rewrite
+# → ESS.evaluate / ESS.verify_mms_convergence) lives in test_esd_walker.jl.
 
 @testitem "centered_2nd_uniform scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules

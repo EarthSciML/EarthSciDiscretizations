@@ -1,6 +1,7 @@
 module WalkESDTests
 
-using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff
+using EarthSciDiscretizations: load_rules, RuleFile
+using EarthSciSerialization: verify_mms_convergence, MMSEvaluatorError
 using JSON
 
 export walk_esd_tests,
@@ -55,9 +56,9 @@ end
 """
     run_layer_a(rule) -> LayerResult
 
-Canonical-form conformance: run the rule engine against `fixtures/canonical/input.esm`
-and byte-compare to `fixtures/canonical/expected.esm`. Until the ESS rule engine
-(gt-b13f) is wired into this walker, layer A skips with a descriptive reason.
+Canonical-form conformance: run the ESS rule engine against
+`fixtures/canonical/input.esm` and byte-compare to `fixtures/canonical/expected.esm`.
+Layer A is wired here as a stub pending per-rule canonical fixtures.
 """
 function run_layer_a(rule::RuleFile)
     canonical = joinpath(rule_fixtures_dir(rule), "canonical")
@@ -69,26 +70,20 @@ function run_layer_a(rule::RuleFile)
     if !isfile(input) || !isfile(expected)
         return LayerResult(LAYER_FAIL, "canonical/ present but missing input.esm or expected.esm")
     end
-    if !rule_engine_available()
-        return LayerResult(LAYER_SKIP, "rule engine (ESS gt-b13f) not yet available to walker")
-    end
     return apply_rule_and_diff(rule, input, expected)
 end
 
 """
     run_layer_b(rule) -> LayerResult
 
-MMS convergence: instantiate the rule on a sequence of grids, solve a manufactured
-problem, measure L∞ error, verify slope matches the declared order. Requires the
-tree-walk evaluator (gt-TBD); skips until available.
+MMS convergence: dispatch to ESS's `verify_mms_convergence`, which evaluates
+all stencil coefficients via the AST evaluator and runs the manufactured-solution
+sweep on a sequence of grids.
 """
 function run_layer_b(rule::RuleFile)
     convergence = joinpath(rule_fixtures_dir(rule), "convergence")
     if !isdir(convergence)
         return LayerResult(LAYER_SKIP, "no convergence fixtures at $(relpath_from_repo(convergence))")
-    end
-    if !tree_walk_evaluator_available()
-        return LayerResult(LAYER_SKIP, "tree-walk evaluator (gt-TBD) not yet available to walker")
     end
     return run_mms_convergence(rule, convergence)
 end
@@ -107,30 +102,21 @@ function run_layer_c(rule::RuleFile)
     if !isdir(integration)
         return LayerResult(LAYER_SKIP, "no integration fixtures declared")
     end
-    if !tree_walk_evaluator_available()
-        return LayerResult(LAYER_SKIP, "tree-walk evaluator (gt-TBD) not yet available to walker")
-    end
     return run_integration_benchmarks(rule, integration)
 end
 
-rule_engine_available() = false
-# Layer B routes coefficient evaluation through EarthSciSerialization's tree-walk
-# evaluator (see src/rule_eval.jl). Layer A still needs the ESS rule engine
-# (canonical-form round-trip) which is a larger surface than the evaluator.
-tree_walk_evaluator_available() = true
-
 function apply_rule_and_diff(::RuleFile, ::AbstractString, ::AbstractString)
-    return LayerResult(LAYER_SKIP, "layer A executor stub — rule engine not yet wired")
+    return LayerResult(LAYER_SKIP, "layer A executor stub — canonical-form fixtures not yet authored")
 end
 
 """
     run_mms_convergence(rule, convergence_dir) -> LayerResult
 
-Dispatch MMS convergence on a rule using the ESS AST evaluator for all
-rule-side coefficient computations. Rule-specific appliers (stencil
-application, BC handling, manufactured-solution sampling) live in small
-per-rule drivers registered below. Rules without a registered driver skip
-with a descriptive reason — the walker keeps green.
+End-to-end Layer B: parse the rule JSON, the input fixture and the expected
+fixture, then route through `EarthSciSerialization.verify_mms_convergence`.
+ESS owns the manufactured-solution sweep, the AST coefficient evaluator,
+and the order-deficit check. Rules whose manufactured solution is not
+registered with ESS skip with a descriptive reason.
 """
 function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     input_path = joinpath(convergence_dir, "input.esm")
@@ -138,68 +124,25 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     if !(isfile(input_path) && isfile(expected_path))
         return LayerResult(LAYER_FAIL, "convergence/ present but missing input.esm or expected.esm")
     end
-    input = JSON.parse(read(input_path, String))
-    expected = JSON.parse(read(expected_path, String))
+    rule_json = JSON.parse(read(rule.path, String))
+    input_json = JSON.parse(read(input_path, String))
+    expected_json = JSON.parse(read(expected_path, String))
 
-    if rule.family === :finite_difference && rule.name == "centered_2nd_uniform"
-        return _mms_centered_2nd_uniform(rule, input, expected)
-    end
-    return LayerResult(
-        LAYER_SKIP,
-        "no MMS driver registered for $(rule.family)/$(rule.name); fixture present but walker cannot apply it"
-    )
-end
-
-# Apply the centered-2nd finite-difference stencil to a smooth periodic
-# manufactured solution on a sequence of uniform grids. All stencil
-# coefficients come from the rule JSON via the ESS evaluator; the walker
-# does not reimplement `-1/(2*dx)` etc. in Julia.
-function _mms_centered_2nd_uniform(rule::RuleFile, input, expected)
-    raw = JSON.parse(read(rule.path, String))
-    spec = raw["discretizations"]["centered_2nd_uniform"]
-    stencil = spec["stencil"]
-    grids = [Int(g["n"]) for g in input["grids"]]
-    min_order = Float64(expected["expected_min_order"])
-
-    # Manufactured: u(x) = sin(2π x) on [0, 1] periodic; du/dx = 2π cos(2π x).
-    # Cell-center sampling: x_i = (i − 1/2) * dx, i = 1..n.
-    errs = Float64[]
-    for n in grids
-        dx = 1.0 / n
-        bindings = Dict("dx" => dx)
-        coeff_pairs = [
-            (Int(s["selector"]["offset"]), eval_coeff(s["coeff"], bindings))
-                for s in stencil
-        ]
-        u = [sin(2π * ((i - 0.5) * dx)) for i in 1:n]
-        du_num = zeros(n)
-        for i in 1:n
-            acc = 0.0
-            for (off, c) in coeff_pairs
-                j = mod1(i + off, n)  # periodic wrap
-                acc += c * u[j]
-            end
-            du_num[i] = acc
-        end
-        du_exact = [2π * cos(2π * ((i - 0.5) * dx)) for i in 1:n]
-        push!(errs, maximum(abs.(du_num .- du_exact)))
-    end
-
-    if any(!isfinite, errs) || any(e -> e <= 0, errs)
-        return LayerResult(LAYER_FAIL, "non-finite or zero error on some grid; errs=$(errs)")
-    end
-    orders = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
-    observed = minimum(orders)
-    if observed < min_order
+    try
+        result = verify_mms_convergence(rule_json, input_json, expected_json)
+        observed = round(result.observed_min_order; digits = 3)
+        threshold = expected_json["expected_min_order"]
+        grids = [Int(g["n"]) for g in input_json["grids"]]
         return LayerResult(
-            LAYER_FAIL,
-            "observed min order $(round(observed; digits = 3)) below expected $(min_order); errs=$(errs)"
+            LAYER_PASS,
+            "min order $(observed) >= $(threshold) on grids $(grids)"
         )
+    catch err
+        if err isa MMSEvaluatorError
+            return LayerResult(LAYER_FAIL, sprint(showerror, err))
+        end
+        rethrow()
     end
-    return LayerResult(
-        LAYER_PASS,
-        "min order $(round(observed; digits = 3)) >= $(min_order) on grids $(grids)"
-    )
 end
 
 function run_integration_benchmarks(::RuleFile, ::AbstractString)
