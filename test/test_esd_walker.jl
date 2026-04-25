@@ -73,7 +73,8 @@ using TestItems
                                    ("finite_volume", "ppm_reconstruction"),
                                    ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "flux_limiter_minmod"),
-                                   ("finite_volume", "flux_limiter_superbee")])
+                                   ("finite_volume", "flux_limiter_superbee"),
+                                   ("finite_volume", "divergence_arakawa_c")])
     for r in results
         @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_a.reason)

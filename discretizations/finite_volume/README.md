@@ -46,6 +46,22 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   Sweby (1984) second-order TVD region and is compressive near
   discontinuities. Layer-B fixtures parallel to minmod at
   `tests/fixtures/flux_limiter_superbee/`.
+- [`divergence_arakawa_c.json`](divergence_arakawa_c.json) — Arakawa &
+  Lamb (1977) C-grid divergence: ∂uₓ/∂x + ∂u_y/∂y with uₓ at face-x and
+  u_y at face-y, output at cell center. First rule to use the
+  `arakawa` selector kind (`stagger` ∈ {`cell_center`, `face_x`,
+  `face_y`, `vertex`}) and the file-local `enums` block (ESS §9.3) to
+  carry stagger values portably across bindings. Two-point centered
+  per axis, O(h²). The schema decisions for the new `kind` and the
+  stagger-enum convention are pinned in
+  [`../SELECTOR_KINDS.md`](../SELECTOR_KINDS.md) (rows 6–9).
+  Layer-A fixture under `divergence_arakawa_c/fixtures/canonical/`
+  pins a 2×2 cell example (u(x,y) = x at face_x, v(x,y) = y² at
+  face_y → div = [[1.5, 2.5], [1.5, 2.5]]). Layer-B convergence
+  declares `applicable: false` — ESS's `verify_mms_convergence` is
+  wired only for 1D periodic Cartesian stencils today, so the 2D
+  staggered MMS sweep awaits an ESS harness extension; numeric
+  coverage continues to live alongside the runtime tests.
 
 ## Composing a limiter with a reconstruction
 
