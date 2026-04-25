@@ -31,6 +31,148 @@ direction along which `offset` is interpreted. `coeff` is an
 | 3 | Metric for non-uniform vertical grids (`eta`, `theta`, `z` stretched). | **Defer.** The convention will be a per-cell symbolic reference `dz_k` resolved against the grid accessor at evaluation time. Implementing it requires extending the ESS evaluator + grid binding contract; tracked as a follow-up bead. Until then, only uniform vertical (`sigma_uniform`, `z_uniform`) is supported by Layer B. | dsc-mzu (deferred to follow-up) |
 | 4 | Boundary handling for non-periodic vertical (top/bottom). | **Compose with a separate BC rule** (parallel to `periodic_bc.json`) rather than inlining BC handling in the stencil. Keeps the centered stencil rule clean and lets the same BC rule cover all 1D structured families. Concrete `vertical_top_bottom_bc.json` is a follow-up. | dsc-mzu (deferred to follow-up) |
 | 5 | One rule with `grid_family: ["cartesian", "vertical"]` vs sibling files. | **Sibling files** when the selector `kind` differs (which is always, given decision #1). A `grid_family` array is reserved for cases where the AST and selectors are byte-identical — currently no such case exists. | dsc-mzu |
+| 6 | MPAS selector shape: a per-family `kind: "mpas"` with an integer `neighbor` slot, or the upstream ESS structural kinds (`indirect`, `reduction`) with a `table` field naming a connectivity table? | **Structural — adopt ESS verbatim.** MPAS uses `kind: "indirect"` for fixed-arity stencils (one neighbor per stencil row, e.g. edge→cell-pair) and `kind: "reduction"` for variable-valence stencils (one stencil row that lowers to an `arrayop` reduction over a contiguous index range, e.g. cell→edges). The `table` field names a connectivity array declared on the grid (`edges_on_cell`, `cells_on_edge`, `vertices_on_edge`); this is the family-specific accessor of decision #1, just routed through the table identifier instead of the kind name. A bare `kind: "mpas"` with an integer neighbor slot was rejected because it cannot express variable valence (12 pentagons + N hexagons share one mesh) without sentinel padding, and it would diverge from the upstream `ExpressionNode` lowering path defined in ESS RFC `discretization.md` §4 / §7.2. | dsc-6xp |
+| 7 | Variable connectivity (cells with 5 vs 6 neighbors): fixed-max with sentinel (`-1`) or true variable-arity? | **True variable-arity via `reduction` selector.** A `reduction` selector carries a `count_expr` (typically `index(n_edges_on_cell, $target)`) and a `k_bound` local index name; expansion (ESS §7.2) lowers exactly one stencil row to an `arrayop` over `k = 0 .. count_expr − 1`. Bindings never see sentinel `-1` entries and never branch on cell valence. Fixed-max-with-sentinel was rejected because it pollutes the AST with conditionals and breaks bit-identity across bindings whose padding conventions differ. | dsc-6xp |
+| 8 | Edge-based vs cell-based stencils (MPAS quantities live at cells, edges, or vertices): one selector kind per stagger location, or one shared kind plus a target-location tag on the scheme? | **Shared kind, per-scheme location tag.** `indirect` and `reduction` are agnostic to whether the target is a cell, edge, or vertex; the location is set by the scheme's `emits_location` (`cell_center`, `edge_normal`, `vertex`) and ESS §7.1.1's `$target` chooser binds the scalar `c` / `e` / `v` accordingly. The connectivity table named by the selector resolves the rest (e.g. `cells_on_edge` for edge→cell-pair, `edges_on_cell` for cell→edge-fan). No new selector kinds were introduced for stagger variants. | dsc-6xp |
+| 9 | Coefficient symbols available inside MPAS rule `coeff` ASTs. | **The `dsc-7j0` grid-accessor symbol set, snake_case.** Metric arrays: `area_cell`, `dc_edge`, `dv_edge` (and lon/lat/x/y/z per element kind). Connectivity tables: `edges_on_cell`, `cells_on_edge`, `cells_on_cell`, `vertices_on_edge`. Valence array: `n_edges_on_cell`. Symbol names follow the `src/grids/mpas.jl` runtime fields verbatim (and the matching Python/TS bindings); rule authors MUST NOT introduce new bare-name symbols without extending the MPAS grid schema (`grids/mpas.schema.json`). The ESS RFC's camelCase examples (`areaCell`, `nEdgesOnCell`) are illustrative — ESD uses snake_case to match the binding runtime. | dsc-6xp |
+
+## MPAS (unstructured Voronoi) — selector schema
+
+MPAS lacks logical (i, j, k) offsets — neighbors are addressed by integer
+**connectivity tables** loaded from the mesh file (`edges_on_cell`,
+`cells_on_edge`, `vertices_on_edge`, …). Two structural selector kinds (per
+upstream ESS RFC `discretization.md` §4) cover every MPAS stencil pattern:
+
+### `kind: "indirect"` — fixed-arity neighbor
+
+Use when each stencil row references **one** neighbor whose index is a
+deterministic function of `$target` and a known integer slot (e.g. the two
+cells adjacent to an edge).
+
+```jsonc
+{
+  "selector": {
+    "kind":       "indirect",
+    "table":      "cells_on_edge",
+    "index_expr": { "op": "index", "args": ["cells_on_edge", "$target", 0] }
+  },
+  "coeff": <ExpressionNode>
+}
+```
+
+- `table` — name of a connectivity array declared on the grid (must exist
+  in the grid's `connectivity` block; see `grids/mpas.schema.json`).
+- `index_expr` — single `ExpressionNode` resolving to the operand's index.
+  Composes with `$target` (here: edge index `e`) and integer slots. The
+  expansion (ESS §7.2 `indirect` row) substitutes this expression directly
+  into the operand reference.
+
+### `kind: "reduction"` — variable-arity reduction
+
+Use when one stencil row stands in for a sum/product/min/max **over a
+variable number of neighbors** (e.g. divergence at a cell summing over its
+5 or 6 incident edges).
+
+```jsonc
+{
+  "selector": {
+    "kind":       "reduction",
+    "table":      "edges_on_cell",
+    "count_expr": { "op": "index", "args": ["n_edges_on_cell", "$target"] },
+    "k_bound":    "k",
+    "combine":    "+"
+  },
+  "coeff": <ExpressionNode that may reference $target and k>
+}
+```
+
+- `table` — connectivity table; element `index(table, $target, k)` is the
+  k-th neighbor of `$target`.
+- `count_expr` — `ExpressionNode` that evaluates to the inclusive valence
+  count at `$target`; `index(n_edges_on_cell, $target)` is canonical for
+  cell-to-edge fans.
+- `k_bound` — local index name introduced by this selector and brought into
+  scope inside `coeff` per ESS §7.1.1 (not a `$`-prefixed pattern var).
+- `combine` — `"+"`, `"*"`, `"min"`, `"max"`. Almost always matches the
+  scheme's outer `combine`; mixed reductions are legal but not yet used.
+
+Expansion (ESS §7.2 `reduction` row) lowers this single stencil row to an
+`arrayop` over `k = 0 .. count_expr − 1`. **Variable valence is handled
+purely in the AST** — no `-1` sentinel, no per-cell branching at the
+binding layer.
+
+### Stagger location and `$target`
+
+The scheme's `emits_location` (`cell_center` / `edge_normal` / `vertex`)
+determines whether `$target` resolves to a scalar `c`, `e`, or `v` per ESS
+§7.1.1. When the operand sits at a different stagger location from the
+emit location (the common case for divergence and gradient), the
+`indirect` / `reduction` selector's `table` field bridges the two.
+
+### Worked example — flux divergence at cell centers (MPAS C-grid)
+
+The MPAS divergence operator combines a normal-velocity flux `F` defined at
+edge midpoints into a cell-centered tendency:
+
+$$\nabla\!\cdot\!F\;\big|_{c}\;=\;\frac{1}{A_c}\sum_{e\in\mathcal{E}(c)} L_e\, F_e$$
+
+where $A_c$ is `area_cell`, $L_e$ is the dual-edge length `dv_edge`, and
+$\mathcal{E}(c)$ is the set of `n_edges_on_cell[c]` edges incident on cell
+$c$. Expressed against this document's selector schema:
+
+```jsonc
+{
+  "discretizations": {
+    "mpas_cell_div": {
+      "applies_to":   { "op": "div", "args": ["$F"], "dim": "cell" },
+      "grid_family":  "unstructured",
+      "requires_locations": ["edge_normal"],
+      "emits_location":     "cell_center",
+      "combine":      "+",
+      "accuracy":     "O(dx) on a quasi-uniform Voronoi mesh",
+      "stencil": [
+        {
+          "selector": {
+            "kind":       "reduction",
+            "table":      "edges_on_cell",
+            "count_expr": { "op": "index", "args": ["n_edges_on_cell", "$target"] },
+            "k_bound":    "k",
+            "combine":    "+"
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "index", "args": [
+                  "dv_edge",
+                  { "op": "index", "args": ["edges_on_cell", "$target", "k"] }
+              ]},
+              { "op": "index", "args": ["area_cell", "$target"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+After §7.2 expansion at cell `c` (`$target → c`), this lowers to a single
+`arrayop` reduction whose lowered shape is given verbatim in ESS RFC
+`discretization.md` §7.3. The lowered form parses against the base-spec
+`arrayop` schema (no new AST node).
+
+### Cross-references
+
+- ESS RFC `discretization.md` §4 (selector taxonomy), §6.3 (unstructured
+  grid schema), §7.2 (expansion semantics), §7.3 (worked MPAS divergence),
+  §7.4 (`staggering_rules` for quantity-location declarations).
+- `grids/mpas.schema.json` — MPAS grid family schema (loader-backed).
+- `src/grids/mpas.jl` — Julia accessor runtime (canonical symbol names).
+- `dsc-7j0` — grid accessor runtime that pins the symbol set.
+- ESS `esm-spec.md` — base AST spec; the `index` op (§4.3.3) and `arrayop`
+  (§4.3.1) are the only nodes the lowered MPAS stencils require. **No
+  amendment to `esm-spec.md` is needed** for MPAS support; the structural
+  selectors above lower to existing AST nodes only.
 
 ## When to add a new selector kind
 
