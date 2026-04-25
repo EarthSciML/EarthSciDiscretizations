@@ -29,3 +29,54 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   (≥4.7 asymptotic order on phase-shifted sine) and a linear-advection
   square-wave shock-capturing sanity check (max overshoot/undershoot
   below 0.05 after one period).
+- [`flux_limiter_minmod.json`](flux_limiter_minmod.json) — Roe (1986)
+  minmod limiter, φ(r) = max(0, min(r, 1)). TVD, monotonicity-preserving,
+  symmetric. The limiter **formula is encoded directly as an
+  ExpressionNode AST** in the rule's `formula` field — there is no
+  runtime-callable Julia name. Evaluation walks the AST. Applies to the
+  slope-ratio scalar `$r`, so the rule is grid-family-agnostic in practice
+  even though the POC scopes `grid_family` to `cartesian`. Layer-B
+  fixture at `tests/fixtures/flux_limiter_minmod/phi_sweep.esm` pins the
+  expected φ(r) at seven checkpoints and verifies Sweby-region bounds;
+  `tvd_check.esm` confirms strict TVD on a smooth+square-wave IC over one
+  advection period.
+- [`flux_limiter_superbee.json`](flux_limiter_superbee.json) — Roe (1986)
+  superbee limiter, φ(r) = max(0, min(2r, 1), min(r, 2)). Same shape and
+  AST-first encoding as minmod; superbee sits on the upper edge of the
+  Sweby (1984) second-order TVD region and is compressive near
+  discontinuities. Layer-B fixtures parallel to minmod at
+  `tests/fixtures/flux_limiter_superbee/`.
+
+## Composing a limiter with a reconstruction
+
+The limiter rules accept a slope-ratio scalar `$r` and return φ(`$r`).
+They do not carry stencils — the slope ratio is the caller's
+responsibility.
+
+Worked example (1D uniform Cartesian, u > 0):
+
+1. **Compute the slope ratio at each cell interface**:
+
+   `r_i = (q_i - q_{i-1}) / (q_{i+1} - q_i + ε)` (guard against zero
+   denominators with a small ε when the solution is locally flat).
+
+2. **Evaluate the limiter rule's `formula` AST** at `$r = r_i` using the
+   ESD evaluator (`EarthSciDiscretizations.eval_coeff`) or an equivalent
+   tree-walk evaluator in your binding. The result is φ(r_i).
+
+3. **Scale the high-order slope correction by φ(r_i)** in the MUSCL-style
+   flux, e.g.
+
+   `F_{i+1/2} = u * (q_i + 0.5 * φ(r_i) * (q_{i+1} - q_i))`.
+
+   Under forward Euler with CFL ≤ 1/(1 + 0.5·φ_max) (φ_max = 1 for
+   minmod, 2 for superbee), this scheme is strictly TVD. The Layer-B′
+   fixtures in `tests/fixtures/flux_limiter_{minmod,superbee}/tvd_check.esm`
+   drive exactly this composition with a 64-cell grid and CFL=0.4 to
+   verify total variation is non-increasing over one advection period.
+
+Combining a limiter with PPM (`ppm_reconstruction.json`) or WENO-5
+(`weno5_advection.json`) follows the same pattern: compute `r` at each
+interface from the relevant reconstruction values and scale the
+high-order contribution by φ(`r`). The limiter rule is entirely
+reconstruction-agnostic.

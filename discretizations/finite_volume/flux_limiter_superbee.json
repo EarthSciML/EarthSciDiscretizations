@@ -1,0 +1,33 @@
+{
+  "discretizations": {
+    "flux_limiter_superbee": {
+      "applies_to": {
+        "op": "limit",
+        "args": ["$r"]
+      },
+      "grid_family": "cartesian",
+      "form": "tvd_flux_limiter",
+      "accuracy": "O(dx^2) in smooth monotone regions; compressive near discontinuities; degrades at smooth extrema",
+      "reference": "Roe (1986), Ann. Rev. Fluid Mech. 18:337-365, eq. (36); Sweby (1984), SIAM J. Numer. Anal. 21(5):995-1011, fig. 4",
+      "tvd": true,
+      "monotonicity_preserving": true,
+      "symmetric": true,
+      "sweby_bounds": {
+        "comment": "Sweby (1984) region: phi(r) >= 0 for all r, phi(r) = 0 for r <= 0, phi(r) <= 2 and phi(r) <= 2*r for r > 0, phi(1) = 1. Superbee sits on the upper edge of the second-order TVD region.",
+        "lower": "phi(r) >= 0",
+        "upper": "phi(r) <= 2",
+        "consistency": "phi(1) = 1"
+      },
+      "formula": {
+        "comment": "phi(r) = max(0, min(2*r, 1), min(r, 2)) — the superbee limiter of Roe (1986).",
+        "op": "max",
+        "args": [
+          0,
+          { "op": "min", "args": [{ "op": "*", "args": [2, "$r"] }, 1] },
+          { "op": "min", "args": ["$r", 2] }
+        ]
+      },
+      "composition_hint": "Caller computes slope ratio r = (q_i - q_{i-1}) / (q_{i+1} - q_i) at each interface and multiplies the high-order slope correction by phi(r). See discretizations/finite_volume/README.md for the worked example."
+    }
+  }
+}

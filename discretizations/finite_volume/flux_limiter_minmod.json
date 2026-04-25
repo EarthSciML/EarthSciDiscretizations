@@ -1,0 +1,32 @@
+{
+  "discretizations": {
+    "flux_limiter_minmod": {
+      "applies_to": {
+        "op": "limit",
+        "args": ["$r"]
+      },
+      "grid_family": "cartesian",
+      "form": "tvd_flux_limiter",
+      "accuracy": "O(dx^2) in smooth monotone regions; drops to O(dx) at extrema by design",
+      "reference": "Roe (1986), Ann. Rev. Fluid Mech. 18:337-365, eq. (35); Sweby (1984), SIAM J. Numer. Anal. 21(5):995-1011, fig. 3",
+      "tvd": true,
+      "monotonicity_preserving": true,
+      "symmetric": true,
+      "sweby_bounds": {
+        "comment": "Sweby (1984) region: phi(r) >= 0 for all r, phi(r) = 0 for r <= 0, phi(r) <= min(2, 2*r) for r > 0, phi(1) = 1.",
+        "lower": "phi(r) >= 0",
+        "upper": "phi(r) <= 2",
+        "consistency": "phi(1) = 1"
+      },
+      "formula": {
+        "comment": "phi(r) = max(0, min(r, 1)) — the minmod limiter of Roe (1986).",
+        "op": "max",
+        "args": [
+          0,
+          { "op": "min", "args": ["$r", 1] }
+        ]
+      },
+      "composition_hint": "Caller computes slope ratio r = (q_i - q_{i-1}) / (q_{i+1} - q_i) at each interface and multiplies the high-order slope correction by phi(r). See discretizations/finite_volume/README.md for the worked example."
+    }
+  }
+}
