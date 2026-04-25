@@ -45,7 +45,7 @@ Fields:
 - `provenance`: §6.4 fingerprint
 - `loader`: DuoLoader the grid was generated from
 """
-struct DuoGrid{T} <: AbstractGrid
+struct DuoGrid{T} <: AbstractUnstructuredGrid
     level::Int
     R::T
     dtype::String
@@ -504,3 +504,98 @@ function to_esm(g::DuoGrid)
 end
 
 family(::DuoGrid) = "duo"
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier U (icosahedral triangular mesh)
+#
+# Convention mirrors MPAS: flat 1-D `:cell` axis; `cell_centers(g, :lon|:lat)`
+# returns flat-vector geographic coordinates; `neighbor_indices(g, :cell, k)`
+# for `k ∈ 1:3` returns the cell sharing edge `k` (boundary sentinel `0`).
+# Cell neighbour table is the eagerly-built `cell_neighbors` matrix.
+# ---------------------------------------------------------------------------
+
+n_dims(::DuoGrid) = 1
+axis_names(::DuoGrid) = (:cell,)
+
+function _duo_axis_check(::DuoGrid, axis::Symbol)
+    axis in (:cell, :lon, :lat) ||
+        throw(ArgumentError("duo: unknown axis :$axis (expected :cell, :lon, or :lat)"))
+    return nothing
+end
+
+function cell_centers(g::DuoGrid{T}, axis::Symbol) where {T}
+    _duo_axis_check(g, axis)
+    axis === :cell &&
+        throw(ArgumentError("duo: cell_centers needs a coordinate axis (:lon or :lat); :cell is the layout axis"))
+    return axis === :lon ? g.lon : g.lat
+end
+
+function cell_widths(g::DuoGrid{T}, axis::Symbol) where {T}
+    _duo_axis_check(g, axis)
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        out = Vector{T}(undef, length(g.area))
+        @inbounds for c in eachindex(g.area)
+            out[c] = T(sqrt(g.area[c]))
+        end
+        return out
+    end
+end
+
+cell_volume(g::DuoGrid) = g.area
+
+function neighbor_indices(g::DuoGrid, axis::Symbol, offset::Int)
+    axis === :cell ||
+        throw(ArgumentError("duo: neighbor_indices: only axis=:cell is supported (offset = edge slot 1..3); got :$axis"))
+    (1 <= offset <= 3) ||
+        throw(ArgumentError("duo: neighbor_indices offset (edge slot) must lie in 1..3; got $offset"))
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        Nc = size(g.cell_neighbors, 2)
+        out = Vector{Int}(undef, Nc)
+        @inbounds for c in 1:Nc
+            out[c] = g.cell_neighbors[offset, c]
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::DuoGrid, axis::Symbol, side::Symbol)
+    axis === :cell ||
+        throw(ArgumentError("duo: boundary_mask: only axis=:cell is supported; got :$axis"))
+    side in (:lower, :upper) ||
+        throw(ArgumentError("duo: side must be :lower or :upper; got :$side"))
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        Nc = size(g.cell_neighbors, 2)
+        out = falses(Nc)
+        @inbounds for c in 1:Nc
+            for k in 1:3
+                if g.cell_neighbors[k, c] == 0
+                    out[c] = true
+                    break
+                end
+            end
+        end
+        return out
+    end
+end
+
+# Tier U — ragged adjacency. The icosahedral mesh is closed and triangular
+# (valence == 3 always), but the trait accessors stay general so callers
+# don't need to know that a priori.
+
+"""
+    cell_neighbor_table(g::DuoGrid) -> Matrix{Int}
+
+`(3, n_cells)` neighbour-cell matrix; slot k is the cell across edge k of
+each triangle. Closed icosahedral meshes have no boundary cells, so all
+entries are non-zero.
+"""
+cell_neighbor_table(g::DuoGrid) = g.cell_neighbors
+
+"""
+    cell_valence(g::DuoGrid) -> Vector{Int}
+
+Per-cell neighbour count (always `3` for triangular meshes).
+"""
+function cell_valence(g::DuoGrid)
+    return fill(3, size(g.cell_neighbors, 2))
+end

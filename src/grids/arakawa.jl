@@ -117,7 +117,7 @@ _arakawa_base_esm(b::CartesianBase) = Dict{String, Any}(
 # ArakawaGrid: a base grid + stagger label
 # ---------------------------------------------------------------------------
 
-struct ArakawaGrid{T, B <: ArakawaBaseGrid} <: AbstractGrid
+struct ArakawaGrid{T, B <: ArakawaBaseGrid} <: AbstractStaggeredGrid
     base::B
     stagger::ArakawaStagger
     ghosts::Int
@@ -295,3 +295,83 @@ end
 _dtype_string(::Type{Float64}) = "float64"
 _dtype_string(::Type{Float32}) = "float32"
 _dtype_string(::Type{T}) where {T} = string(T)
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier S (staggered horizontal mesh)
+#
+# Cell-centered Tier-C arrays are flat row-major over the (nx, ny) interior
+# (slow axis = j). Face / corner accessors stay scalar — they are
+# stagger-specific and live above as `u_face`, `v_face`, `corners`.
+# ---------------------------------------------------------------------------
+
+n_dims(::ArakawaGrid) = 2
+axis_names(::ArakawaGrid) = (:x, :y)
+n_cells(g::ArakawaGrid) = arakawa_nx(g) * arakawa_ny(g)
+
+function _arakawa_axis_idx(::ArakawaGrid, axis::Symbol)
+    axis === :x && return 1
+    axis === :y && return 2
+    throw(ArgumentError("arakawa: unknown axis :$axis (expected :x or :y)"))
+end
+
+function cell_centers(g::ArakawaGrid{T}, axis::Symbol) where {T}
+    d = _arakawa_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_centers, axis)) do
+        nx = arakawa_nx(g); ny = arakawa_ny(g)
+        out = Vector{T}(undef, nx * ny)
+        @inbounds for j in 1:ny, i in 1:nx
+            xy = arakawa_cell_center(g.base, i, j)
+            out[(j - 1) * nx + i] = T(xy[d])
+        end
+        return out
+    end
+end
+
+function cell_widths(g::ArakawaGrid{T}, axis::Symbol) where {T}
+    d = _arakawa_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        nx = arakawa_nx(g); ny = arakawa_ny(g)
+        w = d == 1 ? T(arakawa_dx(g.base)) : T(arakawa_dy(g.base))
+        return fill(w, nx * ny)
+    end
+end
+
+function cell_volume(g::ArakawaGrid{T}) where {T}
+    return _grid_memo!(g, :cell_volume) do
+        nx = arakawa_nx(g); ny = arakawa_ny(g)
+        a = T(arakawa_dx(g.base)) * T(arakawa_dy(g.base))
+        return fill(a, nx * ny)
+    end
+end
+
+function neighbor_indices(g::ArakawaGrid, axis::Symbol, offset::Int)
+    d = _arakawa_axis_idx(g, axis)
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        nx = arakawa_nx(g); ny = arakawa_ny(g)
+        out = Vector{Int}(undef, nx * ny)
+        @inbounds for j in 1:ny, i in 1:nx
+            ii = d == 1 ? i + offset : i
+            jj = d == 2 ? j + offset : j
+            k = (j - 1) * nx + i
+            out[k] = (1 <= ii <= nx && 1 <= jj <= ny) ?
+                ((jj - 1) * nx + ii) : 0
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::ArakawaGrid, axis::Symbol, side::Symbol)
+    d = _arakawa_axis_idx(g, axis)
+    side in (:lower, :upper) ||
+        throw(ArgumentError("arakawa: side must be :lower or :upper; got :$side"))
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        nx = arakawa_nx(g); ny = arakawa_ny(g)
+        out = falses(nx * ny)
+        target = side === :lower ? 1 : (d == 1 ? nx : ny)
+        @inbounds for j in 1:ny, i in 1:nx
+            v = d == 1 ? i : j
+            out[(j - 1) * nx + i] = v == target
+        end
+        return out
+    end
+end

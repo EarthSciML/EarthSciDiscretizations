@@ -22,7 +22,7 @@ geometry from that declaration via pure math.
 # Type
 # ---------------------------------------------------------------------------
 
-struct CartesianGrid{T <: AbstractFloat, N} <: AbstractGrid
+struct CartesianGrid{T <: AbstractFloat, N} <: AbstractCurvilinearGrid
     n::NTuple{N, Int}
     extent::NTuple{N, Tuple{T, T}}
     edges::NTuple{N, Vector{T}}
@@ -380,3 +380,163 @@ end
 # `EarthSciDiscretizations.grids` submodule (defined at the bottom of
 # `src/EarthSciDiscretizations.jl`) aliases `_cartesian` here. See
 # GRIDS_API.md §2.3 for the public call form.
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier M (identity metric)
+#
+# Cartesian grids subtype `AbstractCurvilinearGrid` and supply an identity
+# metric per RFC §1 Tier M, so they can drop into curvilinear assemblers
+# (`precompute_laplacian_stencil`, `precompute_gradient_stencil`) unchanged.
+# ---------------------------------------------------------------------------
+
+n_dims(::CartesianGrid{T, N}) where {T, N} = N
+n_cells(g::CartesianGrid) = prod(g.n)
+axis_names(::CartesianGrid{T, N}) where {T, N} = ntuple(d -> _AXIS_NAMES[d], N)
+
+function _cartesian_axis_idx(::CartesianGrid{T, N}, axis::Symbol) where {T, N}
+    @inbounds for d in 1:N
+        _AXIS_NAMES[d] === axis && return d
+    end
+    throw(ArgumentError("cartesian: unknown axis :$axis for $(N)D grid"))
+end
+
+function cell_centers(g::CartesianGrid{T, N}, axis::Symbol) where {T, N}
+    d = _cartesian_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_centers, axis)) do
+        nc = prod(g.n)
+        out = Vector{T}(undef, nc)
+        cs = g.centers[d]
+        ci = CartesianIndices(g.n)
+        @inbounds for k in 1:nc
+            out[k] = cs[ci[k][d]]
+        end
+        return out
+    end
+end
+
+function cell_widths(g::CartesianGrid{T, N}, axis::Symbol) where {T, N}
+    d = _cartesian_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        nc = prod(g.n)
+        out = Vector{T}(undef, nc)
+        ws = g.widths[d]
+        ci = CartesianIndices(g.n)
+        @inbounds for k in 1:nc
+            out[k] = ws[ci[k][d]]
+        end
+        return out
+    end
+end
+
+function cell_volume(g::CartesianGrid{T, N}) where {T, N}
+    return _grid_memo!(g, :cell_volume) do
+        nc = prod(g.n)
+        out = Vector{T}(undef, nc)
+        ci = CartesianIndices(g.n)
+        @inbounds for k in 1:nc
+            v = one(T)
+            ix = ci[k]
+            for d in 1:N
+                v *= g.widths[d][ix[d]]
+            end
+            out[k] = v
+        end
+        return out
+    end
+end
+
+function neighbor_indices(g::CartesianGrid{T, N}, axis::Symbol, offset::Int) where {T, N}
+    d = _cartesian_axis_idx(g, axis)
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        nc = prod(g.n)
+        out = Vector{Int}(undef, nc)
+        ci = CartesianIndices(g.n)
+        li = LinearIndices(g.n)
+        nd = g.n[d]
+        @inbounds for k in 1:nc
+            ix = ci[k]
+            new_d = ix[d] + offset
+            if 1 <= new_d <= nd
+                new_ix = ntuple(p -> p == d ? new_d : ix[p], N)
+                out[k] = li[CartesianIndex(new_ix)]
+            else
+                out[k] = 0
+            end
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::CartesianGrid{T, N}, axis::Symbol, side::Symbol) where {T, N}
+    d = _cartesian_axis_idx(g, axis)
+    side in (:lower, :upper) ||
+        throw(ArgumentError("cartesian: side must be :lower or :upper; got :$side"))
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        nc = prod(g.n)
+        out = Vector{Bool}(undef, nc)
+        target = side === :lower ? 1 : g.n[d]
+        ci = CartesianIndices(g.n)
+        @inbounds for k in 1:nc
+            out[k] = ci[k][d] == target
+        end
+        return out
+    end
+end
+
+# Tier-M identity metric — `g_ij = δ_ij`, `J = ∏ dx_d`, derivatives of `g_ij`
+# vanish. The coordinate Jacobian is identity vs the cartesian target, and
+# the second-derivative Jacobian is zero.
+
+function metric_g(g::CartesianGrid{T, N}) where {T, N}
+    return _grid_memo!(g, :metric_g) do
+        nc = prod(g.n)
+        out = zeros(T, nc, N, N)
+        @inbounds for k in 1:nc, d in 1:N
+            out[k, d, d] = one(T)
+        end
+        return out
+    end
+end
+
+function metric_ginv(g::CartesianGrid{T, N}) where {T, N}
+    return _grid_memo!(g, :metric_ginv) do
+        nc = prod(g.n)
+        out = zeros(T, nc, N, N)
+        @inbounds for k in 1:nc, d in 1:N
+            out[k, d, d] = one(T)
+        end
+        return out
+    end
+end
+
+function metric_jacobian(g::CartesianGrid{T, N}) where {T, N}
+    # J = product of cell widths (cell_volume on a cartesian grid).
+    return cell_volume(g)
+end
+
+function metric_dgij_dxk(g::CartesianGrid{T, N}) where {T, N}
+    return _grid_memo!(g, :metric_dgij_dxk) do
+        zeros(T, prod(g.n), N, N, N)
+    end
+end
+
+function coord_jacobian(g::CartesianGrid{T, N}, target::Symbol) where {T, N}
+    target === :cartesian ||
+        throw(ArgumentError("cartesian: coord_jacobian only supports target=:cartesian; got :$target"))
+    return _grid_memo!(g, (:coord_jacobian, target)) do
+        nc = prod(g.n)
+        out = zeros(T, nc, N, N)
+        @inbounds for k in 1:nc, d in 1:N
+            out[k, d, d] = one(T)
+        end
+        return out
+    end
+end
+
+function coord_jacobian_second(g::CartesianGrid{T, N}, target::Symbol) where {T, N}
+    target === :cartesian ||
+        throw(ArgumentError("cartesian: coord_jacobian_second only supports target=:cartesian; got :$target"))
+    return _grid_memo!(g, (:coord_jacobian_second, target)) do
+        zeros(T, prod(g.n), N, N, N)
+    end
+end

@@ -35,7 +35,7 @@ from `levels` via pure arithmetic.
 # Type
 # ---------------------------------------------------------------------------
 
-struct VerticalGrid{T <: AbstractFloat} <: AbstractGrid
+struct VerticalGrid{T <: AbstractFloat} <: AbstractVerticalGrid
     coordinate::Symbol
     levels::Vector{T}
     centers::Vector{T}
@@ -450,3 +450,78 @@ family(::VerticalGrid) = "vertical"
 # `EarthSciDiscretizations.grids` submodule (defined at the bottom of
 # `src/EarthSciDiscretizations.jl`) aliases `_vertical` here. See
 # GRIDS_API.md §2.3 for the public call form.
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier V (vertical column)
+#
+# 1D column: a single axis named `:z` regardless of coordinate flavor
+# (`sigma`, `eta`, `z`, `theta`, ...). Coordinate-specific values are
+# available via `metric_eval(g, :z|:sigma|:pressure|...)` and via the
+# Tier-V accessors `half_levels`, `layer_thickness`, `pressure_coefficients`.
+# ---------------------------------------------------------------------------
+
+n_dims(::VerticalGrid) = 1
+axis_names(::VerticalGrid) = (:z,)
+
+function _vertical_axis_check(::VerticalGrid, axis::Symbol)
+    axis === :z ||
+        throw(ArgumentError("vertical: unknown axis :$axis (only :z is defined)"))
+    return nothing
+end
+
+cell_centers(g::VerticalGrid, axis::Symbol) =
+    (_vertical_axis_check(g, axis); g.centers)
+
+cell_widths(g::VerticalGrid, axis::Symbol) =
+    (_vertical_axis_check(g, axis); g.widths)
+
+cell_volume(g::VerticalGrid) = g.widths
+
+function neighbor_indices(g::VerticalGrid, axis::Symbol, offset::Int)
+    _vertical_axis_check(g, axis)
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        n = n_cells(g)
+        out = Vector{Int}(undef, n)
+        @inbounds for k in 1:n
+            kk = k + offset
+            out[k] = (1 <= kk <= n) ? kk : 0
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::VerticalGrid, axis::Symbol, side::Symbol)
+    _vertical_axis_check(g, axis)
+    side in (:lower, :upper) ||
+        throw(ArgumentError("vertical: side must be :lower or :upper; got :$side"))
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        n = n_cells(g)
+        out = falses(n)
+        out[side === :lower ? 1 : n] = true
+        return out
+    end
+end
+
+# Tier V — column structure.
+"""
+    half_levels(g::VerticalGrid) -> Vector{T}
+
+Layer interface coordinates (length `nz + 1`). Same units as the
+configured coordinate kind.
+"""
+half_levels(g::VerticalGrid) = g.levels
+
+"""
+    layer_thickness(g::VerticalGrid) -> Vector{T}
+
+Per-layer thickness (length `nz`). Always positive.
+"""
+layer_thickness(g::VerticalGrid) = g.widths
+
+"""
+    pressure_coefficients(g::VerticalGrid) -> NamedTuple{(:ak,:bk,:p0)}
+
+Hybrid sigma-pressure coefficients (length `nz + 1` for `ak`, `bk`). Empty
+arrays when the coordinate kind has no hybrid coefficients.
+"""
+pressure_coefficients(g::VerticalGrid) = (ak = g.ak, bk = g.bk, p0 = g.p0)

@@ -65,7 +65,19 @@ include("rule_eval.jl")
 
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
+export AbstractCurvilinearGrid, AbstractStaggeredGrid,
+    AbstractVerticalGrid, AbstractUnstructuredGrid
+export GridTraitError
 export total_area
+
+# Exports: ESS Grid trait (Tier C / Tier M)
+export n_dims, axis_names, neighbor_indices, boundary_mask
+export metric_g, metric_ginv, metric_jacobian, metric_dgij_dxk
+export coord_jacobian, coord_jacobian_second
+
+# Exports: Tier-V (vertical column) and Tier-U (unstructured)
+export half_levels, layer_thickness, pressure_coefficients
+export cell_neighbor_table, cell_valence
 # DUO icosahedral family (GRIDS_API §1 row 7, §10 loader-backed)
 export DuoGrid, DuoLoader, build_duo_grid
 export cell_centers, neighbors, metric_eval

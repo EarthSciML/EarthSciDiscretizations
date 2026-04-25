@@ -240,3 +240,231 @@ function CubedSphereGrid(Nc::Int; R = 1.0, Ng::Int = 3)
 end
 
 total_area(grid::CubedSphereGrid) = sum(grid.area)
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier M (curvilinear gnomonic cubed sphere)
+#
+# Flat indexing convention: cell `(p, i, j)` maps to flat index
+# `(p - 1) * Nc^2 + (j - 1) * Nc + i`. Tier-M tensor methods reuse the
+# eagerly-precomputed metric arrays already stored on the grid struct.
+# ---------------------------------------------------------------------------
+
+n_dims(::CubedSphereGrid) = 2
+axis_names(::CubedSphereGrid) = (:xi, :eta)
+n_cells(g::CubedSphereGrid) = 6 * g.Nc * g.Nc
+
+function _cs_axis_idx(::CubedSphereGrid, axis::Symbol)
+    axis === :xi && return 1
+    axis === :eta && return 2
+    throw(ArgumentError("cubed_sphere: unknown axis :$axis (expected :xi or :eta)"))
+end
+
+@inline _cs_flat(p::Int, i::Int, j::Int, Nc::Int) = (p - 1) * Nc * Nc + (j - 1) * Nc + i
+
+function cell_centers(g::CubedSphereGrid{T}, axis::Symbol) where {T}
+    _cs_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_centers, axis)) do
+        Nc = g.Nc
+        out = Vector{T}(undef, 6 * Nc * Nc)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            out[_cs_flat(p, i, j, Nc)] = axis === :xi ? g.ξ_centers[i] : g.η_centers[j]
+        end
+        return out
+    end
+end
+
+function cell_widths(g::CubedSphereGrid{T}, axis::Symbol) where {T}
+    _cs_axis_idx(g, axis)
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        n = 6 * g.Nc * g.Nc
+        return fill(axis === :xi ? T(g.dξ) : T(g.dη), n)
+    end
+end
+
+function cell_volume(g::CubedSphereGrid{T}) where {T}
+    return _grid_memo!(g, :cell_volume) do
+        Nc = g.Nc
+        out = Vector{T}(undef, 6 * Nc * Nc)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            out[_cs_flat(p, i, j, Nc)] = g.area[p, i, j]
+        end
+        return out
+    end
+end
+
+function neighbor_indices(g::CubedSphereGrid, axis::Symbol, offset::Int)
+    d = _cs_axis_idx(g, axis)
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        Nc = g.Nc
+        out = Vector{Int}(undef, 6 * Nc * Nc)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            ii = d == 1 ? i + offset : i
+            jj = d == 2 ? j + offset : j
+            if 1 <= ii <= Nc && 1 <= jj <= Nc
+                out[k] = _cs_flat(p, ii, jj, Nc)
+            elseif abs(offset) == 1
+                # Single-cell hop crossing a panel edge: resolve via the
+                # connectivity table.
+                edge = if d == 1
+                    offset == 1 ? East : West
+                else
+                    offset == 1 ? North : South
+                end
+                nb = PANEL_CONNECTIVITY[p][edge]
+                # `transform_ghost_index(nb, depth, along, ni, nj, src_dir)`:
+                # depth=1 means "one cell off the panel edge" (the immediate
+                # neighbour on the adjacent panel).
+                ip, jp = if d == 1
+                    transform_ghost_index(nb, 1, j, Nc, Nc, edge)
+                else
+                    transform_ghost_index(nb, 1, i, Nc, Nc, edge)
+                end
+                out[k] = (1 <= ip <= Nc && 1 <= jp <= Nc) ?
+                    _cs_flat(nb.neighbor_panel, ip, jp, Nc) : 0
+            else
+                # Multi-cell hops past a panel edge are out of scope for the
+                # trait; assemblers stack ±1 hops instead. Sentinel = 0.
+                out[k] = 0
+            end
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::CubedSphereGrid, axis::Symbol, side::Symbol)
+    _cs_axis_idx(g, axis)
+    side in (:lower, :upper) ||
+        throw(ArgumentError("cubed_sphere: side must be :lower or :upper; got :$side"))
+    # Every cell on a closed cubed sphere has neighbours via panel
+    # connectivity, so there are no "boundary" cells.
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        falses(6 * g.Nc * g.Nc)
+    end
+end
+
+# Tier M — pull from the eagerly-materialized metric arrays.
+
+function metric_g(g::CubedSphereGrid{T}) where {T}
+    return _grid_memo!(g, :metric_g) do
+        Nc = g.Nc
+        out = zeros(T, 6 * Nc * Nc, 2, 2)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            ginv_xx = g.ginv_ξξ[p, i, j]
+            ginv_yy = g.ginv_ηη[p, i, j]
+            ginv_xe = g.ginv_ξη[p, i, j]
+            det_inv = ginv_xx * ginv_yy - ginv_xe * ginv_xe
+            # g_{ij} = inv(g^{ij}) (pointwise 2×2 inverse).
+            out[k, 1, 1] = ginv_yy / det_inv
+            out[k, 2, 2] = ginv_xx / det_inv
+            out[k, 1, 2] = -ginv_xe / det_inv
+            out[k, 2, 1] = -ginv_xe / det_inv
+        end
+        return out
+    end
+end
+
+function metric_ginv(g::CubedSphereGrid{T}) where {T}
+    return _grid_memo!(g, :metric_ginv) do
+        Nc = g.Nc
+        out = zeros(T, 6 * Nc * Nc, 2, 2)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            out[k, 1, 1] = g.ginv_ξξ[p, i, j]
+            out[k, 2, 2] = g.ginv_ηη[p, i, j]
+            out[k, 1, 2] = g.ginv_ξη[p, i, j]
+            out[k, 2, 1] = g.ginv_ξη[p, i, j]
+        end
+        return out
+    end
+end
+
+function metric_jacobian(g::CubedSphereGrid{T}) where {T}
+    return _grid_memo!(g, :metric_jacobian) do
+        Nc = g.Nc
+        out = Vector{T}(undef, 6 * Nc * Nc)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            out[_cs_flat(p, i, j, Nc)] = g.J[p, i, j]
+        end
+        return out
+    end
+end
+
+function metric_dgij_dxk(g::CubedSphereGrid{T}) where {T}
+    # Reconstruct ∂g_ij/∂x^k from ∂(J g^{ij})/∂x^k via the product rule:
+    # ∂(J g^{ij})/∂x^k = (∂J/∂x^k) g^{ij} + J (∂g^{ij}/∂x^k)
+    # Then ∂g_ij/∂x^k = -g_im g_jn (∂g^{mn}/∂x^k).
+    # The grid stores `dJgxx_dξ`, `dJgyy_dη`, `dJgxe_dξ`, `dJgxe_dη` which
+    # are sufficient for the assemblers' first-derivative correction terms;
+    # we compute the full ∂g_ij/∂x^k array by finite-differencing g_ij over
+    # the same uniform (ξ, η) grid that the metric arrays live on.
+    return _grid_memo!(g, :metric_dgij_dxk) do
+        Nc = g.Nc
+        N = 6 * Nc * Nc
+        out = zeros(T, N, 2, 2, 2)
+        # Use precomputed 2D arrays of g_ij from metric_g.
+        gij = metric_g(g)
+        # Centered differences in computational space (ξ, η). Boundary cells
+        # use one-sided differences (no panel-crossing — sufficient for the
+        # 9-point stencil's correction terms).
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            # ∂/∂ξ
+            ip = i + 1; im = i - 1
+            ip_c = clamp(ip, 1, Nc); im_c = clamp(im, 1, Nc)
+            inv_dξ = T(1) / (T(ip_c - im_c) * T(g.dξ))
+            for a in 1:2, b in 1:2
+                kp = _cs_flat(p, ip_c, j, Nc); km = _cs_flat(p, im_c, j, Nc)
+                out[k, a, b, 1] = (gij[kp, a, b] - gij[km, a, b]) * inv_dξ
+            end
+            # ∂/∂η
+            jp = j + 1; jm = j - 1
+            jp_c = clamp(jp, 1, Nc); jm_c = clamp(jm, 1, Nc)
+            inv_dη = T(1) / (T(jp_c - jm_c) * T(g.dη))
+            for a in 1:2, b in 1:2
+                kp = _cs_flat(p, i, jp_c, Nc); km = _cs_flat(p, i, jm_c, Nc)
+                out[k, a, b, 2] = (gij[kp, a, b] - gij[km, a, b]) * inv_dη
+            end
+        end
+        return out
+    end
+end
+
+function coord_jacobian(g::CubedSphereGrid{T}, target::Symbol) where {T}
+    target === :lon_lat ||
+        throw(ArgumentError("cubed_sphere: coord_jacobian only supports target=:lon_lat; got :$target"))
+    return _grid_memo!(g, (:coord_jacobian, target)) do
+        Nc = g.Nc
+        out = zeros(T, 6 * Nc * Nc, 2, 2)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            out[k, 1, 1] = g.dξ_dlon[p, i, j]
+            out[k, 1, 2] = g.dξ_dlat[p, i, j]
+            out[k, 2, 1] = g.dη_dlon[p, i, j]
+            out[k, 2, 2] = g.dη_dlat[p, i, j]
+        end
+        return out
+    end
+end
+
+function coord_jacobian_second(g::CubedSphereGrid{T}, target::Symbol) where {T}
+    target === :lon_lat ||
+        throw(ArgumentError("cubed_sphere: coord_jacobian_second only supports target=:lon_lat; got :$target"))
+    return _grid_memo!(g, (:coord_jacobian_second, target)) do
+        Nc = g.Nc
+        out = zeros(T, 6 * Nc * Nc, 2, 2, 2)
+        @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+            k = _cs_flat(p, i, j, Nc)
+            out[k, 1, 1, 1] = g.d2ξ_dlon2[p, i, j]
+            out[k, 1, 1, 2] = g.d2ξ_dlondlat[p, i, j]
+            out[k, 1, 2, 1] = g.d2ξ_dlondlat[p, i, j]
+            out[k, 1, 2, 2] = g.d2ξ_dlat2[p, i, j]
+            out[k, 2, 1, 1] = g.d2η_dlon2[p, i, j]
+            out[k, 2, 1, 2] = g.d2η_dlondlat[p, i, j]
+            out[k, 2, 2, 1] = g.d2η_dlondlat[p, i, j]
+            out[k, 2, 2, 2] = g.d2η_dlat2[p, i, j]
+        end
+        return out
+    end
+end

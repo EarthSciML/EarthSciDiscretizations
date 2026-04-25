@@ -46,7 +46,7 @@ const _LATLON_METRIC_NAMES = (
 # Type
 # ---------------------------------------------------------------------------
 
-struct LatLonGrid{T <: AbstractFloat} <: AbstractGrid
+struct LatLonGrid{T <: AbstractFloat} <: AbstractCurvilinearGrid
     variant::Symbol
     nlat::Int
     nlon_per_row::Vector{Int}
@@ -531,3 +531,252 @@ end
 # `EarthSciDiscretizations.grids` submodule (defined at the bottom of
 # `src/EarthSciDiscretizations.jl`) aliases `_latlon` here. See
 # `GRIDS_API.md` §2.3 for the public call form.
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier M (sphere-surface curvilinear)
+#
+# Flat ragged-row-major cell layout: cell `(j, i)` (1-based) lives at flat
+# index `row_offset(g, j) + i`. Longitude wraps periodically. Latitude
+# stepping uses `_latlon_map_i` to handle reduced-Gaussian rows where
+# `nlon_per_row[j]` differs across `j`. Pole neighbours are `0` under the
+# default `pole_policy=:none`.
+# ---------------------------------------------------------------------------
+
+n_dims(::LatLonGrid) = 2
+axis_names(::LatLonGrid) = (:lon, :lat)
+
+function _latlon_axis_check(::LatLonGrid, axis::Symbol)
+    axis in (:lon, :lat) ||
+        throw(ArgumentError("lat_lon: unknown axis :$axis (expected :lon or :lat)"))
+    return nothing
+end
+
+function cell_centers(g::LatLonGrid{T}, axis::Symbol) where {T}
+    _latlon_axis_check(g, axis)
+    return _grid_memo!(g, (:cell_centers, axis)) do
+        nt = cell_centers(g)  # NamedTuple{(:lon,:lat)}
+        return axis === :lon ? nt.lon : nt.lat
+    end
+end
+
+function cell_widths(g::LatLonGrid{T}, axis::Symbol) where {T}
+    _latlon_axis_check(g, axis)
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        nc = n_cells(g)
+        out = Vector{T}(undef, nc)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            if axis === :lon
+                w = T(2) * T(pi) / T(n_i)
+                for _ in 1:n_i
+                    k += 1
+                    out[k] = w
+                end
+            else
+                w = g.lat_edges[j + 1] - g.lat_edges[j]
+                for _ in 1:n_i
+                    k += 1
+                    out[k] = w
+                end
+            end
+        end
+        return out
+    end
+end
+
+function cell_volume(g::LatLonGrid{T}) where {T}
+    return _grid_memo!(g, :cell_volume) do
+        nc = n_cells(g)
+        out = Vector{T}(undef, nc)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            dlon = T(2) * T(pi) / T(n_i)
+            sin_n = sin(g.lat_edges[j + 1])
+            sin_s = sin(g.lat_edges[j])
+            area = g.R * g.R * dlon * (sin_n - sin_s)
+            for _ in 1:n_i
+                k += 1
+                out[k] = area
+            end
+        end
+        return out
+    end
+end
+
+function neighbor_indices(g::LatLonGrid, axis::Symbol, offset::Int)
+    _latlon_axis_check(g, axis)
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        nc = n_cells(g)
+        out = Vector{Int}(undef, nc)
+        # Precompute row offsets once.
+        row_off = Vector{Int}(undef, g.nlat + 1)
+        row_off[1] = 0
+        @inbounds for j in 1:g.nlat
+            row_off[j + 1] = row_off[j] + g.nlon_per_row[j]
+        end
+        if axis === :lon
+            @inbounds for j in 1:g.nlat
+                n_i = g.nlon_per_row[j]
+                base = row_off[j]
+                for i in 1:n_i
+                    ii = mod(i - 1 + offset, n_i) + 1
+                    out[base + i] = row_off[j] + ii
+                end
+            end
+        else  # :lat
+            @inbounds for j in 1:g.nlat
+                n_i = g.nlon_per_row[j]
+                base = row_off[j]
+                jj = j + offset
+                if 1 <= jj <= g.nlat
+                    n_t = g.nlon_per_row[jj]
+                    base_t = row_off[jj]
+                    for i in 1:n_i
+                        i_t = _latlon_map_i(i, n_i, n_t)
+                        out[base + i] = base_t + i_t
+                    end
+                else
+                    # Pole: pole_policy=:none → no neighbour.
+                    for i in 1:n_i
+                        out[base + i] = 0
+                    end
+                end
+            end
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::LatLonGrid, axis::Symbol, side::Symbol)
+    _latlon_axis_check(g, axis)
+    side in (:lower, :upper) ||
+        throw(ArgumentError("lat_lon: side must be :lower or :upper; got :$side"))
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        nc = n_cells(g)
+        out = falses(nc)
+        if axis === :lon
+            # Longitude wraps periodically — no lon boundary cells.
+            return out
+        end
+        target = side === :lower ? 1 : g.nlat
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            mark = j == target
+            for _ in 1:n_i
+                k += 1
+                out[k] = mark
+            end
+        end
+        return out
+    end
+end
+
+# Tier-M curvilinear metric. The lat-lon basis on a sphere of radius R has
+# `g_λλ = R² cos²(φ)`, `g_φφ = R²`, `g_λφ = 0`. The longitudinally-uniform
+# layout means every cell in row `j` shares the same metric tensor.
+
+function metric_g(g::LatLonGrid{T}) where {T}
+    return _grid_memo!(g, :metric_g) do
+        nc = n_cells(g)
+        out = zeros(T, nc, 2, 2)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            cos_lat = cos(g.lat_centers[j])
+            g_ll = g.R * g.R * cos_lat * cos_lat
+            g_pp = g.R * g.R
+            for _ in 1:n_i
+                k += 1
+                out[k, 1, 1] = g_ll
+                out[k, 2, 2] = g_pp
+            end
+        end
+        return out
+    end
+end
+
+function metric_ginv(g::LatLonGrid{T}) where {T}
+    return _grid_memo!(g, :metric_ginv) do
+        nc = n_cells(g)
+        out = zeros(T, nc, 2, 2)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            cos_lat = cos(g.lat_centers[j])
+            g_ll = g.R * g.R * cos_lat * cos_lat
+            g_pp = g.R * g.R
+            inv_ll = g_ll > zero(T) ? one(T) / g_ll : T(Inf)
+            inv_pp = one(T) / g_pp
+            for _ in 1:n_i
+                k += 1
+                out[k, 1, 1] = inv_ll
+                out[k, 2, 2] = inv_pp
+            end
+        end
+        return out
+    end
+end
+
+function metric_jacobian(g::LatLonGrid{T}) where {T}
+    return _grid_memo!(g, :metric_jacobian) do
+        nc = n_cells(g)
+        out = Vector{T}(undef, nc)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            J = g.R * g.R * abs(cos(g.lat_centers[j]))
+            for _ in 1:n_i
+                k += 1
+                out[k] = J
+            end
+        end
+        return out
+    end
+end
+
+function metric_dgij_dxk(g::LatLonGrid{T}) where {T}
+    # Lat-lon layout uses physical (lon, lat) as the computational axes too,
+    # so `∂g_ij/∂x^k` reduces to derivatives w.r.t. (lon, lat). All entries
+    # vanish except `∂g_λλ/∂φ = -2 R² cos(φ) sin(φ)`.
+    return _grid_memo!(g, :metric_dgij_dxk) do
+        nc = n_cells(g)
+        out = zeros(T, nc, 2, 2, 2)
+        k = 0
+        @inbounds for j in 1:g.nlat
+            n_i = g.nlon_per_row[j]
+            φ = g.lat_centers[j]
+            dgll_dφ = -T(2) * g.R * g.R * cos(φ) * sin(φ)
+            for _ in 1:n_i
+                k += 1
+                out[k, 1, 1, 2] = dgll_dφ  # ∂g_λλ / ∂φ
+            end
+        end
+        return out
+    end
+end
+
+function coord_jacobian(g::LatLonGrid{T}, target::Symbol) where {T}
+    target === :lon_lat ||
+        throw(ArgumentError("lat_lon: coord_jacobian only supports target=:lon_lat; got :$target"))
+    # Computational and target axes coincide, so `∂(comp)/∂(target) = δ`.
+    return _grid_memo!(g, (:coord_jacobian, target)) do
+        nc = n_cells(g)
+        out = zeros(T, nc, 2, 2)
+        @inbounds for k in 1:nc
+            out[k, 1, 1] = one(T)
+            out[k, 2, 2] = one(T)
+        end
+        return out
+    end
+end
+
+function coord_jacobian_second(g::LatLonGrid{T}, target::Symbol) where {T}
+    target === :lon_lat ||
+        throw(ArgumentError("lat_lon: coord_jacobian_second only supports target=:lon_lat; got :$target"))
+    return _grid_memo!(g, (:coord_jacobian_second, target)) do
+        zeros(T, n_cells(g), 2, 2, 2)
+    end
+end

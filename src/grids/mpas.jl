@@ -296,7 +296,7 @@ end
 MPAS unstructured Voronoi grid. Wraps a validated `MpasMeshData` plus the
 family options `(R, dtype, ghosts, loader)` and a provenance block (§6.4).
 """
-struct MpasGrid{T} <: AbstractGrid
+struct MpasGrid{T} <: AbstractUnstructuredGrid
     mesh::MpasMeshData
     R::T
     dtype::String
@@ -563,3 +563,133 @@ function to_esm(g::MpasGrid)
         "provenance" => g.provenance,
     )
 end
+
+# ---------------------------------------------------------------------------
+# ESS Grid trait — Tier C + Tier U (unstructured Voronoi sphere)
+#
+# MPAS uses a flat 1-D cell axis (`:cell`); spatial coordinates are exposed
+# via `cell_centers(g, :lon)` / `(g, :lat)` (still flat-vector, length
+# `n_cells`). Per-cell neighbour slots are reached through
+# `neighbor_indices(g, :cell, k)` for `k ∈ 1:max_edges` — the offset is the
+# slot index, not an axial step. Boundary sentinel: `0`. Tier-U methods
+# (`cell_neighbor_table`, `cell_valence`, `edge_length`, `cell_distance`)
+# expose the ragged adjacency directly.
+# ---------------------------------------------------------------------------
+
+n_dims(::MpasGrid) = 1
+axis_names(::MpasGrid) = (:cell,)
+
+function _mpas_axis_check(::MpasGrid, axis::Symbol)
+    axis in (:cell, :lon, :lat) ||
+        throw(ArgumentError("mpas: unknown axis :$axis (expected :cell, :lon, or :lat)"))
+    return nothing
+end
+
+function cell_centers(g::MpasGrid{T}, axis::Symbol) where {T}
+    _mpas_axis_check(g, axis)
+    axis === :cell &&
+        throw(ArgumentError("mpas: cell_centers needs a coordinate axis (:lon or :lat); :cell is the layout axis"))
+    return _grid_memo!(g, (:cell_centers, axis)) do
+        src = axis === :lon ? g.mesh.lon_cell : g.mesh.lat_cell
+        return T[T(x) for x in src]
+    end
+end
+
+function cell_widths(g::MpasGrid{T}, axis::Symbol) where {T}
+    _mpas_axis_check(g, axis)
+    # MPAS Voronoi cells are non-axial. Expose an isotropic length proxy:
+    # `sqrt(area_cell)`. Consumers needing edge lengths or center-to-center
+    # distances should use `edge_length(g, e)` / `cell_distance(g, e)`.
+    return _grid_memo!(g, (:cell_widths, axis)) do
+        out = Vector{T}(undef, g.mesh.n_cells)
+        @inbounds for c in 1:g.mesh.n_cells
+            out[c] = T(sqrt(g.mesh.area_cell[c]))
+        end
+        return out
+    end
+end
+
+function cell_volume(g::MpasGrid{T}) where {T}
+    return _grid_memo!(g, :cell_volume) do
+        T[T(x) for x in g.mesh.area_cell]
+    end
+end
+
+function neighbor_indices(g::MpasGrid, axis::Symbol, offset::Int)
+    axis === :cell ||
+        throw(ArgumentError("mpas: neighbor_indices: only axis=:cell is supported (offset = neighbour slot 1..max_edges); got :$axis"))
+    me = g.mesh.max_edges
+    (1 <= offset <= me) ||
+        throw(ArgumentError("mpas: neighbor_indices offset (slot index) must lie in 1..max_edges=$me; got $offset"))
+    return _grid_memo!(g, (:neighbor_indices, axis, offset)) do
+        Nc = g.mesh.n_cells
+        out = Vector{Int}(undef, Nc)
+        @inbounds for c in 1:Nc
+            valence = g.mesh.n_edges_on_cell[c]
+            out[c] = offset <= valence ? g.mesh.cells_on_cell[offset, c] : 0
+        end
+        return out
+    end
+end
+
+function boundary_mask(g::MpasGrid, axis::Symbol, side::Symbol)
+    axis === :cell ||
+        throw(ArgumentError("mpas: boundary_mask: only axis=:cell is supported; got :$axis"))
+    side in (:lower, :upper) ||
+        throw(ArgumentError("mpas: side must be :lower or :upper; got :$side"))
+    # A "boundary" cell on an MPAS mesh is any cell with at least one zero
+    # entry in `cells_on_cell` — i.e. an open-domain edge. Closed global
+    # meshes have none. The `side` argument is preserved for trait shape but
+    # both sides return the same flag (no axial direction to distinguish).
+    return _grid_memo!(g, (:boundary_mask, axis, side)) do
+        Nc = g.mesh.n_cells
+        out = falses(Nc)
+        @inbounds for c in 1:Nc
+            v = g.mesh.n_edges_on_cell[c]
+            for j in 1:v
+                if g.mesh.cells_on_cell[j, c] == 0
+                    out[c] = true
+                    break
+                end
+            end
+        end
+        return out
+    end
+end
+
+# Tier U — ragged adjacency.
+
+"""
+    cell_neighbor_table(g::MpasGrid) -> Matrix{Int}
+
+`(max_edges, n_cells)` neighbour-cell table. Slot index is the local edge
+index on each cell; `0` denotes "no neighbour" (boundary cell on open
+meshes).
+"""
+cell_neighbor_table(g::MpasGrid) = g.mesh.cells_on_cell
+
+"""
+    cell_valence(g::MpasGrid) -> Vector{Int}
+
+Per-cell number of neighbouring cells (`n_edges_on_cell`).
+"""
+cell_valence(g::MpasGrid) = g.mesh.n_edges_on_cell
+
+# Tier-U `edge_length` and `cell_distance` already exist as scalar accessors
+# `(g, e::Integer)`. Provide bulk-array siblings that return the full edge
+# vectors per the trait contract.
+
+"""
+    edge_length(g::MpasGrid) -> Vector{Float64}
+
+Voronoi-vertex-to-vertex arc lengths (`dv_edge`), shape `(n_edges,)`.
+"""
+edge_length(g::MpasGrid) = g.mesh.dv_edge
+
+"""
+    cell_distance(g::MpasGrid) -> Vector{Float64}
+
+Cell-center-to-cell-center great-circle distances (`dc_edge`), shape
+`(n_edges,)`.
+"""
+cell_distance(g::MpasGrid) = g.mesh.dc_edge
