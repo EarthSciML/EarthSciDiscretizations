@@ -155,8 +155,80 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     end
 end
 
-function run_integration_benchmarks(::RuleFile, ::AbstractString)
-    return LayerResult(LAYER_SKIP, "layer C executor stub — integration harness not yet wired")
+"""
+    run_integration_benchmarks(rule, integration_dir) -> LayerResult
+
+Layer-C dispatcher. Reads `integration_dir/cases.json` (a JSON manifest listing
+benchmark cases applicable to this rule), dispatches each case through
+`IntegrationCases.run_case`, and aggregates:
+
+- All cases PASS or SKIP, at least one PASS  → `LAYER_PASS` with per-case summary
+- All cases SKIP                              → `LAYER_SKIP` with skip reasons
+- Any case FAIL                               → `LAYER_FAIL` with failure detail
+
+Cases that the runner cannot yet drive (Williamson 2 geostrophic, DCMIP 1-1)
+declare `kind: "stub"` and emit a SKIP carrying the manifest's `skip_reason`.
+"""
+function run_integration_benchmarks(rule::RuleFile, integration_dir::AbstractString)
+    cases_path = joinpath(integration_dir, "cases.json")
+    if !isfile(cases_path)
+        return LayerResult(LAYER_SKIP, "no cases.json in $(relpath_from_repo(integration_dir))")
+    end
+    cases_json = try
+        JSON.parse(read(cases_path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse $(relpath_from_repo(cases_path)): $(sprint(showerror, err))")
+    end
+    cases = get(cases_json, "cases", nothing)
+    if !(cases isa AbstractVector) || isempty(cases)
+        return LayerResult(LAYER_SKIP, "cases.json declares no cases")
+    end
+
+    # Deferred load of IntegrationCases so the unit tests that exercise
+    # walker plumbing (e.g. layer C honors ESD_RUN_INTEGRATION) don't pay
+    # the OrdinaryDiffEq compile cost unless integration is actually requested.
+    cases_module_path = joinpath(@__DIR__, "integration_cases", "IntegrationCases.jl")
+    if !isfile(cases_module_path)
+        return LayerResult(LAYER_FAIL, "IntegrationCases module missing at $(relpath_from_repo(cases_module_path))")
+    end
+    if !isdefined(@__MODULE__, :IntegrationCases)
+        Base.include(@__MODULE__, cases_module_path)
+    end
+    # Resolve `run_case` via `invokelatest(getfield, ...)` so this caller can
+    # see a binding that `Base.include` defined in a newer world. The dispatcher
+    # returns a `(outcome::Symbol, message::String)` tuple — using a Symbol tag
+    # avoids a second world-age hop on the comparison side.
+    cases_mod = Base.invokelatest(getfield, @__MODULE__, :IntegrationCases)
+    run_case = Base.invokelatest(getfield, cases_mod, :run_case)
+
+    summaries = String[]
+    n_pass = 0
+    n_skip = 0
+    n_fail = 0
+    for case in cases
+        case_dict = case isa AbstractDict ? case : Dict{String, Any}()
+        outcome, message = Base.invokelatest(run_case, case_dict, integration_dir)
+        push!(summaries, message)
+        if outcome === :pass
+            n_pass += 1
+        elseif outcome === :skip
+            n_skip += 1
+        else
+            n_fail += 1
+        end
+    end
+
+    summary = join(summaries, "; ")
+    if n_fail > 0
+        return LayerResult(LAYER_FAIL, summary)
+    elseif n_pass > 0
+        return LayerResult(
+            LAYER_PASS, "$(n_pass)/$(length(cases)) cases pass" *
+                (n_skip > 0 ? ", $(n_skip) skipped" : "") * ": $summary"
+        )
+    else
+        return LayerResult(LAYER_SKIP, "$(n_skip)/$(length(cases)) cases skipped: $summary")
+    end
 end
 
 function relpath_from_repo(path::AbstractString)

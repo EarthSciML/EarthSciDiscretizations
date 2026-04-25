@@ -18,7 +18,20 @@ using TestItems
     junit = joinpath(@__DIR__, "junit-esd.xml")
     isfile(junit) && rm(junit)
 
-    results = WalkESDTests.walk_esd_tests(; catalog = catalog, junit_path = junit)
+    # Pin Layer C to the default skip path so the broad assertion below holds
+    # regardless of whether the caller exported ESD_RUN_INTEGRATION=1.
+    prior_run_integration = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    delete!(ENV, "ESD_RUN_INTEGRATION")
+
+    results = try
+        WalkESDTests.walk_esd_tests(; catalog = catalog, junit_path = junit)
+    finally
+        if prior_run_integration === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior_run_integration
+        end
+    end
 
     names = Set(r.name for r in results)
     # Superset: the catalog has grown with grid schemas and other families;
@@ -170,6 +183,61 @@ end
             else
                 ENV["ESD_RUN_INTEGRATION"] = prior
             end
+        end
+    end
+end
+
+@testitem "walker: layer C runs Cartesian Gaussian end-to-end via ESS pipeline (ESD_RUN_INTEGRATION=1)" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    upwind = first(filter(r -> r.name == "upwind_1st", rules))
+
+    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    try
+        ENV["ESD_RUN_INTEGRATION"] = "1"
+        result = WalkESDTests.run_layer_c(upwind)
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("gaussian_advection_cartesian_1d", result.reason)
+        @test occursin("L∞", result.reason)
+    finally
+        if prior === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior
+        end
+    end
+end
+
+@testitem "walker: layer C runs Williamson 1 cubed-sphere advection (ESD_RUN_INTEGRATION=1)" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    ppm = first(filter(r -> r.name == "ppm_reconstruction", rules))
+
+    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    try
+        ENV["ESD_RUN_INTEGRATION"] = "1"
+        result = WalkESDTests.run_layer_c(ppm)
+        # Williamson 1 PASSes; Williamson 2 + DCMIP 1-1 are stubs that SKIP.
+        # Aggregate: 1 pass + 2 skip → LAYER_PASS with "1/3 cases pass, 2 skipped".
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("williamson1_cosine_bell", result.reason)
+        @test occursin("williamson2_geostrophic_steady", result.reason)
+        @test occursin("dcmip_1_1_3d_advection", result.reason)
+    finally
+        if prior === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior
         end
     end
 end
