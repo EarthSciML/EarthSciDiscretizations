@@ -1,0 +1,83 @@
+{
+  "discretizations": {
+    "nn_diffusion_mpas": {
+      "applies_to": { "op": "laplacian", "args": ["$u"], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["cell_center"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "O(h^2) on a quasi-uniform Voronoi mesh",
+      "stencil": [
+        {
+          "selector": {
+            "kind": "reduction",
+            "table": "cells_on_cell",
+            "count_expr": { "op": "index", "args": ["n_edges_on_cell", "$target"] },
+            "k_bound": "k",
+            "combine": "+"
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "index", "args": [
+                  "dv_edge",
+                  { "op": "index", "args": ["edges_on_cell", "$target", "k"] }
+              ]},
+              { "op": "*", "args": [
+                  { "op": "index", "args": [
+                      "dc_edge",
+                      { "op": "index", "args": ["edges_on_cell", "$target", "k"] }
+                  ]},
+                  { "op": "index", "args": ["area_cell", "$target"] }
+              ]}
+            ]
+          }
+        },
+        {
+          "selector": {
+            "kind": "indirect",
+            "table": "cells_on_cell",
+            "index_expr": "$target"
+          },
+          "coeff": {
+            "op": "*",
+            "args": [
+              -1,
+              {
+                "op": "arrayop",
+                "output_idx": [],
+                "expr": {
+                  "op": "/",
+                  "args": [
+                    { "op": "index", "args": [
+                        "dv_edge",
+                        { "op": "index", "args": ["edges_on_cell", "$target", "k"] }
+                    ]},
+                    { "op": "*", "args": [
+                        { "op": "index", "args": [
+                            "dc_edge",
+                            { "op": "index", "args": ["edges_on_cell", "$target", "k"] }
+                        ]},
+                        { "op": "index", "args": ["area_cell", "$target"] }
+                    ]}
+                  ]
+                },
+                "ranges": {
+                  "k": [
+                    0,
+                    { "op": "-", "args": [
+                        { "op": "index", "args": ["n_edges_on_cell", "$target"] },
+                        1
+                    ]}
+                  ]
+                },
+                "reduce": "+",
+                "args": ["dv_edge", "dc_edge", "area_cell", "edges_on_cell", "n_edges_on_cell"]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

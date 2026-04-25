@@ -42,6 +42,7 @@ using TestItems
         "centered_2nd_uniform",
         "centered_2nd_uniform_vertical",
         "centered_2nd_uniform_latlon",
+        "nn_diffusion_mpas",
         "periodic_bc",
         "upwind_1st",
     )
@@ -80,6 +81,7 @@ using TestItems
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "centered_2nd_uniform_latlon"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
+                                   ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "ppm_reconstruction"),
                                    ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "flux_limiter_minmod"),

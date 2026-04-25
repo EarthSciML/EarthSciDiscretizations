@@ -170,6 +170,46 @@ end
     @test occursin("dJgxe_deta", content)
 end
 
+@testitem "nn_diffusion_mpas scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "nn_diffusion_mpas", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"unstructured\"", content)
+    @test occursin("\"stencil\"", content)
+    # Operator class: scalar Laplacian acting at cell centers.
+    @test occursin("\"op\": \"laplacian\"", content)
+    @test occursin("\"emits_location\": \"cell_center\"", content)
+    # Two-row formulation closes ∇²u(c) = Σ_k w_k (u(n_k) − u(c)) — Row 1 is a
+    # variable-valence neighbor reduction (decision #6/#7 in SELECTOR_KINDS.md);
+    # Row 2 is a self-targeting indirect row whose coeff is the diagonal-weight
+    # arrayop sum −Σ_k w_k (decision #6 / RFC §7.2 indirect materialization).
+    @test occursin("\"kind\": \"reduction\"", content)
+    @test occursin("\"kind\": \"indirect\"", content)
+    @test occursin("\"table\": \"cells_on_cell\"", content)
+    @test occursin("\"k_bound\": \"k\"", content)
+    @test occursin("\"index_expr\": \"\$target\"", content)
+    @test occursin("\"arrayop\"", content)
+    # Coefficient symbols come from the dsc-7j0 MPAS accessor runtime
+    # (SELECTOR_KINDS.md decision #9, snake_case): area_cell, dc_edge, dv_edge,
+    # edges_on_cell, n_edges_on_cell.
+    @test occursin("\"dv_edge\"", content)
+    @test occursin("\"dc_edge\"", content)
+    @test occursin("\"area_cell\"", content)
+    @test occursin("\"edges_on_cell\"", content)
+    @test occursin("\"n_edges_on_cell\"", content)
+end
+
 @testitem "rule catalog exposes the seeded finite-difference rules" begin
     using EarthSciDiscretizations: load_rules
 
@@ -184,6 +224,7 @@ end
         "centered_2nd_uniform",
         "centered_2nd_uniform_vertical",
         "centered_2nd_uniform_latlon",
+        "nn_diffusion_mpas",
         "periodic_bc",
         "upwind_1st",
     )
@@ -194,6 +235,7 @@ end
     @test "centered_2nd_uniform" in fd_names
     @test "centered_2nd_uniform_vertical" in fd_names
     @test "centered_2nd_uniform_latlon" in fd_names
+    @test "nn_diffusion_mpas" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
