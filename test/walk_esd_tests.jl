@@ -144,8 +144,10 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     if rule.family === :finite_difference && rule.name == "centered_2nd_uniform"
         return _mms_centered_2nd_uniform(rule, input, expected)
     end
-    return LayerResult(LAYER_SKIP,
-        "no MMS driver registered for $(rule.family)/$(rule.name); fixture present but walker cannot apply it")
+    return LayerResult(
+        LAYER_SKIP,
+        "no MMS driver registered for $(rule.family)/$(rule.name); fixture present but walker cannot apply it"
+    )
 end
 
 # Apply the centered-2nd finite-difference stencil to a smooth periodic
@@ -167,7 +169,7 @@ function _mms_centered_2nd_uniform(rule::RuleFile, input, expected)
         bindings = Dict("dx" => dx)
         coeff_pairs = [
             (Int(s["selector"]["offset"]), eval_coeff(s["coeff"], bindings))
-            for s in stencil
+                for s in stencil
         ]
         u = [sin(2π * ((i - 0.5) * dx)) for i in 1:n]
         du_num = zeros(n)
@@ -189,11 +191,15 @@ function _mms_centered_2nd_uniform(rule::RuleFile, input, expected)
     orders = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
     observed = minimum(orders)
     if observed < min_order
-        return LayerResult(LAYER_FAIL,
-            "observed min order $(round(observed; digits=3)) below expected $(min_order); errs=$(errs)")
+        return LayerResult(
+            LAYER_FAIL,
+            "observed min order $(round(observed; digits = 3)) below expected $(min_order); errs=$(errs)"
+        )
     end
-    return LayerResult(LAYER_PASS,
-        "min order $(round(observed; digits=3)) >= $(min_order) on grids $(grids)")
+    return LayerResult(
+        LAYER_PASS,
+        "min order $(round(observed; digits = 3)) >= $(min_order) on grids $(grids)"
+    )
 end
 
 function run_integration_benchmarks(::RuleFile, ::AbstractString)

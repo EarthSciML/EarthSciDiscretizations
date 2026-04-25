@@ -35,7 +35,7 @@ Throws `EarthSciSerialization.UnboundVariableError` if a variable appears in the
 AST but not in `bindings`, and propagates any numerical errors (`DomainError`,
 `DivideError`) raised by the ESS evaluator.
 """
-function eval_coeff(node, bindings::Dict{String,Float64})::Float64
+function eval_coeff(node, bindings::Dict{String, Float64})::Float64
     expr = _ESS.parse_expression(node)
     return _ESS.evaluate(expr, bindings)
 end
