@@ -2,6 +2,7 @@ module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile
 using EarthSciSerialization: verify_mms_convergence, MMSEvaluatorError
+import EarthSciSerialization
 using JSON
 
 export walk_esd_tests,
@@ -105,8 +106,147 @@ function run_layer_c(rule::RuleFile)
     return run_integration_benchmarks(rule, integration)
 end
 
-function apply_rule_and_diff(::RuleFile, ::AbstractString, ::AbstractString)
-    return LayerResult(LAYER_SKIP, "layer A executor stub — canonical-form fixtures not yet authored")
+rule_engine_available() = true
+# Layer B routes coefficient evaluation through EarthSciSerialization's tree-walk
+# evaluator (see src/rule_eval.jl). Layer A drives the ESS rule engine end-to-end
+# via `EarthSciSerialization.discretize` and a canonical whole-document JSON
+# emitter that matches the ESS conformance harness contract.
+tree_walk_evaluator_available() = true
+
+"""
+    apply_rule_and_diff(rule, input_path, expected_path) -> LayerResult
+
+Read `input_path` (an `.esm` JSON document), run the ESS rule engine on it via
+`EarthSciSerialization.discretize`, emit the canonical whole-document JSON form
+(sorted keys, `format_canonical_float` for floats, minified per the ESS
+conformance contract — see `tests/conformance/discretize/README.md` in ESS),
+and byte-compare to the (canonical) contents of `expected_path`. Trailing
+newlines on the expected file are tolerated. Returns `LAYER_PASS` on byte
+equality, `LAYER_FAIL` with a small diff window on mismatch.
+"""
+function apply_rule_and_diff(
+        ::RuleFile, input_path::AbstractString,
+        expected_path::AbstractString
+    )
+    parsed = try
+        JSON.parse(read(input_path, String))
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "failed to parse $(relpath_from_repo(input_path)): $(err)"
+        )
+    end
+    out = try
+        EarthSciSerialization.discretize(parsed)
+    catch err
+        io = IOBuffer()
+        showerror(io, err)
+        return LayerResult(
+            LAYER_FAIL,
+            "discretize threw on $(relpath_from_repo(input_path)): $(String(take!(io)))"
+        )
+    end
+    actual = canonical_doc_json(out)
+    expected = rstrip(read(expected_path, String), '\n')
+    if actual == expected
+        return LayerResult(
+            LAYER_PASS,
+            "canonical-form match ($(length(actual)) bytes)"
+        )
+    end
+    return LayerResult(LAYER_FAIL, _byte_diff_message(actual, expected))
+end
+
+# Show the first divergence with a small surrounding window, so debugging a
+# canonical-form drift does not require diffing two minified strings by eye.
+function _byte_diff_message(actual::AbstractString, expected::AbstractString)
+    n = min(length(actual), length(expected))
+    diff_at = n + 1
+    for i in 1:n
+        if actual[i] != expected[i]
+            diff_at = i
+            break
+        end
+    end
+    window = 40
+    lo = max(1, diff_at - window)
+    hi_a = min(length(actual), diff_at + window)
+    hi_e = min(length(expected), diff_at + window)
+    return string(
+        "canonical-form mismatch at byte ", diff_at,
+        " (actual=", length(actual), "B, expected=", length(expected), "B)\n",
+        "  actual:   …", actual[lo:hi_a], "…\n",
+        "  expected: …", expected[lo:hi_e], "…",
+    )
+end
+
+# ---------------------------------------------------------------------------
+# Canonical whole-document JSON emitter — mirrors the ESS conformance harness
+# (`tests/conformance/discretize/conformance_discretize_test.jl`): sorted keys,
+# minified, RFC §5.4.6 float formatting via `format_canonical_float`. Kept
+# in-tree (not exported from ESS) because ESS itself uses it only for tests.
+# ---------------------------------------------------------------------------
+
+function canonical_doc_json(doc)::String
+    io = IOBuffer()
+    _canon_emit(io, doc)
+    return String(take!(io))
+end
+
+function _canon_emit(io::IO, x::AbstractDict)
+    print(io, "{")
+    ks = sort!(String[string(k) for k in keys(x)])
+    for (i, k) in enumerate(ks)
+        i > 1 && print(io, ",")
+        _canon_emit_string(io, k)
+        print(io, ":")
+        _canon_emit(io, x[k])
+    end
+    return print(io, "}")
+end
+
+function _canon_emit(io::IO, xs::AbstractVector)
+    print(io, "[")
+    for (i, v) in enumerate(xs)
+        i > 1 && print(io, ",")
+        _canon_emit(io, v)
+    end
+    return print(io, "]")
+end
+
+_canon_emit(io::IO, t::Tuple) = _canon_emit(io, collect(t))
+_canon_emit(io::IO, s::AbstractString) = _canon_emit_string(io, String(s))
+_canon_emit(io::IO, b::Bool) = print(io, b ? "true" : "false")
+_canon_emit(io::IO, ::Nothing) = print(io, "null")
+_canon_emit(io::IO, n::Integer) = print(io, string(n))
+_canon_emit(io::IO, n::AbstractFloat) =
+    print(io, EarthSciSerialization.format_canonical_float(Float64(n)))
+
+function _canon_emit_string(io::IO, s::String)
+    print(io, '"')
+    for c in s
+        cu = UInt32(c)
+        if c == '"'
+            print(io, "\\\"")
+        elseif c == '\\'
+            print(io, "\\\\")
+        elseif cu == 0x08
+            print(io, "\\b")
+        elseif cu == 0x09
+            print(io, "\\t")
+        elseif cu == 0x0A
+            print(io, "\\n")
+        elseif cu == 0x0C
+            print(io, "\\f")
+        elseif cu == 0x0D
+            print(io, "\\r")
+        elseif cu < 0x20
+            print(io, "\\u", string(cu; base = 16, pad = 4))
+        else
+            print(io, c)
+        end
+    end
+    return print(io, '"')
 end
 
 """

@@ -56,7 +56,8 @@ using TestItems
     weno = first(filter(r -> r.name == "weno5_advection", results))
     @test weno.family == :finite_volume
 
-    # Layer A always skips (ESS canonical-form rule engine not yet wired).
+    # Layer A: passes for centered_2nd_uniform (canonical fixture committed)
+    # and skips for every other rule with reason "no canonical fixtures".
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
     # Layer B passes for rules with a runnable convergence fixture
     # (centered_2nd_uniform, centered_2nd_uniform_vertical, upwind_1st —
@@ -75,18 +76,28 @@ using TestItems
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee")])
     for r in results
-        @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-        @test !isempty(r.layer_a.reason)
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
         key = (String(r.family), r.name)
-        if key in pass_layer_b
+        if r.family === :finite_difference && r.name == "centered_2nd_uniform"
+            # centered_2nd_uniform is the only rule with a canonical fixture,
+            # so Layer A passes via the ESS rule engine (dsc-3sg) in addition
+            # to the Layer B convergence sweep.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif key in pass_layer_b
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical fixtures", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif key in not_applicable_layer_b
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("fixture-declared not applicable", r.layer_b.reason)
         else
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical fixtures", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
         end
@@ -100,10 +111,13 @@ using TestItems
     total = length(results) * 3
     # Three layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, upwind_1st); the rest skip.
-    passed = sum(1 for r in results
-                 if (String(r.family), r.name) in pass_layer_b; init = 0)
+    layer_b_passes = sum(1 for r in results
+                         if (String(r.family), r.name) in pass_layer_b; init = 0)
+    # Plus Layer A passes for centered_2nd_uniform via the ESS rule engine
+    # (dsc-3sg): 3 + 1 = 4 passing testcases overall.
+    passed = layer_b_passes + 1
     skipped = total - passed
-    @test passed == 3
+    @test layer_b_passes == 3
     @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"0\"", xml)
     @test occursin("skipped=\"$skipped\"", xml)
