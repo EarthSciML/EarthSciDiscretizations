@@ -28,6 +28,20 @@ export interface RuleStencilEntry {
   coeff: ExpressionNode;
 }
 
+/**
+ * A rule's `stencil` is either:
+ *  - a flat array of entries (single linear combination, the common case), or
+ *  - an object mapping sub-stencil names → entry arrays (multi-output rules
+ *    such as `ppm_reconstruction`, where the same support set produces several
+ *    distinct linear combinations like `q_left_edge` / `q_right_edge`).
+ *
+ * The on-disk JSON shape is preserved verbatim; downstream evaluators dispatch
+ * on type via `Array.isArray`.
+ */
+export type RuleStencil =
+  | RuleStencilEntry[]
+  | Record<string, RuleStencilEntry[]>;
+
 export interface Rule {
   name: string;
   family: string;
@@ -35,7 +49,15 @@ export interface Rule {
   grid_family: string;
   combine?: string;
   accuracy?: string;
-  stencil: RuleStencilEntry[];
+  stencil: RuleStencil;
+  /** Declared output kinds for multi-output rules (e.g. PPM). */
+  outputs?: string[];
+  /** Reconstruction form (e.g. `"piecewise_parabolic"`). */
+  form?: string;
+  /** Limiter selection (e.g. `"none"`, `"monotonic"`). */
+  limiter?: string;
+  /** Reference citation (e.g. CW84). */
+  reference?: string;
 }
 
 export type Bindings = Map<string, number>;
