@@ -1,12 +1,14 @@
 using Test
 using TestItems
 
-# Tests for the three-layer CI walker that validates rule files under
-# discretizations/. The walker discovers rules via load_rules and runs three
+# Tests for the multi-layer CI walker that validates rule files under
+# discretizations/. The walker discovers rules via load_rules and runs five
 # layers per rule: (A) canonical-form byte-diff, (B) MMS convergence (driven
-# by EarthSciSerialization.verify_mms_convergence), (C) integration
-# benchmarks. Layer A skips until canonical-form fixtures are authored;
-# Layer C is gated on ESD_RUN_INTEGRATION=1 and skipped by default.
+# by EarthSciSerialization.verify_mms_convergence), (B') TVD/monotonicity
+# for slope-ratio limiters, (C) integration benchmarks, (D) discrete
+# conservation for finite-volume rules. Layer A skips until canonical-form
+# fixtures are authored; Layer C is gated on ESD_RUN_INTEGRATION=1 and
+# skipped by default; Layer D skips for rules without a conservation/ fixture.
 
 @testitem "walker: discovers seeded rules; centered_2nd_uniform layer B passes via ESS evaluator" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
@@ -94,6 +96,13 @@ using TestItems
     # AST (dsc-8vu). All other rules SKIP this layer.
     pass_layer_limiter = Set([("finite_volume", "flux_limiter_minmod"),
                               ("finite_volume", "flux_limiter_superbee")])
+    # Layer D (conservation): finite-volume rules that ship a
+    # `conservation/` fixture (dsc-559). Currently divergence_arakawa_c
+    # exercises the 2D periodic divergence telescoping check, and
+    # flux_limiter_minmod exercises the 1D MUSCL telescoping check. All
+    # other rules SKIP because they have no conservation/ fixture.
+    pass_layer_d = Set([("finite_volume", "divergence_arakawa_c"),
+                        ("finite_volume", "flux_limiter_minmod")])
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -129,14 +138,21 @@ using TestItems
             @test r.layer_limiter.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no monotonicity fixtures", r.layer_limiter.reason)
         end
+        if key in pass_layer_d
+            @test r.layer_d.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("conservation OK", r.layer_d.reason)
+        else
+            @test r.layer_d.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no conservation fixtures", r.layer_d.reason)
+        end
     end
 
     @test isfile(junit)
     xml = read(junit, String)
     @test occursin("<testsuites>", xml)
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
-    # Parametrize against actual catalog size: 4 layers (A/B/B'/C) per rule.
-    total = length(results) * 4
+    # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
+    total = length(results) * 5
     # Six layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st,
     # ppm_reconstruction, weno5_advection); the rest skip.
@@ -147,8 +163,14 @@ using TestItems
     layer_limiter_passes = sum(1 for r in results
                                if (String(r.family), r.name) in pass_layer_limiter;
                                init = 0)
+    # Two layer-D (conservation) cases pass (divergence_arakawa_c,
+    # flux_limiter_minmod). All other rules SKIP because no conservation/
+    # fixture exists.
+    layer_d_passes = sum(1 for r in results
+                         if (String(r.family), r.name) in pass_layer_d; init = 0)
     @test layer_b_passes == 6
     @test layer_limiter_passes == 2
+    @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
     # correct as the catalog evolves (e.g. when new rules ship canonical
     # fixtures that convert a layer-A FAIL into a PASS or SKIP). Avoids
@@ -169,6 +191,7 @@ using TestItems
     @test occursin("classname=\"finite_volume.flux_limiter_superbee\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("name=\"layer_limiter\"", xml)
+    @test occursin("name=\"layer_D\"", xml)
     @test occursin("<skipped message=", xml)
 end
 
@@ -530,6 +553,120 @@ end
     end
 end
 
+@testitem "walker: layer D skips when conservation/ is absent" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_volume")
+        mkpath(family_dir)
+        rule_json = joinpath(family_dir, "no_conservation.json")
+        write(rule_json, "{}")
+        rule = RuleFile(:finite_volume, "no_conservation", rule_json)
+
+        result = WalkESDTests.run_layer_d(rule)
+        @test result.outcome == WalkESDTests.LAYER_SKIP
+        @test occursin("no conservation fixtures", result.reason)
+    end
+end
+
+@testitem "walker: layer D fails when conservation_check.esm is missing" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_volume")
+        mkpath(family_dir)
+        rule_json = joinpath(family_dir, "broken_conservation.json")
+        write(rule_json, "{}")
+        # Empty conservation/ directory: walker must surface a structured FAIL.
+        mkpath(joinpath(family_dir, "broken_conservation", "fixtures", "conservation"))
+
+        rule = RuleFile(:finite_volume, "broken_conservation", rule_json)
+        result = WalkESDTests.run_layer_d(rule)
+        @test result.outcome == WalkESDTests.LAYER_FAIL
+        @test occursin("missing conservation_check.esm", result.reason)
+    end
+end
+
+@testitem "walker: layer D passes for divergence_arakawa_c end-to-end" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    div = first(filter(r -> r.name == "divergence_arakawa_c", rules))
+
+    result = WalkESDTests.run_layer_d(div)
+    @test result.outcome == WalkESDTests.LAYER_PASS
+    @test occursin("conservation OK", result.reason)
+    @test occursin("∇·F", result.reason)
+end
+
+@testitem "walker: layer D passes for flux_limiter_minmod end-to-end" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    minmod = first(filter(r -> r.name == "flux_limiter_minmod", rules))
+
+    result = WalkESDTests.run_layer_d(minmod)
+    @test result.outcome == WalkESDTests.LAYER_PASS
+    @test occursin("conservation OK", result.reason)
+    @test occursin("MUSCL", result.reason)
+end
+
+@testitem "walker: layer D fails when divergence stencil is corrupted" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+    using JSON
+
+    # Synthetic rule with a non-telescoping stencil: both x-faces carry the
+    # same coefficient, so the global divergence sum is non-zero by design.
+    # The walker must surface a FAIL with the offending sum.
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_volume")
+        mkpath(family_dir)
+        rule_path = joinpath(family_dir, "broken_div.json")
+        rule_doc = Dict(
+            "discretizations" => Dict(
+                "broken_div" => Dict(
+                    "stencil" => [
+                        Dict("selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 0),
+                             "coeff" => Dict("op" => "/", "args" => [1, "dx"])),
+                        Dict("selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 1),
+                             "coeff" => Dict("op" => "/", "args" => [1, "dx"])),
+                    ],
+                ),
+            ),
+        )
+        write(rule_path, JSON.json(rule_doc))
+
+        cdir = joinpath(family_dir, "broken_div", "fixtures", "conservation")
+        mkpath(cdir)
+        write(joinpath(cdir, "conservation_check.esm"), JSON.json(Dict(
+            "kind" => "conservation_divergence_2d_periodic",
+            "rule" => "broken_div",
+            "grid" => Dict("nx" => 8, "ny" => 6, "dx" => 0.125, "dy" => 0.16666666666666666),
+            "seed" => 42,
+            "tolerance" => 1.0e-12,
+        )))
+
+        rule = RuleFile(:finite_volume, "broken_div", rule_path)
+        result = WalkESDTests.run_layer_d(rule)
+        @test result.outcome == WalkESDTests.LAYER_FAIL
+        @test occursin("global divergence sum", result.reason)
+    end
+end
+
 @testitem "walker: junit XML escapes special characters" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
@@ -540,6 +677,7 @@ end
             "rule_with_<>&\"'",
             "/tmp/x.json",
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, "reason with <tag> & \"quote\""),
+            WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),

@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "kind": "conservation_muscl_1d_periodic",
+  "rule": "flux_limiter_minmod",
+  "rule_family": "finite_volume",
+  "comment": "Discrete conservation regression for the minmod flux limiter (dsc-559) under a MUSCL upwind scheme on a 1D periodic domain. The walker advances the same smooth+square initial condition used by the layer-B' TVD check (sin(2π x)·1_{[0,0.4]} + 1·1_{[0.6,0.85]}), driven by F_{i+1/2} = u·(q_i + 0.5·phi(r_i)·(q_{i+1}-q_i)) with phi evaluated from the rule's AST. Conservation follows because every interface flux F_{i+1/2} appears once positively in the i+1 update and once negatively in the i update (forward-Euler MUSCL with shared face fluxes); on a periodic domain the per-step sum of Δq telescopes to 0 up to roundoff. The check is a regression guard against asymmetric flux assembly or off-by-one wraps in any future rewrite of the limiter formula AST.",
+  "domain": { "extent": [[0.0, 1.0]], "boundary": "periodic" },
+  "grid": { "n": 64, "uniform": true, "dx": 0.015625 },
+  "advection": {
+    "velocity": 1.0,
+    "periods": 1.0,
+    "cfl": 0.4,
+    "scheme": "muscl_upwind_with_limiter",
+    "time_integrator": "forward_euler"
+  },
+  "eps_denom": 1.0e-12,
+  "tolerance": 1.0e-12,
+  "expected": {
+    "property": "|sum_i (q_final - q_initial)_i| <= tolerance",
+    "rationale": "Forward-Euler MUSCL with shared face fluxes is locally conservative; periodic boundaries close the telescoping sum, leaving only floating-point roundoff."
+  }
+}

@@ -11,6 +11,7 @@ export walk_esd_tests,
     run_layer_b,
     run_layer_c,
     run_layer_limiter,
+    run_layer_d,
     RuleResult,
     LayerOutcome,
     write_junit
@@ -30,6 +31,7 @@ struct RuleResult
     layer_b::LayerResult
     layer_c::LayerResult
     layer_limiter::LayerResult
+    layer_d::LayerResult
 end
 
 """
@@ -155,6 +157,38 @@ function run_layer_limiter(rule::RuleFile)
         return LayerResult(LAYER_SKIP, "no monotonicity fixtures at $(relpath_from_repo(monotonicity))")
     end
     return run_monotonicity_check(rule, monotonicity)
+end
+
+"""
+    run_layer_d(rule) -> LayerResult
+
+Layer D — discrete conservation for finite-volume rules. Verifies that the
+rule, applied to a periodic domain, conserves the integrated quantity to
+roundoff: the global sum of the rule output (or the per-cell update derived
+from it) satisfies `|∑ Δq| < tol`. Mathematically this follows from flux
+telescoping on a closed domain — the layer is a regression guard against
+sign errors, missing wraps, and stencil drift.
+
+Looks for a `conservation/` fixture directory at
+`discretizations/<family>/<rule>/fixtures/conservation/conservation_check.esm`.
+Skips when the directory is absent (the common case for non-FV rules); fails
+when the fixture file is missing or the conservation property is violated.
+
+Two fixture `kind`s are supported (see fixture files for full schema):
+
+- `conservation_divergence_2d_periodic` — fluxes are sampled on Arakawa-C-style
+  staggered faces of a 2D periodic rectangle; the rule's stencil is applied at
+  every cell and the global sum of the divergence is checked.
+- `conservation_muscl_1d_periodic` — runs the MUSCL upwind scheme
+  `F_{i+1/2} = u·(q_i + 0.5·phi(r_i)·(q_{i+1}-q_i))` (same form as the layer-B'
+  TVD check) on a 1D periodic domain, then checks that `∑(q_final - q_0) ≈ 0`.
+"""
+function run_layer_d(rule::RuleFile)
+    conservation = joinpath(rule_fixtures_dir(rule), "conservation")
+    if !isdir(conservation)
+        return LayerResult(LAYER_SKIP, "no conservation fixtures at $(relpath_from_repo(conservation))")
+    end
+    return run_conservation_check(rule, conservation)
 end
 
 """
@@ -712,6 +746,235 @@ function _run_tvd_advection(formula, tvd::AbstractDict)
     return _TVDSummary(tv_final <= tv_initial + tvd_tol && all(isfinite, q), tv_initial, tv_final, tvd_tol)
 end
 
+# ---------------------------------------------------------------------------
+# Layer D (discrete conservation) — generic over fixture `kind`. Two kinds
+# are wired up; new kinds can be added without touching the dispatcher.
+# ---------------------------------------------------------------------------
+
+function run_conservation_check(rule::RuleFile, conservation_dir::AbstractString)
+    fixture_path = joinpath(conservation_dir, "conservation_check.esm")
+    if !isfile(fixture_path)
+        return LayerResult(
+            LAYER_FAIL,
+            "conservation/ present but missing conservation_check.esm",
+        )
+    end
+    fixture = try
+        JSON.parse(read(fixture_path, String))
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "failed to parse $(relpath_from_repo(fixture_path)): $(sprint(showerror, err))",
+        )
+    end
+    kind = get(fixture, "kind", nothing)
+    if kind == "conservation_divergence_2d_periodic"
+        return _run_conservation_divergence_2d_periodic(rule, fixture)
+    elseif kind == "conservation_muscl_1d_periodic"
+        return _run_conservation_muscl_1d_periodic(rule, fixture)
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "$(relpath_from_repo(fixture_path)) has unsupported kind $(repr(kind))",
+        )
+    end
+end
+
+# Synthesize a periodic flux field from a deterministic pseudo-random seed.
+# A linear congruential generator is used so the fixture is bit-reproducible
+# across Julia versions without depending on a stdlib RNG implementation.
+function _seeded_flux_field(seed::UInt64, n::Int)
+    state = seed == 0 ? UInt64(0x9E3779B97F4A7C15) : seed
+    out = Vector{Float64}(undef, n)
+    for i in 1:n
+        # Numerical Recipes LCG (Knuth) — full-period on UInt64.
+        state = (state * 6364136223846793005 + 1442695040888963407) % typemax(UInt64)
+        # Map the high 53 bits to [-1, 1).
+        u = (state >> 11) / Float64(1 << 53)
+        out[i] = 2.0 * u - 1.0
+    end
+    return out
+end
+
+function _run_conservation_divergence_2d_periodic(rule::RuleFile, fixture::AbstractDict)
+    rule_json = try
+        JSON.parse(read(rule.path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse rule $(relpath_from_repo(rule.path)): $(sprint(showerror, err))")
+    end
+    spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
+    if !(spec isa AbstractDict) || !haskey(spec, "stencil")
+        return LayerResult(
+            LAYER_FAIL,
+            "rule $(rule.name) has no `stencil` under discretizations.$(rule.name)",
+        )
+    end
+    stencil = spec["stencil"]
+    if !(stencil isa AbstractVector) || isempty(stencil)
+        return LayerResult(LAYER_FAIL, "rule $(rule.name) has empty stencil")
+    end
+
+    grid = get(fixture, "grid", nothing)
+    grid isa AbstractDict ||
+        return LayerResult(LAYER_FAIL, "fixture missing grid object")
+    nx = Int(get(grid, "nx", 0))
+    ny = Int(get(grid, "ny", 0))
+    dx = Float64(get(grid, "dx", 0.0))
+    dy = Float64(get(grid, "dy", 0.0))
+    (nx > 0 && ny > 0 && dx > 0 && dy > 0) ||
+        return LayerResult(LAYER_FAIL, "fixture grid must declare positive nx, ny, dx, dy")
+
+    seed = UInt64(get(fixture, "seed", 42))
+    Fx = reshape(_seeded_flux_field(seed, nx * ny), nx, ny)
+    Fy = reshape(_seeded_flux_field(seed + 1, nx * ny), nx, ny)
+    bindings = Dict{String, Float64}("dx" => dx, "dy" => dy)
+
+    # Evaluate the rule's stencil at every cell; sum the per-cell divergence.
+    # Periodic wrap is applied on both axes (modulo nx / ny). The stencil
+    # entries are interpreted via their `selector.stagger` / `selector.axis`
+    # so we don't hard-code the rule's algebraic shape.
+    div_sum = 0.0
+    for j in 1:ny, i in 1:nx
+        cell_div = 0.0
+        for entry in stencil
+            sel = entry["selector"]
+            kind = String(get(sel, "kind", ""))
+            kind == "arakawa" ||
+                return LayerResult(LAYER_FAIL, "selector kind $(repr(kind)) not supported by layer-D 2D periodic runner")
+            stagger = String(get(sel, "stagger", ""))
+            axis = String(get(sel, "axis", ""))
+            offset = Int(get(sel, "offset", 0))
+            coeff = _eval_limiter_ast(entry["coeff"], bindings)
+            value = if stagger == "face_x" && axis == "\$x"
+                Fx[mod(i - 1 + offset, nx) + 1, j]
+            elseif stagger == "face_y" && axis == "\$y"
+                Fy[i, mod(j - 1 + offset, ny) + 1]
+            else
+                return LayerResult(
+                    LAYER_FAIL,
+                    "unsupported (stagger=$(stagger), axis=$(axis)) for layer-D 2D periodic runner",
+                )
+            end
+            cell_div += coeff * value
+        end
+        div_sum += cell_div
+    end
+
+    tol = Float64(get(fixture, "tolerance", 1.0e-12))
+    abs_sum = abs(div_sum)
+    if abs_sum > tol
+        return LayerResult(
+            LAYER_FAIL,
+            "global divergence sum |∑ ∇·F| = $(abs_sum) exceeds tol=$(tol) on $(nx)×$(ny) periodic grid",
+        )
+    end
+    return LayerResult(
+        LAYER_PASS,
+        "conservation OK: |∑ ∇·F| = $(abs_sum) ≤ $(tol) on $(nx)×$(ny) periodic grid",
+    )
+end
+
+function _run_conservation_muscl_1d_periodic(rule::RuleFile, fixture::AbstractDict)
+    rule_json = try
+        JSON.parse(read(rule.path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse rule $(relpath_from_repo(rule.path)): $(sprint(showerror, err))")
+    end
+    spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
+    if !(spec isa AbstractDict) || !haskey(spec, "formula")
+        return LayerResult(
+            LAYER_FAIL,
+            "rule $(rule.name) has no `formula` AST under discretizations.$(rule.name)",
+        )
+    end
+    formula = spec["formula"]
+
+    grid = get(fixture, "grid", nothing)
+    grid isa AbstractDict ||
+        return LayerResult(LAYER_FAIL, "fixture missing grid object")
+    n = Int(get(grid, "n", 0))
+    dx = Float64(get(grid, "dx", 0.0))
+    (n > 0 && dx > 0) ||
+        return LayerResult(LAYER_FAIL, "fixture grid must declare positive n, dx")
+
+    advection = get(fixture, "advection", Dict())
+    u = Float64(get(advection, "velocity", 1.0))
+    cfl = Float64(get(advection, "cfl", 0.4))
+    periods = Float64(get(advection, "periods", 1.0))
+    eps_denom = Float64(get(fixture, "eps_denom", 1.0e-12))
+    tol = Float64(get(fixture, "tolerance", 1.0e-12))
+
+    # Reuse the layer-B' smooth+square initial condition by default; explicit
+    # `initial_condition.values` lets a fixture override with a literal array.
+    ic_values = get(fixture, "initial_condition_values", nothing)
+    q0 = if ic_values isa AbstractVector
+        length(ic_values) == n ||
+            return LayerResult(LAYER_FAIL, "initial_condition_values length $(length(ic_values)) != n=$(n)")
+        Float64[Float64(v) for v in ic_values]
+    else
+        F_smooth(x) = -cos(2π * x) / (2π)
+        function cell_avg(i)
+            a = (i - 1) * dx
+            b = i * dx
+            sa = max(a, 0.0)
+            sb = min(b, 0.4)
+            smooth = sb > sa ? (F_smooth(sb) - F_smooth(sa)) / dx : 0.0
+            qa = max(a, 0.6)
+            qb = min(b, 0.85)
+            square = qb > qa ? (qb - qa) / dx : 0.0
+            return smooth + square
+        end
+        Float64[cell_avg(i) for i in 1:n]
+    end
+
+    modn(j) = mod(j - 1, n) + 1
+    phi(r) = _eval_limiter_ast(formula, Dict("r" => Float64(r)))
+    function step(q, dt)
+        Fs = Vector{Float64}(undef, n)
+        for i in 1:n
+            qm = q[modn(i - 1)]; qi = q[i]; qp = q[modn(i + 1)]
+            num = qi - qm
+            den = qp - qi
+            den_safe = abs(den) > eps_denom ? den : (den >= 0 ? eps_denom : -eps_denom)
+            r_ratio = num / den_safe
+            Fs[i] = u * (qi + 0.5 * phi(r_ratio) * (qp - qi))
+        end
+        qnew = similar(q)
+        for i in 1:n
+            qnew[i] = q[i] - dt / dx * (Fs[i] - Fs[modn(i - 1)])
+        end
+        return qnew
+    end
+
+    dt = cfl * dx / abs(u)
+    T = periods / abs(u)
+    q = copy(q0)
+    tsim = 0.0
+    nsteps = 0
+    while tsim < T
+        dts = min(dt, T - tsim)
+        q = step(q, dts)
+        tsim += dts
+        nsteps += 1
+    end
+
+    delta_sum = 0.0
+    for i in 1:n
+        delta_sum += q[i] - q0[i]
+    end
+    abs_sum = abs(delta_sum)
+    if abs_sum > tol
+        return LayerResult(
+            LAYER_FAIL,
+            "MUSCL update violates conservation: |∑ Δq| = $(abs_sum) > tol=$(tol) after $(nsteps) steps",
+        )
+    end
+    return LayerResult(
+        LAYER_PASS,
+        "conservation OK: |∑ Δq| = $(abs_sum) ≤ $(tol) over $(nsteps) MUSCL steps on n=$(n) periodic grid",
+    )
+end
+
 """
     run_integration_benchmarks(rule, integration_dir) -> LayerResult
 
@@ -814,7 +1077,8 @@ function walk_esd_tests(;
         b = run_layer_b(rule)
         c = run_layer_c(rule)
         lim = run_layer_limiter(rule)
-        push!(results, RuleResult(rule.family, rule.name, rule.path, a, b, c, lim))
+        d = run_layer_d(rule)
+        push!(results, RuleResult(rule.family, rule.name, rule.path, a, b, c, lim, d))
     end
     print_report(io, catalog, results)
     if junit_path !== nothing
@@ -837,14 +1101,14 @@ function print_report(io::IO, catalog, results::Vector{RuleResult})
         return
     end
     for r in results
-        println(io, "[$(r.family)/$(r.name)]  A=$(outcome_tag(r.layer_a.outcome))  B=$(outcome_tag(r.layer_b.outcome))  B'=$(outcome_tag(r.layer_limiter.outcome))  C=$(outcome_tag(r.layer_c.outcome))")
-        for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("B'", r.layer_limiter), ("C", r.layer_c))
+        println(io, "[$(r.family)/$(r.name)]  A=$(outcome_tag(r.layer_a.outcome))  B=$(outcome_tag(r.layer_b.outcome))  B'=$(outcome_tag(r.layer_limiter.outcome))  C=$(outcome_tag(r.layer_c.outcome))  D=$(outcome_tag(r.layer_d.outcome))")
+        for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("B'", r.layer_limiter), ("C", r.layer_c), ("D", r.layer_d))
             if lr.outcome != LAYER_PASS && !isempty(lr.reason)
                 println(io, "    layer $tag: $(lr.reason)")
             end
         end
     end
-    total = length(results) * 4
+    total = length(results) * 5
     npass = sum(count_outcome(r, LAYER_PASS) for r in results; init = 0)
     nfail = sum(count_outcome(r, LAYER_FAIL) for r in results; init = 0)
     nskip = sum(count_outcome(r, LAYER_SKIP) for r in results; init = 0)
@@ -855,7 +1119,8 @@ function count_outcome(r::RuleResult, target::LayerOutcome)
     return (r.layer_a.outcome == target) +
         (r.layer_b.outcome == target) +
         (r.layer_limiter.outcome == target) +
-        (r.layer_c.outcome == target)
+        (r.layer_c.outcome == target) +
+        (r.layer_d.outcome == target)
 end
 
 function xml_escape(s::AbstractString)
@@ -874,7 +1139,7 @@ Emit a JUnit XML summary to `path`. One `<testcase>` per (rule, layer). Skipped
 layers carry `<skipped>` with the reason; failed layers carry `<failure>`.
 """
 function write_junit(path::AbstractString, results::Vector{RuleResult})
-    total = length(results) * 4
+    total = length(results) * 5
     failures = sum(count_outcome(r, LAYER_FAIL) for r in results; init = 0)
     skipped = sum(count_outcome(r, LAYER_SKIP) for r in results; init = 0)
     open(path, "w") do io
@@ -882,7 +1147,7 @@ function write_junit(path::AbstractString, results::Vector{RuleResult})
         println(io, "<testsuites>")
         println(io, "  <testsuite name=\"ESD Walker\" tests=\"$total\" failures=\"$failures\" skipped=\"$skipped\">")
         for r in results
-            for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("limiter", r.layer_limiter), ("C", r.layer_c))
+            for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("limiter", r.layer_limiter), ("C", r.layer_c), ("D", r.layer_d))
                 classname = xml_escape("$(r.family).$(r.name)")
                 name = "layer_$tag"
                 print(io, "    <testcase classname=\"", classname, "\" name=\"", name, "\">")
