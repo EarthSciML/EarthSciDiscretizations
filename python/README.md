@@ -16,6 +16,9 @@ pip install -e .[dev,xarray]
 
 - `src/earthsci_toolkit/` — package source
 - `src/earthsci_toolkit/grids/` — per-family grid accessor modules (one file per family)
+- `src/earthsci_toolkit/rules/` — discretization-rule runtime (AST
+  `eval_coeff`, rule loader, structured stencil application). Mirrors
+  `src/rule_eval.jl` in the Julia binding.
 - `tests/` — pytest suite
 
 ## Test
