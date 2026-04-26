@@ -57,21 +57,62 @@ end
 """
     run_layer_a(rule) -> LayerResult
 
-Canonical-form conformance: run the ESS rule engine against
-`fixtures/canonical/input.esm` and byte-compare to `fixtures/canonical/expected.esm`.
-Layer A is wired here as a stub pending per-rule canonical fixtures.
+Rule-engine round-trip against fixture inputs. Two variants are supported:
+
+- `fixtures/canonical/` — whole-document conformance via
+  `EarthSciSerialization.discretize`, byte-compared to the canonical-form
+  rendering of `expected.esm`. Used by stencil-coefficient rules.
+- `fixtures/rewrite/` — expression-level rewrite via
+  `EarthSciSerialization.rewrite`, byte-compared to the canonical JSON of
+  `expected.esm`. Used by index-rewrite (boundary-condition) rules whose
+  acceptance signature is "this input expression rewrites to that output
+  expression" rather than a numeric residual.
+
+If both directories exist, both run and outcomes are AND-combined (any FAIL
+wins; otherwise PASS unless all variants SKIP). If neither exists, SKIP.
 """
 function run_layer_a(rule::RuleFile)
-    canonical = joinpath(rule_fixtures_dir(rule), "canonical")
-    if !isdir(canonical)
-        return LayerResult(LAYER_SKIP, "no canonical fixtures at $(relpath_from_repo(canonical))")
+    fdir = rule_fixtures_dir(rule)
+    canonical_dir = joinpath(fdir, "canonical")
+    rewrite_dir = joinpath(fdir, "rewrite")
+    have_canonical = isdir(canonical_dir)
+    have_rewrite = isdir(rewrite_dir)
+    if !have_canonical && !have_rewrite
+        return LayerResult(LAYER_SKIP, "no canonical or rewrite fixtures at $(relpath_from_repo(fdir))")
     end
+    results = LayerResult[]
+    have_canonical && push!(results, _run_canonical_variant(rule, canonical_dir))
+    have_rewrite && push!(results, _run_rewrite_variant(rule, rewrite_dir))
+    return _combine_layer_a(results)
+end
+
+function _run_canonical_variant(rule::RuleFile, canonical::AbstractString)
     input = joinpath(canonical, "input.esm")
     expected = joinpath(canonical, "expected.esm")
     if !isfile(input) || !isfile(expected)
         return LayerResult(LAYER_FAIL, "canonical/ present but missing input.esm or expected.esm")
     end
     return apply_rule_and_diff(rule, input, expected)
+end
+
+function _run_rewrite_variant(rule::RuleFile, rewrite_dir::AbstractString)
+    input = joinpath(rewrite_dir, "input.esm")
+    expected = joinpath(rewrite_dir, "expected.esm")
+    if !isfile(input) || !isfile(expected)
+        return LayerResult(LAYER_FAIL, "rewrite/ present but missing input.esm or expected.esm")
+    end
+    return apply_rewrite_and_diff(rule, input, expected)
+end
+
+# AND-combine: any FAIL wins (failures dominate); else PASS if any variant
+# passed; else SKIP. Reasons are joined with "; " so the report shows both.
+function _combine_layer_a(results::Vector{LayerResult})
+    length(results) == 1 && return results[1]
+    any(r -> r.outcome == LAYER_FAIL, results) &&
+        return LayerResult(LAYER_FAIL, join((r.reason for r in results if r.outcome == LAYER_FAIL), "; "))
+    any(r -> r.outcome == LAYER_PASS, results) &&
+        return LayerResult(LAYER_PASS, join((r.reason for r in results), "; "))
+    return LayerResult(LAYER_SKIP, join((r.reason for r in results), "; "))
 end
 
 """
@@ -155,6 +196,136 @@ function apply_rule_and_diff(
         )
     end
     return LayerResult(LAYER_FAIL, _byte_diff_message(actual, expected))
+end
+
+"""
+    apply_rewrite_and_diff(rule, input_path, expected_path) -> LayerResult
+
+Read `input_path` (a JSON document containing `context` and `expression`),
+parse the rule via `EarthSciSerialization.parse_rules`, build a
+`RuleContext` from the fixture's grids/variables tables, run
+`EarthSciSerialization.rewrite` on the input expression, and emit the
+result as canonical-form JSON via `EarthSciSerialization.canonical_json`.
+Byte-compare to the contents of `expected_path` (trailing newlines tolerated).
+
+This is the rule-engine path for index-rewrite rules (e.g. `periodic_bc`)
+whose acceptance signature is "this expression rewrites to that one" rather
+than a numeric residual on a stencil sweep. See
+`discretizations/finite_difference/periodic_bc/fixtures/rewrite/` for the
+seed fixture.
+"""
+function apply_rewrite_and_diff(
+        rule::RuleFile, input_path::AbstractString,
+        expected_path::AbstractString
+    )
+    input_doc = try
+        JSON.parse(read(input_path, String))
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "failed to parse $(relpath_from_repo(input_path)): $(err)"
+        )
+    end
+    expr_json = get(input_doc, "expression", nothing)
+    if expr_json === nothing
+        return LayerResult(
+            LAYER_FAIL,
+            "$(relpath_from_repo(input_path)) missing required `expression` field"
+        )
+    end
+    rule_doc = try
+        JSON.parse(read(rule.path, String))
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "failed to parse $(relpath_from_repo(rule.path)): $(err)"
+        )
+    end
+    rules_obj = get(rule_doc, "rules", nothing)
+    if rules_obj === nothing
+        return LayerResult(
+            LAYER_FAIL,
+            "$(relpath_from_repo(rule.path)) missing top-level `rules` table"
+        )
+    end
+    rules = try
+        EarthSciSerialization.parse_rules(rules_obj)
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "parse_rules threw on $(relpath_from_repo(rule.path)): $(sprint(showerror, err))"
+        )
+    end
+    ctx = _build_rule_context(get(input_doc, "context", Dict{String, Any}()))
+    input_expr = try
+        _expr_from_json(expr_json)
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "failed to lift `expression` from $(relpath_from_repo(input_path)): $(sprint(showerror, err))"
+        )
+    end
+    out_expr = try
+        EarthSciSerialization.rewrite(input_expr, rules, ctx)
+    catch err
+        return LayerResult(
+            LAYER_FAIL,
+            "rewrite threw on $(relpath_from_repo(input_path)): $(sprint(showerror, err))"
+        )
+    end
+    actual = EarthSciSerialization.canonical_json(out_expr)
+    expected = rstrip(read(expected_path, String), '\n')
+    if actual == expected
+        return LayerResult(
+            LAYER_PASS,
+            "rewrite canonical-form match ($(length(actual)) bytes)"
+        )
+    end
+    return LayerResult(LAYER_FAIL, _byte_diff_message(actual, expected))
+end
+
+# Lift a JSON-decoded subtree (Dict/Number/String) to the corresponding
+# `EarthSciSerialization.Expr` node. Mirrors ESS's private `_parse_expr`,
+# but only the fields used by index-rewrite fixtures (`op`, `args`, plus
+# `wrt`/`dim` for symmetry with the rule engine's pattern shape) — fancy
+# `arrayop`/`makearray` fields are out of scope until a fixture needs them.
+function _expr_from_json(v)
+    if v isa Bool
+        # Bool <: Integer in Julia; reject explicitly so a stray `true` in a
+        # fixture surfaces as a parse error rather than silently becoming `1`.
+        throw(ArgumentError("boolean literal not valid in expression position"))
+    elseif v isa Integer
+        return EarthSciSerialization.IntExpr(Int64(v))
+    elseif v isa AbstractFloat
+        return EarthSciSerialization.NumExpr(Float64(v))
+    elseif v isa AbstractString
+        return EarthSciSerialization.VarExpr(String(v))
+    elseif v isa AbstractDict
+        op = String(v["op"])
+        args_raw = get(v, "args", Any[])
+        args = EarthSciSerialization.Expr[_expr_from_json(a) for a in args_raw]
+        wrt = haskey(v, "wrt") && v["wrt"] !== nothing ? String(v["wrt"]) : nothing
+        dim = haskey(v, "dim") && v["dim"] !== nothing ? String(v["dim"]) : nothing
+        return EarthSciSerialization.OpExpr(op, args; wrt = wrt, dim = dim)
+    end
+    throw(ArgumentError("cannot parse expression node of type $(typeof(v))"))
+end
+
+# Build a RuleContext from the `context` block of a rewrite fixture. Both
+# subtables default to empty so a fixture that needs no metadata (a pure
+# syntactic rewrite, no guards) parses cleanly.
+function _build_rule_context(ctx_json)
+    grids = Dict{String, Dict{String, Any}}()
+    variables = Dict{String, Dict{String, Any}}()
+    grids_raw = get(ctx_json, "grids", Dict{String, Any}())
+    for (k, v) in grids_raw
+        grids[String(k)] = Dict{String, Any}(String(kk) => vv for (kk, vv) in v)
+    end
+    vars_raw = get(ctx_json, "variables", Dict{String, Any}())
+    for (k, v) in vars_raw
+        variables[String(k)] = Dict{String, Any}(String(kk) => vv for (kk, vv) in v)
+    end
+    return EarthSciSerialization.RuleContext(grids, variables)
 end
 
 # Show the first divergence with a small surrounding window, so debugging a

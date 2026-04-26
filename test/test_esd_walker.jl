@@ -62,8 +62,10 @@ using TestItems
     lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
     @test lap.family == :finite_difference
 
-    # Layer A: passes for centered_2nd_uniform (canonical fixture committed)
-    # and skips for every other rule with reason "no canonical fixtures".
+    # Layer A: passes for centered_2nd_uniform (canonical/ fixture committed)
+    # and skips for every other rule with reason "no canonical or rewrite
+    # fixtures" (dsc-aez introduced the rewrite/ variant; no rule has one
+    # committed yet — see the synthetic-rule unit tests below).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
     # Layer B passes for rules with a runnable convergence fixture
     # (centered_2nd_uniform, centered_2nd_uniform_vertical, upwind_1st —
@@ -97,7 +99,7 @@ using TestItems
             @test occursin("min order", r.layer_b.reason)
         elseif key in pass_layer_b
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("no canonical fixtures", r.layer_a.reason)
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif key in not_applicable_layer_b
@@ -105,7 +107,7 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("no canonical fixtures", r.layer_a.reason)
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
         end
@@ -172,6 +174,127 @@ end
         result = WalkESDTests.run_layer_a(rule)
         @test result.outcome == WalkESDTests.LAYER_FAIL
         @test occursin("missing input.esm or expected.esm", result.reason)
+    end
+end
+
+@testitem "walker: layer A runs `rewrite/` fixture end-to-end via ESS rule engine" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    # End-to-end exercise of the `rewrite/` fixture kind for index-rewrite
+    # rules (dsc-aez). Synthetic rule: rewrite `grad($u, dim=$x)` →
+    # `index($u, $x)` under guards that bind $g to $u's grid and require $x
+    # to be a periodic dimension of $g. Terminating because the replacement
+    # changes the operator (`grad` → `index`), preventing re-match.
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_difference")
+        mkpath(family_dir)
+        rule_path = joinpath(family_dir, "synth_periodic.json")
+        write(rule_path, """
+        {
+          "rules": {
+            "grad_to_index_periodic": {
+              "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
+              "where": [
+                {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
+                {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
+              ],
+              "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+            }
+          }
+        }
+        """)
+        rewrite_dir = joinpath(family_dir, "synth_periodic", "fixtures", "rewrite")
+        mkpath(rewrite_dir)
+        write(joinpath(rewrite_dir, "input.esm"), """
+        {
+          "kind": "rewrite",
+          "context": {
+            "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
+            "variables": {"T": {"grid": "g1"}}
+          },
+          "expression": {"op": "grad", "args": ["T"], "dim": "x"}
+        }
+        """)
+        write(joinpath(rewrite_dir, "expected.esm"),
+              "{\"args\":[\"T\",\"x\"],\"op\":\"index\"}\n")
+
+        rule = RuleFile(:finite_difference, "synth_periodic", rule_path)
+        result = WalkESDTests.run_layer_a(rule)
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("rewrite canonical-form match", result.reason)
+    end
+end
+
+@testitem "walker: layer A flags missing rewrite fixture files as failure" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    # Symmetric to the canonical/ missing-files check: an empty rewrite/
+    # directory should surface a structured FAIL, not silently SKIP.
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_difference")
+        mkpath(family_dir)
+        rule_path = joinpath(family_dir, "broken_rewrite.json")
+        write(rule_path, "{\"rules\": {}}")
+        rewrite_dir = joinpath(family_dir, "broken_rewrite", "fixtures", "rewrite")
+        mkpath(rewrite_dir)
+
+        rule = RuleFile(:finite_difference, "broken_rewrite", rule_path)
+        result = WalkESDTests.run_layer_a(rule)
+        @test result.outcome == WalkESDTests.LAYER_FAIL
+        @test occursin("missing input.esm or expected.esm", result.reason)
+    end
+end
+
+@testitem "walker: layer A surfaces canonical mismatch from rewrite fixture" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    # Authored expected.esm doesn't match the actual rewrite output: the
+    # walker should FAIL with the byte-diff window from `_byte_diff_message`,
+    # not silently PASS. Same synthetic rule as the success test.
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_difference")
+        mkpath(family_dir)
+        rule_path = joinpath(family_dir, "synth_mismatch.json")
+        write(rule_path, """
+        {
+          "rules": {
+            "grad_to_index_periodic": {
+              "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
+              "where": [
+                {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
+                {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
+              ],
+              "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+            }
+          }
+        }
+        """)
+        rewrite_dir = joinpath(family_dir, "synth_mismatch", "fixtures", "rewrite")
+        mkpath(rewrite_dir)
+        write(joinpath(rewrite_dir, "input.esm"), """
+        {
+          "kind": "rewrite",
+          "context": {
+            "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
+            "variables": {"T": {"grid": "g1"}}
+          },
+          "expression": {"op": "grad", "args": ["T"], "dim": "x"}
+        }
+        """)
+        # Wrong: claim the output is `index(U, x)` instead of `index(T, x)`.
+        write(joinpath(rewrite_dir, "expected.esm"),
+              "{\"args\":[\"U\",\"x\"],\"op\":\"index\"}\n")
+
+        rule = RuleFile(:finite_difference, "synth_mismatch", rule_path)
+        result = WalkESDTests.run_layer_a(rule)
+        @test result.outcome == WalkESDTests.LAYER_FAIL
+        @test occursin("canonical-form mismatch", result.reason)
     end
 end
 
