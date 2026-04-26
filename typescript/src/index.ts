@@ -5,8 +5,9 @@
  */
 
 import * as grids from "./grids/index.js";
+import * as rules from "./rules/index.js";
 
-export { grids };
+export { grids, rules };
 export type { Dtype, Grid } from "./grids/types.js";
 
-export const earthsci = { grids };
+export const earthsci = { grids, rules };
