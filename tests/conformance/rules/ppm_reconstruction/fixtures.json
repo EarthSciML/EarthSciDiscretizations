@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "rule": "ppm_reconstruction",
+  "rule_path": "discretizations/finite_volume/ppm_reconstruction.json",
+  "convergence_fixture_dir": "tests/fixtures/ppm_reconstruction",
+  "tolerance": {
+    "relative": 1e-13,
+    "notes": "PPM coefficients are pure rationals (-1/12, 7/12); the parabolic reconstruction adds only multiplications and additions on top. Bit-for-bit agreement across bindings is impractical because of summation order, but the analytical-cell-average MMS pipeline is deterministic enough that the per-grid Linf error matches across bindings to ~1e-13 of the Julia reference."
+  },
+  "reference_binding": "julia",
+  "reference_binding_notes": "ESD ships a Julia evaluator pinned by test/test_ppm_reconstruction_rule.jl (CW84 eqs. 1.6-1.10 + cell-average parabola). Rust + Python siblings must match its per-grid Linf error to `tolerance.relative` and recover the rule's expected_min_order on the canonical smooth-periodic MMS sweep.",
+  "sub_stencil_cases": [
+    {
+      "name": "q_left_edge_offsets",
+      "notes": "Sanity-check for sub_stencil dispatch: q_left_edge selectors are i-2..i+1 with coefficients (-1/12, 7/12, 7/12, -1/12).",
+      "sub_stencil": "q_left_edge",
+      "expected_offsets": [-2, -1, 0, 1],
+      "expected_coeffs": [-0.08333333333333333, 0.5833333333333334, 0.5833333333333334, -0.08333333333333333]
+    },
+    {
+      "name": "q_right_edge_offsets",
+      "notes": "q_right_edge selectors are i-1..i+2 with the same rational pattern.",
+      "sub_stencil": "q_right_edge",
+      "expected_offsets": [-1, 0, 1, 2],
+      "expected_coeffs": [-0.08333333333333333, 0.5833333333333334, 0.5833333333333334, -0.08333333333333333]
+    }
+  ],
+  "output_kind_cases": [
+    {
+      "name": "cw84_eq_1_6_right_edge_unit_window",
+      "notes": "Direct CW84 eq. (1.6) check: q_{i+1/2} from a unit window q_{-1..2} = (3, 5, 11, -2) is (-3 + 35 + 77 + 2) / 12 = 111 / 12.",
+      "output_kind": "q_right_edge",
+      "window_offsets": [-1, 0, 1, 2],
+      "window_values": [3.0, 5.0, 11.0, -2.0],
+      "expected": 9.25
+    },
+    {
+      "name": "parabola_xi_endpoints",
+      "notes": "Parabola at xi=0 returns a_L; at xi=1 returns a_R, regardless of q_i (cell-average is preserved).",
+      "output_kind": "q_parabola",
+      "samples": [
+        { "a_L": 0.4, "a_R": 1.7, "q_i": 1.0, "xi": 0.0, "expected": 0.4 },
+        { "a_L": 0.4, "a_R": 1.7, "q_i": 1.0, "xi": 1.0, "expected": 1.7 }
+      ]
+    }
+  ],
+  "convergence_case": {
+    "name": "smooth_periodic_mms",
+    "notes": "Reads tests/fixtures/ppm_reconstruction/{input,expected}.esm. Manufactured solution sin(2πx) + 0.3 cos(4πx) on [0,1] with periodic BC; cell averages computed analytically; PPM applied via the Rust evaluator's sub_stencil + output_kind dispatch. Verifies expected_min_order from expected.esm.",
+    "fixture_input": "tests/fixtures/ppm_reconstruction/input.esm",
+    "fixture_expected": "tests/fixtures/ppm_reconstruction/expected.esm"
+  }
+}
