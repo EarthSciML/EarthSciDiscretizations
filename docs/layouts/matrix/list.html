@@ -1,0 +1,60 @@
+{{ define "main" }}
+{{ $matrix := site.Data.rule_matrix }}
+<section class="matrix-page">
+  <header>
+    <h1>{{ .Title }}</h1>
+    {{ with .Params.description }}<p class="lede">{{ . }}</p>{{ end }}
+  </header>
+
+  {{ with .Content }}<div class="matrix-intro">{{ . }}</div>{{ end }}
+
+  {{ if $matrix }}
+    <div class="matrix-meta">
+      <span><strong>Rules:</strong> {{ $matrix.coverage.rules_total }}</span>
+      <span><strong>Applicable cells:</strong> {{ $matrix.coverage.applicable_cells }}</span>
+      <span class="cell-convergence"><strong>Convergence:</strong> {{ $matrix.coverage.convergence_cells }}</span>
+      <span class="cell-canonical"><strong>Canonical only:</strong> {{ $matrix.coverage.canonical_cells }}</span>
+      <span class="cell-missing"><strong>Missing:</strong> {{ $matrix.coverage.missing_cells }}</span>
+      <span class="muted">Generated {{ $matrix.generated_at }}</span>
+    </div>
+
+    <div class="matrix-table-wrap">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>rule</th>
+          <th>family</th>
+          <th>op</th>
+          {{ range $matrix.grid_families }}<th>{{ . }}</th>{{ end }}
+        </tr>
+      </thead>
+      <tbody>
+        {{ range $matrix.rules }}
+        <tr>
+          <td><a href="{{ printf "/rules/%s/" .name | relURL }}"><code>{{ .name }}</code></a></td>
+          <td><span class="badge badge-family">{{ .family }}</span></td>
+          <td>{{ with .applies_to_op }}<code>{{ . }}</code>{{ end }}</td>
+          {{ $cells := .cells }}
+          {{ range $g := $matrix.grid_families }}
+            {{ $cell := index $cells $g }}
+            {{ if not $cell.applicable }}
+              <td class="cell-na" title="rule does not declare {{ $g }}">n/a</td>
+            {{ else if eq $cell.fixture "convergence" }}
+              <td class="cell-convergence" title="expected_min_order from convergence fixture">{{ $cell.order }}</td>
+            {{ else if eq $cell.fixture "canonical" }}
+              <td class="cell-canonical" title="canonical cross-binding fixture exists; no convergence fixture">canonical</td>
+            {{ else }}
+              <td class="cell-missing" title="{{ with $cell.skip_reason }}{{ . }}{{ else }}no fixture yet — dispatch hole{{ end }}">missing</td>
+            {{ end }}
+          {{ end }}
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+    </div>
+  {{ else }}
+    <p>No matrix data found. Run <code>python3 tools/render_rule_matrix.py</code>
+       to regenerate <code>docs/data/rule_matrix.json</code>.</p>
+  {{ end }}
+</section>
+{{ end }}
