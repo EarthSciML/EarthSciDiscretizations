@@ -634,6 +634,57 @@ def stencil_limiter_superbee(out: Path) -> None:
     )
 
 
+def interface_limiter_minmod(out: Path) -> None:
+    """Slope-ratio interface stencil: q_{i-1}, q_i, q_{i+1} feeding face i+1/2."""
+    fig, ax = plt.subplots(figsize=(7.8, 3.4))
+    centers_x = [-1, 0, 1]
+    center_labels = ["qᵢ₋₁", "qᵢ", "qᵢ₊₁"]
+    face_x = 0.5
+    # Cell baseline
+    ax.axhline(0, color="#1f4f3a", lw=0.8, zorder=1)
+    # Cell boundaries
+    for x in (-1.5, -0.5, 0.5, 1.5):
+        ax.plot([x, x], [-0.18, 0.18], color="#888", lw=0.6)
+    # Cell centers
+    for x, lbl in zip(centers_x, center_labels):
+        ax.scatter([x], [0], color="#b58a00", s=160, zorder=3,
+                   edgecolor="#5b3d09")
+        ax.text(x, -0.32, lbl, ha="center", va="top", fontsize=10,
+                color="#1f4f3a")
+    # Highlight the i+1/2 face
+    ax.scatter([face_x], [0], color="#6c1d1d", s=180, marker="D",
+               zorder=4, edgecolor="#3a0a0a", label="face i+1/2")
+    ax.annotate("Fᵢ₊₁/₂  (limited flux emitted here)",
+                xy=(face_x, 0), xytext=(face_x, 0.55),
+                ha="center", fontsize=10, color="#6c1d1d",
+                arrowprops=dict(arrowstyle="->", color="#6c1d1d"))
+    # Slope-ratio annotation
+    ax.annotate("", xy=(0, 0.22), xytext=(-1, 0.22),
+                arrowprops=dict(arrowstyle="<->", color="#15315d", lw=0.9))
+    ax.text(-0.5, 0.30, "qᵢ − qᵢ₋₁  (upwind slope)", ha="center",
+            fontsize=9, color="#15315d")
+    ax.annotate("", xy=(1, 0.22), xytext=(0, 0.22),
+                arrowprops=dict(arrowstyle="<->", color="#5b3d09", lw=0.9))
+    ax.text(0.5, 0.30, "qᵢ₊₁ − qᵢ  (downwind slope)", ha="center",
+            fontsize=9, color="#5b3d09")
+    ax.text(0.0, -0.78,
+            "r = (qᵢ − qᵢ₋₁) / (qᵢ₊₁ − qᵢ)     "
+            "→     φ(r) = max(0, min(r, 1))     "
+            "→     Fᵢ₊₁/₂ = F_low + φ(r) · (F_high − F_low)",
+            ha="center", fontsize=9.5, color="#1f4f3a")
+    ax.set_xlim(-1.8, 1.8)
+    ax.set_ylim(-1.0, 0.85)
+    ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_title("flux_limiter_minmod — slope-ratio interface stencil "
+                 "(positive-velocity branch)")
+    for spine in ("top", "right", "left", "bottom"):
+        ax.spines[spine].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+
+
 def stencil_arakawa_divergence(out: Path) -> None:
     fig, ax = plt.subplots(figsize=(6.0, 5.5))
     # Single C-grid cell. cell-center at (0.5, 0.5).
@@ -680,6 +731,14 @@ RULE_STENCIL_PLOTTERS = {
     "flux_limiter_minmod": stencil_limiter_minmod,
     "flux_limiter_superbee": stencil_limiter_superbee,
     "divergence_arakawa_c": stencil_arakawa_divergence,
+}
+
+
+# Optional secondary diagrams keyed by suffix. A rule appears here only if it
+# benefits from a second image (e.g. limiters: φ(r) curve + grid-space
+# slope-ratio stencil). File naming is rules/<rule>-<suffix>.png.
+RULE_EXTRA_PLOTTERS: dict[str, dict[str, "callable"]] = {
+    "flux_limiter_minmod": {"interface": interface_limiter_minmod},
 }
 
 
@@ -794,6 +853,10 @@ def render_all(out_root: Path, what: str = "all") -> None:
             target = rules_dir / f"{rule}-stencil.png"
             print(f"  rules/{rule}-stencil.png", file=sys.stderr)
             RULE_STENCIL_PLOTTERS[rule](target)
+            for suffix, plotter in RULE_EXTRA_PLOTTERS.get(rule, {}).items():
+                extra = rules_dir / f"{rule}-{suffix}.png"
+                print(f"  rules/{rule}-{suffix}.png", file=sys.stderr)
+                plotter(extra)
         for rule in sorted(APPLICABLE):
             target = rules_dir / f"{rule}-convergence.png"
             print(f"  rules/{rule}-convergence.png", file=sys.stderr)
