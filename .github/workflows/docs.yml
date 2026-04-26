@@ -2,19 +2,24 @@
 name: docs
 
 # Mirrors EarthSciModels' Hugo doc-site deploy workflow (mdl-w8s).
-# The render → generate → Hugo build → deploy ordering is the contract:
-# example plots and rule/grid pages MUST be produced before Hugo runs,
-# otherwise PNGs referenced by generated markdown never ship to gh-pages.
-#
-# Auto-triggers (push/pull_request) are intentionally OMITTED until the
-# sibling bead dsc-f9e lands the Hugo scaffolding under docs/ and the
-# Python generators under tools/. Until then this workflow is invokable
-# only via workflow_dispatch so it does not break PR CI when its inputs
-# (tools/esd_to_docs.py, tools/render_example_plots.py, docs/hugo.toml)
-# do not yet exist. When the sibling lands, restore the push/pull_request
-# triggers below — see commit log of EarthSciModels' .github/workflows/
-# docs.yml for the canonical filter set.
+# The render → Hugo build → deploy ordering is the contract: example plots
+# MUST be produced before Hugo runs, otherwise PNGs referenced by markdown
+# under docs/content/ never ship to gh-pages.
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'discretizations/**'
+      - 'tools/render_doc_plots.py'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'discretizations/**'
+      - 'tools/render_doc_plots.py'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 # Single deploy at a time; cancel in-flight superseded runs.
@@ -52,16 +57,8 @@ jobs:
             "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
             | tar -xz -C /usr/local/bin hugo
 
-      - name: Unit test the generators
-        run: |
-          python -m unittest tools/esd_to_docs_test.py
-          python -m unittest tools/render_example_plots_test.py
-
-      - name: Render example plots
-        run: python tools/render_example_plots.py
-
-      - name: Generate rule + grid pages
-        run: python tools/esd_to_docs.py
+      - name: Render doc plots
+        run: python tools/render_doc_plots.py
 
       - name: Build site with Hugo
         run: hugo --source docs --minify --destination public
