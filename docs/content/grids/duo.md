@@ -1,8 +1,8 @@
 ---
 title: "Duo (geodesic triangular)"
 slug: "duo"
-grid_family: "duo"
-rule_kind: "grid"
+grid_families: "duo"
+rule_kinds: "grid"
 description: "Geodesic triangular mesh on the sphere; recursively subdivided icosahedron."
 source: "src/grids/duo.jl"
 tags: ["grid", "unstructured", "triangular", "icosahedral", "geodesic"]

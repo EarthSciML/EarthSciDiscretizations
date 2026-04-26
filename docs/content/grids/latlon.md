@@ -1,8 +1,8 @@
 ---
 title: "Lat-Lon"
 slug: "latlon"
-grid_family: "latlon"
-rule_kind: "grid"
+grid_families: "latlon"
+rule_kinds: "grid"
 description: "Regular spherical lat-lon mesh with metric corrections for the spherical surface."
 source: "src/grids/latlon.jl"
 tags: ["grid", "structured", "spherical", "lat-lon"]

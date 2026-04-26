@@ -1,9 +1,9 @@
 ---
 title: "covariant_laplacian_cubed_sphere"
 slug: "covariant_laplacian_cubed_sphere"
-family: "finite_difference"
-grid_family: "cubed_sphere"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "cubed_sphere"
+rule_kinds: "scheme"
 accuracy: "O(h²)"
 applies_to: "laplacian(φ)"
 rule_path: "discretizations/finite_difference/covariant_laplacian_cubed_sphere.json"

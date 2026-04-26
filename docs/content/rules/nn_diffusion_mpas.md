@@ -1,9 +1,9 @@
 ---
 title: "nn_diffusion_mpas"
 slug: "nn_diffusion_mpas"
-family: "finite_difference"
-grid_family: "mpas"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "mpas"
+rule_kinds: "scheme"
 accuracy: "O(h²) on quasi-uniform Voronoi"
 applies_to: "laplacian(u), dim=cell"
 rule_path: "discretizations/finite_difference/nn_diffusion_mpas.json"

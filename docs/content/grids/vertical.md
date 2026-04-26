@@ -1,8 +1,8 @@
 ---
 title: "Vertical"
 slug: "vertical"
-grid_family: "vertical"
-rule_kind: "grid"
+grid_families: "vertical"
+rule_kinds: "grid"
 description: "1D vertical column with arbitrary level spacing — pressure / sigma / hybrid coordinates."
 source: "src/grids/vertical.jl"
 tags: ["grid", "structured", "vertical", "column", "sigma", "hybrid"]

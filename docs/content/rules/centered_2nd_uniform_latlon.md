@@ -1,9 +1,9 @@
 ---
 title: "centered_2nd_uniform_latlon"
 slug: "centered_2nd_uniform_latlon"
-family: "finite_difference"
-grid_family: "latlon"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "latlon"
+rule_kinds: "scheme"
 accuracy: "O(h²)"
 applies_to: "grad(u), dim=k (k ∈ {lon, lat})"
 rule_path: "discretizations/finite_difference/centered_2nd_uniform_latlon.json"

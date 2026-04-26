@@ -1,8 +1,8 @@
 ---
 title: "MPAS"
 slug: "mpas"
-grid_family: "mpas"
-rule_kind: "grid"
+grid_families: "mpas"
+rule_kinds: "grid"
 description: "Quasi-uniform Voronoi mesh on the sphere with icosahedral dual (12 pentagons + hexagons)."
 source: "src/grids/mpas.jl"
 tags: ["grid", "unstructured", "voronoi", "spherical", "mpas", "soca"]

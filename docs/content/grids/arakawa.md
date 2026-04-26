@@ -1,8 +1,8 @@
 ---
 title: "Arakawa staggered grid"
 slug: "arakawa"
-grid_family: "arakawa"
-rule_kind: "grid"
+grid_families: "arakawa"
+rule_kinds: "grid"
 description: "Staggered grid wrapping a base curvilinear grid — A / B / C / D variants — with per-stagger location keys."
 source: "src/grids/arakawa.jl"
 tags: ["grid", "staggered", "arakawa", "c-grid", "b-grid", "shallow-water"]

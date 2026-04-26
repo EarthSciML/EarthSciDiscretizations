@@ -1,9 +1,9 @@
 ---
 title: "divergence_arakawa_c"
 slug: "divergence_arakawa_c"
-family: "finite_volume"
-grid_family: "arakawa"
-rule_kind: "scheme"
+families: "finite_volume"
+grid_families: "arakawa"
+rule_kinds: "scheme"
 accuracy: "O(h²)"
 applies_to: "div(F)"
 rule_path: "discretizations/finite_volume/divergence_arakawa_c.json"
