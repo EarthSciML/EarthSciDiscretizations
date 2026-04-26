@@ -44,6 +44,7 @@ import numpy as np
 APPLICABLE = {
     "centered_2nd_uniform",
     "centered_2nd_uniform_vertical",
+    "ppm_reconstruction",
     "upwind_1st",
 }
 
@@ -820,9 +821,43 @@ def convergence_upwind_1st(out: Path) -> None:
                       ns, errs, expected_order=1.0)
 
 
+def convergence_ppm_reconstruction(out: Path) -> None:
+    """Unlimited PPM (CW84 §1, eqs. 1.6, 1.7, 1.10) on sin(2πx) on [0,1]
+    periodic, cell-averaged inputs, evaluated at subcell ξ ∈ {0.1, …, 0.9}.
+    Mirrors the fixture under
+    ``discretizations/finite_volume/ppm_reconstruction/fixtures/convergence``.
+    """
+    ns = [16, 32, 64, 128, 256]
+    xis = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    errs = []
+    for n in ns:
+        dx = 1.0 / n
+        # Cell centers and exact cell averages of sin(2πx) on [x-dx/2, x+dx/2].
+        x = (np.arange(n) + 0.5) * dx
+        q = (np.cos(2 * np.pi * (x - 0.5 * dx))
+             - np.cos(2 * np.pi * (x + 0.5 * dx))) / (2 * np.pi * dx)
+        # 4th-order edge value at i+1/2: (-q_{i-1} + 7 q_i + 7 q_{i+1} - q_{i+2}) / 12.
+        q_edge = (-np.roll(q, 1) + 7 * q + 7 * np.roll(q, -1)
+                  - np.roll(q, -2)) / 12.0
+        a_L = np.roll(q_edge, 1)   # q_{i-1/2}
+        a_R = q_edge               # q_{i+1/2}
+        da = a_R - a_L
+        a6 = 6.0 * (q - 0.5 * (a_L + a_R))
+        # Evaluate parabola at each ξ for each cell, compare to exact sin.
+        max_err = 0.0
+        for xi in xis:
+            recon = a_L + xi * (da + a6 * (1.0 - xi))
+            exact = np.sin(2 * np.pi * (x - 0.5 * dx + xi * dx))
+            max_err = max(max_err, float(np.max(np.abs(recon - exact))))
+        errs.append(max_err)
+    _convergence_plot(out, "ppm_reconstruction — empirical convergence",
+                      ns, errs, expected_order=3.0)
+
+
 CONVERGENCE_PLOTTERS = {
     "centered_2nd_uniform": convergence_centered_2nd,
     "centered_2nd_uniform_vertical": convergence_centered_2nd_vertical,
+    "ppm_reconstruction": convergence_ppm_reconstruction,
     "upwind_1st": convergence_upwind_1st,
 }
 
