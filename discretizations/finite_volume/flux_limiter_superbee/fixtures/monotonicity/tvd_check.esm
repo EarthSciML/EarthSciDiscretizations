@@ -1,0 +1,40 @@
+{
+  "version": "1.0.0",
+  "kind": "limiter_tvd_check",
+  "rule": "flux_limiter_superbee",
+  "rule_family": "finite_volume",
+  "comment": "1D periodic linear advection TVD check for the superbee limiter. The walker constructs cell averages of a smooth+square-wave IC, then advances for exactly one period with a MUSCL-style upwind scheme F_{i+1/2} = u * (q_i + 0.5*phi(r_i)*(q_{i+1}-q_i)) where r_i = (q_i - q_{i-1}) / (q_{i+1} - q_i + eps_denom) and phi is evaluated by the rule's AST at runtime. After one period, total variation TV(q) = sum_i |q_{i+1} - q_i| must not exceed TV(q_0) by more than tvd_tolerance. Superbee is strictly TVD with forward Euler and CFL <= 1/(1+0.5*phi_max) = 1/2; CFL=0.4 leaves margin. Mirrors tests/fixtures/flux_limiter_superbee/tvd_check.esm; this is the walker-consumable copy under the new monotonicity/ fixture kind (dsc-8vu).",
+  "domain": {
+    "extent": [[0.0, 1.0]],
+    "boundary": "periodic"
+  },
+  "grid": { "n": 64, "uniform": true, "dx": 0.015625 },
+  "initial_condition": {
+    "name": "smooth_plus_square",
+    "smooth_component": {
+      "comment": "Smooth bump sin(2*pi*x) on [0.0, 0.4], zero elsewhere (masked).",
+      "expression": "sin(2*pi*x) * (1 if 0.0 <= x <= 0.4 else 0)"
+    },
+    "square_component": {
+      "comment": "Unit-height square on [0.6, 0.85].",
+      "low": 0.6,
+      "high": 0.85,
+      "amplitude": 1.0
+    }
+  },
+  "advection": {
+    "velocity": 1.0,
+    "periods": 1.0,
+    "cfl": 0.4,
+    "time_integrator": "forward_euler",
+    "scheme": "muscl_upwind_with_limiter",
+    "comment": "MUSCL flux F_{i+1/2} = u * (q_i + 0.5*phi(r_i)*(q_{i+1} - q_i)) for u > 0, with r_i = (q_i - q_{i-1}) / (q_{i+1} - q_i + eps_denom), eps_denom = 1e-12 to avoid division by zero in flat regions."
+  },
+  "phi_max": 2.0,
+  "eps_denom": 1.0e-12,
+  "tvd_tolerance": 1.0e-10,
+  "expected": {
+    "comment": "Strict TVD property: TV(q_final) <= TV(q_initial) + tvd_tolerance. The tolerance covers accumulated round-off over ~160 steps.",
+    "property": "TV_final <= TV_initial + tvd_tolerance"
+  }
+}
