@@ -8,7 +8,7 @@ import { join, basename, extname } from "node:path";
 import type { Rule } from "./types.js";
 
 interface RawRuleFile {
-  discretizations: Record<string, Omit<Rule, "name" | "family">>;
+  discretizations: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -28,7 +28,7 @@ export function parseRuleFile(path: string, content: string): Rule[] {
   const family = basename(path.replace(/[/\\][^/\\]+$/, ""));
   const out: Rule[] = [];
   for (const [name, body] of Object.entries(parsed.discretizations)) {
-    out.push({ name, family, ...body });
+    out.push({ name, family, ...body } as unknown as Rule);
   }
   return out;
 }

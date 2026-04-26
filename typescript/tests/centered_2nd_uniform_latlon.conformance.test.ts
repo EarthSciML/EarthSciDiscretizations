@@ -94,12 +94,21 @@ function tagFor(key: StencilKey): string {
   return `${key.axis}_${key.offset >= 0 ? "p" : "m"}${Math.abs(key.offset)}`;
 }
 
+function flatStencil(rule: rules.Rule): rules.RuleStencilEntry[] {
+  if (!Array.isArray(rule.stencil)) {
+    throw new Error(
+      `centered_2nd_uniform_latlon expected a flat stencil array, got a multi-stencil object`,
+    );
+  }
+  return rule.stencil;
+}
+
 function findStencil(
   rule: rules.Rule,
   axis: string,
   offset: number,
 ): rules.RuleStencilEntry {
-  for (const entry of rule.stencil) {
+  for (const entry of flatStencil(rule)) {
     const sel = entry.selector as rules.RuleSelector;
     if (sel.axis === axis && sel.offset === offset) return entry;
   }
@@ -170,14 +179,15 @@ describe("centered_2nd_uniform_latlon rule eval cross-binding conformance", () =
     expect(rule.family).toBe("finite_difference");
     expect(rule.grid_family).toBe("latlon");
     expect(rule.combine).toBe("+");
-    expect(rule.stencil.length).toBe(4);
+    const stencil = flatStencil(rule);
+    expect(stencil.length).toBe(4);
     const axes = new Set(
-      rule.stencil.map((e) => (e.selector as rules.RuleSelector).axis),
+      stencil.map((e) => (e.selector as rules.RuleSelector).axis),
     );
     expect(axes.has("lon")).toBe(true);
     expect(axes.has("lat")).toBe(true);
     const offsets = new Set(
-      rule.stencil.map((e) => (e.selector as rules.RuleSelector).offset),
+      stencil.map((e) => (e.selector as rules.RuleSelector).offset),
     );
     expect(offsets.has(-1)).toBe(true);
     expect(offsets.has(1)).toBe(true);
