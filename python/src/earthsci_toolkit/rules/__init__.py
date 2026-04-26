@@ -3,8 +3,8 @@
 This package mirrors ``src/rule_eval.jl`` (Julia binding): rule authors
 express stencil coefficients, edge interpolants, and reconstructions as
 JSON ExpressionNode ASTs (ESS spec §7 / §9.2), and the runtime exposes
-a single AST entry point :func:`eval_coeff` plus a thin loader and a
-stencil applicator for the ``latlon`` selector kind.
+a single AST entry point :func:`eval_coeff` plus a thin loader and the
+applicators for the rule families currently in the catalog.
 
 Cross-binding contract:
 
@@ -13,29 +13,42 @@ Cross-binding contract:
   every op the rule catalog actually uses today: ``+ - * / ^``, the unary
   function set (``sin cos tan exp log sqrt abs``), and the constants
   ``pi`` / ``e``. Unbound variables raise :class:`UnboundVariableError`.
-* :func:`load_rule` reads a rule JSON file and returns a
-  :class:`Rule` with the ``applies_to``, ``grid_family``, ``combine``,
-  ``accuracy``, and ``stencil`` blocks normalised.
+* :func:`load_rule` reads a rule JSON file and returns a :class:`Rule`.
+  Single-stencil rules expose entries via :attr:`Rule.stencil`;
+  multi-stencil rules (PPM-style; ESS §7.5) expose them via
+  :attr:`Rule.sub_stencils`.
 * :func:`apply_stencil_latlon` applies a ``selector.kind == "latlon"``
-  stencil to a ``(nlat, nlon)`` field with longitudinally-periodic
-  neighbours and pole-aware lat-axis indexing, summing
-  ``coeff * field[neighbor]`` per stencil entry under the rule's
-  ``combine`` operator.
-
-This is the seed of the cross-binding rule-evaluation contract for the
-``centered_2nd_uniform_latlon`` pilot (bead ``dsc-ve1``) and is intended
-to grow as additional rule families gain Python parity.
+  stencil at a single cell with periodic-lon / bounded-lat indexing.
+* :func:`apply_stencil_periodic_1d` applies a 1-D stencil (``cartesian``
+  selectors) to a periodic sample vector with ``sub_stencil`` dispatch.
+* :func:`parabola_reconstruct_periodic_1d` composes the named left- and
+  right-edge sub-stencils of a multi-stencil rule into the
+  Colella-Woodward (1984) PPM parabola and samples it at supplied
+  sub-cell points -- the ``output_kind="reconstruction"`` /
+  ``"parabola"`` regime exercised by ``ppm_reconstruction``.
 """
 
+from .cartesian import (
+    OUTPUT_KINDS,
+    apply_stencil_periodic_1d,
+    parabola_reconstruct_periodic_1d,
+    reference_samples,
+    resolve_sub_stencil,
+)
 from .evaluator import UnboundVariableError, eval_coeff
 from .loader import Rule, StencilEntry, load_rule
 from .stencil import apply_stencil_latlon
 
 __all__ = [
+    "OUTPUT_KINDS",
     "Rule",
     "StencilEntry",
     "UnboundVariableError",
     "apply_stencil_latlon",
+    "apply_stencil_periodic_1d",
     "eval_coeff",
     "load_rule",
+    "parabola_reconstruct_periodic_1d",
+    "reference_samples",
+    "resolve_sub_stencil",
 ]
