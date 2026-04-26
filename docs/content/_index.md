@@ -18,6 +18,8 @@ are currently producing.
 
 - **[Grid families →]({{< ref "/grids" >}})**
 - **[Discretization rules →]({{< ref "/rules" >}})**
+- **[Rule × grid matrix →]({{< ref "/matrix" >}})** — what dispatches where,
+  with observed convergence orders and visible holes in fixture coverage.
 - Browse [by family]({{< ref "/families" >}}) (`finite_difference`,
   `finite_volume`, …)
 - Browse [by grid family]({{< ref "/grid_families" >}})
