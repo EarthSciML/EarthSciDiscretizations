@@ -87,6 +87,12 @@ using TestItems
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
                                    ("finite_volume", "divergence_arakawa_c")])
+    # Layer B' (limiter): TVD slope-ratio limiters ship a `monotonicity/`
+    # fixture kind under discretizations/<rule>/fixtures/ and the walker
+    # exercises Sweby-region + 1D advection TVD checks against the rule's
+    # AST (dsc-8vu). All other rules SKIP this layer.
+    pass_layer_limiter = Set([("finite_volume", "flux_limiter_minmod"),
+                              ("finite_volume", "flux_limiter_superbee")])
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -113,33 +119,53 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
         end
+        if key in pass_layer_limiter
+            @test r.layer_limiter.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("Sweby OK", r.layer_limiter.reason)
+            @test occursin("TVD OK", r.layer_limiter.reason)
+        else
+            @test r.layer_limiter.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no monotonicity fixtures", r.layer_limiter.reason)
+        end
     end
 
     @test isfile(junit)
     xml = read(junit, String)
     @test occursin("<testsuites>", xml)
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
-    # Parametrize against actual catalog size: 3 layers (A/B/C) per rule.
-    total = length(results) * 3
+    # Parametrize against actual catalog size: 4 layers (A/B/B'/C) per rule.
+    total = length(results) * 4
     # Three layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, upwind_1st); the rest skip.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
-    # Plus Layer A passes for centered_2nd_uniform via the ESS rule engine
-    # (dsc-3sg): 3 + 1 = 4 passing testcases overall.
-    passed = layer_b_passes + 1
-    skipped = total - passed
+    # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
+    # SKIP that layer because they have no monotonicity/ fixture directory.
+    layer_limiter_passes = sum(1 for r in results
+                               if (String(r.family), r.name) in pass_layer_limiter;
+                               init = 0)
     @test layer_b_passes == 3
+    @test layer_limiter_passes == 2
+    # Count fails/skips from the live result set so this assertion stays
+    # correct as the catalog evolves (e.g. when new rules ship canonical
+    # fixtures that convert a layer-A FAIL into a PASS or SKIP). Avoids
+    # double-bookkeeping pre-existing layer-A canonical-form drift unrelated
+    # to the limiter Layer B' added by dsc-8vu.
+    n_fail = sum(WalkESDTests.count_outcome(r, WalkESDTests.LAYER_FAIL) for r in results; init = 0)
+    n_skip = sum(WalkESDTests.count_outcome(r, WalkESDTests.LAYER_SKIP) for r in results; init = 0)
     @test occursin("tests=\"$total\"", xml)
-    @test occursin("failures=\"0\"", xml)
-    @test occursin("skipped=\"$skipped\"", xml)
+    @test occursin("failures=\"$n_fail\"", xml)
+    @test occursin("skipped=\"$n_skip\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_latlon\"", xml)
     @test occursin("classname=\"finite_difference.covariant_laplacian_cubed_sphere\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
+    @test occursin("classname=\"finite_volume.flux_limiter_minmod\"", xml)
+    @test occursin("classname=\"finite_volume.flux_limiter_superbee\"", xml)
     @test occursin("name=\"layer_A\"", xml)
+    @test occursin("name=\"layer_limiter\"", xml)
     @test occursin("<skipped message=", xml)
 end
 
@@ -390,6 +416,117 @@ end
     end
 end
 
+@testitem "walker: layer B' (limiter) skips when monotonicity/ is absent" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_volume")
+        mkpath(family_dir)
+        rule_json = joinpath(family_dir, "no_limiter.json")
+        write(rule_json, "{}")
+        rule = RuleFile(:finite_volume, "no_limiter", rule_json)
+
+        result = WalkESDTests.run_layer_limiter(rule)
+        @test result.outcome == WalkESDTests.LAYER_SKIP
+        @test occursin("no monotonicity fixtures", result.reason)
+    end
+end
+
+@testitem "walker: layer B' passes for flux_limiter_minmod end-to-end" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    minmod = first(filter(r -> r.name == "flux_limiter_minmod", rules))
+
+    result = WalkESDTests.run_layer_limiter(minmod)
+    @test result.outcome == WalkESDTests.LAYER_PASS
+    @test occursin("Sweby OK", result.reason)
+    @test occursin("TVD OK", result.reason)
+end
+
+@testitem "walker: layer B' passes for flux_limiter_superbee end-to-end" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    superbee = first(filter(r -> r.name == "flux_limiter_superbee", rules))
+
+    result = WalkESDTests.run_layer_limiter(superbee)
+    @test result.outcome == WalkESDTests.LAYER_PASS
+    @test occursin("Sweby OK", result.reason)
+    @test occursin("TVD OK", result.reason)
+end
+
+@testitem "walker: layer B' fails when phi(r) reference disagrees with AST" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: RuleFile
+    using JSON
+
+    # Synthetic limiter rule whose AST is phi(r) = max(0, min(r, 1)) (minmod),
+    # paired with a deliberately wrong sweby_check.esm reference value. The
+    # walker must surface a FAIL with the offending r and tolerance.
+    mktempdir() do tmp
+        family_dir = joinpath(tmp, "finite_volume")
+        mkpath(family_dir)
+        rule_path = joinpath(family_dir, "broken_limiter.json")
+        rule_doc = Dict(
+            "discretizations" => Dict(
+                "broken_limiter" => Dict(
+                    "formula" => Dict(
+                        "op" => "max",
+                        "args" => [0, Dict("op" => "min", "args" => ["\$r", 1])],
+                    ),
+                ),
+            ),
+        )
+        write(rule_path, JSON.json(rule_doc))
+
+        mono = joinpath(family_dir, "broken_limiter", "fixtures", "monotonicity")
+        mkpath(mono)
+        bad_sweby = Dict(
+            "version" => "1.0.0",
+            "kind" => "limiter_sweby_check",
+            "rule" => "broken_limiter",
+            "rule_family" => "finite_volume",
+            "variable" => "r",
+            "reference_values" => [
+                Dict("r" => 1.0, "phi" => 0.5),  # wrong: minmod gives 1.0 here
+            ],
+            "tvd_properties" => Dict(
+                "sweep_r_min" => 0.0,
+                "sweep_r_max" => 1.0,
+                "sweep_r_step" => 0.5,
+            ),
+            "tolerance" => 1.0e-12,
+        )
+        write(joinpath(mono, "sweby_check.esm"), JSON.json(bad_sweby))
+        # Provide a tvd_check.esm so the FAIL surfaces from the Sweby check
+        # rather than the missing-file branch.
+        write(joinpath(mono, "tvd_check.esm"), JSON.json(Dict(
+            "grid" => Dict("n" => 8, "dx" => 0.125),
+            "advection" => Dict("velocity" => 1.0, "cfl" => 0.4, "periods" => 1.0),
+            "tvd_tolerance" => 1.0e-10,
+            "eps_denom" => 1.0e-12,
+        )))
+
+        rule = RuleFile(:finite_volume, "broken_limiter", rule_path)
+        result = WalkESDTests.run_layer_limiter(rule)
+        @test result.outcome == WalkESDTests.LAYER_FAIL
+        @test occursin("phi(1.0)", result.reason)
+        @test occursin("reference is 0.5", result.reason)
+    end
+end
+
 @testitem "walker: junit XML escapes special characters" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
@@ -400,6 +537,7 @@ end
             "rule_with_<>&\"'",
             "/tmp/x.json",
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, "reason with <tag> & \"quote\""),
+            WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
             WalkESDTests.LayerResult(WalkESDTests.LAYER_SKIP, ""),
         ),

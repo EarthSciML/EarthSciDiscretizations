@@ -10,6 +10,7 @@ export walk_esd_tests,
     run_layer_a,
     run_layer_b,
     run_layer_c,
+    run_layer_limiter,
     RuleResult,
     LayerOutcome,
     write_junit
@@ -28,6 +29,7 @@ struct RuleResult
     layer_a::LayerResult
     layer_b::LayerResult
     layer_c::LayerResult
+    layer_limiter::LayerResult
 end
 
 """
@@ -128,6 +130,31 @@ function run_layer_b(rule::RuleFile)
         return LayerResult(LAYER_SKIP, "no convergence fixtures at $(relpath_from_repo(convergence))")
     end
     return run_mms_convergence(rule, convergence)
+end
+
+"""
+    run_layer_limiter(rule) -> LayerResult
+
+Layer B' — monotonicity / TVD acceptance for slope-ratio limiter rules
+(Sweby (1984), Roe (1986)). Limiter rules ship a separate fixture kind under
+`fixtures/monotonicity/` because their acceptance is *monotonicity preservation*
+on the Sweby region plus *strict TVD on smooth+square-wave ICs over an advection
+period* — not asymptotic convergence-order on a manufactured solution. See bead
+dsc-8vu and `discretizations/finite_volume/flux_limiter_*.json` for the rule
+form.
+
+Skips if `monotonicity/` is absent (the common case for non-limiter rules);
+fails if either fixture file is missing or any check fails; passes when all
+reference (r, phi) pairs match within tolerance, every Sweby property holds
+across the sweep, and TV(q_final) <= TV(q_initial) + tvd_tolerance after one
+period.
+"""
+function run_layer_limiter(rule::RuleFile)
+    monotonicity = joinpath(rule_fixtures_dir(rule), "monotonicity")
+    if !isdir(monotonicity)
+        return LayerResult(LAYER_SKIP, "no monotonicity fixtures at $(relpath_from_repo(monotonicity))")
+    end
+    return run_monotonicity_check(rule, monotonicity)
 end
 
 """
@@ -466,6 +493,225 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     end
 end
 
+# ---------------------------------------------------------------------------
+# Layer B' (limiter) — monotonicity / TVD evaluator scoped to the walker.
+#
+# ESS 0.0.3's `evaluate` does not yet implement the `max`/`min` ops that
+# slope-ratio limiters rely on (a follow-up bead is filed against ESS), so
+# the limiter runner uses a small local AST evaluator confined to this file.
+# This mirrors the precedent in `test/test_flux_limiters_rule.jl` and is
+# allowed by the dsc-8vu risk section. When ESS gains max/min, this can be
+# replaced by `EarthSciDiscretizations.eval_coeff` with no fixture changes.
+# ---------------------------------------------------------------------------
+
+function _eval_limiter_ast(node, bindings::Dict{String, Float64})::Float64
+    if node isa Number
+        return Float64(node)
+    elseif node isa AbstractString
+        name = startswith(node, "\$") ? node[2:end] : node
+        haskey(bindings, name) ||
+            throw(ArgumentError("unbound variable: $(name)"))
+        return bindings[name]
+    elseif node isa AbstractDict
+        op = node["op"]
+        args = [_eval_limiter_ast(a, bindings) for a in node["args"]]
+        if op == "max"
+            return maximum(args)
+        elseif op == "min"
+            return minimum(args)
+        elseif op == "+"
+            return length(args) == 1 ? args[1] : sum(args)
+        elseif op == "-"
+            return length(args) == 1 ? -args[1] : args[1] - args[2]
+        elseif op == "*"
+            return length(args) == 1 ? args[1] : prod(args)
+        elseif op == "/"
+            return args[1] / args[2]
+        elseif op == "abs"
+            return abs(args[1])
+        else
+            throw(ArgumentError("unsupported op in limiter walker: $op"))
+        end
+    end
+    throw(ArgumentError("unrecognized AST node type: $(typeof(node))"))
+end
+
+"""
+    run_monotonicity_check(rule, monotonicity_dir) -> LayerResult
+
+Run the limiter Sweby + TVD checks on a single rule. Reads
+`monotonicity/sweby_check.esm` (phi(r) reference values + sweep bounds) and
+`monotonicity/tvd_check.esm` (1D periodic advection params), evaluates the
+rule formula AST against both, and returns PASS / FAIL with a one-line
+summary. A missing file is FAIL (the dir was authored — we expect both
+fixtures); a parse error or property violation surfaces as FAIL with the
+specific failure included in the message.
+"""
+function run_monotonicity_check(rule::RuleFile, monotonicity_dir::AbstractString)
+    sweby_path = joinpath(monotonicity_dir, "sweby_check.esm")
+    tvd_path = joinpath(monotonicity_dir, "tvd_check.esm")
+    if !isfile(sweby_path) || !isfile(tvd_path)
+        return LayerResult(
+            LAYER_FAIL,
+            "monotonicity/ present but missing sweby_check.esm or tvd_check.esm",
+        )
+    end
+
+    rule_json = try
+        JSON.parse(read(rule.path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse rule $(relpath_from_repo(rule.path)): $(sprint(showerror, err))")
+    end
+    spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
+    if !(spec isa AbstractDict) || !haskey(spec, "formula")
+        return LayerResult(LAYER_FAIL, "rule $(rule.name) has no `formula` AST under discretizations.$(rule.name)")
+    end
+    formula = spec["formula"]
+
+    # --- Sweby check ------------------------------------------------------
+    sweby = try
+        JSON.parse(read(sweby_path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse $(relpath_from_repo(sweby_path)): $(sprint(showerror, err))")
+    end
+    tol = Float64(get(sweby, "tolerance", 1.0e-12))
+    refs = get(sweby, "reference_values", Any[])
+    n_ref = 0
+    for pair in refs
+        r = Float64(pair["r"])
+        expected = Float64(pair["phi"])
+        actual = try
+            _eval_limiter_ast(formula, Dict("r" => r))
+        catch err
+            return LayerResult(LAYER_FAIL, "AST eval failed at r=$(r): $(sprint(showerror, err))")
+        end
+        if !isapprox(actual, expected; atol = tol, rtol = 0.0)
+            return LayerResult(
+                LAYER_FAIL,
+                "phi($(r)) = $(actual) but reference is $(expected) (tol=$(tol))",
+            )
+        end
+        n_ref += 1
+    end
+    props = get(sweby, "tvd_properties", Dict())
+    rmin = Float64(get(props, "sweep_r_min", -2.0))
+    rmax = Float64(get(props, "sweep_r_max", 5.0))
+    rstep = Float64(get(props, "sweep_r_step", 0.05))
+    n_sweep = 0
+    for r in rmin:rstep:rmax
+        rf = Float64(r)
+        phi = try
+            _eval_limiter_ast(formula, Dict("r" => rf))
+        catch err
+            return LayerResult(LAYER_FAIL, "AST eval failed at r=$(rf): $(sprint(showerror, err))")
+        end
+        if phi < -tol
+            return LayerResult(LAYER_FAIL, "positivity violated at r=$(rf): phi=$(phi)")
+        end
+        if phi > 2.0 + tol
+            return LayerResult(LAYER_FAIL, "Sweby upper bound violated at r=$(rf): phi=$(phi) > 2")
+        end
+        if rf <= 0 && !isapprox(phi, 0.0; atol = tol)
+            return LayerResult(LAYER_FAIL, "monotonicity-preserving violated: phi($(rf))=$(phi), expected 0")
+        end
+        n_sweep += 1
+    end
+    phi_one = _eval_limiter_ast(formula, Dict("r" => 1.0))
+    if !isapprox(phi_one, 1.0; atol = tol)
+        return LayerResult(LAYER_FAIL, "consistency violated: phi(1)=$(phi_one), expected 1")
+    end
+
+    # --- TVD check --------------------------------------------------------
+    tvd = try
+        JSON.parse(read(tvd_path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse $(relpath_from_repo(tvd_path)): $(sprint(showerror, err))")
+    end
+    tv_summary = try
+        _run_tvd_advection(formula, tvd)
+    catch err
+        return LayerResult(LAYER_FAIL, "TVD check threw: $(sprint(showerror, err))")
+    end
+    if !tv_summary.passed
+        return LayerResult(
+            LAYER_FAIL,
+            "TVD violated: TV_final=$(tv_summary.tv_final) > TV_initial=$(tv_summary.tv_initial) + tol=$(tv_summary.tol)",
+        )
+    end
+
+    return LayerResult(
+        LAYER_PASS,
+        "Sweby OK ($(n_ref) refs, $(n_sweep) sweep pts); TVD OK (TV $(round(tv_summary.tv_initial; digits=6)) -> $(round(tv_summary.tv_final; digits=6)))",
+    )
+end
+
+# Container for TVD-check outcomes — keeps `run_monotonicity_check` flat.
+struct _TVDSummary
+    passed::Bool
+    tv_initial::Float64
+    tv_final::Float64
+    tol::Float64
+end
+
+function _run_tvd_advection(formula, tvd::AbstractDict)
+    n = Int(tvd["grid"]["n"])
+    dx = Float64(tvd["grid"]["dx"])
+    u = Float64(tvd["advection"]["velocity"])
+    cfl = Float64(tvd["advection"]["cfl"])
+    periods = Float64(tvd["advection"]["periods"])
+    eps_denom = Float64(get(tvd, "eps_denom", 1.0e-12))
+    tvd_tol = Float64(get(tvd, "tvd_tolerance", 1.0e-10))
+
+    # Cell averages of the smooth+square IC: sin(2πx)·1_{[0,0.4]} + 1·1_{[0.6,0.85]}.
+    F_smooth(x) = -cos(2π * x) / (2π)
+    function cell_avg(i)
+        a = (i - 1) * dx
+        b = i * dx
+        sa = max(a, 0.0)
+        sb = min(b, 0.4)
+        smooth = sb > sa ? (F_smooth(sb) - F_smooth(sa)) / dx : 0.0
+        qa = max(a, 0.6)
+        qb = min(b, 0.85)
+        square = qb > qa ? (qb - qa) / dx : 0.0
+        return smooth + square
+    end
+    q0 = [cell_avg(i) for i in 1:n]
+
+    modn(j) = mod(j - 1, n) + 1
+    tv(q) = sum(abs(q[modn(i + 1)] - q[i]) for i in 1:n)
+    phi(r) = _eval_limiter_ast(formula, Dict("r" => Float64(r)))
+
+    function step(q, dt)
+        Fs = Vector{Float64}(undef, n)
+        for i in 1:n
+            qm = q[modn(i - 1)]; qi = q[i]; qp = q[modn(i + 1)]
+            num = qi - qm
+            den = qp - qi
+            den_safe = abs(den) > eps_denom ? den : (den >= 0 ? eps_denom : -eps_denom)
+            r_ratio = num / den_safe
+            Fs[i] = u * (qi + 0.5 * phi(r_ratio) * (qp - qi))
+        end
+        qnew = similar(q)
+        for i in 1:n
+            qnew[i] = q[i] - dt / dx * (Fs[i] - Fs[modn(i - 1)])
+        end
+        return qnew
+    end
+
+    dt = cfl * dx / abs(u)
+    T = periods / abs(u)
+    q = copy(q0)
+    tsim = 0.0
+    while tsim < T
+        dts = min(dt, T - tsim)
+        q = step(q, dts)
+        tsim += dts
+    end
+    tv_initial = tv(q0)
+    tv_final = tv(q)
+    return _TVDSummary(tv_final <= tv_initial + tvd_tol && all(isfinite, q), tv_initial, tv_final, tvd_tol)
+end
+
 """
     run_integration_benchmarks(rule, integration_dir) -> LayerResult
 
@@ -567,7 +813,8 @@ function walk_esd_tests(;
         a = run_layer_a(rule)
         b = run_layer_b(rule)
         c = run_layer_c(rule)
-        push!(results, RuleResult(rule.family, rule.name, rule.path, a, b, c))
+        lim = run_layer_limiter(rule)
+        push!(results, RuleResult(rule.family, rule.name, rule.path, a, b, c, lim))
     end
     print_report(io, catalog, results)
     if junit_path !== nothing
@@ -590,14 +837,14 @@ function print_report(io::IO, catalog, results::Vector{RuleResult})
         return
     end
     for r in results
-        println(io, "[$(r.family)/$(r.name)]  A=$(outcome_tag(r.layer_a.outcome))  B=$(outcome_tag(r.layer_b.outcome))  C=$(outcome_tag(r.layer_c.outcome))")
-        for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("C", r.layer_c))
+        println(io, "[$(r.family)/$(r.name)]  A=$(outcome_tag(r.layer_a.outcome))  B=$(outcome_tag(r.layer_b.outcome))  B'=$(outcome_tag(r.layer_limiter.outcome))  C=$(outcome_tag(r.layer_c.outcome))")
+        for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("B'", r.layer_limiter), ("C", r.layer_c))
             if lr.outcome != LAYER_PASS && !isempty(lr.reason)
                 println(io, "    layer $tag: $(lr.reason)")
             end
         end
     end
-    total = length(results) * 3
+    total = length(results) * 4
     npass = sum(count_outcome(r, LAYER_PASS) for r in results; init = 0)
     nfail = sum(count_outcome(r, LAYER_FAIL) for r in results; init = 0)
     nskip = sum(count_outcome(r, LAYER_SKIP) for r in results; init = 0)
@@ -605,7 +852,10 @@ function print_report(io::IO, catalog, results::Vector{RuleResult})
 end
 
 function count_outcome(r::RuleResult, target::LayerOutcome)
-    return (r.layer_a.outcome == target) + (r.layer_b.outcome == target) + (r.layer_c.outcome == target)
+    return (r.layer_a.outcome == target) +
+        (r.layer_b.outcome == target) +
+        (r.layer_limiter.outcome == target) +
+        (r.layer_c.outcome == target)
 end
 
 function xml_escape(s::AbstractString)
@@ -624,7 +874,7 @@ Emit a JUnit XML summary to `path`. One `<testcase>` per (rule, layer). Skipped
 layers carry `<skipped>` with the reason; failed layers carry `<failure>`.
 """
 function write_junit(path::AbstractString, results::Vector{RuleResult})
-    total = length(results) * 3
+    total = length(results) * 4
     failures = sum(count_outcome(r, LAYER_FAIL) for r in results; init = 0)
     skipped = sum(count_outcome(r, LAYER_SKIP) for r in results; init = 0)
     open(path, "w") do io
@@ -632,7 +882,7 @@ function write_junit(path::AbstractString, results::Vector{RuleResult})
         println(io, "<testsuites>")
         println(io, "  <testsuite name=\"ESD Walker\" tests=\"$total\" failures=\"$failures\" skipped=\"$skipped\">")
         for r in results
-            for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("C", r.layer_c))
+            for (tag, lr) in (("A", r.layer_a), ("B", r.layer_b), ("limiter", r.layer_limiter), ("C", r.layer_c))
                 classname = xml_escape("$(r.family).$(r.name)")
                 name = "layer_$tag"
                 print(io, "    <testcase classname=\"", classname, "\" name=\"", name, "\">")
