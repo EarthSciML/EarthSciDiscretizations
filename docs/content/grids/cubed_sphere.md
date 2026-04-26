@@ -1,8 +1,8 @@
 ---
 title: "Cubed-sphere"
 slug: "cubed_sphere"
-grid_family: "cubed_sphere"
-rule_kind: "grid"
+grid_families: "cubed_sphere"
+rule_kinds: "grid"
 description: "Six gnomonic panels covering the sphere; in-panel curvilinear (ξ, η) coordinates with cross-panel ghost stitching."
 source: "src/grids/cubed_sphere.jl"
 tags: ["grid", "block-structured", "spherical", "cubed-sphere", "gnomonic"]

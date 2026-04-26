@@ -1,9 +1,9 @@
 ---
 title: "centered_2nd_uniform"
 slug: "centered_2nd_uniform"
-family: "finite_difference"
-grid_family: "cartesian"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "cartesian"
+rule_kinds: "scheme"
 accuracy: "O(dx²)"
 applies_to: "grad(u), dim=x"
 rule_path: "discretizations/finite_difference/centered_2nd_uniform.json"

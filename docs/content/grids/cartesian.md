@@ -1,8 +1,8 @@
 ---
 title: "Cartesian"
 slug: "cartesian"
-grid_family: "cartesian"
-rule_kind: "grid"
+grid_families: "cartesian"
+rule_kinds: "grid"
 description: "Logically rectangular Cartesian mesh with optional non-uniform spacing per axis (1D / 2D / 3D)."
 source: "src/grids/cartesian.jl"
 tags: ["grid", "structured", "rectilinear", "uniform", "non-uniform"]

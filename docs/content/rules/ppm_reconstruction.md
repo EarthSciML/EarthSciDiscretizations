@@ -1,9 +1,9 @@
 ---
 title: "ppm_reconstruction"
 slug: "ppm_reconstruction"
-family: "finite_volume"
-grid_family: "cartesian"
-rule_kind: "scheme"
+families: "finite_volume"
+grid_families: "cartesian"
+rule_kinds: "scheme"
 accuracy: "O(dx³)"
 applies_to: "reconstruct(q), dim=x"
 rule_path: "discretizations/finite_volume/ppm_reconstruction.json"

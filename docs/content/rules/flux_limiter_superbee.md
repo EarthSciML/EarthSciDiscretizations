@@ -1,9 +1,9 @@
 ---
 title: "flux_limiter_superbee"
 slug: "flux_limiter_superbee"
-family: "limiter"
-grid_family: "cartesian"
-rule_kind: "limiter"
+families: "limiter"
+grid_families: "cartesian"
+rule_kinds: "limiter"
 accuracy: "O(dx²) in smooth monotone regions; compressive near discontinuities"
 applies_to: "limit(r)"
 rule_path: "discretizations/finite_volume/flux_limiter_superbee.json"

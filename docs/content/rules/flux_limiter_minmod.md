@@ -1,9 +1,9 @@
 ---
 title: "flux_limiter_minmod"
 slug: "flux_limiter_minmod"
-family: "limiter"
-grid_family: "cartesian"
-rule_kind: "limiter"
+families: "limiter"
+grid_families: "cartesian"
+rule_kinds: "limiter"
 accuracy: "O(dx²) in smooth monotone regions; O(dx) at extrema"
 applies_to: "limit(r)"
 rule_path: "discretizations/finite_volume/flux_limiter_minmod.json"

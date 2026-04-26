@@ -1,9 +1,9 @@
 ---
 title: "weno5_advection"
 slug: "weno5_advection"
-family: "finite_volume"
-grid_family: "cartesian"
-rule_kind: "scheme"
+families: "finite_volume"
+grid_families: "cartesian"
+rule_kinds: "scheme"
 accuracy: "O(dx⁵)"
 applies_to: "advect(q, u), dim=x"
 rule_path: "discretizations/finite_volume/weno5_advection.json"

@@ -1,9 +1,9 @@
 ---
 title: "centered_2nd_uniform_vertical"
 slug: "centered_2nd_uniform_vertical"
-family: "finite_difference"
-grid_family: "vertical"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "vertical"
+rule_kinds: "scheme"
 accuracy: "O(h²)"
 applies_to: "grad(u), dim=k"
 rule_path: "discretizations/finite_difference/centered_2nd_uniform_vertical.json"

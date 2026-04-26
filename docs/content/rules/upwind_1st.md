@@ -1,9 +1,9 @@
 ---
 title: "upwind_1st"
 slug: "upwind_1st"
-family: "finite_difference"
-grid_family: "cartesian"
-rule_kind: "scheme"
+families: "finite_difference"
+grid_families: "cartesian"
+rule_kinds: "scheme"
 accuracy: "O(dx)"
 applies_to: "grad(u), dim=x"
 rule_path: "discretizations/finite_difference/upwind_1st.json"
