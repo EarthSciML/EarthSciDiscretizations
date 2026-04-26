@@ -83,13 +83,19 @@ using TestItems
                         ("finite_difference", "centered_2nd_uniform_latlon"),
                         ("finite_difference", "upwind_1st"),
                         ("finite_volume", "ppm_reconstruction"),
-                        ("finite_volume", "weno5_advection")])
+                        ("finite_volume", "weno5_advection"),
+                        ("finite_volume", "divergence_arakawa_c")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
-                                   ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "divergence_arakawa_c")])
+                                   ("finite_volume", "flux_limiter_superbee")])
+    # Rules whose canonical/ fixture has pre-existing layer-A drift that is
+    # tracked by a separate bead. We assert layer-B passes via the convergence
+    # sweep but do not constrain layer-A here (the n_fail tally below absorbs
+    # any layer-A failure dynamically so the assertion stays correct as the
+    # canonical drift is fixed in another PR).
+    pass_layer_b_canonical_drift = Set([("finite_volume", "divergence_arakawa_c")])
     # Layer B' (limiter): TVD slope-ratio limiters ship a `monotonicity/`
     # fixture kind under discretizations/<rule>/fixtures/ and the walker
     # exercises Sweby-region + 1D advection TVD checks against the rule's
@@ -114,6 +120,9 @@ using TestItems
             # dsc-cjh) in addition to the Layer B convergence sweep.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif key in pass_layer_b_canonical_drift
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif key in pass_layer_b
@@ -153,9 +162,9 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Six layer-B cases pass (centered_2nd_uniform,
+    # Seven layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st,
-    # ppm_reconstruction, weno5_advection); the rest skip.
+    # ppm_reconstruction, weno5_advection, divergence_arakawa_c); the rest skip.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -168,7 +177,7 @@ using TestItems
     # fixture exists.
     layer_d_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_d; init = 0)
-    @test layer_b_passes == 6
+    @test layer_b_passes == 7
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
