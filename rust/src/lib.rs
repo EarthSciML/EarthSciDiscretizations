@@ -6,10 +6,12 @@
 
 pub mod grids;
 pub mod rule_eval;
+pub mod rules;
 
 pub use error::{GridError, Result};
 pub use grids::duo;
 pub use rule_eval::{eval_coeff, Bindings, RuleEvalError};
+pub use rules::ppm_reconstruction;
 pub use traits::{Dtype, Grid};
 
 // Re-export per-family modules at the crate root so the documented
