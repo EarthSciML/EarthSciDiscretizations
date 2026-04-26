@@ -1,0 +1,90 @@
+---
+name: docs
+
+# Mirrors EarthSciModels' Hugo doc-site deploy workflow (mdl-w8s).
+# The render → generate → Hugo build → deploy ordering is the contract:
+# example plots and rule/grid pages MUST be produced before Hugo runs,
+# otherwise PNGs referenced by generated markdown never ship to gh-pages.
+#
+# Auto-triggers (push/pull_request) are intentionally OMITTED until the
+# sibling bead dsc-f9e lands the Hugo scaffolding under docs/ and the
+# Python generators under tools/. Until then this workflow is invokable
+# only via workflow_dispatch so it does not break PR CI when its inputs
+# (tools/esd_to_docs.py, tools/render_example_plots.py, docs/hugo.toml)
+# do not yet exist. When the sibling lands, restore the push/pull_request
+# triggers below — see commit log of EarthSciModels' .github/workflows/
+# docs.yml for the canonical filter set.
+on:
+  workflow_dispatch:
+
+# Single deploy at a time; cancel in-flight superseded runs.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: "0.131.0"
+      PAGEFIND_VERSION: "1.1.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python plotting deps
+        run: |
+          python -m pip install --upgrade matplotlib numpy sympy
+          python -m pip install \
+            "git+https://github.com/EarthSciML/EarthSciSerialization.git#subdirectory=packages/earthsci_toolkit"
+
+      - name: Install Hugo extended
+        run: |
+          curl -sSL \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin hugo
+
+      - name: Unit test the generators
+        run: |
+          python -m unittest tools/esd_to_docs_test.py
+          python -m unittest tools/render_example_plots_test.py
+
+      - name: Render example plots
+        run: python tools/render_example_plots.py
+
+      - name: Generate rule + grid pages
+        run: python tools/esd_to_docs.py
+
+      - name: Build site with Hugo
+        run: hugo --source docs --minify --destination public
+
+      - name: Install Pagefind
+        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
+
+      - name: Build Pagefind search index
+        run: pagefind --site docs/public
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
