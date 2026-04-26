@@ -44,6 +44,7 @@ import numpy as np
 APPLICABLE = {
     "centered_2nd_uniform",
     "centered_2nd_uniform_vertical",
+    "centered_2nd_uniform_latlon",
     "ppm_reconstruction",
     "upwind_1st",
 }
@@ -854,9 +855,33 @@ def convergence_ppm_reconstruction(out: Path) -> None:
                       ns, errs, expected_order=3.0)
 
 
+def convergence_centered_2nd_latlon(out: Path) -> None:
+    """Y_{2,0} spherical harmonic on the unit sphere, lon-independent so the
+    lon stencil is exact and the test isolates the lat-axis order. Mirrors the
+    Layer-B fixture under
+    discretizations/finite_difference/centered_2nd_uniform_latlon/fixtures/convergence/.
+    """
+    R = EARTH_R
+    ns = [16, 32, 64, 128]
+    errs = []
+    for n in ns:
+        # Cell-centered lat grid on [-π/2, π/2] with constant dφ = π/n.
+        dphi = math.pi / n
+        phi = (np.arange(n) + 0.5) * dphi - math.pi / 2.0
+        u = 3.0 * np.sin(phi) ** 2 - 1.0  # ∝ Y_{2,0}(φ)
+        # Centered lat stencil; interior cells only (poles excluded).
+        du_num = (u[2:] - u[:-2]) / (2.0 * R * dphi)
+        du_exact = 3.0 * np.sin(2.0 * phi[1:-1]) / R
+        errs.append(np.max(np.abs(du_num - du_exact)))
+    _convergence_plot(out,
+                      "centered_2nd_uniform_latlon — empirical convergence",
+                      ns, errs, expected_order=2.0)
+
+
 CONVERGENCE_PLOTTERS = {
     "centered_2nd_uniform": convergence_centered_2nd,
     "centered_2nd_uniform_vertical": convergence_centered_2nd_vertical,
+    "centered_2nd_uniform_latlon": convergence_centered_2nd_latlon,
     "ppm_reconstruction": convergence_ppm_reconstruction,
     "upwind_1st": convergence_upwind_1st,
 }

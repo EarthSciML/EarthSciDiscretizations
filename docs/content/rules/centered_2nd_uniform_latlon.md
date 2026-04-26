@@ -34,7 +34,49 @@ tags: ["finite-difference", "lat-lon", "spherical", "metric"]
 spacings. The lat-lon accessor surfaces `cos_lat` as a per-row metric
 quantity bound at evaluation time.
 
+## Discrete operator
+
+Let `u_{i,j}` denote the cell-centered value at longitude index `i` and
+latitude index `j`, with constant grid spacings `Δλ`, `Δφ` and per-row
+metric `cos φ_j`. The two axes apply independently:
+
+$$
+\left.\frac{1}{R\cos\varphi}\,\frac{\partial u}{\partial\lambda}\right|_{i,j}
+\;\approx\;
+\frac{u_{i+1,j} - u_{i-1,j}}{2\,R\,\cos\varphi_j\,\Delta\lambda},
+\qquad
+\left.\frac{1}{R}\,\frac{\partial u}{\partial\varphi}\right|_{i,j}
+\;\approx\;
+\frac{u_{i,j+1} - u_{i,j-1}}{2\,R\,\Delta\varphi}.
+$$
+
+A Taylor expansion about each cell center gives the leading truncation
+errors
+
+$$
+\frac{(\Delta\lambda)^2}{6}\,
+   \frac{1}{R\cos\varphi_j}\,\frac{\partial^3 u}{\partial\lambda^3},
+\qquad
+\frac{(\Delta\varphi)^2}{6}\,
+   \frac{1}{R}\,\frac{\partial^3 u}{\partial\varphi^3},
+$$
+
+so each axis is `O(h²)` in its own grid spacing. Latitude rows adjacent
+to the poles are excluded from the support — the `±1` lat offset would
+step past the grid — and the lon axis is periodic in `i`.
+
 ## Convergence
+
+<figure class="figure">
+  <img src="/plots/rules/centered_2nd_uniform_latlon-convergence.png"
+       alt="Empirical convergence — slope ≈ −2 on log-log">
+  <figcaption>L<sub>∞</sub> error of the lat-axis stencil applied to the
+  lon-independent <code>Y<sub>2,0</sub></code> spherical harmonic on the
+  unit sphere, sampled at cell centers with
+  <code>n ∈ {16, 32, 64, 128}</code> and dropping the polar rows from the
+  measurement. The empirical slope tracks the expected −2 reference
+  line.</figcaption>
+</figure>
 
 The Layer-B walker drives this rule through ESS's
 <code>verify_mms_convergence</code> with the registered
