@@ -30,6 +30,28 @@ tags: ["finite-difference", "centered", "uniform", "P0"]
 Combined as `+`. The result is the cell-centered approximation of the first
 spatial derivative with a leading error term `(dx² / 6) · u′′′(x)`.
 
+## Discrete operator
+
+Applied to a cell-centered field \(u_i = u(x_i)\) on a uniform axis with
+spacing \(\Delta x\), the rule produces the discrete first-derivative
+operator
+
+$$\left(\frac{\partial u}{\partial x}\right)_i \;\approx\; \frac{u_{i+1} - u_{i-1}}{2\,\Delta x}.$$
+
+Symmetric Taylor expansion of the two neighbors about \(x_i\),
+
+$$u_{i\pm 1} \;=\; u_i \;\pm\; \Delta x\,u'_i \;+\; \tfrac{\Delta x^{2}}{2}\,u''_i \;\pm\; \tfrac{\Delta x^{3}}{6}\,u'''_i \;+\; \tfrac{\Delta x^{4}}{24}\,u^{(4)}_i \;\pm\; \cdots,$$
+
+cancels the even-order terms when subtracted, giving
+
+$$\frac{u_{i+1} - u_{i-1}}{2\,\Delta x} \;=\; u'_i \;+\; \tfrac{\Delta x^{2}}{6}\,u'''_i \;+\; O(\Delta x^{4}).$$
+
+The scheme is therefore second-order accurate, with a purely dispersive
+leading error \(\tfrac{\Delta x^{2}}{6}\,u'''(x)\) and no numerical
+diffusion — contrast with [`upwind_1st`]({{< ref "/rules/upwind_1st" >}}),
+whose one-sided stencil introduces an explicit diffusive
+\((\Delta x / 2)\,u''(x)\) term.
+
 ## Convergence
 
 <figure class="figure">
