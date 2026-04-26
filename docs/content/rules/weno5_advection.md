@@ -52,11 +52,36 @@ mirror of the left-biased branch under index reflection.
 
 ## Convergence
 
+Numeric coverage lives in the canonical Julia test fixture at
+[<code>tests/fixtures/weno5_advection/</code>]({{< param repoURL >}}/blob/main/tests/fixtures/weno5_advection),
+exercised by
+[<code>test/test_weno5_advection_rule.jl</code>]({{< param repoURL >}}/blob/main/test/test_weno5_advection_rule.jl).
+The MMS fixture uses `f(x) = sin(2πx + 1)` on `[0, 1]` with periodic boundary
+conditions; the phase shift keeps the critical points of `f` away from every
+dyadic cell face at `n ∈ {32, 64, 128, 256}`, sidestepping the well-known
+WENO5-JS accuracy dip from `ω_k → d_k` recovery stalling at
+`f'(x_{i+1/2}) = 0` (Henrick, Aslam & Powers, JCP 2005).
+
+| `n`  | `dx`         | L∞ error     | observed order |
+| ---: | :----------- | :----------- | :------------- |
+|  32  | 0.03125000   | 3.4137e-05   | —              |
+|  64  | 0.01562500   | 1.0656e-06   | 5.002          |
+| 128  | 0.00781250   | 3.3254e-08   | 5.002          |
+| 256  | 0.00390625   | 1.0377e-09   | 5.002          |
+
+Theoretical asymptotic order: **5.0** (Jiang & Shu 1996, smooth regions).
+Acceptance threshold: **min(observed order) ≥ 4.7** — leaves headroom for the
+small accuracy hit from the `ε = 1e-6` regularisation of the nonlinear
+weights. A companion shock-capturing fixture advects a unit square wave one
+full period at CFL 0.4 with SSP-RK3; max overshoot/undershoot is ~3.7e-4,
+well under the 0.05 tolerance.
+
 <div class="callout callout-pending">
-<strong>Pending ESS harness extension.</strong>
-The Layer-B harness needs nonlinear-reconstruction support — the
-ratio-form nonlinear weights are not yet expressible in the §7 stencil
-schema. The fixture under
-[<code>fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection/fixtures/convergence)
-will populate once that extension lands.
+<strong>Pending ESS walker harness extension.</strong>
+The Layer-B walker harness needs nonlinear-reconstruction support — the
+ratio-form nonlinear weights `ω_k = d_k / (ε + β_k)²` are not yet expressible
+in the §7 stencil schema. The walker-side fixture under
+[<code>discretizations/finite_volume/weno5_advection/fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection/fixtures/convergence)
+records a structured SKIP and will populate once that extension lands; until
+then the canonical numeric coverage above is the source of truth.
 </div>
