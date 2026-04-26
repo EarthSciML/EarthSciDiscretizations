@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "rule": "centered_2nd_uniform_latlon",
+  "rule_path": "discretizations/finite_difference/centered_2nd_uniform_latlon.json",
+  "tolerance": {
+    "relative": 1e-14,
+    "notes": "Coefficient ASTs are simple rational expressions in (R, dlon, dlat, cos_lat); only `cos` is transcendental and is libm-stable across Linux/macOS to well under 1e-14. The Julia evaluator is the reference per docs/GRIDS_API.md §4.3; the Python evaluator must match to this tolerance."
+  },
+  "reference_binding": "julia",
+  "reference_binding_notes": "ESD ships a Julia rule evaluator (src/rule_eval.jl, a thin passthrough to EarthSciSerialization.evaluate). Rust + TypeScript siblings will follow once the Python pilot lands.",
+  "coefficient_cases": [
+    {
+      "name": "unit_sphere_equator",
+      "notes": "Unit sphere (R=1), 1° spacing, lat=0 -> cos_lat=1. Exercises the simplest baseline.",
+      "bindings": {
+        "R": 1.0,
+        "dlon": 0.017453292519943295,
+        "dlat": 0.017453292519943295,
+        "cos_lat": 1.0
+      }
+    },
+    {
+      "name": "earth_60N",
+      "notes": "Earth radius, 1° spacing, lat=60° -> cos_lat=0.5. Exercises non-unit R and the lon metric.",
+      "bindings": {
+        "R": 6371000.0,
+        "dlon": 0.017453292519943295,
+        "dlat": 0.017453292519943295,
+        "cos_lat": 0.5
+      }
+    },
+    {
+      "name": "earth_45N_quarter_degree",
+      "notes": "Earth radius, 0.25° spacing, lat=45° -> cos_lat=sqrt(2)/2.",
+      "bindings": {
+        "R": 6371000.0,
+        "dlon": 0.004363323129985824,
+        "dlat": 0.004363323129985824,
+        "cos_lat": 0.7071067811865476
+      }
+    },
+    {
+      "name": "anisotropic_high_lat",
+      "notes": "Anisotropic dlon != dlat, high latitude (lat=80° -> cos_lat=0.17365). Exercises the lon-axis cos_lat metric.",
+      "bindings": {
+        "R": 6371000.0,
+        "dlon": 0.034906585039886591,
+        "dlat": 0.017453292519943295,
+        "cos_lat": 0.17364817766693033
+      }
+    }
+  ],
+  "stencil_cases": [
+    {
+      "name": "small_grid_sin_lon_cos_lat",
+      "notes": "8x16 (nlat x nlon) grid on the unit sphere with f(lon,lat)=sin(lon)*cos(lat). Apply the rule at each interior cell (no lat-axis wrap) and store the per-cell stencil sums for both axes' contributions. The lon stencil approximates d_lon/(R cos_lat) of f; the lat stencil approximates d_lat/R of f.",
+      "grid": {
+        "nlat": 8,
+        "nlon": 16,
+        "R": 1.0
+      },
+      "interior_query_points": [
+        [1, 0], [1, 4], [1, 8], [1, 12], [1, 15],
+        [3, 0], [3, 7], [3, 15],
+        [4, 1], [4, 8], [4, 14],
+        [6, 0], [6, 5], [6, 10], [6, 15]
+      ]
+    }
+  ]
+}
