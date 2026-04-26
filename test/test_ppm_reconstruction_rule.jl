@@ -33,12 +33,14 @@ using TestItems
     @test occursin("\"piecewise_parabolic\"", content)
     @test occursin("\"O(dx^3)\"", content)
     @test occursin("\"stencil\"", content)
-    # 5-point support stencil i-2..i+2.
+    # Multi-stencil mapping with named left/right edge entries (ESS §7.5).
+    @test occursin("\"q_left_edge\"", content)
+    @test occursin("\"q_right_edge\"", content)
+    # 5-point support stencil i-2..i+2 (union of left/right edge offsets).
     for off in (-2, -1, 0, 1, 2)
         @test occursin("\"offset\": $off", content)
     end
     # 4th-order edge interpolation coefficients (CW84 eq. 1.6).
-    @test occursin("\"edge_value_stencil\"", content)
     @test occursin("[-1, 12]", content)
     @test occursin("[7, 12]", content)
 end
@@ -77,11 +79,21 @@ end
     @test spec["accuracy"] == "O(dx^3)"
     @test spec["form"] == "piecewise_parabolic"
     @test spec["limiter"] == "none"
-    @test length(spec["stencil"]) == 5
-    offsets = sort([s["selector"]["offset"] for s in spec["stencil"]])
-    @test offsets == [-2, -1, 0, 1, 2]
-    edge = spec["edge_value_stencil"]
-    @test length(edge["stencil"]) == 4
+    @test spec["stencil"] isa AbstractDict
+    @test haskey(spec["stencil"], "q_left_edge")
+    @test haskey(spec["stencil"], "q_right_edge")
+    @test length(spec["stencil"]["q_left_edge"]) == 4
+    @test length(spec["stencil"]["q_right_edge"]) == 4
+    # Union of left/right edge offsets is the canonical 5-cell PPM support.
+    union_offsets = sort(unique(vcat(
+        [s["selector"]["offset"] for s in spec["stencil"]["q_left_edge"]],
+        [s["selector"]["offset"] for s in spec["stencil"]["q_right_edge"]],
+    )))
+    @test union_offsets == [-2, -1, 0, 1, 2]
+    # The right-edge sub-stencil computes q_{i+1/2} per CW84 eq. (1.6); the
+    # `edge_value_stencil` block is now a human-readable summary that points
+    # back into the canonical multi-stencil mapping.
+    @test spec["edge_value_stencil"]["stencil_ref"] == "stencil.q_right_edge"
 end
 
 @testitem "ppm_reconstruction MMS convergence: order >= 2.7 on uniform Cartesian" begin
