@@ -14,9 +14,10 @@ points rather than serialized geometry bytes.
 
 - `fixtures.json` — fixture opts and query points, shared across bindings
 - `regenerate_golden.py` — reference-golden regenerator
-- `golden/<fixture>.json` — reference accessor outputs
-- `../../../../python/tests/test_lat_lon_conformance.py` — Python test
-- `../../../../rust/tests/lat_lon_conformance.rs` — Rust test
+- `golden/<fixture>.json` — reference accessor outputs and rule-eval coefficients
+- `../../../../python/tests/test_lat_lon_conformance.py` — Python accessor test
+- `../../../../rust/tests/lat_lon_conformance.rs` — Rust accessor test
+- `../../../../rust/tests/lat_lon_rule_conformance.rs` — Rust rule-eval test
 - `../../../../typescript/tests/lat_lon.conformance.test.ts` — TypeScript test
 
 ## Reference binding
@@ -66,6 +67,29 @@ Results are compared against `golden/<fixture>.json`:
   is closed-form; the only transcendental hit is `sin` on cell-center
   latitudes, which is bit-stable across Linux/macOS libm.
 
+## Rule-evaluator parity
+
+Each golden additionally carries a `rule_evals` array under the same
+`tolerance.relative` budget. Each entry pins the per-query-point bindings
+(`R`, `cos_lat`, `dlon`, `dlat` for the FD `latlon` family) and the
+evaluated `coeff` value for every stencil entry of the named rule:
+
+- `rule` / `rule_path` — discretization name and rule JSON path
+- `stencil_selectors` — copy of the rule's stencil selector list (axis,
+  offset) for cross-checking
+- `bindings_per_qp` — per-query-point binding map; bindings derived from
+  each binding's grid accessor must match these to the same tolerance
+- `stencil_coeffs` — evaluated `coeff` per stencil entry per query point;
+  each binding's ESS-AST evaluator must reproduce these floats
+
+Rules currently covered:
+
+- `centered_2nd_uniform_latlon`
+  (`discretizations/finite_difference/centered_2nd_uniform_latlon.json`)
+
+The Rust evaluator (`earthsci_grids::eval_coeff`) is exercised against
+this corpus by `rust/tests/lat_lon_rule_conformance.rs`.
+
 ## Indexing
 
 All query points and accessor outputs are `0`-indexed for row `j` and
@@ -95,6 +119,7 @@ cd python && PYTHONPATH=src pytest tests/test_lat_lon_conformance.py
 ### Rust
 ```bash
 cd rust && cargo test --test lat_lon_conformance
+cd rust && cargo test --test lat_lon_rule_conformance
 ```
 
 ### TypeScript
