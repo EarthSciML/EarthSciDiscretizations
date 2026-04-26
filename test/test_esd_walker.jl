@@ -63,10 +63,11 @@ using TestItems
     lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
     @test lap.family == :finite_difference
 
-    # Layer A: passes for centered_2nd_uniform (canonical/ fixture committed)
-    # and skips for every other rule with reason "no canonical or rewrite
-    # fixtures" (dsc-aez introduced the rewrite/ variant; no rule has one
-    # committed yet — see the synthetic-rule unit tests below).
+    # Layer A: passes for centered_2nd_uniform and
+    # centered_2nd_uniform_vertical (both ship a canonical/ fixture); skips
+    # for every other rule with reason "no canonical or rewrite fixtures"
+    # (dsc-aez introduced the rewrite/ variant; no rule has one committed
+    # yet — see the synthetic-rule unit tests below).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
     # Layer B passes for rules with a runnable convergence fixture
     # (centered_2nd_uniform, centered_2nd_uniform_vertical, upwind_1st —
@@ -97,10 +98,11 @@ using TestItems
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
         key = (String(r.family), r.name)
-        if r.family === :finite_difference && r.name == "centered_2nd_uniform"
-            # centered_2nd_uniform is the only rule with a canonical fixture,
-            # so Layer A passes via the ESS rule engine (dsc-3sg) in addition
-            # to the Layer B convergence sweep.
+        if r.family === :finite_difference && r.name in ("centered_2nd_uniform", "centered_2nd_uniform_vertical")
+            # Both centered_2nd_uniform (cartesian) and
+            # centered_2nd_uniform_vertical (vertical) ship a canonical/
+            # fixture, so Layer A passes via the ESS rule engine (dsc-3sg /
+            # dsc-cjh) in addition to the Layer B convergence sweep.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
