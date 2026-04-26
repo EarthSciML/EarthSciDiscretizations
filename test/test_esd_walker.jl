@@ -78,9 +78,9 @@ using TestItems
     # skip.
     pass_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
                         ("finite_difference", "centered_2nd_uniform_vertical"),
+                        ("finite_difference", "centered_2nd_uniform_latlon"),
                         ("finite_difference", "upwind_1st")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
-                                   ("finite_difference", "centered_2nd_uniform_latlon"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "ppm_reconstruction"),
@@ -137,8 +137,9 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 4 layers (A/B/B'/C) per rule.
     total = length(results) * 4
-    # Three layer-B cases pass (centered_2nd_uniform,
-    # centered_2nd_uniform_vertical, upwind_1st); the rest skip.
+    # Four layer-B cases pass (centered_2nd_uniform,
+    # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st);
+    # the rest skip.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -146,7 +147,7 @@ using TestItems
     layer_limiter_passes = sum(1 for r in results
                                if (String(r.family), r.name) in pass_layer_limiter;
                                init = 0)
-    @test layer_b_passes == 3
+    @test layer_b_passes == 4
     @test layer_limiter_passes == 2
     # Count fails/skips from the live result set so this assertion stays
     # correct as the catalog evolves (e.g. when new rules ship canonical

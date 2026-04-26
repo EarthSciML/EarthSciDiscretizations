@@ -36,13 +36,13 @@ quantity bound at evaluation time.
 
 ## Convergence
 
-<div class="callout callout-pending">
-<strong>Pending ESS harness extension.</strong>
-The Layer-B convergence harness needs the in-flight 2D dispatch and per-cell
-metric callables (see
-<code>EarthSciSerialization/packages/EarthSciSerialization.jl/src/mms_evaluator.jl</code>)
-to evaluate this rule on a spherical manufactured solution. The fixture
-under
-[<code>fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_difference/centered_2nd_uniform_latlon/fixtures/convergence)
-declares <code>applicable: false</code> until those extensions land.
-</div>
+The Layer-B walker drives this rule through ESS's
+<code>verify_mms_convergence</code> with the registered
+<code>Y<sub>2,0</sub></code> spherical-harmonic manufactured solution on the
+unit sphere (lon-independent, so the lon stencil is exact and the test
+isolates the lat-axis 2nd-order accuracy). The fixture sweeps
+<code>n ∈ {16, 32, 64, 128}</code> with <code>nlon = 2 n</code>,
+<code>nlat = n</code> and asserts an observed L<sub>∞</sub> minimum order
+≥ 1.9 over interior cells (poles excluded by the lat stencil's reach).
+Inputs/expected live under
+[<code>fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_difference/centered_2nd_uniform_latlon/fixtures/convergence).
