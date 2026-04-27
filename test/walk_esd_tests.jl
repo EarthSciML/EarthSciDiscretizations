@@ -510,6 +510,18 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
         return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
     end
 
+    # Closed-AST replacement-form rules carry a `replacement` template instead
+    # of a `stencil` block. ESS's AST-walker dispatch (esm-4gw) reads the
+    # resolved-form `lowering` field. Synthesize one from the rule's
+    # `replacement` by substituting pattern variables (`$u`, `$x`, …) with
+    # canonical names ("u", "i", …) so the walker can exercise the rule.
+    spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
+    if spec isa AbstractDict && haskey(spec, "replacement") &&
+            !haskey(spec, "stencil") && !haskey(spec, "lowering")
+        spec["lowering"] = _synthesize_lowering(spec["replacement"],
+                                                get(spec, "applies_to", Dict()))
+    end
+
     try
         result = verify_mms_convergence(rule_json, input_json, expected_json)
         observed = round(result.observed_min_order; digits = 3)
@@ -524,6 +536,42 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
             return LayerResult(LAYER_FAIL, sprint(showerror, err))
         end
         rethrow()
+    end
+end
+
+# Build a `lowering` AST from a rule's `replacement` template by substituting
+# pattern variables (`$u`, `$x`, …) with the canonical names ESS's AST-walker
+# expects ("u", "i", …). The first array operand in `applies_to.args` becomes
+# "u" (subsequent operands "u2", "u3", …); `applies_to.dim` becomes "i".
+function _synthesize_lowering(replacement, applies_to::AbstractDict)
+    bindings = Dict{String,String}()
+    args_list = get(applies_to, "args", nothing)
+    if args_list isa AbstractVector
+        n_arr = 0
+        for a in args_list
+            if a isa AbstractString && startswith(a, "\$")
+                n_arr += 1
+                bindings[a] = n_arr == 1 ? "u" : "u$(n_arr)"
+            end
+        end
+    end
+    dim = get(applies_to, "dim", nothing)
+    if dim isa AbstractString && startswith(dim, "\$")
+        bindings[dim] = "i"
+    end
+    return _substitute_pattern_vars(replacement, bindings)
+end
+
+function _substitute_pattern_vars(node, bindings::Dict{String,String})
+    if node isa AbstractDict
+        return Dict{String,Any}(String(k) => _substitute_pattern_vars(v, bindings)
+                                for (k, v) in node)
+    elseif node isa AbstractVector
+        return Any[_substitute_pattern_vars(v, bindings) for v in node]
+    elseif node isa AbstractString
+        return get(bindings, String(node), node)
+    else
+        return node
     end
 end
 
