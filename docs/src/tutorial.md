@@ -1,153 +1,221 @@
-# Tutorial: Diffusion on the Sphere
+# Tutorial: Authoring a rule
 
-This tutorial simulates diffusion on the cubed sphere using the full
-ModelingToolkit integration — you write the PDE, and `discretize` converts
-it into an ODE system that can be solved with any SciML solver.
+This tutorial walks through writing a new discretization rule end-to-end
+in the closed-AST lowering pattern. The running example is
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) — the
+two-point centered finite difference for ∂u/∂x on a uniform Cartesian
+axis. It is the smallest rule in the catalog that exercises every step,
+and it is currently the canonical linear exemplar (commit `7b26ffd`).
 
-## Problem setup
+By the end you will have:
 
-The diffusion equation on the sphere is:
+1. Pattern-matched a §4.2 PDE operator with metavariables.
+2. Lowered it to a closed `arrayop` expression in the §4.2 op vocabulary.
+3. Delegated boundary handling to the domain's `boundary_conditions`
+   block.
+4. Validated the rule with a Layer-A canonical-form fixture.
+5. Set up the Layer-B convergence sweep with a documented escape hatch
+   for the in-flight ESS prerequisite.
 
-```math
-\frac{\partial u}{\partial t} = \kappa \left(
-  \frac{\partial^2 u}{\partial \lambda^2} +
-  \frac{\partial^2 u}{\partial \varphi^2}
-\right)
+## Step 1 — Match a §4.2 PDE operator
+
+A rule's `applies_to` clause is a pattern that the ESS rewriter unifies
+against the equation tree. The `op` field MUST be one of the §4.2 PDE
+operators: `D`, `grad`, `div`, `laplacian` (plus the pointwise-math
+vocabulary for non-spatial transformations).
+
+Do **not** invent off-spec match keys. Names like `advect`,
+`reconstruct`, `flux`, and `limit` are forbidden as `applies_to.op`
+values — those are *implementation details of a scheme*, not PDE
+operators. Every advection scheme matches a `D` (or, in flux form, a
+`div`); every reconstruction is part of the `arrayop` body of the rule
+that emits the reconstructed array.
+
+For our example, the operator is the spatial gradient:
+
+```json
+"applies_to": {
+  "op":   "grad",
+  "args": ["$u"],
+  "dim":  "$x"
+}
 ```
 
-where ``\lambda`` and ``\varphi`` are longitude and latitude, and ``\kappa``
-is the diffusion coefficient. The library automatically maps this notation
-to the covariant Laplacian on the cubed-sphere grid.
+`$u` and `$x` are pattern metavariables. They bind to the actual field
+name and axis at rewrite time, so the same rule fires for
+`grad(temperature, dim=x)` and `grad(salinity, dim=x)` alike. If a rule
+applies to multiple PDE ops, write one rule file per pattern — the
+catalog favours small, single-purpose rules.
 
-## Step 1: Define the PDE
+## Step 2 — Lower to a closed `arrayop`
 
-```@example tutorial
-using EarthSciDiscretizations
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
-using Symbolics
-using DomainSets
-using OrdinaryDiffEqDefault
-using SciMLBase
+The `replacement` is a single AST node in the §4.2 op vocabulary.
+`arrayop` is the usual top-level shape: it carries an `output_idx`
+(symbolic indices spanning the result), an `expr` (the scalar body
+evaluated at each index point), and `args` (the input operands).
 
-@parameters lon lat
-@variables u(..)
-Dlon = Differential(lon)
-Dlat = Differential(lat)
+For the centered difference, the body is `(u[$x+1] - u[$x-1]) / (2·dx)`:
 
-κ = 0.1  # diffusion coefficient
-
-eq = [D(u(t, lon, lat)) ~ κ * (Dlon(Dlon(u(t, lon, lat))) + Dlat(Dlat(u(t, lon, lat))))]
-bcs = [u(0, lon, lat) ~ exp(-10 * (lon^2 + lat^2))]  # Gaussian blob at (0,0)
-domains = [t ∈ Interval(0.0, 0.5),
-           lon ∈ Interval(-π, π),
-           lat ∈ Interval(-π/2, π/2)]
-
-@named pdesys = PDESystem(eq, bcs, domains, [t, lon, lat], [u(t, lon, lat)])
-nothing # hide
+```json
+"replacement": {
+  "op": "arrayop",
+  "output_idx": ["$x"],
+  "expr": {
+    "op": "/",
+    "args": [
+      { "op": "-", "args": [
+        { "op": "index", "args": ["$u", { "op": "+", "args": ["$x", 1] }] },
+        { "op": "index", "args": ["$u", { "op": "-", "args": ["$x", 1] }] }
+      ]},
+      { "op": "*", "args": [2, "dx"] }
+    ]
+  },
+  "args": ["$u"]
+}
 ```
 
-## Step 2: Discretize and solve
+A few authoring rules that follow from "stay in the §4.2 vocabulary":
 
-```@example tutorial
-Nc = 8  # C8 resolution (6 × 64 = 384 cells)
-disc = FVCubedSphere(Nc; R=1.0)
+- **No scheme-specific kernels.** Every `op` in the body is one of the
+  §4.2 ops listed in [Operators](@ref). If you need a limiter, write
+  `min` / `max` / `ifelse`. If you need a polynomial reconstruction,
+  write `+` / `*` / `index`. Reviewers reject `fn` nodes that
+  re-implement a clamp under a custom name.
+- **No `bc:*` ops in the body.** The lowering is the *interior* closed
+  form; boundaries come in at Step 3.
+- **No host-language code anywhere.** Rules ship JSON. The reference
+  evaluator implements §4.2 once; rules compose against it.
 
-prob = discretize(pdesys, disc)
-sol = solve(prob)
+Larger rules follow the same shape. A flux-form lowering uses an
+`arrayop` whose `output_idx` ranges over edges; a limiter is a
+`broadcast` of `min`/`max`/`ifelse` over operand arrays; a 5-point
+Laplacian is an `arrayop` summing five `index` nodes with the
+appropriate coefficients in the body. The full op alphabet is in
+[Operators](@ref).
 
-println("Retcode: ", sol.retcode)
-println("Grid cells: ", 6 * Nc^2)
-println("Timesteps: ", length(sol.t))
+## Step 3 — Delegate boundary conditions to the domain
+
+Boundary handling is declared once per field on the domain's
+`boundary_conditions` block (`esm-spec.md` §11.5). The rule itself stays
+BC-agnostic — its lowering covers only the interior. A separate set of
+**downstream BC rewrite rules** consumes the domain's BC list and
+rewrites the index expressions at the boundary cells:
+
+| Domain BC | Index transformation applied to `$u[$x ± 1]` |
+|---|---|
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
+| `dirichlet` / `constant` | boundary cell reads the prescribed value |
+| `neumann` / `zero_gradient` | mirror the in-range neighbor (clamp the index) |
+| `robin` | mixed coefficient row at the boundary |
+
+Concretely, this means **do not** write `ifelse` branches in your
+`arrayop` body to special-case the boundary cells. Let the lowering be
+the one-line interior formula; the BC rewriter will rewrite the index
+expressions at the boundary at lowering time.
+
+## Step 4 — Layer-A canonical fixture (validate the JSON)
+
+Layer A is the canonical-form round-trip: load the rule JSON, walk the
+AST, re-serialize, and compare. It catches schema violations,
+metavariable typos, and accidental host-language leakage. Every rule
+ships at least one Layer-A fixture covering the lowering.
+
+The Layer-A fixture for our running example lives next to the rule:
+
+```
+discretizations/finite_difference/centered_2nd_uniform/fixtures/canonical/
 ```
 
-That's the entire workflow: define a PDE with ModelingToolkit, create a
-`FVCubedSphere` discretization, and call `discretize`. The library handles
-grid construction, spatial derivative replacement, initial condition
-projection, and ODE system assembly automatically.
+Run the catalog tests locally to exercise it:
 
-## Step 3: Visualize the result
-
-```@example tutorial
-using CairoMakie, GeoMakie
-
-grid = CubedSphereGrid(Nc; R=1.0)
-
-# Extract solution at a given time using symbolic indexing
-u_sym = first(@variables u(t)[1:6, 1:Nc, 1:Nc])
-
-function get_snapshot(sol, u_sym, grid, tidx)
-    Nc = grid.Nc
-    q = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        q[p, i, j] = sol[u_sym[p, i, j]][tidx]
-    end
-    return q
-end
-
-function plot_cubed_sphere(grid, q; title="", colorrange=nothing)
-    Nc = grid.Nc
-    cr = isnothing(colorrange) ? (minimum(q), maximum(q)) : colorrange
-    fig = Figure(size=(900, 500))
-    ga = GeoAxis(fig[1, 1]; dest="+proj=robin", title=title)
-    for p in 1:6
-        surface!(ga, rad2deg.(grid.lon[p, :, :]), rad2deg.(grid.lat[p, :, :]),
-                 zeros(Nc, Nc); color=q[p, :, :], shading=NoShading,
-                 colormap=:viridis, colorrange=cr)
-    end
-    lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
-    Colorbar(fig[1, 2]; colormap=:viridis, colorrange=cr, label="u")
-    fig
-end
-
-q_initial = get_snapshot(sol, u_sym, grid, 1)
-fig = plot_cubed_sphere(grid, q_initial; title="Initial condition", colorrange=(0, 1))
-fig
+```bash
+julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-```@example tutorial
-q_final = get_snapshot(sol, u_sym, grid, length(sol.t))
-fig = plot_cubed_sphere(grid, q_final; title="Final state (t=$(sol.t[end]))",
-                        colorrange=(0, 1))
-fig
+The catalog tests are the *defensive* layer — they confirm the rule
+parses, the metavariables resolve, and the lowering walks cleanly. They
+should pass before you proceed to Step 5.
+
+## Step 5 — Layer-B convergence sweep (and the ESS prerequisite)
+
+Layer B is an MMS (manufactured-solution) convergence sweep that
+verifies the rule's empirical order of accuracy on a refinement
+sequence. Each rule ships an `input.esm` that names the manufactured
+solution and a sweep of grid sizes; the harness measures L∞ / L₂ error
+and fits a slope.
+
+There is an **in-flight prerequisite** worth flagging: the ESS
+`mms_evaluator` currently dispatches via the legacy `spec['stencil']`
+kernels rather than walking the closed `arrayop` lowering. Until ESS
+gains an AST-walker dispatch path (tracked as ESS `esm-4gw`), Layer B
+cannot exercise a closed-AST rule against the symbolic harness.
+
+The right escape hatch for this **specific** prerequisite is
+`applicable: false` with a `skip_reason` that names the blocker:
+
+```json
+{
+  "rule": "centered_2nd_uniform",
+  "manufactured_solution": "sin(2*pi*x) on [0,1] periodic; derivative 2*pi*cos(2*pi*x)",
+  "sampling": "cell_center",
+  "grids": [
+    { "n": 16 }, { "n": 32 }, { "n": 64 }, { "n": 128 }
+  ],
+  "applicable": false,
+  "skip_reason": "rule rewritten as closed arrayop replacement (dsc-rar); ESS mms_evaluator currently dispatches via spec['stencil'] kernels — Layer-B re-enables once ESS gains an AST-walker dispatch (see follow-up bead)."
+}
 ```
 
-## Step 4: Animate
+`applicable: false` is **only** for blockers of this kind: an upstream
+prerequisite that, once landed, lets the *unmodified* fixture re-enable.
+It is **not** a general escape hatch for "the convergence test is hard
+to write", "we haven't verified the order yet", or "the MMS choice is
+wrong". A `skip_reason` that doesn't name a tracked blocker should not
+land.
 
-```@example tutorial
-# Collect all cell-center coordinates for scatter plot animation
-lons_all = [rad2deg(grid.lon[p, i, j]) for p in 1:6 for i in 1:Nc for j in 1:Nc]
-lats_all = [rad2deg(grid.lat[p, i, j]) for p in 1:6 for i in 1:Nc for j in 1:Nc]
+When ESS lands `esm-4gw`, the fixture flips to `applicable: true`
+without other edits and the sweep exercises the rule's `arrayop`
+lowering through the same evaluator the canonical tests use.
 
-fig = Figure(size=(900, 500))
-ga = GeoAxis(fig[1, 1]; dest="+proj=robin")
+## Step 6 — Document and link
 
-color_obs = Observable(vec(q_initial))
-scatter!(ga, lons_all, lats_all; color=color_obs, colormap=:viridis,
-         colorrange=(0, 1), markersize=8)
-lines!(ga, GeoMakie.coastlines(); color=:black, linewidth=0.5)
-Colorbar(fig[1, 2]; colormap=:viridis, colorrange=(0, 1), label="u")
+Each rule has a doc page under `docs/content/rules/<rule>.md`. Follow
+the structure of
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) —
+overview, `applies_to` and `replacement` AST, BC handoff table,
+truncation derivation, convergence figure / status. Cross-link to
+related rules and to `esm-spec.md` §4.2 / §11.5 for the definitive
+operator and BC vocabulary.
 
-frame_indices = range(1, length(sol.t), length=min(20, length(sol.t))) .|> round .|> Int |> unique
+The catalog landing page at
+[`docs/content/rules/_index.md`]({{< ref "/rules" >}}) advertises the
+closed-AST lowering pattern as the default. New rules should match its
+framing; rules predating the migration carry a "legacy form" note on
+their page until they are rewritten.
 
-record(fig, joinpath(@__DIR__, "diffusion.gif"), frame_indices; framerate=5) do tidx
-    q = get_snapshot(sol, u_sym, grid, tidx)
-    color_obs[] = vec(q)
-end
-nothing # hide
-```
+## Adapt to your scheme
 
-![Diffusion on the sphere](diffusion.gif)
+To author a different rule, swap each piece:
 
-## What happened under the hood
+- Step 1 — choose the §4.2 PDE op your scheme discretizes. (`D` for
+  most time-dependent schemes; `grad` / `div` / `laplacian` for spatial
+  operators.)
+- Step 2 — write the closed `arrayop` body. Use `index`, arithmetic,
+  `min` / `max` / `ifelse`, and (for nonlinear or weighted schemes)
+  `broadcast`. No new ops.
+- Step 3 — leave BC handling to the domain. Do not embed BC switches in
+  the body.
+- Step 4 — ship a canonical fixture. Make it pass.
+- Step 5 — ship the convergence fixture. Use `applicable: false` with a
+  named-blocker `skip_reason` only if a tracked prerequisite genuinely
+  blocks the sweep; otherwise the fixture must be `applicable: true`
+  and the slope must match the declared accuracy.
+- Step 6 — write the doc page in the same shape as
+  `centered_2nd_uniform.md` and cross-link.
 
-When you call `discretize(pdesys, disc)`:
-
-1. A `CubedSphereGrid` is constructed with the specified resolution
-2. For each PDE unknown `u(t, lon, lat)`, a discrete state array `u(t)[1:6, 1:Nc, 1:Nc]` is created
-3. The PDE equations are walked symbolically — each spatial `Differential` is replaced with a finite-difference stencil operating on the discrete array
-4. Initial conditions from the BCs are evaluated at each grid cell's (lon, lat)
-5. The resulting ODE system is compiled by ModelingToolkit and wrapped in an `ODEProblem`
-
-The solver then integrates the ODE system using any algorithm from the
-DifferentialEquations.jl ecosystem (Tsit5, Rodas5, etc.).
+For a contributor-oriented walk through the surrounding repository
+infrastructure (paths, CI layers, registration), see the
+[Add a new discretization rule]({{< ref "/tutorials/add-a-rule" >}})
+companion tutorial — note that until that tutorial migrates to the new
+pedagogy it still describes the legacy stencil/coefficient form on some
+steps.

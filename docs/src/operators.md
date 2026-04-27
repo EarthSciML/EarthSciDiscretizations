@@ -1,14 +1,108 @@
 # Operators
 
-## Overview
+## The closed authoring vocabulary
 
-All finite-volume operators in EarthSciDiscretizations.jl return symbolic `ArrayOp` objects from SymbolicUtils.jl. To obtain numerical results, call `evaluate_arrayop` on the returned `ArrayOp`.
+A discretization rule's `replacement` MUST be expressible in the §4.2 op
+vocabulary alone. That vocabulary is *closed*: every binding (Julia,
+Python, future host) walks the same AST, and no rule introduces new
+ops. The vocabulary covers everything an FV scheme needs — including
+limiters, reconstructions, and weighted-stencil schemes — without any
+scheme-specific dispatch.
 
-This design allows operators to be composed symbolically before evaluation, enabling future integration with ModelingToolkit.jl equation systems.
+The full list, summarized from `esm-spec.md` §4.2 (consult that section
+for the authoritative form):
 
-## Gradient of a Linear Field
+### PDE operators (`applies_to.op` and tendency expressions)
 
-The gradient operator should exactly reproduce the slope of a linear field in computational coordinates.
+| Op | Fields | Meaning |
+|---|---|---|
+| `D` | `wrt` | Time derivative ∂/∂t |
+| `grad` | `dim` | Spatial gradient ∂/∂x |
+| `div` | | Divergence ∇· |
+| `laplacian` | | Laplacian ∇² |
+
+These four (plus pointwise math, below) are the PDE-operator alphabet
+that authors pattern-match against. A rule's `applies_to.op` MUST be
+one of them.
+
+### Pointwise math
+
+Arithmetic: `+` (n-ary), `-` (unary or binary), `*` (n-ary), `/`
+(binary), `^` (binary).
+
+Elementary functions: `exp`, `log`, `log10`, `sqrt`, `abs`, `sign`,
+`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `min` (n-ary,
+≥2 args), `max` (n-ary, ≥2 args), `floor`, `ceil`.
+
+`min` / `max` are the canonical encoding of clamp / clip / limiter
+primitives — `clamp(x, lo, hi)` is `min(hi, max(lo, x))`. Reviewers
+reject `fn` nodes that re-implement these in disguise.
+
+### Conditionals
+
+`ifelse [cond, then, else]`, `>`, `<`, `>=`, `<=`, `==`, `!=`, `and`,
+`or`, `not`. Conditional logic in lowerings (e.g. flux-limiter switches)
+goes through `ifelse`; there is no `if`-statement primitive.
+
+### Inline constants and registry calls
+
+`const` (literal value), `enum` (file-local symbolic name), `fn`
+(invocation of a closed-registry function — `name` is a dotted path).
+Most FV rules need none of these; mention them only when shipping a
+table of coefficients inline (`const`) or a registry-level helper.
+
+### Array / tensor ops (`replacement` body)
+
+| Op | Required fields | Meaning |
+|---|---|---|
+| `arrayop` | `output_idx`, `expr` | Generalized Einstein-notation tensor expression with implicit reductions over non-output indices. (§4.3.1.) |
+| `makearray` | `regions`, `values` | Block assembly from overlapping sub-region assignments; later regions overwrite earlier ones. (§4.3.2.) |
+| `index` | — | Element / sub-array access. `args[0]` is the array; `args[1..]` are index expressions. (§4.3.3.) |
+| `broadcast` | `fn` | Element-wise application of scalar op `fn`. (§4.3.4.) |
+| `reshape` | `shape` | Reshape the operand to a target shape. (§4.3.5.) |
+| `transpose` | optional `perm` | Axis permutation. (§4.3.5.) |
+| `concat` | `axis` | Concatenate operand arrays along `axis`. (§4.3.5.) |
+
+`arrayop` is the workhorse: every closed-AST FV lowering in the
+catalog ultimately resolves to one or more `arrayop` nodes whose body
+combines `index`, arithmetic, and (for nonlinear schemes) `ifelse` and
+`broadcast`.
+
+## What the vocabulary excludes
+
+Rules MUST NOT introduce off-spec match keys or scheme-named ops in
+either `applies_to.op` or anywhere inside `replacement`. The following
+names are forbidden:
+
+| Forbidden as `op` | Right answer |
+|---|---|
+| `advect` | match `D(q, wrt=t)` (or whichever PDE op the scheme discretizes) and lower the advective tendency as an `arrayop`. |
+| `reconstruct` | the reconstruction is the body of the `arrayop` — express the polynomial in `+`, `*`, `index`. |
+| `flux` | flux assembly is an `arrayop` whose `output_idx` ranges over edges and whose body is the numerical-flux formula in pointwise math + `ifelse`. |
+| `limit` / `limiter` | encode the limiter as `min` / `max` / `ifelse` directly. |
+| `bc:*` | boundary handling is declared on the domain (`esm-spec.md` §11.5) and applied by downstream BC rules; no `bc:*` op exists in the lowered AST. |
+
+The rule of thumb: if the only justification for a new op name is "this
+scheme calls it that", it is the wrong move. Express the math in the
+existing alphabet. If a scheme genuinely cannot be expressed — bring it
+to the spec authors before authoring the rule.
+
+The companion prohibition is on **scheme-specific kernels in any host
+language**. Rules ship JSON, not Julia or Python. The reference
+evaluator (`evaluate_arrayop` and the ESS walker) implements the §4.2
+vocabulary once; rules borrow that implementation by composition.
+
+## Worked sanity checks
+
+The closed-AST lowerings produced by the catalog satisfy the same basic
+invariants any FV operator must — they are still operators on arrays,
+just authored differently. The following examples evaluate the AST that
+the rules emit, confirming each invariant holds.
+
+### Gradient of a linear field
+
+The gradient operator should reproduce the slope of a linear field in
+computational coordinates.
 
 ```@example ops
 using EarthSciDiscretizations
@@ -32,9 +126,9 @@ println("  Max:  $(maximum(grad))")
 println("  All equal to 2.0: $(all(isapprox.(grad, 2.0; rtol=1e-12)))")
 ```
 
-## Divergence of Zero Flux
+### Divergence of a zero flux
 
-The divergence of a zero flux field should be exactly zero.
+The divergence of a zero flux field is exactly zero.
 
 ```@example ops
 F_xi = zeros(6, Nc + 1, Nc)
@@ -47,9 +141,9 @@ println("  Size: $(size(div_result))")
 println("  Max absolute value: $(maximum(abs.(div_result)))")
 ```
 
-## Laplacian of a Constant
+### Laplacian of a constant
 
-The Laplacian of a constant field should be zero everywhere.
+The Laplacian of a constant field is zero everywhere.
 
 ```@example ops
 phi_const = fill(42.0, 6, Nc, Nc)
@@ -60,9 +154,10 @@ println("  Size: $(size(lap))")
 println("  Max absolute value: $(maximum(abs.(lap)))")
 ```
 
-## Transport of a Constant Field
+### Transport of a constant field
 
-Advecting a constant field should produce zero tendency regardless of the velocity field.
+Advecting a constant field produces zero tendency regardless of the
+velocity field.
 
 ```@example ops
 q_const = fill(5.0, 6, Nc, Nc)
@@ -76,14 +171,9 @@ println("  Size: $(size(tendency))")
 println("  Max absolute value: $(maximum(abs.(tendency)))")
 ```
 
-## Operator Summary
+## Where to read more
 
-| Operator | Input | Output Size | Description |
-|:---------|:------|:------------|:------------|
-| `fv_divergence` | $F^\xi$ [6, Nc+1, Nc], $F^\eta$ [6, Nc, Nc+1] | [6, Nc, Nc] | Finite-volume divergence |
-| `fv_gradient_xi` | $\phi$ [6, Nc, Nc] | [6, Nc-1, Nc] | $\xi$-gradient at interior U-edges |
-| `fv_gradient_eta` | $\phi$ [6, Nc, Nc] | [6, Nc, Nc-1] | $\eta$-gradient at interior V-edges |
-| `fv_laplacian` | $\phi$ [6, Nc, Nc] | [6, Nc-2, Nc-2] | 5-point Laplacian at interior cells |
-| `flux_1d` | $q$, $c$ [6, Nc, Nc] | [6, Nc-2, Nc] or [6, Nc, Nc-2] | 1D Lax-Friedrichs transport |
-| `transport_2d` | $q$, $c_\xi$, $c_\eta$ [6, Nc, Nc] | [6, Nc-2, Nc-2] | 2D Lax-Friedrichs transport |
-| `ppm_reconstruction` | $q$ [6, Nc, Nc] | Left/Right [6, Nc-4, Nc] | PPM sub-grid reconstruction |
+- [Finite-Volume Method](@ref) — how a rule's pattern match and closed
+  `arrayop` replacement encode an FV operator.
+- [Tutorial: Authoring a rule](@ref) — end-to-end walkthrough.
+- `esm-spec.md` §4.2 (operator vocabulary), §4.3 (array semantics).

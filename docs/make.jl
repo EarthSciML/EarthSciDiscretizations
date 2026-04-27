@@ -11,7 +11,7 @@ makedocs(
         "Finite-Volume Method" => "fv_method.md",
         "Cubed-Sphere Grid" => "grid.md",
         "Operators" => "operators.md",
-        "Tutorial: Diffusion on the Sphere" => "tutorial.md",
+        "Tutorial: Authoring a rule" => "tutorial.md",
     ],
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
