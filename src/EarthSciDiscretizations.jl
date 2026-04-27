@@ -39,9 +39,9 @@ include("operators/transport_2d.jl")
 include("operators/vertical_remap.jl")
 
 # FV3-specific operators
-include("operators/wind_ops.jl")
-include("operators/vorticity.jl")
-include("operators/kinetic_energy.jl")
+# Wind-field operators (vorticity, kinetic energy, C↔D grid transformation +
+# sub-grid sin(α) flux) ported to JSON discretization rules under
+# `discretizations/finite_volume/fv3_*.json`. See dsc-247.
 include("operators/ppm_edge.jl")
 
 # Boundary-condition handler
@@ -131,19 +131,6 @@ export ppm_reconstruction_arrayop
 
 # Exports: FV3 super-grid
 export compute_super_grid, compute_super_grid!, compute_angle_at_point
-
-# Exports: FV3 wind operators
-export covariant_to_contravariant, contravariant_to_covariant
-export dgrid_to_cgrid!, dgrid_to_cgrid, dgrid_to_cgrid_arrayop
-export compute_flux_with_sinsg!, compute_flux_with_sinsg
-export compute_flux_with_sinsg_xi_arrayop, compute_flux_with_sinsg_eta_arrayop
-
-# Exports: FV3 vorticity and kinetic energy
-export fv_vorticity!, fv_vorticity, fv_vorticity_arrayop
-export fv_vorticity_cellmean!, fv_vorticity_cellmean, fv_vorticity_cellmean_arrayop
-export fv_absolute_vorticity!, fv_absolute_vorticity, fv_absolute_vorticity_arrayop
-export fv_kinetic_energy!, fv_kinetic_energy, fv_kinetic_energy_arrayop
-export fv_kinetic_energy_cell!, fv_kinetic_energy_cell, fv_kinetic_energy_cell_arrayop
 
 # Exports: FV3 two-sided PPM
 export ppm_edge_value_twosided, ppm_edge_value_twosided_limited

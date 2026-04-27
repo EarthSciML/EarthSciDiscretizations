@@ -1,0 +1,54 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_absolute_vorticity_cellmean": {
+      "applies_to": {
+        "op": "absolute_vorticity",
+        "args": ["$omega_rel"]
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "D",
+      "stagger_enum": "cubed_sphere_stagger",
+      "requires_locations": ["cell_center"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "exact addition of Coriolis to relative vorticity",
+      "reference": "f = 2·Ω_rot·sin(lat); Harris et al. (2021), GFDL FV3 Technical Memorandum, §6.3; src/operators/vorticity.jl `fv_absolute_vorticity` (imperative reference).",
+      "notes": "ω_abs = ω_rel + f, where f = 2·Omega_rot·sin(lat). Composes with `fv3_vorticity_cellmean`: the operand at the cell-center slot is the cell-mean relative vorticity emitted by that rule. The Coriolis offset is contributed by an additive constant term whose AST evaluates against the per-cell `lat` binding and the scalar `Omega_rot` binding (default 7.292e-5 rad/s for Earth). The two stencil rows are the cell-center relative vorticity (coeff 1) and the constant-source Coriolis term whose `coeff` AST is the closed-form 2·Omega_rot·sin(lat) — selector `kind: \"constant\"` flags a self-targeting source row that carries no operand read.",
+      "metric_bindings": {
+        "lat": "geographic latitude at CellCenter(i,j) (radians)",
+        "Omega_rot": "planetary rotation rate (rad/s); supplied as a scalar binding at stencil-application time"
+      },
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi",  "offset": 0 },
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": 1
+        },
+        {
+          "selector": {
+            "kind": "constant",
+            "name": "coriolis_f"
+          },
+          "coeff": {
+            "op": "*",
+            "args": [
+              2,
+              "Omega_rot",
+              { "op": "sin", "args": ["lat"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_sinsg_flux_xi": {
+      "applies_to": {
+        "op": "metric_flux",
+        "args": ["$vel"],
+        "dim": "xi"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "form": "closed_form_upwind_blended",
+      "requires_locations": ["u_edge"],
+      "emits_location": "u_edge",
+      "accuracy": "first-order (upwind sub-grid sin(α) selection)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §3.5, §6 (sub-grid sin(α) upwind selection); Lin & Rood (1997) MWR; src/operators/wind_ops.jl `compute_flux_with_sinsg_xi_arrayop` (imperative reference).",
+      "notes": "Metric-corrected ξ-direction flux through a UEdge interface. Uses an upwind-blended closed-form rather than branching on sign(vel): flux = ((v + |v|)·sin_pos + (v − |v|)·sin_neg) / 2 · dx · dt, where `sin_pos` is the sub-grid sin(α) on the upwind side for v>0 (interior: position 3 of cell i−1; west boundary: position 1 of cell 1) and `sin_neg` is the upwind side for v<0 (interior: position 1 of cell i; east boundary: position 3 of cell Nc). The interior/boundary lookup is precomputed by the cubed_sphere grid accessor and exposed as the `sin_pos[p,i,j]` / `sin_neg[p,i,j]` arrays at u_edge stagger; the rule reads them as scalar bindings via the accessor.",
+      "metric_bindings": {
+        "sin_pos": "sub-grid sin(α) on the upwind side when vel > 0 — precomputed at u_edge by the grid accessor (`_precompute_sinsg_xi`)",
+        "sin_neg": "sub-grid sin(α) on the upwind side when vel < 0",
+        "dx": "physical edge length at the UEdge interface (`grid.dx[p,i,j]`)",
+        "dt": "scalar time-step binding supplied by the rule consumer"
+      },
+      "reads": [
+        { "name": "v", "selector": { "kind": "cubed_sphere", "stagger": "u_edge", "axis": "xi", "offset": 0 } }
+      ],
+      "expression": {
+        "op": "*",
+        "args": [
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [{ "op": "+", "args": ["v", { "op": "abs", "args": ["v"] }] }, "sin_pos"] },
+                  { "op": "*", "args": [{ "op": "-", "args": ["v", { "op": "abs", "args": ["v"] }] }, "sin_neg"] }
+                ]
+              },
+              2
+            ]
+          },
+          "dx",
+          "dt"
+        ]
+      }
+    }
+  }
+}

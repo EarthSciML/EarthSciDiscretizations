@@ -1,0 +1,57 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_sinsg_flux_eta": {
+      "applies_to": {
+        "op": "metric_flux",
+        "args": ["$vel"],
+        "dim": "eta"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "form": "closed_form_upwind_blended",
+      "requires_locations": ["v_edge"],
+      "emits_location": "v_edge",
+      "accuracy": "first-order (upwind sub-grid sin(α) selection)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §3.5, §6; src/operators/wind_ops.jl `compute_flux_with_sinsg_eta_arrayop` (imperative reference).",
+      "notes": "η-direction sibling of `fv3_sinsg_flux_xi`. flux = ((v + |v|)·sin_pos + (v − |v|)·sin_neg) / 2 · dy · dt. `sin_pos` is upwind for v>0 (interior: position 4 of cell j−1; south boundary: position 2 of cell 1); `sin_neg` is upwind for v<0 (interior: position 2 of cell j; north boundary: position 4 of cell Nc). Precomputation lives in `_precompute_sinsg_eta`.",
+      "metric_bindings": {
+        "sin_pos": "sub-grid sin(α) on the upwind side when vel > 0 (precomputed at v_edge)",
+        "sin_neg": "sub-grid sin(α) on the upwind side when vel < 0",
+        "dy": "physical edge length at the VEdge interface (`grid.dy[p,i,j]`)",
+        "dt": "scalar time-step binding supplied by the rule consumer"
+      },
+      "reads": [
+        { "name": "v", "selector": { "kind": "cubed_sphere", "stagger": "v_edge", "axis": "eta", "offset": 0 } }
+      ],
+      "expression": {
+        "op": "*",
+        "args": [
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [{ "op": "+", "args": ["v", { "op": "abs", "args": ["v"] }] }, "sin_pos"] },
+                  { "op": "*", "args": [{ "op": "-", "args": ["v", { "op": "abs", "args": ["v"] }] }, "sin_neg"] }
+                ]
+              },
+              2
+            ]
+          },
+          "dy",
+          "dt"
+        ]
+      }
+    }
+  }
+}

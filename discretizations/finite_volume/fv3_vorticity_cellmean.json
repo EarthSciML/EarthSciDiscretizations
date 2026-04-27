@@ -1,0 +1,83 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_vorticity_cellmean": {
+      "applies_to": {
+        "op": "curl",
+        "args": ["$V"]
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "D",
+      "stagger_enum": "cubed_sphere_stagger",
+      "requires_locations": ["u_edge", "v_edge"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "exact (midpoint rule on primal-cell circulation)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §3, §5, §6; src/operators/vorticity.jl `fv_vorticity_cellmean` (imperative reference).",
+      "notes": "Cell-mean relative vorticity from D-grid normalized covariant winds via Stokes' theorem on the primal cell. Circulation around the primal cell at (i,j): Γ = v_d[i,j]·dy[i,j] + u_d[i+1,j]·dx[i+1,j] − v_d[i,j+1]·dy[i,j+1] − u_d[i,j]·dx[i,j]. Then ω = Γ / area. The four stencil rows are the four oriented edge contributions; each carries the sign of the outward edge normal in the closed circulation integral. D-grid wind convention (FV3): u_d at UEdge is V·ê_η on a ξ-constant edge of length dx; v_d at VEdge is V·ê_ξ on an η-constant edge of length dy. Per-cell metric bindings (`dx`, `dy`, `area`) are resolved by the cubed_sphere grid accessor at the staggered cell carrying the selector.",
+      "metric_bindings": {
+        "comment": "Per-cell metric quantities resolved by the cubed_sphere grid accessor. Names match `CubedSphereGrid` field names so the accessor wires them directly.",
+        "dx": "physical length of the ξ-constant edge at UEdge(i,j) (runs in η-direction)",
+        "dy": "physical length of the η-constant edge at VEdge(i,j) (runs in ξ-direction)",
+        "area": "primal-cell area at CellCenter(i,j)"
+      },
+      "stencil": [
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "v_edge",
+            "axis": "eta",
+            "offset": 0
+          },
+          "coeff": { "op": "/", "args": ["dy", "area"] }
+        },
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "u_edge",
+            "axis": "xi",
+            "offset": 1
+          },
+          "coeff": { "op": "/", "args": ["dx", "area"] }
+        },
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "v_edge",
+            "axis": "eta",
+            "offset": 1
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "*", "args": [-1, "dy"] },
+              "area"
+            ]
+          }
+        },
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "u_edge",
+            "axis": "xi",
+            "offset": 0
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "*", "args": [-1, "dx"] },
+              "area"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

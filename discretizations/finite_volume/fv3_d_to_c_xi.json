@@ -1,0 +1,48 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_d_to_c_xi": {
+      "applies_to": {
+        "op": "d_to_c",
+        "args": ["$ua"],
+        "dim": "xi"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "requires_locations": ["cell_center"],
+      "emits_location": "u_edge",
+      "combine": "+",
+      "accuracy": "O(h^2) (two-point centered average across the ξ-edge)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §6; src/operators/wind_ops.jl `dgrid_to_cgrid` step 4 (imperative reference).",
+      "notes": "Final A→C interpolation step of the D→C grid algorithm: average the cell-center contravariant ξ-wind ũ from the two cells flanking a ξ-constant face. Inputs are A-grid contravariant winds at cell centers (output of the covariant→contravariant transform followed by ghost extension with vector rotation — `src/ghost_cells.jl::extend_with_ghosts_vector`). Cross-panel ghost extension lives in the grid accessor; selectors carry no `panel` field.",
+      "stencil": [
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "cell_center",
+            "axis": "xi",
+            "offset": -1
+          },
+          "coeff": { "op": "/", "args": [1, 2] }
+        },
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "cell_center",
+            "axis": "xi",
+            "offset": 0
+          },
+          "coeff": { "op": "/", "args": [1, 2] }
+        }
+      ]
+    }
+  }
+}
