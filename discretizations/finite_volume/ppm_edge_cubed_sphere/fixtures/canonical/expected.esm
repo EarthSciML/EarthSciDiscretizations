@@ -1,0 +1,12 @@
+{
+  "rule": "ppm_edge_cubed_sphere",
+  "result": {
+    "name": "q_panel_edge",
+    "shape": [6, 23, 24],
+    "sampling": "face_xi",
+    "form": "linear stencil at offsets {-1, 0, 1, 2} along ξ with coefficients [-1/4, 3/4, 3/4, -1/4] applied to q(p,i,j) = 1 + 0.3·sin(2·ξ_i)·cos(η_j) at every ξ-face on every panel; numeric values match the unlimited `ppm_edge_value_twosided` reference (q_m1=q[i-1], q_0=q[i], q_1=q[i+1], q_2=q[i+2], dx=h) bit-for-bit on c24 (within 1e-12 relative tolerance)."
+  },
+  "tolerance": 1.0e-12,
+  "comment": "Bit-equivalence check vs the imperative `ppm_edge_value_twosided` reference (pre-port; src/operators/ppm_edge.jl). Once the ESS Layer-A canonical-form rule engine accepts cubed_sphere selectors and routes cross-panel offsets through the panel-connectivity accessor, the walker will materialize the rule against this input and byte-compare to the imperative reference. Today Layer A is documentation of the equivalence contract — the canonical input/expected pair pins the equivalence so a future ESS extension can flip the walker to PASS without rewriting fixtures.",
+  "notes": "The monotonicity-clamped form (FV3 eq. 6.6) is documented in the rule's `monotonicity_constraint` block but is NOT exercised here — the canonical fixture pins the unlimited stencil only. Numeric coverage of the limited form, mass conservation, and consistency-with-interior-PPM continues to live in the Julia tests `test/test_fv3_operators.jl` (the items relying on `ppm_edge_value_twosided` and `flux_1d_ppm_twosided!` are removed alongside `src/operators/ppm_edge.jl` in this bead; the equivalence claim above is the lasting contract). The cubed_sphere walker harness path needed to drive this fixture (panel-connectivity-aware ESS dispatch + per-cell `h` binding) is a known follow-up shared with covariant_laplacian_cubed_sphere."
+}

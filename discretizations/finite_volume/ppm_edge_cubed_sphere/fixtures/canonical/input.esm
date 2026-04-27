@@ -1,0 +1,30 @@
+{
+  "rule": "ppm_edge_cubed_sphere",
+  "grid": {
+    "family": "cubed_sphere",
+    "Nc": 24,
+    "R": 1.0,
+    "ghost_width": 3,
+    "comment": "c24 gnomonic equidistant cubed sphere; uniform isotropic spacing h = π/(2·24) on each panel. Cross-panel ghost cells (needed for the offset {-1, 0, 1, 2} stencil at panel-boundary interfaces) are filled by the cubed_sphere grid accessor (src/grids/panel_connectivity.jl) — the rule references in-panel offsets only."
+  },
+  "field": {
+    "name": "q",
+    "form": "q(p,i,j) = 1 + 0.3 · sin(2 · ξ_i) · cos(η_j)",
+    "sampling": "cell_center"
+  },
+  "operator": {
+    "op": "reconstruct_panel_edge",
+    "args": ["q"],
+    "dim": "xi"
+  },
+  "interface_locus": {
+    "axis": "xi",
+    "comment": "Panel-boundary interface along ξ. The 4-cell stencil at offsets {-1, 0, 1, 2} produces the value at the i+1/2 face between offsets 0 and 1; the leftmost two cells (offsets -1, 0) sit on the neighbor panel through ghost cells when the interface is the panel seam."
+  },
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "ppm_edge_value_twosided",
+    "path": "src/operators/ppm_edge.jl (deleted in this bead; pre-port reference)",
+    "comment": "Imperative reference at the time of port. Layer-A canonical-form rule engine, once wired with cubed_sphere multi-axis selectors and the panel-connectivity accessor, must produce bit-identical output (within 1e-12 relative tolerance) when applied to this input. The unlimited two-sided edge value (no monotonicity clamp) is what the rule's linear stencil encodes; the limited form (FV3 eq. 6.6) requires a post-stencil clamp tracked separately."
+  }
+}

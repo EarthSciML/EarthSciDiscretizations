@@ -174,6 +174,40 @@ end
     @test occursin("dJgxe_deta", content)
 end
 
+@testitem "ppm_edge_cubed_sphere scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "ppm_edge_cubed_sphere", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cubed_sphere\"", content)
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"op\": \"reconstruct_panel_edge\"", content)
+    # FV3 two-sided edge formula on the gnomonic equidistant cubed sphere
+    # collapses to a 4-cell linear stencil at offsets {-1, 0, 1, 2} along the
+    # chosen axis ($x ∈ {xi, eta}); 1D-along-axis selectors composed via a
+    # `selectors: [...]` array per SELECTOR_KINDS.md decision #13.
+    @test occursin("\"selectors\"", content)
+    @test occursin("\"axis\": \"\$x\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 2", content)
+    # Cross-panel ghost handling lives in the cubed_sphere grid accessor; the
+    # rule must NOT carry a `panel` field.
+    @test !occursin("\"panel\"", content)
+    # FV3 eq. 6.6 monotonicity clamp is documented separately as a non-linear
+    # post-processing step; the rule keeps the linear stencil only.
+    @test occursin("monotonicity_constraint", content)
+end
+
 @testitem "nn_diffusion_mpas scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 

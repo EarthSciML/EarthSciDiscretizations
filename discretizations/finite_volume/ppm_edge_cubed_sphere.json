@@ -1,0 +1,59 @@
+{
+  "discretizations": {
+    "ppm_edge_cubed_sphere": {
+      "applies_to": {
+        "op": "reconstruct_panel_edge",
+        "args": ["$q"],
+        "dim": "$x"
+      },
+      "grid_family": "cubed_sphere",
+      "form": "piecewise_parabolic_two_sided",
+      "limiter": "monotonicity_constraint",
+      "accuracy": "O(h^2) at panel-boundary interfaces (deliberate fallback from the interior O(h^4) PPM edge formula)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, Eq. 6.5–6.6.",
+      "notes": "Two-sided PPM extrapolation at cubed-sphere panel-boundary interfaces. The standard 4th-order PPM edge formula (CW84 eq. 1.6, encoded in finite_volume/ppm_reconstruction.json) is inaccurate across the discontinuous panel coordinate system; this rule averages two one-sided extrapolations, one from each side of the boundary. The stencil samples cells at offsets {-1, 0, 1, 2} along the chosen axis ($x ∈ {xi, eta}) and produces the value at the panel-edge interface lying between offsets 0 and 1; cross-panel offsets are resolved to neighbor-panel ghost cells (with the appropriate 2×2 basis rotation) by the cubed_sphere grid accessor (src/grids/panel_connectivity.jl), so selectors carry no `panel` field per SELECTOR_KINDS.md decision #13. On the gnomonic equidistant cubed sphere the spacing is uniform isotropic h = dξ = dη = π/(2·Nc), so the FV3 non-uniform formula a_E = (1/2)·[(2 dx_1 + dx_2) q_1 − dx_1 q_2] / (dx_1 + dx_2) + (1/2)·[(2 dx_0 + dx_{-1}) q_0 − dx_0 q_{-1}] / (dx_0 + dx_{-1}) collapses to the 4-cell linear stencil with coefficients [-1/4, 3/4, 3/4, -1/4]. The monotonicity constraint of FV3 eq. 6.6 (clamp the linear value to the [min, max] range of the four contributing cells) is documented separately under `monotonicity_constraint` and is not part of the linear stencil — encoding a post-stencil clamp in the ESS §7 schema is a follow-up.",
+      "panel_handling": "lives in the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); the rule references in-panel offsets only.",
+      "metric_bindings": {
+        "comment": "The two-sided edge formula on a uniform isotropic gnomonic equidistant grid carries no metric coefficients — all `dx_k = h` cancel from the FV3 non-uniform formula. The per-axis spacing symbol `h` is reported here for cross-reference with the cubed_sphere accessor (matches src/grids/cubed_sphere.jl `dξ` / `dη` fields, both equal to π/(2·Nc)).",
+        "h": "uniform isotropic spacing dξ = dη = π / (2 Nc)"
+      },
+      "outputs": ["q_panel_edge"],
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "$x", "offset": -1 }
+          ],
+          "coeff": { "op": "/", "args": [-1, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "$x", "offset": 0 }
+          ],
+          "coeff": { "op": "/", "args": [3, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "$x", "offset": 1 }
+          ],
+          "coeff": { "op": "/", "args": [3, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "$x", "offset": 2 }
+          ],
+          "coeff": { "op": "/", "args": [-1, 4] }
+        }
+      ],
+      "edge_value_stencil": {
+        "produces": "q_{i+1/2} at panel-boundary interfaces along $x",
+        "comment": "FV3 eq. 6.5 (two-sided extrapolation) specialized to uniform isotropic spacing on the gnomonic equidistant cubed sphere. The 4-point stencil over offsets {-1, 0, 1, 2} carries coefficients [-1/4, 3/4, 3/4, -1/4]; the value sits on the cell-edge interface between cells at offsets 0 and 1. Compare with the standard interior 4th-order PPM edge formula (CW84 eq. 1.6) [-1/12, 7/12, 7/12, -1/12]: same 4 cells, different weights — the two-sided form is exact for linear fields only, by design at panel boundaries where the higher-order formula breaks down.",
+        "stencil_ref": "stencil"
+      },
+      "monotonicity_constraint": {
+        "comment": "FV3 eq. 6.6: after the linear stencil produces a_E, clamp it to the closed range [min(q_{-1}, q_0, q_1, q_2), max(q_{-1}, q_0, q_1, q_2)] of the four contributing cell means, preventing new extrema from forming at panel-boundary interfaces. This is a non-linear post-processing step expressed against the same stencil cells; the rule carries the linear stencil only because the ESS §7 schema does not yet encode post-stencil clamps. Bindings that need the limited form apply `clamp(a_E, qmin, qmax)` after the linear sum.",
+        "form": "a_E := clamp(a_E, min(q_{-1}, q_0, q_1, q_2), max(q_{-1}, q_0, q_1, q_2))",
+        "follow_up": "ESS extension to encode post-stencil clamp guards (parallel to the `formula` AST in flux_limiter_minmod.json) is tracked separately."
+      }
+    }
+  }
+}

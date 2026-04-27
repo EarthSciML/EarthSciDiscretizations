@@ -42,7 +42,8 @@ include("operators/vertical_remap.jl")
 # Wind-field operators (vorticity, kinetic energy, C↔D grid transformation +
 # sub-grid sin(α) flux) ported to JSON discretization rules under
 # `discretizations/finite_volume/fv3_*.json`. See dsc-247.
-include("operators/ppm_edge.jl")
+# PPM edge reconstruction (`ppm_edge.jl`) ported to
+# `discretizations/finite_volume/ppm_edge_cubed_sphere.json`. See dsc-9yh.
 
 # Boundary-condition handler
 include("bc_handler.jl")
@@ -132,9 +133,6 @@ export ppm_reconstruction_arrayop
 # Exports: FV3 super-grid
 export compute_super_grid, compute_super_grid!, compute_angle_at_point
 
-# Exports: FV3 two-sided PPM
-export ppm_edge_value_twosided, ppm_edge_value_twosided_limited
-export flux_1d_ppm_twosided!
 
 # Exports: Initial-condition projection
 export project_initial_condition

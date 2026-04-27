@@ -98,7 +98,8 @@ using TestItems
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "transport_2d")])
+                                   ("finite_volume", "transport_2d"),
+                                   ("finite_volume", "ppm_edge_cubed_sphere")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs
