@@ -4,7 +4,7 @@ slug: "weno5_advection_2d"
 families: "finite_volume"
 grid_families: "cartesian"
 rule_kinds: "scheme"
-accuracy: "O(h⁵) per axis"
+accuracy: "O(h⁵)"
 applies_to: "advect(q, U), dims=(x, y)"
 rule_path: "discretizations/finite_volume/weno5_advection_2d.json"
 description: "Dimension-by-dimension Jiang–Shu WENO5 reconstruction on a 2D structured uniform Cartesian grid."
@@ -63,45 +63,23 @@ $$
   asymptotic regime.</figcaption>
 </figure>
 
-The numeric coverage lives in two fixtures:
-
-- Layer-B canonical convergence —
-  [<code>discretizations/finite_volume/weno5_advection_2d/fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection_2d/fixtures/convergence)
-  — declares <code>expected_min_order = 4.5</code> on
-  <code>n ∈ {32, 64, 128, 256}</code> with the phase-shifted 2D sine MMS,
-  matching the floor cited by Shu (1998) §2.2 with a small allowance for
-  the ε-regularised nonlinear-weight transition.
-
-- Layer-C integration convergence —
-  [<code>discretizations/finite_volume/weno5_advection_2d/fixtures/integration/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection_2d/fixtures/integration)
-  — runs the dimension-by-dimension 1D WENO5 reconstruction along both
-  axes on cell-averaged 2D phase-shifted sine over
-  <code>n ∈ {16, 32, 64, 128}</code> and asserts
-  <code>observed_min_order ≥ 4.4</code>. Empirically the floor sits at
-  <code>≈ 4.98</code> on this sequence.
-
-| `n`  | `h`          | L∞ error     | observed order |
-| ---: | :----------- | :----------- | :------------- |
-|  16  | 0.06250000   | 1.0733e-03   | —              |
-|  32  | 0.03125000   | 3.4081e-05   | 4.977          |
-|  64  | 0.01562500   | 1.0643e-06   | 5.001          |
-| 128  | 0.00781250   | 3.3249e-08   | 5.000          |
+The numeric coverage lives in the Layer-B convergence fixture —
+[<code>discretizations/finite_volume/weno5_advection_2d/fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection_2d/fixtures/convergence)
+— which declares <code>expected_min_order = 4.5</code> on
+<code>n ∈ {32, 64, 128, 256}</code> with the separable phase-shifted sine
+product MMS <code>u(x,y) = sin(2π x + 1)·sin(2π y + 1)</code> on
+<code>[0,1]²</code> periodic, matching the floor cited by Shu (1998) §2.2
+with a small allowance for the ε-regularised nonlinear-weight transition.
 
 Theoretical asymptotic order: **5.0** per axis (Jiang & Shu 1996, smooth
 regions; Shu 1998 §2.2 dimension-by-dimension splitting; LeVeque 2002 §20).
-Acceptance threshold: **min(observed order) ≥ 4.4** across the
-<code>n ∈ {16, 32, 64, 128}</code> sweep, with NO acceptance fudging — the
-case fails (not skips) if the observed order falls below 4.4 (dsc-5od §5).
+Acceptance threshold: **min(observed order) ≥ 4.5** across the
+<code>n ∈ {32, 64, 128, 256}</code> sweep.
 
-<div class="callout callout-pending">
-<strong>Pending ESS dispatch extension.</strong>
-ESS 0.0.3's <code>mms_convergence</code> routes WENO5 rules unconditionally
-to a 1D path (<code>mms_weno5_convergence</code>) that expects
-<code>reconstruction_left_biased</code> at the spec root. The 2D rule
-carries the same blocks under <code>axes.x</code> / <code>axes.y</code> per
-the dimension-by-dimension splitting (Shu 1998), so the existing path
-cannot read it. Until ESS gains a 2D dispatch (a follow-up
-<code>esm-*</code> bead is needed), Layer B SKIPs with
-<code>applicable: false</code> and Layer C is the operational verifier of
-the asymptotic 2D order.
-</div>
+The sweep is dispatched through ESS's
+<code>mms_weno5_convergence</code> 2D path (esm-hsa): the harness applies
+the rule's <code>axes.x</code> 1D sub-stencil row-wise on the cell-averaged
+manufactured field and compares the reconstructed face values against the
+perpendicular-axis-averaged analytic face truth. WENO5's positive
+homogeneity makes the result symmetric in <code>x ↔ y</code>, so verifying
+one axis is sufficient for the asymptotic-order claim.

@@ -11,7 +11,6 @@ export run_case
 
 include("cartesian_full_pipeline.jl")
 include("cubed_sphere_advection.jl")
-include("weno5_2d_smooth_advection_convergence.jl")
 
 """
     run_case(case_spec::AbstractDict, base_dir::AbstractString) -> Tuple{Symbol,String}
@@ -40,8 +39,6 @@ function run_case(case_spec, base_dir::AbstractString)
         return run_cartesian_full_pipeline(name, manifest)
     elseif kind == "cubed_sphere_advection"
         return run_cubed_sphere_advection(name, manifest)
-    elseif kind == "weno5_2d_smooth_advection_convergence"
-        return run_weno5_2d_smooth_advection_convergence(name, manifest)
     else
         return (:fail, "$name: unknown case kind '$kind'")
     end

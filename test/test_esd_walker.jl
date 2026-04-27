@@ -91,13 +91,13 @@ using TestItems
                         ("finite_difference", "upwind_1st"),
                         ("finite_volume", "ppm_reconstruction"),
                         ("finite_volume", "weno5_advection"),
+                        ("finite_volume", "weno5_advection_2d"),
                         ("finite_volume", "divergence_arakawa_c")])
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "weno5_advection_2d"),
                                    ("finite_volume", "transport_2d")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
@@ -171,9 +171,14 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Seven layer-B cases pass (centered_2nd_uniform,
+    # Eight layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st,
-    # ppm_reconstruction, weno5_advection, divergence_arakawa_c); the rest skip.
+    # ppm_reconstruction, weno5_advection, weno5_advection_2d,
+    # divergence_arakawa_c); the rest skip. weno5_advection_2d joined the
+    # pass set once ESS esm-hsa landed the 2D axis-split WENO5 dispatch
+    # (mms_weno5_convergence reads `axes.x`/`axes.y` and dispatches on
+    # `haskey(spec, "axes")`); the prior Layer-C operational substitute was
+    # retired in dsc-7hx.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -186,7 +191,7 @@ using TestItems
     # fixture exists.
     layer_d_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_d; init = 0)
-    @test layer_b_passes == 7
+    @test layer_b_passes == 8
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
@@ -452,33 +457,6 @@ end
         @test occursin("williamson1_cosine_bell", result.reason)
         @test occursin("williamson2_geostrophic_steady", result.reason)
         @test occursin("dcmip_1_1_3d_advection", result.reason)
-    finally
-        if prior === nothing
-            delete!(ENV, "ESD_RUN_INTEGRATION")
-        else
-            ENV["ESD_RUN_INTEGRATION"] = prior
-        end
-    end
-end
-
-@testitem "walker: layer C runs WENO5 2D smooth advection convergence (ESD_RUN_INTEGRATION=1)" begin
-    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
-    using .WalkESDTests
-    using EarthSciDiscretizations: load_rules
-
-    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    catalog = joinpath(repo_root, "discretizations")
-    rules = load_rules(catalog)
-    weno2d = first(filter(r -> r.name == "weno5_advection_2d", rules))
-    @test weno2d.family == :finite_volume
-
-    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
-    try
-        ENV["ESD_RUN_INTEGRATION"] = "1"
-        result = WalkESDTests.run_layer_c(weno2d)
-        @test result.outcome == WalkESDTests.LAYER_PASS
-        @test occursin("smooth_2d_convergence", result.reason)
-        @test occursin("observed_min_order", result.reason)
     finally
         if prior === nothing
             delete!(ENV, "ESD_RUN_INTEGRATION")
