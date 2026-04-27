@@ -89,7 +89,8 @@ using TestItems
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
-                                   ("finite_volume", "flux_limiter_superbee")])
+                                   ("finite_volume", "flux_limiter_superbee"),
+                                   ("finite_volume", "weno5_advection_2d")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs
@@ -442,6 +443,33 @@ end
         @test occursin("williamson1_cosine_bell", result.reason)
         @test occursin("williamson2_geostrophic_steady", result.reason)
         @test occursin("dcmip_1_1_3d_advection", result.reason)
+    finally
+        if prior === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior
+        end
+    end
+end
+
+@testitem "walker: layer C runs WENO5 2D smooth advection convergence (ESD_RUN_INTEGRATION=1)" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    weno2d = first(filter(r -> r.name == "weno5_advection_2d", rules))
+    @test weno2d.family == :finite_volume
+
+    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    try
+        ENV["ESD_RUN_INTEGRATION"] = "1"
+        result = WalkESDTests.run_layer_c(weno2d)
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("smooth_2d_convergence", result.reason)
+        @test occursin("observed_min_order", result.reason)
     finally
         if prior === nothing
             delete!(ENV, "ESD_RUN_INTEGRATION")
