@@ -64,6 +64,13 @@ using TestItems
     @test "covariant_laplacian_cubed_sphere" in names
     lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
     @test lap.family == :finite_difference
+    # finite_volume/transport_2d (dsc-hdk) — first 2D cubed-sphere FV rule
+    # whose coefficients depend on C-grid face-staggered Courant bindings;
+    # declares applicable:false on Layer B until ESS extends the harness for
+    # cubed_sphere staggered-velocity bindings (parallel to the laplacian).
+    @test "transport_2d" in names
+    tr2d = first(filter(r -> r.name == "transport_2d", results))
+    @test tr2d.family == :finite_volume
 
     # Layer A: passes for centered_2nd_uniform and
     # centered_2nd_uniform_vertical (both ship a canonical/ fixture); skips
@@ -90,7 +97,8 @@ using TestItems
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "weno5_advection_2d")])
+                                   ("finite_volume", "weno5_advection_2d"),
+                                   ("finite_volume", "transport_2d")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs
@@ -199,6 +207,7 @@ using TestItems
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("classname=\"finite_volume.flux_limiter_minmod\"", xml)
     @test occursin("classname=\"finite_volume.flux_limiter_superbee\"", xml)
+    @test occursin("classname=\"finite_volume.transport_2d\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("name=\"layer_limiter\"", xml)
     @test occursin("name=\"layer_D\"", xml)

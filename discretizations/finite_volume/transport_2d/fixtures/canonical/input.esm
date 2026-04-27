@@ -1,0 +1,51 @@
+{
+  "rule": "transport_2d",
+  "grid": {
+    "family": "cubed_sphere",
+    "Nc": 24,
+    "R": 1.0,
+    "ghost_width": 1,
+    "stagger": "C",
+    "comment": "c24 gnomonic cubed sphere with C-grid staggered velocities. The reference implementation uses Nc=24 with a 1-cell ghost halo for the 3-point face stencil and the LF flux. Cross-panel ghost cells are filled by the cubed_sphere accessor (src/grids/panel_connectivity.jl); the rule references in-panel (xi, eta) offsets only."
+  },
+  "fields": [
+    {
+      "name": "q",
+      "stagger": "cell_center",
+      "shape": [6, 24, 24],
+      "form": "q(p, i, j) = cos(2·xi_i) · cos(2·eta_j) sampled at panel-cell centers",
+      "sampling": "cell_center"
+    },
+    {
+      "name": "courant_xi",
+      "stagger": "face_xi",
+      "shape": [6, 25, 24],
+      "form": "courant_xi(p, i, j) = sin(xi_face_i) · cos(eta_j) at xi-faces — placeholder analytic field exercising both signs of c_E and c_W."
+    },
+    {
+      "name": "courant_eta",
+      "stagger": "face_eta",
+      "shape": [6, 24, 25],
+      "form": "courant_eta(p, i, j) = cos(xi_i) · sin(eta_face_j) at eta-faces — placeholder analytic field exercising both signs of c_N and c_S."
+    }
+  ],
+  "operator": {
+    "op": "advect",
+    "args": ["q", "U"],
+    "dims": ["xi", "eta"],
+    "U_components": {
+      "courant_xi": "courant_xi",
+      "courant_eta": "courant_eta"
+    }
+  },
+  "interior": {
+    "shape": [6, 22, 22],
+    "comment": "Tendency is evaluated on the interior cells (p, 1:Nc-2, 1:Nc-2); physical-cell index is (p, i+1, j+1) under the same shift convention as the imperative `transport_2d` ArrayOp."
+  },
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "transport_2d",
+    "path": "src/operators/transport_2d.jl",
+    "comment": "Imperative reference. Once the ESS Layer-A canonical-form rule engine ingests cubed_sphere grids with C-grid staggered Courant fields (currently a harness gap, see fixtures/convergence/input.esm), the walker will materialize this rule against the input above and byte-compare to the imperative `transport_2d` output within 1e-12 relative tolerance."
+  }
+}

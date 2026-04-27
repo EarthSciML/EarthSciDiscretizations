@@ -63,6 +63,7 @@ ALL_RULES = (
     "flux_limiter_minmod",
     "flux_limiter_superbee",
     "divergence_arakawa_c",
+    "transport_2d",
 )
 
 ALL_GRID_FAMILIES = (
@@ -480,6 +481,17 @@ def stencil_upwind_1st(out: Path) -> None:
     )
 
 
+def stencil_transport_2d(out: Path) -> None:
+    pts = [
+        (0, 0, "−Σ_face inflow / A"),
+        (1, 0, "−((c_E−|c_E|)/2)·dx_E / A"),
+        (-1, 0, "+((c_W+|c_W|)/2)·dx_W / A"),
+        (0, 1, "−((c_N−|c_N|)/2)·dy_N / A"),
+        (0, -1, "+((c_S+|c_S|)/2)·dy_S / A"),
+    ]
+    _stencil_2d(out, "transport_2d — 5-point in-panel stencil (C-grid Courant)", pts)
+
+
 def stencil_covariant_laplacian(out: Path) -> None:
     pts = [
         (0, 0, "−2(g^{ξξ}+g^{ηη})/h²"),
@@ -781,6 +793,7 @@ RULE_STENCIL_PLOTTERS = {
     "flux_limiter_minmod": stencil_limiter_minmod,
     "flux_limiter_superbee": stencil_limiter_superbee,
     "divergence_arakawa_c": stencil_arakawa_divergence,
+    "transport_2d": stencil_transport_2d,
 }
 
 
