@@ -83,8 +83,7 @@ whose one-sided stencil introduces an explicit diffusive
 The fixture under
 [`discretizations/finite_difference/centered_2nd_uniform/fixtures/convergence/`]({{< param repoURL >}}/blob/main/discretizations/finite_difference/centered_2nd_uniform/fixtures/convergence)
 sets `expected_min_order = 1.9` to tolerate minor pre-asymptotic drift on
-the 16 → 32 → 64 → 128 sequence. The sweep is currently marked
-`applicable: false` pending an ESS upgrade that lets `mms_convergence`
-walk a `replacement`-form rule through the existing arrayop / broadcast
-evaluator (no new scheme-specific kernels). Once ESS lands the AST
-dispatch path, the convergence fixture re-enables without modification.
+the 16 → 32 → 64 → 128 sequence. ESS's `mms_convergence` walks the
+`replacement`-form rule through its arrayop / broadcast evaluator (no
+scheme-specific kernels), so the sweep runs directly against the closed
+§4.2 lowering described above.
