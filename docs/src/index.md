@@ -32,4 +32,4 @@ println("Relative error: $(abs(total_area(grid) - 4pi) / 4pi)")
 - [Finite-Volume Method](@ref) -- mathematical foundations and operator formulas
 - [Cubed-Sphere Grid](@ref) -- grid construction and geometry
 - [Operators](@ref) -- using FV operators on data
-- [Tutorial: Diffusion on the Sphere](@ref) -- full diffusion simulation example
+- [Tutorial: Authoring a rule](@ref) -- end-to-end walkthrough for writing a new discretization rule in the closed-AST lowering pattern

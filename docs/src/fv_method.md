@@ -2,93 +2,158 @@
 
 ## Overview
 
-EarthSciDiscretizations.jl uses the finite-volume (FV) method to discretize PDEs on the cubed-sphere grid. The FV method is based on the integral form of conservation laws, making it naturally conservative and well-suited for geophysical fluid dynamics.
+EarthSciDiscretizations.jl supplies finite-volume (FV) discretization rules
+that the EarthSciSerialization (ESS) rewriter applies to PDE equation trees.
+A rule is a small JSON file with two halves:
 
-## The Divergence Theorem
+1. **`applies_to`** — a *pattern match* against a §4.2 PDE operator
+   (`D`, `grad`, `div`, `laplacian`, plus the pointwise-math vocabulary).
+2. **`replacement`** — a **closed `arrayop` lowering** in the §4.2 op
+   vocabulary only (`arrayop`, `broadcast`, `index`, `ifelse`, `+`, `-`,
+   `*`, `/`, `^`, `sqrt`, `min`, `max`, …).
 
-The foundation of the FV method is the divergence theorem. For a vector field $\mathbf{F}$ over a cell with area $A$ and boundary $\partial A$:
+Authors do **not** invent scheme-specific match keys (no `advect`,
+`reconstruct`, `flux`, `limit` — those names are forbidden as `applies_to.op`
+values) and do **not** ship scheme-specific kernels in any host language.
+Every binding (Julia, Python, future host) executes the same closed AST by
+walking the §4.2 ops it already understands.
 
-```math
-\int_A \nabla \cdot \mathbf{F} \, dA = \oint_{\partial A} \mathbf{F} \cdot \hat{n} \, ds
-```
+The integral conservation law that motivates the FV method survives this
+move — it now lives in the structure of the `arrayop` body rather than in a
+named coefficient table.
 
-In the discrete setting, each cell is a quadrilateral on the cubed-sphere surface. The integral of the divergence is approximated by the sum of fluxes through the cell edges.
+## The integral form
 
-## Discrete Operators
-
-### Divergence
-
-The discrete divergence at cell center $(i, j)$ on panel $p$ is:
-
-```math
-(\nabla \cdot \mathbf{F})_{p,i,j} = \frac{1}{A_{p,i,j}} \left[ F^\xi_{p,i+1,j} \, \Delta x_{p,i+1,j} - F^\xi_{p,i,j} \, \Delta x_{p,i,j} + F^\eta_{p,i,j+1} \, \Delta y_{p,i,j+1} - F^\eta_{p,i,j} \, \Delta y_{p,i,j} \right]
-```
-
-where $F^\xi$ and $F^\eta$ are the contravariant flux components at U-edges and V-edges respectively, $\Delta x$ and $\Delta y$ are edge lengths, and $A$ is the cell area.
-
-
-### Gradient
-
-The discrete gradient is computed at edge locations. The $\xi$-component at interior U-edges:
+For a vector field $\mathbf{F}$ over a cell with area $A$ and boundary
+$\partial A$, the divergence theorem reads
 
 ```math
-\left(\frac{\partial \phi}{\partial \xi}\right)_{p,i,j} = \frac{\phi_{p,i+1,j} - \phi_{p,i,j}}{\Delta \xi}
+\int_A \nabla \cdot \mathbf{F} \, dA = \oint_{\partial A} \mathbf{F} \cdot \hat{n} \, ds.
 ```
 
-The $\eta$-component at interior V-edges:
+A rule that lowers `div(F)` is therefore expected to produce an `arrayop`
+whose body sums signed edge fluxes scaled by edge lengths and the inverse
+cell area. The rule does not need a custom dispatcher to express this: the
+`+` and `*` and `index` ops in §4.2 are sufficient.
+
+## Worked example: `centered_2nd_uniform`
+
+The smallest rule in the catalog —
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}),
+landed in commit `7b26ffd` — is the canonical exemplar of the closed-AST
+lowering pattern. It targets `grad(u, dim=x)` on a uniform Cartesian axis.
+
+### (a) The PDE operator
+
+The continuous operator is the partial derivative
 
 ```math
-\left(\frac{\partial \phi}{\partial \eta}\right)_{p,i,j} = \frac{\phi_{p,i,j+1} - \phi_{p,i,j}}{\Delta \eta}
+\left(\frac{\partial u}{\partial x}\right)(x).
 ```
 
+In §4.2 it is encoded as `{"op": "grad", "args": ["u"], "dim": "x"}`.
 
-### Laplacian
+### (b) The pattern match
 
-The full covariant Laplacian on the cubed sphere is:
+The rule's `applies_to` clause matches that op verbatim, with metavariables
+`$u` and `$x` for the operand and axis:
+
+```json
+"applies_to": {
+  "op":   "grad",
+  "args": ["$u"],
+  "dim":  "$x"
+}
+```
+
+The matcher fires anywhere in the equation tree where a `grad` node has the
+declared shape; `$u` and `$x` bind to the concrete field name and axis at
+rewrite time.
+
+### (c) The closed `arrayop` replacement
+
+The replacement is a single `arrayop` node whose body is a centered
+two-point difference:
+
+```json
+"replacement": {
+  "op": "arrayop",
+  "output_idx": ["$x"],
+  "expr": {
+    "op": "/",
+    "args": [
+      { "op": "-", "args": [
+        { "op": "index", "args": ["$u", { "op": "+", "args": ["$x", 1] }] },
+        { "op": "index", "args": ["$u", { "op": "-", "args": ["$x", 1] }] }
+      ]},
+      { "op": "*", "args": [2, "dx"] }
+    ]
+  },
+  "args": ["$u"]
+}
+```
+
+After substitution (`$u → u`, `$x → i`), the lowering at each interior
+cell reduces to
 
 ```math
-\nabla^2 \phi = \frac{1}{J} \left[ \frac{\partial}{\partial \xi}\left(J\, g^{\xi\xi} \frac{\partial \phi}{\partial \xi} + J\, g^{\xi\eta} \frac{\partial \phi}{\partial \eta}\right) + \frac{\partial}{\partial \eta}\left(J\, g^{\xi\eta} \frac{\partial \phi}{\partial \xi} + J\, g^{\eta\eta} \frac{\partial \phi}{\partial \eta}\right) \right]
+\left(\frac{\partial u}{\partial x}\right)_i \approx \frac{u_{i+1} - u_{i-1}}{2\,\Delta x}.
 ```
 
-where $J$ is the Jacobian determinant and $g^{\alpha\beta}$ are the inverse metric tensor components.
+There is no `coeff` table, no `stencil[]` array, no per-host kernel: the
+arithmetic that yields the second-order centered difference is visible
+directly in the AST.
 
-The discrete operator uses a 5-point orthogonal stencil plus a cross-metric correction:
+## Boundary conditions live on the domain
 
-```math
-\nabla^2 \phi_{p,i,j} \approx \frac{1}{A_{p,i,j}} \left[ \text{(face gradient} \times \text{edge length)} \right] + 2\, g^{\xi\eta} \frac{\partial^2 \phi}{\partial \xi \, \partial \eta} + \frac{1}{J}\left[\frac{\partial(J\, g^{\xi\eta})}{\partial \xi} \frac{\partial \phi}{\partial \eta} + \frac{\partial(J\, g^{\xi\eta})}{\partial \eta} \frac{\partial \phi}{\partial \xi}\right]
-```
+A rule's replacement is the **interior** closed form. Boundary handling is
+declared once per field on the domain's `boundary_conditions` block
+(`esm-spec.md` §11.5: `periodic`, `dirichlet` / `constant`, `neumann` /
+`zero_gradient`, `robin`) and applied as **downstream rewrite rules over
+concrete indices**. The lowered AST does not contain `bc:*` ops.
 
-The orthogonal part uses physical center-to-center distances and edge lengths. The cross-metric $g^{\xi\eta}$ correction uses a 4-point cross-stencil for the mixed second derivative and includes first-derivative correction terms arising from the spatial variation of $J \cdot g^{\xi\eta}$ to account for the non-orthogonality of the gnomonic cubed-sphere grid.
+| Domain BC | Index transformation applied to `$u[$x ± 1]` |
+|---|---|
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
+| `dirichlet` / `constant` | boundary cell reads the prescribed value |
+| `neumann` / `zero_gradient` | mirror in-range neighbor (clamp the index) |
+| `robin` | mixed coefficient row at the boundary |
 
+This is the same separation the centered exemplar uses: the rule itself
+stays BC-agnostic, and a downstream BC rule fires at the boundary cells.
+Authors of new rules should not embed BC logic in their lowering.
 
-### Transport
+## What "discrete FV operator" means in this framing
 
-The 1D and 2D transport operators use a Lax-Friedrichs (upwind) flux splitting. The numerical flux at edge $(i+1/2)$ is:
+When this guide talks about a discrete divergence, gradient, or Laplacian,
+it is shorthand for "the closed `arrayop` lowering produced when the
+matching rule fires against the corresponding §4.2 op". For example:
 
-```math
-F_{i+1/2} = \frac{c_{i+1/2} (q_i + q_{i+1})}{2} - \frac{|c_{i+1/2}| (q_{i+1} - q_i)}{2}
-```
+- `grad(u, dim=x)` on a uniform Cartesian axis → `centered_2nd_uniform`
+  → centered two-point difference (above).
+- `div(F^ξ, F^η)` on a cubed-sphere C-grid → a rule that lowers to an
+  `arrayop` summing edge-flux-times-edge-length and dividing by cell area.
+- `laplacian(φ)` on the cubed sphere → a rule whose `arrayop` encodes the
+  5-point orthogonal stencil plus the cross-metric correction terms (the
+  geometry lives in the body of the AST, not in a separate dispatch table).
 
-where $c$ is the Courant number and $q$ is the transported scalar. The tendency is:
+In every case the *math* — the integral form, the metric tensor, the
+truncation error — is the motivation for the AST shape; the *authoring
+artifact* is just the AST.
 
-```math
-\frac{\partial q}{\partial t} = -\frac{F_{i+1/2} - F_{i-1/2}}{\Delta \xi}
-```
+## Where to read more
 
+- [Operators](@ref) — the §4.2 op vocabulary you may use inside a `replacement`.
+- [Tutorial: Authoring a rule](@ref) — end-to-end walkthrough.
+- `esm-spec.md` §4.2 (operator vocabulary), §4.3 (array semantics),
+  §11.5 (BC types) for the definitive specification.
 
-### PPM Reconstruction
+## C-grid staggering
 
-The Piecewise Parabolic Method (PPM) provides higher-order sub-grid reconstruction for transport. It computes left and right interface values using a 4th-order interpolation formula with monotonicity limiting (Colella & Woodward, 1984).
-
-
-### Vertical Remapping
-
-Vertical remapping uses PPM with Colella-Woodward (1984) monotonicity limiting to conservatively remap quantities between different vertical layer structures. The remapping preserves column-integrated mass ($\sum q \cdot \Delta p$) exactly. See `vertical_remap`.
-
-
-## C-Grid Staggering
-
-The Arakawa C-grid staggering places different variables at different locations within each cell:
+The Arakawa C-grid staggering places different variables at different
+locations within each cell. Index symbols in an `arrayop` lowering are
+local to the rule, but the runtime resolves their lengths from the
+operand shapes — which in turn come from the staggering:
 
 | Location | Symbol | Grid Size | Description |
 |:---------|:-------|:----------|:------------|
@@ -97,24 +162,27 @@ The Arakawa C-grid staggering places different variables at different locations 
 | `VEdge` | $(i, j+1/2)$ | $(N_c, N_c+1)$ | Normal velocity component in $\eta$-direction |
 | `Corner` | $(i+1/2, j+1/2)$ | $(N_c+1, N_c+1)$ | Vorticity, stream function |
 
+A rule that produces an edge-quantity output gives an `output_idx` whose
+range matches the corresponding edge-staggered grid; one that consumes an
+edge quantity uses `index` into an array shaped that way.
 
-## Ghost Cells
+## Ghost cells
 
-Inter-panel communication is handled through ghost cells. Each panel is padded with $N_g$ ghost layers on each side, filled from neighboring panels using the connectivity table and index transformations.
-
-
-## ArrayOp Utilities
-
-All operators return symbolic `ArrayOp` objects. Use `evaluate_arrayop` to obtain numerical results.
-
+Inter-panel communication is handled through ghost cells. Each panel is
+padded with $N_g$ ghost layers on each side, filled from neighboring
+panels using the connectivity table and index transformations. This
+happens at the *grid* level, before any rule fires; rule lowerings see
+the ghosted arrays as ordinary inputs.
 
 ## References
 
-The finite-volume methods implemented in this package are based on the following foundational works:
+The finite-volume methods this package targets are based on the following
+foundational works. Their algorithms motivate the *shape* of the AST
+lowerings; nothing in the rule files reproduces a host-language
+implementation of them.
 
-- Lin, S.-J. and R. B. Rood (1996). "Multidimensional Flux-Form Semi-Lagrangian Transport Schemes." *Monthly Weather Review*, 124(9), 2046--2070. — Dimensionally-split transport algorithm.
+- Lin, S.-J. and R. B. Rood (1996). "Multidimensional Flux-Form Semi-Lagrangian Transport Schemes." *Monthly Weather Review*, 124(9), 2046--2070. — Dimensionally-split transport.
 - Colella, P. and P. R. Woodward (1984). "The Piecewise Parabolic Method (PPM) for gas-dynamical simulations." *Journal of Computational Physics*, 54(1), 174--201. — PPM reconstruction and monotonicity limiter.
-- Lin, S.-J. (2004). "A 'Vertically Lagrangian' Finite-Volume Dynamical Core for Global Models." *Monthly Weather Review*, 132(10), 2293--2307. — Vertically Lagrangian FV framework and conservative vertical remapping.
+- Lin, S.-J. (2004). "A 'Vertically Lagrangian' Finite-Volume Dynamical Core for Global Models." *Monthly Weather Review*, 132(10), 2293--2307. — Vertically Lagrangian FV framework.
 - Putman, W. M. and S.-J. Lin (2007). "Finite-volume transport on various cubed-sphere grids." *Journal of Computational Physics*, 227(1), 55--78. — FV transport on cubed-sphere grids.
 - Ronchi, C., R. Iacono, and P. S. Paolucci (1996). "The 'Cubed Sphere': A New Method for the Solution of Partial Differential Equations in Spherical Geometry." *Journal of Computational Physics*, 124(1), 93--114. — Gnomonic cubed-sphere projection and metric tensors.
-
