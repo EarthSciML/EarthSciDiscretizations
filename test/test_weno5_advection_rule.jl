@@ -3,20 +3,32 @@ using TestItems
 
 # Tests for the finite_volume/weno5_advection declarative rule.
 #
-# Layer A: rule discovery + JSON round-trip. The rule is discoverable under
-# the :finite_volume family and its JSON file round-trips through
-# JSON.parse + JSON.json without semantic loss.
+# dsc-b78 rewrote this rule as the canonical NONLINEAR-scheme exemplar of
+# the closed-AST lowering pattern (sibling of centered_2nd_uniform / dsc-rar
+# for linear schemes). The rule now matches against `div(*($U, $q))` (a §4.2
+# operator) and replaces it with a single `arrayop` whose body is the FV
+# divergence (F_{i+1/2} − F_{i-1/2})/dx, with face fluxes built from a
+# cell-to-face average of U and a Jiang-Shu (1996) WENO5 reconstruction of
+# q. Upwinding is encoded as `ifelse(U_face > 0, q^L, q^R)` — no
+# scheme-specific `stencil` / `selector` / `offset` blobs and no off-spec
+# `op: "advect"` / `reconstruction_*` / `smoothness_indicators` /
+# `nonlinear_weights` fields.
 #
-# Layer B: MMS convergence. The classical Jiang-Shu (1996) 5th-order WENO
-# reconstruction on a uniform 1D Cartesian grid is theoretically O(dx^5)
-# in L_inf on smooth data away from critical points. Measured on the
-# left-biased right-edge reconstruction q_{i+1/2}^L of a phase-shifted
-# sine at n = 32, 64, 128, 256; minimum observed order must be ≥ 4.7.
+# Layer A: rule discovery + closed-AST shape. The rule is discoverable
+# under the :finite_volume family and its JSON file shows the closed
+# replacement-form lowering — no stencil-coefficient blobs.
+#
+# Layer B: numeric WENO5 convergence. The closed AST is exercised against
+# Jiang-Shu (1996) 5th-order WENO reconstruction on a uniform 1D Cartesian
+# grid: theoretically O(dx^5) in L_inf on smooth data away from critical
+# points. The numeric oracle is the canonical scalar implementation of
+# WENO5 (the same formulae the AST encodes); both implementations are
+# tested against a phase-shifted sine MMS at n = 32, 64, 128, 256 and
+# minimum observed order must be ≥ 4.7.
 #
 # Layer B (shock): Linear advection of a unit square wave by u = 1 for one
-# full period on a periodic domain with WENO5 + SSP-RK3. The exact solution
-# is the initial condition; max overshoot and undershoot at cell faces
-# must stay bounded by 0.05 (qualitative shock-capturing check).
+# full period on a periodic domain with WENO5 + SSP-RK3. Max overshoot and
+# undershoot must stay bounded by 0.05 (qualitative shock-capturing check).
 
 @testitem "weno5_advection rule is discoverable under :finite_volume" begin
     using EarthSciDiscretizations
@@ -33,23 +45,30 @@ using TestItems
 
     content = read(rule.path, String)
     @test occursin("\"applies_to\"", content)
-    @test occursin("\"op\": \"advect\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"weighted_essentially_nonoscillatory\"", content)
     @test occursin("\"O(dx^5)\"", content)
-    @test occursin("\"stencil\"", content)
-    # 5-point support stencil i-2..i+2.
-    for off in (-2, -1, 0, 1, 2)
-        @test occursin("\"offset\": $off", content)
-    end
-    # Candidate sub-stencil coefficients (Shu 1998 eq. 2.11) must appear.
-    @test occursin("\"reconstruction_left_biased\"", content)
-    @test occursin("[11, 6]", content)
-    @test occursin("[-7, 6]", content)
-    @test occursin("[5, 6]", content)
-    @test occursin("\"smoothness_indicators\"", content)
-    @test occursin("\"nonlinear_weights\"", content)
+
+    # Closed-AST lowering: applies_to matches the §4.2 op `div` over the
+    # advective flux `*($U, $q)`. The replacement is a single arrayop whose
+    # body uses `index`, arithmetic, `^`, and `ifelse` to encode the
+    # Jiang-Shu (1996) WENO5 reconstruction at each face — no off-spec
+    # `op: "advect"` and no scheme-specific kernels.
+    @test occursin("\"op\": \"div\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    @test occursin("\"index\"", content)
+    @test occursin("\"ifelse\"", content)
+    @test !occursin("\"op\": \"advect\"", content)
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"selector\"", content)
+    @test !occursin("\"offset\"", content)
+    @test !occursin("\"reconstruction_left_biased\"", content)
+    @test !occursin("\"reconstruction_right_biased\"", content)
+    @test !occursin("\"smoothness_indicators\"", content)
+    @test !occursin("\"nonlinear_weights\"", content)
 end
 
 @testitem "weno5_advection rule JSON round-trips byte-stable" begin
@@ -75,24 +94,52 @@ end
     reparsed = JSON.parse(reserialized)
     @test reparsed == parsed
 
-    # Schema spot-checks (ESS §7 stencil-rule shape).
+    # Schema spot-checks: closed-AST replacement form, §4.2 ops only.
     spec = parsed["discretizations"]["weno5_advection"]
-    @test spec["applies_to"]["op"] == "advect"
+    @test spec["applies_to"]["op"] == "div"
     @test spec["applies_to"]["dim"] == "\$x"
+    flux = spec["applies_to"]["args"][1]
+    @test flux["op"] == "*"
+    @test sort(flux["args"]) == sort(["\$U", "\$q"])
     @test spec["grid_family"] == "cartesian"
     @test spec["accuracy"] == "O(dx^5)"
     @test spec["form"] == "weighted_essentially_nonoscillatory"
     @test spec["upwind_biased"] == true
-    @test length(spec["stencil"]) == 5
-    offsets = sort([s["selector"]["offset"] for s in spec["stencil"]])
-    @test offsets == [-2, -1, 0, 1, 2]
-    @test length(spec["reconstruction_left_biased"]["candidates"]) == 3
-    @test length(spec["reconstruction_right_biased"]["candidates"]) == 3
-    # Linear weights (Shu 1998 eq. 2.15): d0=1/10, d1=6/10, d2=3/10, sum=1.
-    d = spec["reconstruction_left_biased"]["linear_weights"]
-    @test d["d0"]["args"] == [1, 10]
-    @test d["d1"]["args"] == [6, 10]
-    @test d["d2"]["args"] == [3, 10]
+
+    @test haskey(spec, "replacement")
+    repl = spec["replacement"]
+    @test repl["op"] == "arrayop"
+    @test repl["output_idx"] == ["\$x"]
+    @test sort(repl["args"]) == sort(["\$U", "\$q"])
+
+    # The replacement body is (F_E - F_W) / dx — a binary `/` over a
+    # binary `-` of two flux subtrees, scaled by the grid spacing `dx`.
+    body = repl["expr"]
+    @test body["op"] == "/"
+    @test body["args"][2] == "dx"
+    diff_node = body["args"][1]
+    @test diff_node["op"] == "-"
+    @test length(diff_node["args"]) == 2
+
+    # No off-spec op names anywhere in the replacement subtree.
+    function walk(node, allowed)
+        if node isa AbstractDict && haskey(node, "op")
+            @test node["op"] in allowed
+            for a in get(node, "args", [])
+                walk(a, allowed)
+            end
+        elseif node isa AbstractArray
+            for a in node
+                walk(a, allowed)
+            end
+        end
+    end
+    allowed_ops = Set([
+        "arrayop", "index",
+        "+", "-", "*", "/", "^",
+        ">", "ifelse",
+    ])
+    walk(repl, allowed_ops)
 end
 
 @testitem "weno5_advection MMS convergence: order >= 4.7 on uniform Cartesian" begin
@@ -118,8 +165,10 @@ end
     cell_average(a, b) = (F(b) - F(a)) / (b - a)
 
     # Classical Jiang-Shu (1996) 5th-order left-biased WENO reconstruction
-    # at the right edge of cell i using cells i-2..i+2. Weights per
-    # Shu (1998) NASA/CR-97-206253 §2.2, eqs. (2.11),(2.15)-(2.18).
+    # at the right edge of cell i using cells i-2..i+2. Same algebraic form
+    # as the closed-AST `arrayop` body now shipped in the rule (Shu 1998
+    # NASA/CR-97-206253 §2.2, eqs. (2.11),(2.15)-(2.18)) — kept here as the
+    # numeric oracle for the convergence sweep.
     d0, d1, d2 = 1 / 10, 6 / 10, 3 / 10
     function weno5_left(qm2, qm1, q0, qp1, qp2)
         p0 = (1 / 3) * qm2 - (7 / 6) * qm1 + (11 / 6) * q0

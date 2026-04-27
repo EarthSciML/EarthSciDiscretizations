@@ -16,19 +16,24 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   Layer-B MMS convergence at `tests/fixtures/ppm_reconstruction/` reaches
   ≥3.0 asymptotic order.
 - [`weno5_advection.json`](weno5_advection.json) — Jiang & Shu (1996)
-  classical WENO-5 flux reconstruction, 1D, uniform Cartesian grid,
-  upwind-biased (caller picks `q^L` or `q^R` by local velocity sign).
-  Stencil i−2..i+2 with three 3-point candidate sub-stencils (Shu 1998
-  eq. 2.11), optimal linear weights d₀=1/10, d₁=6/10, d₂=3/10 (eq. 2.15),
-  Jiang-Shu smoothness indicators β_k (eq. 2.17) and nonlinear ω_k (eqs.
-  2.9–2.10). The ε-regularised ratio form of the nonlinear weights is not
-  yet encodable in the ESS §7 stencil schema (follow-up ESS schema
-  extension bead pending); the rule captures the symbolic form in a
-  `nonlinear_weights` block. Layer-B fixtures at
-  `tests/fixtures/weno5_advection/` exercise smooth MMS convergence
-  (≥4.7 asymptotic order on phase-shifted sine) and a linear-advection
-  square-wave shock-capturing sanity check (max overshoot/undershoot
-  below 0.05 after one period).
+  classical WENO-5 reconstruction, 1D, uniform Cartesian grid,
+  upwind-biased. **Canonical nonlinear-scheme exemplar (dsc-b78):**
+  `applies_to` matches the §4.2 op `div(*($U, $q))` and the lowering is
+  a single closed `arrayop` whose body is the FV divergence
+  `(F_E − F_W)/dx` with `F = U_face · ifelse(U_face > 0, q^L, q^R)`.
+  The Jiang-Shu smoothness indicators β_k (eq. 2.17), ε-regularised
+  nonlinear weights α_k = d_k/(ε+β_k)² (eqs. 2.9–2.10), and the convex
+  combination ω_k·p_k are all expressed as `+`, `-`, `*`, `/`, `^` over
+  `index` selectors — no scheme-specific `stencil` / `selector` /
+  `offset` blobs and no off-spec match keys. The right-biased
+  reconstruction `q^R` is the same closed expression evaluated on the
+  mirrored 5-cell stencil (Shu 1998 §2.2 eq. 2.16); ESS evaluates the
+  AST in any binding by walking the existing arrayop / broadcast
+  machinery. Layer-B fixtures at `tests/fixtures/weno5_advection/`
+  exercise smooth MMS convergence (≥4.7 asymptotic order on
+  phase-shifted sine) and a linear-advection square-wave
+  shock-capturing sanity check (max overshoot/undershoot below 0.05
+  after one period).
 - [`flux_limiter_minmod.json`](flux_limiter_minmod.json) — Roe (1986)
   minmod limiter, φ(r) = max(0, min(r, 1)). TVD, monotonicity-preserving,
   symmetric. The limiter **formula is encoded directly as an
