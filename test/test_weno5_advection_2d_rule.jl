@@ -254,10 +254,7 @@ end
 
     # Analytic solution at T = exactly one revolution in x (u*T=1) and two in y
     # (v*T=2): translated Gaussian is identical to the IC.
-    err = 0.0
-    for j in 1:ny, i in 1:nx
-        err = max(err, abs(q[i, j] - q0[i, j]))
-    end
+    err = maximum(abs(q[i, j] - q0[i, j]) for j in 1:ny, i in 1:nx)
     overshoot = maximum(q) - 1.0  # IC peak is amp = 1.0
     undershoot = 0.0 - minimum(q)
     @info "weno5_advection_2d canonical" linf=err overshoot=overshoot undershoot=undershoot
