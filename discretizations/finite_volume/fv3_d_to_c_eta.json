@@ -1,0 +1,48 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_d_to_c_eta": {
+      "applies_to": {
+        "op": "d_to_c",
+        "args": ["$va"],
+        "dim": "eta"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "requires_locations": ["cell_center"],
+      "emits_location": "v_edge",
+      "combine": "+",
+      "accuracy": "O(h^2) (two-point centered average across the η-edge)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §6; src/operators/wind_ops.jl `dgrid_to_cgrid` step 4 (imperative reference).",
+      "notes": "η-direction sibling of `fv3_d_to_c_xi`. Average cell-center contravariant η-wind ṽ across the two cells flanking an η-constant face.",
+      "stencil": [
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "cell_center",
+            "axis": "eta",
+            "offset": -1
+          },
+          "coeff": { "op": "/", "args": [1, 2] }
+        },
+        {
+          "selector": {
+            "kind": "cubed_sphere",
+            "stagger": "cell_center",
+            "axis": "eta",
+            "offset": 0
+          },
+          "coeff": { "op": "/", "args": [1, 2] }
+        }
+      ]
+    }
+  }
+}

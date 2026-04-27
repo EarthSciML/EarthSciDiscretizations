@@ -1,0 +1,58 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_vorticity_corner": {
+      "applies_to": {
+        "op": "curl",
+        "args": ["$V"],
+        "dim": "corner"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "D",
+      "stagger_enum": "cubed_sphere_stagger",
+      "requires_locations": ["cell_center"],
+      "emits_location": "corner",
+      "combine": "+",
+      "accuracy": "O(h^2) (4-point average of cell-mean vorticity at surrounding cells)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, §6 — corner-staggered potential-vorticity flux; src/operators/vorticity.jl `fv_vorticity` (imperative reference).",
+      "notes": "Composes with `fv3_vorticity_cellmean`: the operand `$omega` at each input slot is the cell-mean vorticity emitted by that rule. Corner (i,j) sits at the meeting point of cells (i-1,j-1), (i,j-1), (i-1,j), (i,j); each contributes 1/4. Boundary corners draw from ghost-extended cell-mean vorticity supplied by the cubed_sphere grid accessor (`src/ghost_cells.jl::extend_with_ghosts`); selectors carry no `panel` field.",
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi",  "offset": -1 },
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": { "op": "/", "args": [1, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi",  "offset": 0 },
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": { "op": "/", "args": [1, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi",  "offset": -1 },
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": { "op": "/", "args": [1, 4] }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi",  "offset": 0 },
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": { "op": "/", "args": [1, 4] }
+        }
+      ]
+    }
+  }
+}

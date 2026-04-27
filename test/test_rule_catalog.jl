@@ -250,4 +250,183 @@ end
     # reconstruction, upwind-biased, 1D uniform Cartesian.
     @test "weno5_advection" in names
     @test "weno5_advection" in Set(r.name for r in fv_rules)
+    # FV3 D-grid wind-field rules (dsc-247): vorticity (Stokes' theorem),
+    # corner interpolation + Coriolis, kinetic energy, D→C interpolation,
+    # and metric-corrected sub-grid sin(α) flux on the cubed sphere.
+    for fv3_rule in (
+        "fv3_vorticity_cellmean",
+        "fv3_vorticity_corner",
+        "fv3_absolute_vorticity_cellmean",
+        "fv3_kinetic_energy_cell",
+        "fv3_d_to_c_xi",
+        "fv3_d_to_c_eta",
+        "fv3_sinsg_flux_xi",
+        "fv3_sinsg_flux_eta",
+    )
+        @test fv3_rule in names
+        @test fv3_rule in Set(r.name for r in fv_rules)
+    end
+end
+
+@testitem "fv3_vorticity_cellmean scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "fv3_vorticity_cellmean", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"op\": \"curl\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cubed_sphere\"", content)
+    @test occursin("\"stagger\": \"D\"", content)
+    @test occursin("\"emits_location\": \"cell_center\"", content)
+    @test occursin("\"requires_locations\"", content)
+    # D-grid stagger selectors at the four oriented edges of the primal cell
+    # (decision #17 in SELECTOR_KINDS.md): u_edge / v_edge with axis xi/eta.
+    @test occursin("\"stagger\": \"u_edge\"", content)
+    @test occursin("\"stagger\": \"v_edge\"", content)
+    @test occursin("\"axis\": \"xi\"", content)
+    @test occursin("\"axis\": \"eta\"", content)
+    @test occursin("\"offset\": 0", content)
+    @test occursin("\"offset\": 1", content)
+    # Per-cell metric bindings supplied by the cubed_sphere grid accessor:
+    # physical edge lengths and primal-cell area.
+    @test occursin("\"dx\"", content)
+    @test occursin("\"dy\"", content)
+    @test occursin("\"area\"", content)
+    # Cubed-sphere stagger enum carries the four staggering symbols.
+    @test occursin("\"cubed_sphere_stagger\"", content)
+end
+
+@testitem "fv3_vorticity_corner scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "fv3_vorticity_corner", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"emits_location\": \"corner\"", content)
+    # 4-point average over the four cells meeting at the corner: in-panel
+    # offsets in {-1, 0} along both xi and eta axes (cubed_sphere selectors
+    # follow decision #13 — composed via `selectors: [...]` array per entry).
+    @test occursin("\"selectors\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    @test !occursin("\"panel\"", content)  # cross-panel ghost lives in accessor
+end
+
+@testitem "fv3_absolute_vorticity_cellmean scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "fv3_absolute_vorticity_cellmean", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+
+    content = read(rule.path, String)
+    @test occursin("\"op\": \"absolute_vorticity\"", content)
+    @test occursin("\"emits_location\": \"cell_center\"", content)
+    # ω_abs = ω_rel + 2·Omega_rot·sin(lat) — Coriolis bindings present.
+    @test occursin("\"Omega_rot\"", content)
+    @test occursin("\"lat\"", content)
+    @test occursin("\"op\": \"sin\"", content)
+end
+
+@testitem "fv3_kinetic_energy_cell scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "fv3_kinetic_energy_cell", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+
+    content = read(rule.path, String)
+    @test occursin("\"op\": \"kinetic_energy\"", content)
+    @test occursin("\"form\": \"closed_form_bilinear\"", content)
+    # Bilinear KE: closed-form `expression` over four named D-grid reads
+    # (u_w, u_e, v_s, v_n) — not a sum of linear stencil rows.
+    @test occursin("\"reads\"", content)
+    @test occursin("\"u_w\"", content)
+    @test occursin("\"u_e\"", content)
+    @test occursin("\"v_s\"", content)
+    @test occursin("\"v_n\"", content)
+    @test occursin("\"expression\"", content)
+    # Sub-grid metric at cell center (super-grid position 5).
+    @test occursin("\"sin_a\"", content)
+    @test occursin("\"cos_a\"", content)
+end
+
+@testitem "fv3_d_to_c_xi / fv3_d_to_c_eta schemes are discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    for (rname, axis, stagger_out) in (
+            ("fv3_d_to_c_xi", "xi", "u_edge"),
+            ("fv3_d_to_c_eta", "eta", "v_edge"),
+        )
+        idx = findfirst(r -> r.name == rname, rules)
+        @test idx !== nothing
+        rule = rules[idx]
+        @test rule.family == :finite_volume
+
+        content = read(rule.path, String)
+        @test occursin("\"op\": \"d_to_c\"", content)
+        @test occursin("\"dim\": \"$axis\"", content)
+        @test occursin("\"emits_location\": \"$stagger_out\"", content)
+        # Two-point centered average across the staggered interface.
+        @test occursin("\"axis\": \"$axis\"", content)
+        @test occursin("\"offset\": -1", content)
+        @test occursin("\"offset\": 0", content)
+    end
+end
+
+@testitem "fv3_sinsg_flux_xi / fv3_sinsg_flux_eta schemes are discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    for (rname, axis, stagger, dl) in (
+            ("fv3_sinsg_flux_xi", "xi", "u_edge", "dx"),
+            ("fv3_sinsg_flux_eta", "eta", "v_edge", "dy"),
+        )
+        idx = findfirst(r -> r.name == rname, rules)
+        @test idx !== nothing
+        rule = rules[idx]
+        @test rule.family == :finite_volume
+
+        content = read(rule.path, String)
+        @test occursin("\"op\": \"metric_flux\"", content)
+        @test occursin("\"dim\": \"$axis\"", content)
+        @test occursin("\"form\": \"closed_form_upwind_blended\"", content)
+        @test occursin("\"emits_location\": \"$stagger\"", content)
+        # Upwind-blended closed form: sin_pos / sin_neg precomputed bindings,
+        # |v| via the abs op, multiplied by the physical edge length and dt.
+        @test occursin("\"sin_pos\"", content)
+        @test occursin("\"sin_neg\"", content)
+        @test occursin("\"$dl\"", content)
+        @test occursin("\"dt\"", content)
+        @test occursin("\"op\": \"abs\"", content)
+    end
 end

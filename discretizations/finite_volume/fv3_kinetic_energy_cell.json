@@ -1,0 +1,89 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "fv3_kinetic_energy_cell": {
+      "applies_to": {
+        "op": "kinetic_energy",
+        "args": ["$V"]
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "D",
+      "stagger_enum": "cubed_sphere_stagger",
+      "form": "closed_form_bilinear",
+      "requires_locations": ["u_edge", "v_edge"],
+      "emits_location": "cell_center",
+      "accuracy": "O(h^2) (cell-center averaging of D-grid covariant winds)",
+      "reference": "Harris et al. (2021), GFDL FV3 Technical Memorandum, Eq. 3.5; src/operators/kinetic_energy.jl `fv_kinetic_energy_cell` (imperative reference).",
+      "notes": "Cell-center kinetic energy from D-grid normalized covariant winds on the non-orthogonal gnomonic grid. KE is bilinear in (u_d, v_d), so it is expressed as a closed-form `expression` over four named operand reads rather than a sum of linear stencil rows. The four reads name the surrounding D-grid faces of cell (i,j); the closed-form math is u_avg = (u_w + u_e)/2, v_avg = (v_s + v_n)/2, KE = (u_avg² + v_avg² − 2·u_avg·v_avg·cos α) / (2·sin²α), where α is the angle between coordinate axes at super-grid position 5 (cell center). The upstream-biased variant of Harris et al. Eq. 6.3 (`fv_kinetic_energy_arrayop` in the imperative reference) evaluates at face positions to dodge the Hollingsworth-Kallberg instability, but its A-grid contravariant fields require a ghost-extension+vector-rotation pre-pass that lives in the cubed_sphere grid accessor (`src/ghost_cells.jl::extend_with_ghosts_vector`) — that pre-pass is below the rule layer.",
+      "metric_bindings": {
+        "comment": "Per-cell sub-grid metric resolved by the cubed_sphere grid accessor at super-grid position 5 (cell center). Names match `CubedSphereGrid` field names.",
+        "sin_a": "sin(α) at cell center: sin_sg[$target, 5]",
+        "cos_a": "cos(α) at cell center: cos_sg[$target, 5]"
+      },
+      "reads": [
+        {
+          "name": "u_w",
+          "selector": { "kind": "cubed_sphere", "stagger": "u_edge", "axis": "xi", "offset": 0 }
+        },
+        {
+          "name": "u_e",
+          "selector": { "kind": "cubed_sphere", "stagger": "u_edge", "axis": "xi", "offset": 1 }
+        },
+        {
+          "name": "v_s",
+          "selector": { "kind": "cubed_sphere", "stagger": "v_edge", "axis": "eta", "offset": 0 }
+        },
+        {
+          "name": "v_n",
+          "selector": { "kind": "cubed_sphere", "stagger": "v_edge", "axis": "eta", "offset": 1 }
+        }
+      ],
+      "expression": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      { "op": "/", "args": [{ "op": "+", "args": ["u_w", "u_e"] }, 2] },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      { "op": "/", "args": [{ "op": "+", "args": ["v_s", "v_n"] }, 2] },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  2,
+                  { "op": "/", "args": [{ "op": "+", "args": ["u_w", "u_e"] }, 2] },
+                  { "op": "/", "args": [{ "op": "+", "args": ["v_s", "v_n"] }, 2] },
+                  "cos_a"
+                ]
+              }
+            ]
+          },
+          { "op": "*", "args": [2, { "op": "^", "args": ["sin_a", 2] }] }
+        ]
+      }
+    }
+  }
+}
