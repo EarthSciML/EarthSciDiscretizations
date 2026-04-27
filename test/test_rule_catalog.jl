@@ -96,8 +96,12 @@ end
     # Vertical centered FD uses per-family selector kind and axis k.
     @test occursin("\"kind\": \"vertical\"", content)
     @test occursin("\"axis\": \"\$k\"", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
+    # Face-staggered MMS dispatch (esm-bhv) — selectors carry the per-face
+    # stagger plus an integer offset; the two-point centered stencil reads
+    # the cell's own bottom and top faces (offset 0).
+    @test occursin("\"stagger\": \"face_bottom\"", content)
+    @test occursin("\"stagger\": \"face_top\"", content)
+    @test occursin("\"offset\": 0", content)
 end
 
 @testitem "centered_2nd_uniform_latlon scheme is discoverable and well-formed" begin
