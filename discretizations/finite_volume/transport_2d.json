@@ -1,0 +1,167 @@
+{
+  "discretizations": {
+    "transport_2d": {
+      "applies_to": {
+        "op": "advect",
+        "args": ["$q", "$U"],
+        "dims": ["xi", "eta"]
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "combine": "+",
+      "accuracy": "O(h)",
+      "upwind_biased": true,
+      "reference": "src/operators/transport_2d.jl `transport_2d` (imperative reference) — first-order Rusanov / local Lax-Friedrichs flux-form 2D transport on the gnomonic cubed sphere with C-grid staggered Courant numbers. Equivalent to first-order donor-cell upwind when the LF dissipation coefficient is set to the local face Courant magnitude; retained for symbolic / debugging use as the simplest cubed-sphere transport scheme (cf. catalog row `lax_friedrichs_flux`). Higher-order Lin-Rood and unsplit-PPM transport on the same grid live in transport_2d.jl alongside this rule and remain pending separate beads (catalog rows `fv3_lin_rood_advection`, `cam5_fv_ppm_reconstruction`).",
+      "notes": "Flux-form first-order FV transport: dq/dt = -(1/A)·(F_E·dx_E - F_W·dx_W + G_N·dy_N - G_S·dy_S), with each face flux F = c·(q_L + q_R)/2 - |c|·(q_R - q_L)/2 (local Lax-Friedrichs, dissipation coefficient = |c|). Expanding the symmetric and dissipative parts gives a 5-point in-panel stencil over offsets (0,0), (±1,0), (0,±1) with coefficients that depend on per-face Courant numbers `c_xi_E`, `c_xi_W`, `c_eta_N`, `c_eta_S` and the corresponding face-length / cell-area metrics bound at the central cell by the cubed_sphere accessor. Cross-panel ghost cells and basis rotation at panel boundaries are handled below the rule layer (src/grids/panel_connectivity.jl); selectors carry only in-panel `(xi, eta)` offsets and do NOT carry a `panel` field. Same convention as `covariant_laplacian_cubed_sphere` for the metric/accessor split.",
+      "panel_handling": "lives in the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); the rule references in-panel (xi, eta) offsets only. Selectors do NOT carry a `panel` field — cross-panel ghost extension and basis rotation happen below the rule layer.",
+      "metric_bindings": {
+        "comment": "Per-cell bindings resolved by the cubed_sphere grid accessor at the central stencil cell (offset 0,0). Face-staggered Courant numbers and face lengths are accessor-resolved from the face arrays at the four faces of the central cell. Names follow the snake_case convention of src/grids/cubed_sphere.jl and src/operators/transport_2d.jl.",
+        "c_xi_E": "Courant number at the east (xi+1/2) face of the central cell",
+        "c_xi_W": "Courant number at the west (xi-1/2) face of the central cell",
+        "c_eta_N": "Courant number at the north (eta+1/2) face of the central cell",
+        "c_eta_S": "Courant number at the south (eta-1/2) face of the central cell",
+        "dx_E": "physical edge length of the east face (grid.dx[p, i+1, j])",
+        "dx_W": "physical edge length of the west face (grid.dx[p, i, j])",
+        "dy_N": "physical edge length of the north face (grid.dy[p, i, j+1])",
+        "dy_S": "physical edge length of the south face (grid.dy[p, i, j])",
+        "A": "cell area (grid.area[p, i, j])"
+      },
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  -1,
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [{ "op": "+", "args": ["c_xi_E", { "op": "abs", "args": ["c_xi_E"] }] }, 2] },
+                          "dx_E"
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "*", "args": [-1, { "op": "/", "args": [{ "op": "-", "args": ["c_xi_W", { "op": "abs", "args": ["c_xi_W"] }] }, 2] }] },
+                          "dx_W"
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [{ "op": "+", "args": ["c_eta_N", { "op": "abs", "args": ["c_eta_N"] }] }, 2] },
+                          "dy_N"
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "*", "args": [-1, { "op": "/", "args": [{ "op": "-", "args": ["c_eta_S", { "op": "abs", "args": ["c_eta_S"] }] }, 2] }] },
+                          "dy_S"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "A"
+            ]
+          },
+          "comment": "Center cell (0,0): self-coefficient from the inflow side of every face. East face contributes -((c_E + |c_E|)/2)·dx_E/A, west face contributes +((c_W - |c_W|)/2)·dx_W/A, and similarly for the eta faces."
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  -1,
+                  { "op": "/", "args": [{ "op": "-", "args": ["c_xi_E", { "op": "abs", "args": ["c_xi_E"] }] }, 2] },
+                  "dx_E"
+                ]
+              },
+              "A"
+            ]
+          },
+          "comment": "East neighbor (+1, 0): outflow-from-east contribution at the east face only. Coefficient = -((c_E - |c_E|)/2)·dx_E/A; nonzero only when c_E < 0."
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": -1 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  { "op": "/", "args": [{ "op": "+", "args": ["c_xi_W", { "op": "abs", "args": ["c_xi_W"] }] }, 2] },
+                  "dx_W"
+                ]
+              },
+              "A"
+            ]
+          },
+          "comment": "West neighbor (-1, 0): inflow-from-west contribution at the west face only. Coefficient = +((c_W + |c_W|)/2)·dx_W/A; nonzero only when c_W > 0."
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": 1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  -1,
+                  { "op": "/", "args": [{ "op": "-", "args": ["c_eta_N", { "op": "abs", "args": ["c_eta_N"] }] }, 2] },
+                  "dy_N"
+                ]
+              },
+              "A"
+            ]
+          },
+          "comment": "North neighbor (0, +1): outflow-from-north contribution at the north face only. Coefficient = -((c_N - |c_N|)/2)·dy_N/A; nonzero only when c_N < 0."
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "axis": "xi", "offset": 0 },
+            { "kind": "cubed_sphere", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  { "op": "/", "args": [{ "op": "+", "args": ["c_eta_S", { "op": "abs", "args": ["c_eta_S"] }] }, 2] },
+                  "dy_S"
+                ]
+              },
+              "A"
+            ]
+          },
+          "comment": "South neighbor (0, -1): inflow-from-south contribution at the south face only. Coefficient = +((c_S + |c_S|)/2)·dy_S/A; nonzero only when c_S > 0."
+        }
+      ]
+    }
+  }
+}

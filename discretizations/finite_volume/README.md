@@ -46,6 +46,24 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   Sweby (1984) second-order TVD region and is compressive near
   discontinuities. Layer-B fixtures parallel to minmod at
   `tests/fixtures/flux_limiter_superbee/`.
+- [`transport_2d.json`](transport_2d.json) — first-order Rusanov / local
+  Lax-Friedrichs flux-form 2D transport on the gnomonic cubed sphere
+  with C-grid Courant bindings. 5-point in-panel stencil over offsets
+  `(0, 0)`, `(±1, 0)`, `(0, ±1)`; coefficients depend on per-face
+  Courant numbers (`c_xi_E`, `c_xi_W`, `c_eta_N`, `c_eta_S`), face
+  lengths (`dx_E`, `dx_W`, `dy_N`, `dy_S`), and cell area (`A`) bound at
+  the central cell by the cubed_sphere accessor — the same
+  accessor-resolves-staggered-bindings convention as
+  [`covariant_laplacian_cubed_sphere`](../finite_difference/covariant_laplacian_cubed_sphere.json).
+  Mirrors the imperative `transport_2d` ArrayOp in
+  `src/operators/transport_2d.jl`. Layer-A canonical fixture under
+  `transport_2d/fixtures/canonical/` documents the bit-equivalence
+  contract against `transport_2d(q, courant_xi, courant_eta,
+  CubedSphereGrid(24))` to within `1e-12`. Layer-B convergence declares
+  `applicable: false` — ESS's `verify_mms_convergence` cannot drive a 2D
+  cubed-sphere staggered C-grid sweep with face-Courant bindings today;
+  numeric coverage continues to live at `test/test_transport_2d.jl` and
+  `test/integration_cases/cubed_sphere_advection.jl`.
 - [`divergence_arakawa_c.json`](divergence_arakawa_c.json) — Arakawa &
   Lamb (1977) C-grid divergence: ∂uₓ/∂x + ∂u_y/∂y with uₓ at face-x and
   u_y at face-y, output at cell center. First rule to use the
