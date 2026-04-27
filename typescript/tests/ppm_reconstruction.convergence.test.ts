@@ -21,11 +21,12 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { rules } from "../src/index.js";
+import {
+  reconstructCell,
+  reconstructOutput,
+} from "./ppm_reconstruction_helpers.js";
 
-const REPO_ROOT = resolve(
-  fileURLToPath(new URL("../", import.meta.url)),
-  "..",
-);
+const REPO_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)), "..");
 const RULE_PATH = join(
   REPO_ROOT,
   "discretizations",
@@ -94,7 +95,7 @@ describe("ppm_reconstruction MMS convergence (TypeScript)", () => {
       }
       let err = 0.0;
       for (let i = 0; i < n; i++) {
-        const cell = rules.reconstructCell(rule, q, i);
+        const cell = reconstructCell(rule, q, i);
         for (let k = 0; k < samplesPerCell; k++) {
           const xi = (k + 0.5) / samplesPerCell;
           const x = i * dx + xi * dx;
@@ -139,17 +140,17 @@ describe("ppm_reconstruction MMS convergence (TypeScript)", () => {
       q[i] = (F(b) - F(a)) / (b - a);
     }
     for (const i of [0, 5, 13, n - 1]) {
-      const cell = rules.reconstructCell(rule, q, i);
-      expect(rules.reconstructOutput(rule, "q_left_edge", q, i)).toBe(
+      const cell = reconstructCell(rule, q, i);
+      expect(reconstructOutput(rule, "q_left_edge", q, i)).toBe(
         cell.q_left_edge,
       );
-      expect(rules.reconstructOutput(rule, "q_right_edge", q, i)).toBe(
+      expect(reconstructOutput(rule, "q_right_edge", q, i)).toBe(
         cell.q_right_edge,
       );
       for (const xi of [0.0, 0.25, 0.5, 0.75, 1.0]) {
-        expect(
-          rules.reconstructOutput(rule, "q_parabola", q, i, { xi }),
-        ).toBe(cell.parabola(xi));
+        expect(reconstructOutput(rule, "q_parabola", q, i, { xi })).toBe(
+          cell.parabola(xi),
+        );
       }
     }
   });
