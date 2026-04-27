@@ -47,6 +47,7 @@ APPLICABLE = {
     "centered_2nd_uniform_latlon",
     "ppm_reconstruction",
     "upwind_1st",
+    "weno5_advection_2d",
 }
 
 ALL_RULES = (
@@ -58,6 +59,7 @@ ALL_RULES = (
     "nn_diffusion_mpas",
     "ppm_reconstruction",
     "weno5_advection",
+    "weno5_advection_2d",
     "flux_limiter_minmod",
     "flux_limiter_superbee",
     "divergence_arakawa_c",
@@ -594,6 +596,51 @@ def stencil_weno5(out: Path) -> None:
     plt.close(fig)
 
 
+def stencil_weno5_2d(out: Path) -> None:
+    """Cross-shaped 2D WENO5 stencil: dimension-by-dimension splitting reuses
+    the 1D Jiang-Shu (1996) sub-stencils along x and y independently. Nine
+    points along each axis cross at (i, j); the two arms together span 17 of
+    the 25 cells in the 5×5 neighborhood."""
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    for i in range(-3, 4):
+        for j in range(-3, 4):
+            ax.scatter([i], [j], color="#eeeeee", s=40, zorder=1)
+    x_arm = [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)]
+    y_arm = [(0, -2), (0, -1), (0, 1), (0, 2)]
+    for x, y in x_arm:
+        ax.scatter([x], [y], color="#15315d", s=170, zorder=3,
+                   edgecolor="#0a1530")
+    for x, y in y_arm:
+        ax.scatter([x], [y], color="#6c1d1d", s=170, zorder=3,
+                   edgecolor="#3a0a0a")
+    ax.scatter([0], [0], color="#b58a00", s=180, zorder=4,
+               edgecolor="#5b3d09")
+    ax.axvline(0.5, color="#15315d", lw=0.6, ls="--",
+               label="x face $x_{i+1/2}$")
+    ax.axhline(0.5, color="#6c1d1d", lw=0.6, ls="--",
+               label="y face $y_{j+1/2}$")
+    for x in range(-3, 4):
+        ax.text(x, -3.65, f"i{x:+d}" if x != 0 else "i", ha="center",
+                fontsize=8, color="#666")
+    for y in range(-3, 4):
+        ax.text(-3.6, y, f"j{y:+d}" if y != 0 else "j", va="center",
+                fontsize=8, color="#666")
+    ax.set_xlim(-3.7, 3.7)
+    ax.set_ylim(-3.7, 3.7)
+    ax.set_aspect("equal")
+    ax.set_xticks(list(range(-3, 4)))
+    ax.set_yticks(list(range(-3, 4)))
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_title("weno5_advection_2d — dimension-by-dimension cross stencil")
+    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+
+
 def _limiter_curve(out: Path, title: str, phi):
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
     r = np.linspace(-0.5, 4, 600)
@@ -730,6 +777,7 @@ RULE_STENCIL_PLOTTERS = {
     "nn_diffusion_mpas": stencil_nn_diffusion_mpas,
     "ppm_reconstruction": stencil_ppm_reconstruction,
     "weno5_advection": stencil_weno5,
+    "weno5_advection_2d": stencil_weno5_2d,
     "flux_limiter_minmod": stencil_limiter_minmod,
     "flux_limiter_superbee": stencil_limiter_superbee,
     "divergence_arakawa_c": stencil_arakawa_divergence,
@@ -878,12 +926,78 @@ def convergence_centered_2nd_latlon(out: Path) -> None:
                       ns, errs, expected_order=2.0)
 
 
+def convergence_weno5_advection_2d(out: Path) -> None:
+    """Dimension-by-dimension Jiang-Shu (1996) WENO5 reconstruction on the
+    phase-shifted 2D sine u(x,y) = sin(2π x + 1.0)·sin(2π y + 0.5) on
+    [0,1]² periodic, cell-averaged inputs. Mirrors the Layer-C fixture under
+    discretizations/finite_volume/weno5_advection_2d/fixtures/integration/
+    smooth_2d_convergence.esm. Asymptotic order is sub-5th (~4.5–4.7) with
+    ε = 1e-6 nonlinear-weight regularisation; threshold 4.4 across n ∈
+    {16,32,64,128} per dsc-5od acceptance."""
+    ns = [16, 32, 64, 128]
+    phi_x, phi_y = 1.0, 0.5
+    eps = 1.0e-6
+    errs = []
+
+    def cell_avg_1d(a, b, phi):
+        return (math.cos(2 * math.pi * a + phi)
+                - math.cos(2 * math.pi * b + phi)) / (2 * math.pi * (b - a))
+
+    def weno5_left_face(q):
+        n = len(q)
+        out = np.empty(n)
+        for i in range(n):
+            qm2 = q[(i - 2) % n]; qm1 = q[(i - 1) % n]; q0 = q[i]
+            qp1 = q[(i + 1) % n]; qp2 = q[(i + 2) % n]
+            p0 = (1 / 3) * qm2 + (-7 / 6) * qm1 + (11 / 6) * q0
+            p1 = (-1 / 6) * qm1 + (5 / 6) * q0 + (1 / 3) * qp1
+            p2 = (1 / 3) * q0 + (5 / 6) * qp1 + (-1 / 6) * qp2
+            b0 = (13 / 12) * (qm2 - 2 * qm1 + q0) ** 2 \
+                + 0.25 * (qm2 - 4 * qm1 + 3 * q0) ** 2
+            b1 = (13 / 12) * (qm1 - 2 * q0 + qp1) ** 2 \
+                + 0.25 * (qm1 - qp1) ** 2
+            b2 = (13 / 12) * (q0 - 2 * qp1 + qp2) ** 2 \
+                + 0.25 * (3 * q0 - 4 * qp1 + qp2) ** 2
+            a0 = 0.1 / (eps + b0) ** 2
+            a1 = 0.6 / (eps + b1) ** 2
+            a2 = 0.3 / (eps + b2) ** 2
+            s = a0 + a1 + a2
+            out[i] = (a0 / s) * p0 + (a1 / s) * p1 + (a2 / s) * p2
+        return out
+
+    for n in ns:
+        h = 1.0 / n
+        x_avg = np.array([cell_avg_1d(i * h, (i + 1) * h, phi_x)
+                          for i in range(n)])
+        y_avg = np.array([cell_avg_1d(j * h, (j + 1) * h, phi_y)
+                          for j in range(n)])
+        qbar = np.outer(x_avg, y_avg)  # qbar[i, j]
+        x_face = np.array([math.sin(2 * math.pi * (i + 1) * h + phi_x)
+                           for i in range(n)])
+        y_face = np.array([math.sin(2 * math.pi * (j + 1) * h + phi_y)
+                           for j in range(n)])
+        err = 0.0
+        for j in range(n):
+            qhat = weno5_left_face(qbar[:, j])
+            truth = x_face * y_avg[j]
+            err = max(err, float(np.max(np.abs(qhat - truth))))
+        for i in range(n):
+            qhat = weno5_left_face(qbar[i, :])
+            truth = x_avg[i] * y_face
+            err = max(err, float(np.max(np.abs(qhat - truth))))
+        errs.append(err)
+    _convergence_plot(out,
+                      "weno5_advection_2d — empirical convergence",
+                      ns, errs, expected_order=5.0)
+
+
 CONVERGENCE_PLOTTERS = {
     "centered_2nd_uniform": convergence_centered_2nd,
     "centered_2nd_uniform_vertical": convergence_centered_2nd_vertical,
     "centered_2nd_uniform_latlon": convergence_centered_2nd_latlon,
     "ppm_reconstruction": convergence_ppm_reconstruction,
     "upwind_1st": convergence_upwind_1st,
+    "weno5_advection_2d": convergence_weno5_advection_2d,
 }
 
 
