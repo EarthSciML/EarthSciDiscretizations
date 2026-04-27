@@ -21,32 +21,35 @@ tags: ["finite-difference", "centered", "vertical", "uniform"]
 
 ## Coefficients
 
-| selector kind | axis | offset | coeff |
-|---|---|---:|---|
-| `vertical` | `$k` | −1 | `−1 / (2 h)` |
-| `vertical` | `$k` | +1 | `+1 / (2 h)` |
+| selector kind | axis | stagger | offset | coeff |
+|---|---|---|---:|---|
+| `vertical` | `$k` | `face_bottom` | 0 | `−1 / h` |
+| `vertical` | `$k` | `face_top`    | 0 | `+1 / h` |
 
-Combined as `+`. Same kernel as
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}),
-relabeled for the vertical axis. The vertical accessor exposes the level
-spacing `h` directly so the rule does not need to know whether the column
-is in `z`, `p`, or `σ` coordinates.
+Combined as `+`. The `vertical` selector kind addresses face-staggered
+samples of `u`: at cell `i`, `face_bottom` with offset `0` reads the face
+at the bottom of the cell, and `face_top` with offset `0` reads the face at
+the top of the cell. The vertical accessor exposes the level spacing `h`
+directly so the rule does not need to know whether the column is in `z`,
+`p`, or `σ` coordinates.
 
 ## Discrete operator
 
-For a column sample $u_k$ on a uniform vertical axis with spacing $h$, the
-rule produces
+For face samples $u_{i+1/2}$ on a uniform vertical axis with cell spacing
+$h$, the rule produces a cell-centered derivative at cell $i$ (located at
+$z_i$, the midpoint of the cell's two faces $z_{i-1/2}$ and $z_{i+1/2}$):
 
-$$\bigl(\partial_k u\bigr)_k \;\approx\; \frac{u_{k+1} - u_{k-1}}{2\,h}.$$
+$$\bigl(\partial_k u\bigr)_i \;\approx\; \frac{u_{i+1/2} - u_{i-1/2}}{h}.$$
 
-Taylor-expanding $u_{k\pm 1}$ about level $k$,
+Taylor-expanding $u_{i\pm 1/2}$ about cell center $z_i$,
 
-$$\frac{u_{k+1} - u_{k-1}}{2\,h} \;=\; u'_k \;+\; \frac{h^{2}}{6}\,u'''_k \;+\; \mathcal{O}(h^{4}),$$
+$$\frac{u_{i+1/2} - u_{i-1/2}}{h} \;=\; u'(z_i) \;+\; \frac{h^{2}}{24}\,u'''(z_i) \;+\; \mathcal{O}(h^{4}),$$
 
-so the leading truncation error is $\tfrac{h^{2}}{6}\,u'''(k)$, giving the
-advertised $\mathcal{O}(h^{2})$ accuracy. The expression is anti-symmetric
-in $k\!\pm\!1$, so the operator is non-dissipative — error appears as
-dispersion only, with no built-in numerical diffusion.
+so the leading truncation error is $\tfrac{h^{2}}{24}\,u'''(z_i)$, giving
+the advertised $\mathcal{O}(h^{2})$ accuracy. The expression is
+anti-symmetric in the two adjacent faces, so the operator is
+non-dissipative — error appears as dispersion only, with no built-in
+numerical diffusion.
 
 The vertical accessor binds `h` to whichever coordinate the column actually
 uses ($\Delta z$, $\Delta p$, or $\Delta\sigma$); the discrete operator
@@ -58,8 +61,8 @@ the uniform axis is enforced by the `vertical` selector kind.
 <figure class="figure">
   <img src="/plots/rules/centered_2nd_uniform_vertical-convergence.png"
        alt="Empirical convergence on vertical axis">
-  <figcaption>L∞ error on <code>u(z) = cos(2πz)</code>, periodic <code>[0, 1]</code>,
-  cell-centered samples. Slope matches the −2 reference.</figcaption>
+  <figcaption>L∞ error on <code>u(z) = sin(2πz)</code>, column <code>[0, 1]</code>,
+  face-staggered samples → cell-centered derivative. Slope matches the −2 reference.</figcaption>
 </figure>
 
 Fixture: [`discretizations/finite_difference/centered_2nd_uniform_vertical/fixtures/convergence/`]({{< param repoURL >}}/blob/main/discretizations/finite_difference/centered_2nd_uniform_vertical/fixtures/convergence)
