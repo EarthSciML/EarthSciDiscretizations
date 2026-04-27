@@ -928,14 +928,15 @@ def convergence_centered_2nd_latlon(out: Path) -> None:
 
 def convergence_weno5_advection_2d(out: Path) -> None:
     """Dimension-by-dimension Jiang-Shu (1996) WENO5 reconstruction on the
-    phase-shifted 2D sine u(x,y) = sin(2π x + 1.0)·sin(2π y + 0.5) on
-    [0,1]² periodic, cell-averaged inputs. Mirrors the Layer-C fixture under
-    discretizations/finite_volume/weno5_advection_2d/fixtures/integration/
-    smooth_2d_convergence.esm. Asymptotic order is sub-5th (~4.5–4.7) with
-    ε = 1e-6 nonlinear-weight regularisation; threshold 4.4 across n ∈
-    {16,32,64,128} per dsc-5od acceptance."""
+    phase-shifted 2D sine product u(x,y) = sin(2π x + 1.0)·sin(2π y + 1.0)
+    on [0,1]² periodic, cell-averaged inputs. Mirrors the Layer-B
+    convergence fixture under
+    discretizations/finite_volume/weno5_advection_2d/fixtures/convergence/,
+    which dispatches through ESS's mms_weno5_convergence 2D path
+    (esm-hsa). Asymptotic order is sub-5th (~4.5–4.7) with ε = 1e-6
+    nonlinear-weight regularisation; threshold 4.5 across n ∈ {16,32,64,128}."""
     ns = [16, 32, 64, 128]
-    phi_x, phi_y = 1.0, 0.5
+    phi_x, phi_y = 1.0, 1.0
     eps = 1.0e-6
     errs = []
 

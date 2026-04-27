@@ -54,7 +54,7 @@ using TestItems
     @test occursin("\"cartesian\"", content)
     @test occursin("\"weighted_essentially_nonoscillatory\"", content)
     @test occursin("\"dimension_by_dimension\"", content)
-    @test occursin("\"O(h^5) per axis\"", content)
+    @test occursin("\"O(h^5)\"", content)
     @test occursin("\"stencil\"", content)
     # 9-point stencil: 5 along x at y-offset 0 + 5 along y at x-offset 0
     # share the (0,0) center (counted once).
