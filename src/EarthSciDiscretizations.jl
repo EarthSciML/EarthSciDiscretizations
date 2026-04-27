@@ -42,7 +42,6 @@ include("operators/vertical_remap.jl")
 include("operators/wind_ops.jl")
 include("operators/vorticity.jl")
 include("operators/kinetic_energy.jl")
-include("operators/ppm_edge.jl")
 
 # Boundary-condition handler
 include("bc_handler.jl")
@@ -144,10 +143,6 @@ export fv_vorticity_cellmean!, fv_vorticity_cellmean, fv_vorticity_cellmean_arra
 export fv_absolute_vorticity!, fv_absolute_vorticity, fv_absolute_vorticity_arrayop
 export fv_kinetic_energy!, fv_kinetic_energy, fv_kinetic_energy_arrayop
 export fv_kinetic_energy_cell!, fv_kinetic_energy_cell, fv_kinetic_energy_cell_arrayop
-
-# Exports: FV3 two-sided PPM
-export ppm_edge_value_twosided, ppm_edge_value_twosided_limited
-export flux_1d_ppm_twosided!
 
 # Exports: Initial-condition projection
 export project_initial_condition

@@ -46,6 +46,26 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   Sweby (1984) second-order TVD region and is compressive near
   discontinuities. Layer-B fixtures parallel to minmod at
   `tests/fixtures/flux_limiter_superbee/`.
+- [`ppm_edge_cubed_sphere.json`](ppm_edge_cubed_sphere.json) — Harris et
+  al. (2021), GFDL FV3 Technical Memorandum, Eq. 6.5–6.6: two-sided PPM
+  extrapolation at cubed-sphere panel-boundary interfaces. The standard
+  4th-order PPM edge formula breaks down across the discontinuous panel
+  coordinate system; this rule averages two one-sided extrapolations
+  using only in-panel offsets and lets the cubed_sphere grid accessor
+  (`src/grids/panel_connectivity.jl`) resolve cross-panel offsets to
+  neighbor-panel ghost cells. Single-axis stencil at offsets
+  `{-1, 0, 1, 2}` along `$x ∈ {xi, eta}`; coefficients
+  `[-1/4, 3/4, 3/4, -1/4]` after specializing the FV3 non-uniform
+  formula to the gnomonic equidistant grid's uniform isotropic spacing
+  `h = π/(2·Nc)`. The FV3 eq. 6.6 monotonicity clamp is documented in
+  the rule's `monotonicity_constraint` block as a non-linear
+  post-processing step (post-stencil clamps are a follow-up ESS schema
+  extension; see flux_limiter_minmod's `formula` AST for the related
+  pattern). Layer-A canonical fixture pins bit-equivalence with the
+  pre-port `ppm_edge_value_twosided` reference on `c24`; Layer-B
+  convergence declares `applicable: false` until ESS gains
+  cubed_sphere selectors with panel-connectivity dispatch (shared
+  follow-up with `covariant_laplacian_cubed_sphere`).
 - [`divergence_arakawa_c.json`](divergence_arakawa_c.json) — Arakawa &
   Lamb (1977) C-grid divergence: ∂uₓ/∂x + ∂u_y/∂y with uₓ at face-x and
   u_y at face-y, output at cell center. First rule to use the
