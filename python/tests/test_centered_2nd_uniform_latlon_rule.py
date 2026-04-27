@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from earthsci_toolkit.rules import (
+from earthsci_discretizations.rules import (
     apply_stencil_latlon,
     eval_coeff,
     load_rule,
@@ -118,7 +118,7 @@ def test_stencil_application(rule, fixtures, golden):
 
 
 def test_eval_coeff_unbound_variable_raises(rule):
-    from earthsci_toolkit.rules import UnboundVariableError
+    from earthsci_discretizations.rules import UnboundVariableError
 
     entry = rule.stencil[0]
     with pytest.raises(UnboundVariableError):

@@ -9,7 +9,7 @@ demand by the accessors (:meth:`MpasGrid.cell_centers`,
 :meth:`MpasGrid.edge_length`, :meth:`MpasGrid.metric_eval`). Cross-binding
 conformance is compared at pinned query points.
 
-NetCDF I/O is intentionally not bundled with ``earthsci_toolkit``. Path-based
+NetCDF I/O is intentionally not bundled with ``earthsci_discretizations``. Path-based
 loading requires the caller to pass a ``reader_fn(path) -> MpasMeshData``;
 in-memory construction via :func:`mpas_mesh_data` is the primary path for
 tests and host-built meshes. Mirrors the TypeScript binding's ``readerFn``
@@ -355,7 +355,7 @@ class MpasGrid:
 
     @property
     def provenance(self) -> dict:
-        import earthsci_toolkit
+        import earthsci_discretizations
 
         ldr = self.loader
         loader_blk = (
@@ -363,8 +363,8 @@ class MpasGrid:
         )
         return {
             "binding": "python",
-            "binding_version": earthsci_toolkit.__version__,
-            "source": "earthsci_toolkit.grids.mpas",
+            "binding_version": earthsci_discretizations.__version__,
+            "source": "earthsci_discretizations.grids.mpas",
             "family": "mpas",
             "version": _MPAS_FAMILY_VERSION,
             "source_sha": _MPAS_SOURCE_SHA,
@@ -594,7 +594,7 @@ def mpas(
         if reader_fn is None:
             raise TypeError(
                 "mpas: path-based loading requires reader_fn(path) -> MpasMeshData. "
-                "NetCDF I/O is not bundled with earthsci_toolkit per "
+                "NetCDF I/O is not bundled with earthsci_discretizations per "
                 "GRIDS_API.md §10; pass reader_fn from your consumer package."
             )
         if not callable(reader_fn):

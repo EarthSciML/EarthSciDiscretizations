@@ -18,8 +18,8 @@ import math
 import numpy as np
 import pytest
 
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import (
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import (
     MpasGrid,
     MpasLoader,
     MpasMeshData,

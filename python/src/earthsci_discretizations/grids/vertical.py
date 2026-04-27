@@ -181,11 +181,11 @@ class VerticalGrid:
 
     @property
     def provenance(self) -> dict:
-        import earthsci_toolkit
+        import earthsci_discretizations
 
         return {
             "binding": "python",
-            "binding_version": earthsci_toolkit.__version__,
+            "binding_version": earthsci_discretizations.__version__,
             "family": self.family,
             "version": _FAMILY_VERSION,
             "coordinate": self.coordinate,

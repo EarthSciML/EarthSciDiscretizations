@@ -15,10 +15,10 @@ import math
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import LatLonGrid, lat_lon
-from earthsci_toolkit.grids.lat_lon import _map_i
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import LatLonGrid, lat_lon
+from earthsci_discretizations.grids.lat_lon import _map_i
 
 # ------------------------------------------------------------------ API --
 
@@ -414,9 +414,9 @@ def test_provenance_identifies_python_binding():
     g = lat_lon(nlon=4, nlat=4)
     prov = g.to_esm()["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
+    assert prov["binding_version"] == earthsci_discretizations.__version__
     assert prov["generator"] == "lat_lon_regular"
-    assert prov["source"] == "earthsci_toolkit.grids.lat_lon"
+    assert prov["source"] == "earthsci_discretizations.grids.lat_lon"
 
 
 def test_dtype_f32_propagates_to_esm():

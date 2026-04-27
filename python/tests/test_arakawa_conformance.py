@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids.arakawa import CartesianBase
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids.arakawa import CartesianBase
 
 HARNESS_DIR = (
     Path(__file__).resolve().parents[2]

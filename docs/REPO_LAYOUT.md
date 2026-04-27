@@ -20,9 +20,9 @@ EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 ├── src/                  Julia package source
 ├── test/                 Julia package tests
 ├── Project.toml          Julia package manifest
-├── python/               Python binding (earthsci-toolkit)
+├── python/               Python binding (earthsci-discretizations)
 │   ├── pyproject.toml
-│   ├── src/earthsci_toolkit/
+│   ├── src/earthsci_discretizations/
 │   └── tests/
 ├── rust/                 Rust binding (earthsci_grids crate)
 │   ├── Cargo.toml

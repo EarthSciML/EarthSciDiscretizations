@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from earthsci_toolkit import grids
+from earthsci_discretizations import grids
 
 HARNESS_DIR = (
     Path(__file__).resolve().parents[2]

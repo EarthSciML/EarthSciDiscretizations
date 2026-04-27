@@ -13,10 +13,10 @@ import math
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import ArakawaGrid, BaseGrid, CartesianBase, arakawa
-from earthsci_toolkit.grids.arakawa import (
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import ArakawaGrid, BaseGrid, CartesianBase, arakawa
+from earthsci_discretizations.grids.arakawa import (
     _LOCATIONS,
     _STAGGERS,
     _VARIABLE_LOCATIONS,
@@ -399,9 +399,9 @@ def test_provenance_identifies_python_binding():
     g = arakawa(base=_cart(), stagger="C")
     prov = g.to_esm()["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
+    assert prov["binding_version"] == earthsci_discretizations.__version__
     assert prov["stagger"] == "C"
-    assert prov["source"] == "earthsci_toolkit.grids.arakawa"
+    assert prov["source"] == "earthsci_discretizations.grids.arakawa"
 
 
 def test_dtype_f32_propagates_to_esm():

@@ -14,9 +14,9 @@ import math
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import DuoGrid, DuoLoader, duo
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import DuoGrid, DuoLoader, duo
 
 
 def _builtin(level: int) -> DuoLoader:
@@ -316,7 +316,7 @@ def test_provenance_carries_binding_identity():
     g = duo(loader=_builtin(0), R=1.0)
     prov = g.to_esm()["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
+    assert prov["binding_version"] == earthsci_discretizations.__version__
     assert prov["family"] == "duo"
     assert prov["level"] == 0
     assert prov["reader"] == "builtin_icosahedral"

@@ -13,10 +13,10 @@ import math
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import CubedSphereGrid, cubed_sphere
-from earthsci_toolkit.grids.cubed_sphere import (
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import CubedSphereGrid, cubed_sphere
+from earthsci_discretizations.grids.cubed_sphere import (
     _PANEL_CONNECTIVITY,
     _gnomonic_metric,
     _gnomonic_to_cart,
@@ -318,7 +318,7 @@ def test_provenance_carries_binding_identity():
     g = cubed_sphere(Nc=4)
     prov = g.to_esm()["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
+    assert prov["binding_version"] == earthsci_discretizations.__version__
     assert prov["generator"] == "gnomonic_c6"
 
 
