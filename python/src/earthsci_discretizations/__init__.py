@@ -1,4 +1,4 @@
-"""earthsci_toolkit — Python binding for EarthSciDiscretizations.
+"""earthsci_discretizations — Python binding for EarthSciDiscretizations.
 
 The `grids` submodule houses per-family grid accessor runtimes conforming to
 the cross-binding contract in `docs/GRIDS_API.md`.

@@ -354,12 +354,12 @@ class ArakawaGrid:
 
     @property
     def provenance(self) -> dict:
-        import earthsci_toolkit
+        import earthsci_discretizations
 
         return {
             "binding": "python",
-            "binding_version": earthsci_toolkit.__version__,
-            "source": "earthsci_toolkit.grids.arakawa",
+            "binding_version": earthsci_discretizations.__version__,
+            "source": "earthsci_discretizations.grids.arakawa",
             "stagger": self.stagger,
         }
 

@@ -40,7 +40,7 @@ sys.path.insert(0, str(PY_SRC))
 
 import numpy as np  # noqa: E402
 
-from earthsci_toolkit.grids.mpas import (  # noqa: E402
+from earthsci_discretizations.grids.mpas import (  # noqa: E402
     MpasMeshData,
     mpas,
     mpas_mesh_data,

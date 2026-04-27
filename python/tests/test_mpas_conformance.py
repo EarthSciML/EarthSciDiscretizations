@@ -20,8 +20,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import mpas_mesh_data
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import mpas_mesh_data
 
 HARNESS_DIR = (
     Path(__file__).resolve().parents[2] / "tests" / "conformance" / "grids" / "mpas"

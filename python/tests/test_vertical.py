@@ -14,9 +14,9 @@ import math
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import VerticalGrid, vertical
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import VerticalGrid, vertical
 
 # ------------------------------------------------------------------ API --
 
@@ -383,7 +383,7 @@ def test_provenance_carries_binding_identity():
     g = vertical(coordinate="sigma", nz=4)
     prov = g.to_esm()["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
+    assert prov["binding_version"] == earthsci_discretizations.__version__
     assert prov["family"] == "vertical"
     assert prov["coordinate"] == "sigma"
 

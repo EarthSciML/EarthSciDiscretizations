@@ -392,12 +392,12 @@ class DuoGrid:
 
     @property
     def provenance(self) -> dict:
-        import earthsci_toolkit
+        import earthsci_discretizations
 
         return {
             "binding": "python",
-            "binding_version": earthsci_toolkit.__version__,
-            "source": "earthsci_toolkit.grids.duo",
+            "binding_version": earthsci_discretizations.__version__,
+            "source": "earthsci_discretizations.grids.duo",
             "family": "duo",
             "version": _DUO_FAMILY_VERSION,
             "level": int(self.level),

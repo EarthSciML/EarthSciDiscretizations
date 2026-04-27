@@ -32,7 +32,7 @@ REPO_ROOT = HERE.parents[3]
 PYTHON_SRC = REPO_ROOT / "python" / "src"
 sys.path.insert(0, str(PYTHON_SRC))
 
-from earthsci_toolkit import grids  # noqa: E402
+from earthsci_discretizations import grids  # noqa: E402
 
 
 def _eval_ast(node, bindings: dict[str, float]) -> float:
@@ -48,13 +48,12 @@ def _eval_ast(node, bindings: dict[str, float]) -> float:
     three bindings agree at the bit-exact level on this rule's coefficient
     expressions.
 
-    This evaluator lives inline in the regen script because the ESS Python
-    distribution and the ESD Python binding share the ``earthsci_toolkit``
-    package name, which makes ``from earthsci_toolkit.expression import
-    evaluate`` brittle once ESD's editable tree is on ``sys.path``. The
-    Rust conformance test that consumes this golden uses the production
-    ``earthsci_grids::eval_coeff`` walker, so any divergence between this
-    inline reference and the cross-binding evaluator surfaces immediately.
+    This evaluator lives inline in the regen script so the golden can be
+    regenerated without taking a hard runtime dependency on the ESS Python
+    distribution (``earthsci_toolkit``). The Rust conformance test that
+    consumes this golden uses the production ``earthsci_grids::eval_coeff``
+    walker, so any divergence between this inline reference and the
+    cross-binding evaluator surfaces immediately.
     """
     if isinstance(node, bool):  # exclude bool from numeric branch
         raise TypeError(f"boolean nodes are not supported in scalar AST eval: {node}")

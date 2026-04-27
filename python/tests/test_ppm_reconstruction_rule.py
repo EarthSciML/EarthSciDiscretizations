@@ -8,7 +8,7 @@ sub-stencil offsets/coefficients, the same output_kind dispatch points
 canonical smooth-periodic MMS sweep at
 ``tests/fixtures/ppm_reconstruction/{input,expected}.esm``.
 
-The Python evaluator (``earthsci_toolkit.rules.{eval_coeff,
+The Python evaluator (``earthsci_discretizations.rules.{eval_coeff,
 apply_stencil_periodic_1d, parabola_reconstruct_periodic_1d}``) walks
 the on-disk multi-stencil rule; the Julia binding is the cross-binding
 reference per ``docs/GRIDS_API.md`` §4.3.
@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from earthsci_toolkit.rules import (
+from earthsci_discretizations.rules import (
     apply_stencil_periodic_1d,
     eval_coeff,
     load_rule,

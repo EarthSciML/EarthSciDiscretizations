@@ -14,9 +14,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import earthsci_toolkit
-from earthsci_toolkit import grids
-from earthsci_toolkit.grids import CartesianGrid, cartesian
+import earthsci_discretizations
+from earthsci_discretizations import grids
+from earthsci_discretizations.grids import CartesianGrid, cartesian
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "discretizations" / "grids" / "cartesian"
 
@@ -362,8 +362,8 @@ def test_to_esm_uniform_fields():
     assert "edges" not in esm
     prov = esm["provenance"]
     assert prov["binding"] == "python"
-    assert prov["binding_version"] == earthsci_toolkit.__version__
-    assert prov["source"] == "earthsci_toolkit.grids.cartesian"
+    assert prov["binding_version"] == earthsci_discretizations.__version__
+    assert prov["source"] == "earthsci_discretizations.grids.cartesian"
 
 
 def test_to_esm_nonuniform_includes_edges():

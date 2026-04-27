@@ -1,4 +1,4 @@
-# earthsci-toolkit (Python binding for EarthSciDiscretizations)
+# earthsci-discretizations (Python binding for EarthSciDiscretizations)
 
 Python implementation of the EarthSciDiscretizations grid accessors and
 discretization runtime. Conforms to the cross-binding contract in
@@ -14,9 +14,9 @@ pip install -e .[dev,xarray]
 
 ## Layout
 
-- `src/earthsci_toolkit/` — package source
-- `src/earthsci_toolkit/grids/` — per-family grid accessor modules (one file per family)
-- `src/earthsci_toolkit/rules/` — discretization-rule runtime (AST
+- `src/earthsci_discretizations/` — package source
+- `src/earthsci_discretizations/grids/` — per-family grid accessor modules (one file per family)
+- `src/earthsci_discretizations/rules/` — discretization-rule runtime (AST
   `eval_coeff`, rule loader, structured stencil application). Mirrors
   `src/rule_eval.jl` in the Julia binding.
 - `tests/` — pytest suite

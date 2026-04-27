@@ -93,7 +93,7 @@ runtime is still landing on bead **dsc-7j0**
 (`src/grids/mpas.jl`). Until that bead closes, **Python is the interim
 reference binding** for the mpas family:
 
-- `regenerate_golden.py` uses `earthsci_toolkit.grids.mpas` to emit
+- `regenerate_golden.py` uses `earthsci_discretizations.grids.mpas` to emit
   `golden/*.json`.
 - `test/test_mpas_conformance.jl` asserts the harness files exist and
   `@test_skip`s the accessor comparison with a clear message pointing at
