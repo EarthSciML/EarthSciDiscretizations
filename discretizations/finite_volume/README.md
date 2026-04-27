@@ -84,6 +84,27 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   `test/test_vertical_remap.jl` until the schema gaps land. The
   Julia runtime path at `src/operators/vertical_remap.jl` remains
   the live implementation.
+- [`lax_friedrichs_flux.json`](lax_friedrichs_flux.json) — Lax &
+  Friedrichs (1954) numerical flux for linear advection. Two-point
+  cartesian flux stencil at the face: F_{i+1/2} = max(c,0)·q_i +
+  min(c,0)·q_{i+1}, with the face-staggered Courant `$c` carried as a
+  per-face binding (analogous to `$r` in the limiter rules) and upwind
+  selection encoded directly in the AST via the `abs` op — no caller-side
+  branching on sign(c). Reduces to first-order upwinding; dissipative by
+  construction and retained as a debugging / oracle scheme. The cubed-
+  sphere wrapper in `src/operators/flux_1d.jl` matches the in-panel core
+  encoded here verbatim; cross-panel ghost extension and panel-boundary
+  distance handling await schema follow-ups (boundary_policy +
+  time-varying / face-stagger bindings, tracked off dsc-35x). Layer-A
+  canonical fixture is intentionally omitted because ESS's `discretize`
+  does not yet support op="flux" with per-face bindings — the
+  hand-pinned 5-interior-face example (q = powers of 2; mixed-sign
+  Courant including c=0) lives inline in
+  `test/test_lax_friedrichs_flux_rule.jl` instead. Layer-B convergence
+  declares `applicable: false` for the same face-stagger /
+  per-face-binding gap as the limiter rules — a follow-up Layer-B′
+  MMS-transport fixture (LF + divergence + forward Euler) is the right
+  shape.
 
 ## Composing a limiter with a reconstruction
 

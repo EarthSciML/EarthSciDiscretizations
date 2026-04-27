@@ -1,0 +1,64 @@
+{
+  "discretizations": {
+    "lax_friedrichs_flux": {
+      "applies_to": {
+        "op": "flux",
+        "args": ["$q", "$c"],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "lax_friedrichs",
+      "accuracy": "O(h)",
+      "reference": "Lax & Friedrichs (1954), Comm. Pure Appl. Math. 7(1):159-193 — original LF flux. For linear advection f(q) = c·q with face-staggered Courant c = u·dt/dx, the LF numerical flux F_{i+1/2} = c·(q_i + q_{i+1})/2 - |c|/2·(q_{i+1} - q_i) reduces to first-order upwinding: F_{i+1/2} = max(c,0)·q_i + min(c,0)·q_{i+1}. Reference imperative implementation in src/operators/flux_1d.jl (CubedSphereGrid wrapper); the Cartesian core encoded here matches that computation in-panel.",
+      "produces": "F_{i+1/2}",
+      "outputs": ["F_{i+1/2}"],
+      "monotone": true,
+      "tvd": true,
+      "stencil": [
+        {
+          "selector": { "kind": "cartesian", "axis": "$x", "offset": 0 },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        },
+        {
+          "selector": { "kind": "cartesian", "axis": "$x", "offset": 1 },
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        }
+      ],
+      "flux_form": {
+        "produces": "F_{i+1/2}",
+        "comment": "Algebraic identity: F_{i+1/2} = (c+|c|)/2·q_i + (c-|c|)/2·q_{i+1} = max(c,0)·q_i + min(c,0)·q_{i+1}. Upwind cell selection is encoded directly in the abs op — no caller-side branching on sign(c) is required.",
+        "expression": {
+          "op": "+",
+          "args": [
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_i"
+            ] },
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_{i+1}"
+            ] }
+          ]
+        }
+      },
+      "composition_hint": "Caller computes the face-staggered Courant c_{i+1/2} = u_{i+1/2}·dt/dx and applies this rule at every interface; the cell-centred tendency follows from the FV divergence T_i = -(F_{i+1/2} - F_{i-1/2})/h on a uniform grid (or composes with divergence_arakawa_c on a C-grid). Reduces to first-order upwinding: dissipative by construction, retained as a debugging / oracle scheme — production transport should use the higher-order PPM or WENO rules.",
+      "schema_notes": "The face-Courant `$c` is a per-face binding supplied by the caller (analogous to the slope-ratio `$r` in flux_limiter_minmod), not a stencil-offset selector. Grid-family-agnostic in practice — the Cartesian declaration here follows the §7 convention; an axis-agnostic / multi-grid-family generalisation will compose with future face-stagger schema features (boundary_policy + time-varying bindings; tracked as follow-up beads off dsc-35x).",
+      "limitations": [
+        "Cubed-sphere wrapper (src/operators/flux_1d.jl): in-panel coefficients match the Cartesian core verbatim, but cross-panel ghost extension and panel-boundary distance handling (grid.dist_xi_bnd / grid.dist_eta_bnd) live in the cubed_sphere grid accessor and are not yet expressible in the rule because the cubed_sphere selector kind has no face-stagger slot. Tracked as follow-up dependency on schema beads grid_dispatch + boundary_policy.",
+        "PPM-based flux-form transport (flux_1d_ppm! and flux_1d_ppm_arrayop in src/operators/flux_1d.jl) is a separate higher-order scheme not encoded here; tracked as a follow-up bead pending time-varying bindings + boundary_policy schema features."
+      ]
+    }
+  }
+}
