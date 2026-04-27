@@ -24,11 +24,17 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { rules } from "../src/index.js";
+import {
+  applyEdgeStencil,
+  assertPpmRule,
+  evaluateParabola,
+  getSubStencil,
+  reconstructCell,
+  reconstructOutput,
+  resolveAxis,
+} from "./ppm_reconstruction_helpers.js";
 
-const REPO_ROOT = resolve(
-  fileURLToPath(new URL("../", import.meta.url)),
-  "..",
-);
+const REPO_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)), "..");
 const RULE_PATH = join(
   REPO_ROOT,
   "discretizations",
@@ -119,12 +125,12 @@ describe("ppm_reconstruction rule eval cross-binding conformance", () => {
   const cellAverages = buildCellAverages(fixture.grid);
 
   it("rule shape passes the PPM contract assertions", () => {
-    expect(() => rules.assertPpmRule(rule)).not.toThrow();
+    expect(() => assertPpmRule(rule)).not.toThrow();
     expect(rule.family).toBe("finite_volume");
     expect(rule.grid_family).toBe("cartesian");
-    expect(rules.resolveAxis(rule)).toBe("x");
-    const left = rules.getSubStencil(rule, "q_left_edge");
-    const right = rules.getSubStencil(rule, "q_right_edge");
+    expect(resolveAxis(rule)).toBe("x");
+    const left = getSubStencil(rule, "q_left_edge");
+    const right = getSubStencil(rule, "q_right_edge");
     expect(left.length).toBe(4);
     expect(right.length).toBe(4);
   });
@@ -132,7 +138,9 @@ describe("ppm_reconstruction rule eval cross-binding conformance", () => {
   it("computes cell averages that match the golden", () => {
     expect(cellAverages.length).toBe(golden.cell_averages.length);
     for (let i = 0; i < cellAverages.length; i++) {
-      expect(closeRel(cellAverages[i], golden.cell_averages[i], tol)).toBe(true);
+      expect(closeRel(cellAverages[i], golden.cell_averages[i], tol)).toBe(
+        true,
+      );
     }
   });
 
@@ -141,8 +149,8 @@ describe("ppm_reconstruction rule eval cross-binding conformance", () => {
     for (let k = 0; k < fixture.query_cells.length; k++) {
       const i = fixture.query_cells[k];
       expect(i).toBe(golden.query_cells[k]);
-      const aL = rules.applyEdgeStencil(rule, "q_left_edge", cellAverages, i);
-      const aR = rules.applyEdgeStencil(rule, "q_right_edge", cellAverages, i);
+      const aL = applyEdgeStencil(rule, "q_left_edge", cellAverages, i);
+      const aR = applyEdgeStencil(rule, "q_right_edge", cellAverages, i);
       expect(
         closeRel(aL, golden.q_left_edge[k], tol),
         `q_left_edge[i=${i}]: got ${aL}, golden ${golden.q_left_edge[k]}`,
@@ -159,13 +167,9 @@ describe("ppm_reconstruction rule eval cross-binding conformance", () => {
       const i = fixture.query_cells[k];
       for (let s = 0; s < fixture.parabola_xi.length; s++) {
         const xi = fixture.parabola_xi[s];
-        const got = rules.reconstructOutput(
-          rule,
-          "q_parabola",
-          cellAverages,
-          i,
-          { xi },
-        );
+        const got = reconstructOutput(rule, "q_parabola", cellAverages, i, {
+          xi,
+        });
         const want = golden.q_parabola[k][s];
         expect(
           closeRel(got, want, tol),
@@ -178,13 +182,13 @@ describe("ppm_reconstruction rule eval cross-binding conformance", () => {
   it("reconstructCell agrees with applyEdgeStencil + evaluateParabola", () => {
     for (let k = 0; k < fixture.query_cells.length; k++) {
       const i = fixture.query_cells[k];
-      const cell = rules.reconstructCell(rule, cellAverages, i);
-      const aL = rules.applyEdgeStencil(rule, "q_left_edge", cellAverages, i);
-      const aR = rules.applyEdgeStencil(rule, "q_right_edge", cellAverages, i);
+      const cell = reconstructCell(rule, cellAverages, i);
+      const aL = applyEdgeStencil(rule, "q_left_edge", cellAverages, i);
+      const aR = applyEdgeStencil(rule, "q_right_edge", cellAverages, i);
       expect(cell.q_left_edge).toBe(aL);
       expect(cell.q_right_edge).toBe(aR);
       for (const xi of fixture.parabola_xi) {
-        const direct = rules.evaluateParabola(aL, aR, cellAverages[i], xi);
+        const direct = evaluateParabola(aL, aR, cellAverages[i], xi);
         expect(cell.parabola(xi)).toBe(direct);
       }
     }

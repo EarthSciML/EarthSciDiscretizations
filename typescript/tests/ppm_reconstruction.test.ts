@@ -5,17 +5,17 @@
 
 import { describe, it, expect } from "vitest";
 
+import { parseRuleFile } from "../src/rules/index.js";
+import type { Rule } from "../src/rules/index.js";
 import {
   applyEdgeStencil,
   assertPpmRule,
   evaluateParabola,
   getSubStencil,
-  parseRuleFile,
   reconstructCell,
   reconstructOutput,
   resolveAxis,
-} from "../src/rules/index.js";
-import type { Rule } from "../src/rules/index.js";
+} from "./ppm_reconstruction_helpers.js";
 
 const PPM_JSON = JSON.stringify({
   discretizations: {
@@ -28,16 +28,40 @@ const PPM_JSON = JSON.stringify({
       outputs: ["q_left_edge", "q_right_edge", "q_parabola"],
       stencil: {
         q_left_edge: [
-          { selector: { kind: "cartesian", axis: "$x", offset: -2 }, coeff: { op: "/", args: [-1, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: -1 }, coeff: { op: "/", args: [7, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: 0 },  coeff: { op: "/", args: [7, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: 1 },  coeff: { op: "/", args: [-1, 12] } },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: -2 },
+            coeff: { op: "/", args: [-1, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: -1 },
+            coeff: { op: "/", args: [7, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: 0 },
+            coeff: { op: "/", args: [7, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: 1 },
+            coeff: { op: "/", args: [-1, 12] },
+          },
         ],
         q_right_edge: [
-          { selector: { kind: "cartesian", axis: "$x", offset: -1 }, coeff: { op: "/", args: [-1, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: 0 },  coeff: { op: "/", args: [7, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: 1 },  coeff: { op: "/", args: [7, 12] } },
-          { selector: { kind: "cartesian", axis: "$x", offset: 2 },  coeff: { op: "/", args: [-1, 12] } },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: -1 },
+            coeff: { op: "/", args: [-1, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: 0 },
+            coeff: { op: "/", args: [7, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: 1 },
+            coeff: { op: "/", args: [7, 12] },
+          },
+          {
+            selector: { kind: "cartesian", axis: "$x", offset: 2 },
+            coeff: { op: "/", args: [-1, 12] },
+          },
         ],
       },
     },
@@ -151,9 +175,9 @@ describe("applyEdgeStencil and reconstructOutput dispatch", () => {
 
   it("reconstructOutput dispatches q_parabola only when xi is provided", () => {
     const rule = loadRule();
-    expect(() =>
-      reconstructOutput(rule, "q_parabola", q, 0),
-    ).toThrow(/options\.xi/);
+    expect(() => reconstructOutput(rule, "q_parabola", q, 0)).toThrow(
+      /options\.xi/,
+    );
     const v = reconstructOutput(rule, "q_parabola", q, 0, { xi: 0.5 });
     const cell = reconstructCell(rule, q, 0);
     expect(v).toBe(cell.parabola(0.5));
@@ -168,8 +192,6 @@ describe("applyEdgeStencil and reconstructOutput dispatch", () => {
 
   it("rejects evaluation against an empty field", () => {
     const rule = loadRule();
-    expect(() => applyEdgeStencil(rule, "q_left_edge", [], 0)).toThrow(
-      /empty/,
-    );
+    expect(() => applyEdgeStencil(rule, "q_left_edge", [], 0)).toThrow(/empty/);
   });
 });

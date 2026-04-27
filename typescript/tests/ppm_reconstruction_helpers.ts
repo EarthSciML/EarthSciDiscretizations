@@ -1,39 +1,38 @@
 /**
- * PPM (Colella & Woodward 1984) reconstruction rule evaluator.
+ * Test-private PPM (Colella & Woodward 1984) reconstruction helpers.
  *
- * Mirrors the Julia reference test in `test/test_ppm_reconstruction_rule.jl`
- * and lifts the same semantics into a reusable runtime that consumes the
- * on-disk `discretizations/finite_volume/ppm_reconstruction.json` rule.
+ * Inlines the multi-stencil dispatch + parabola formula required by the
+ * `ppm_reconstruction` conformance / convergence / unit tests. Per
+ * `AGENTS.md`, ESD does not expose per-rule shadow evaluators in its
+ * public API; the canonical Julia test for this rule
+ * (`test/test_ppm_reconstruction_rule.jl`) inlines the same math, and
+ * this module mirrors that pattern for the TypeScript binding.
  *
- * Why this lives next to the generic AST evaluator: the PPM rule's `stencil`
- * field is a multi-stencil mapping (`q_left_edge`, `q_right_edge`) — the
- * generic flat-array stencil applicator does not apply. Output dispatch
- * across the rule's three declared outputs (`q_left_edge`, `q_right_edge`,
- * `q_parabola`) lives here.
- *
- * The edge stencils are 4th-order interpolations of cell-averaged data
- * (CW84 eq. 1.6); the parabola sub-cell reconstruction (CW84 eqs. 1.5,
- * 1.7, 1.10) is a closed-form combination of the two edge values and
- * the cell average and is computed without a separate AST.
+ * The edge stencils (`q_left_edge`, `q_right_edge`) carry their
+ * coefficients as ESS expression-AST nodes, so coefficient evaluation
+ * goes through the canonical generic evaluator
+ * (`rules.evaluate`); only PPM-specific pieces (sub-stencil dispatch,
+ * the closed-form parabola) live here.
  */
 
-import { evaluate } from "./expression.js";
+import { rules } from "../src/index.js";
 import type {
-  Bindings,
   Rule,
   RuleSelector,
   RuleStencilEntry,
-} from "./types.js";
+} from "../src/rules/index.js";
 
 export type PpmSubStencil = "q_left_edge" | "q_right_edge";
 export type PpmOutputKind = PpmSubStencil | "q_parabola";
 
-/** A periodic 1D array of cell averages along the reconstructed axis. */
 export type CellAverages = ReadonlyArray<number>;
 
 const DEFAULT_AXIS = "x";
 
-/** Verify the rule's shape matches what this evaluator expects. */
+function stripPlaceholder(name: string): string {
+  return name.startsWith("$") ? name.slice(1) : name;
+}
+
 export function assertPpmRule(rule: Rule): void {
   if (rule.name !== "ppm_reconstruction") {
     throw new Error(
@@ -60,13 +59,6 @@ export function assertPpmRule(rule: Rule): void {
   }
 }
 
-/**
- * Resolve the placeholder axis name from `applies_to.dim`. The rule uses the
- * ESS placeholder convention (`"$x"`); the bare name (`"x"`) is also accepted.
- * The leading `$`, if present, is stripped — `selectorMatchesAxis` does the
- * same on the selector side so the two compare equal regardless of which form
- * the catalog file happens to use.
- */
 export function resolveAxis(rule: Rule): string {
   const applies = rule.applies_to;
   if (
@@ -75,24 +67,12 @@ export function resolveAxis(rule: Rule): string {
     "dim" in applies &&
     typeof (applies as { dim?: unknown }).dim === "string"
   ) {
-    const dim = (applies as { dim: string }).dim;
-    return stripPlaceholder(dim);
+    return stripPlaceholder((applies as { dim: string }).dim);
   }
   return DEFAULT_AXIS;
 }
 
-function stripPlaceholder(name: string): string {
-  return name.startsWith("$") ? name.slice(1) : name;
-}
-
-/**
- * Look up the named sub-stencil array on a multi-output rule. Throws if the
- * rule's `stencil` is in flat-array form or the sub-stencil is missing.
- */
-export function getSubStencil(
-  rule: Rule,
-  name: string,
-): RuleStencilEntry[] {
+export function getSubStencil(rule: Rule, name: string): RuleStencilEntry[] {
   if (Array.isArray(rule.stencil)) {
     throw new Error(
       `getSubStencil: rule '${rule.name}' has flat stencil array; cannot dispatch to sub-stencil '${name}'`,
@@ -138,25 +118,14 @@ function selectorOffset(sel: RuleSelector | RuleSelector[]): number {
 }
 
 function periodicIndex(i: number, n: number): number {
-  // JS `%` keeps the sign of the dividend; wrap to [0, n).
-  const m = ((i % n) + n) % n;
-  return m;
+  return ((i % n) + n) % n;
 }
 
-/**
- * Apply a named edge sub-stencil at cell `i` of a periodic 1D field.
- *
- * Returns `Σ coeff_k * q[(i + offset_k) mod n]` where `(coeff_k, offset_k)`
- * are taken from `rule.stencil[subStencil]`. The dollar-prefixed axis name
- * declared by the rule (`$x` → `x`) is used to assert that all selectors
- * target the reconstructed axis; non-matching selectors raise.
- */
 export function applyEdgeStencil(
   rule: Rule,
   subStencil: PpmSubStencil,
   q: CellAverages,
   i: number,
-  bindings: Bindings = new Map(),
 ): number {
   if (q.length < 1) {
     throw new RangeError("applyEdgeStencil: cell-average array is empty");
@@ -166,6 +135,7 @@ export function applyEdgeStencil(
   }
   const axis = resolveAxis(rule);
   const entries = getSubStencil(rule, subStencil);
+  const bindings = new Map<string, number>();
   let acc = 0;
   for (const entry of entries) {
     const entryAxis = stripPlaceholder(selectorAxis(entry.selector));
@@ -176,23 +146,17 @@ export function applyEdgeStencil(
     }
     const off = selectorOffset(entry.selector);
     const idx = periodicIndex(i + off, q.length);
-    const c = evaluate(entry.coeff, bindings);
+    const c = rules.evaluate(entry.coeff, bindings);
     acc += c * q[idx];
   }
   return acc;
 }
 
 /**
- * Evaluate the cell-internal PPM parabola at the normalised coordinate
- * `xi ∈ [0, 1]` (CW84 eqs. 1.5, 1.7, 1.10):
- *
- *     a(ξ) = a_L + ξ · (Δa + a_6 · (1 − ξ))
- *     Δa  = a_R − a_L
- *     a_6 = 6 · (q̄ − ½(a_L + a_R))
- *
- * `aL` is the left edge of the cell (= `q_left_edge` for that cell, or
- * equivalently `q_right_edge` of the neighbour to the left), `aR` is the
- * right edge of the cell, `qbar` is the cell average.
+ * Evaluate the PPM parabola at `xi ∈ [0, 1]` (CW84 eqs. 1.5, 1.7, 1.10):
+ *   a(ξ) = a_L + ξ · (Δa + a_6 · (1 − ξ))
+ *   Δa  = a_R − a_L
+ *   a_6 = 6 · (q̄ − ½(a_L + a_R))
  */
 export function evaluateParabola(
   aL: number,
@@ -210,34 +174,20 @@ export function evaluateParabola(
   return aL + xi * (da + a6 * (1 - xi));
 }
 
-/**
- * Reconstructed values for a single cell: both edge values plus a closure
- * that samples the parabola at any `xi ∈ [0, 1]`.
- */
 export interface CellReconstruction {
   q_left_edge: number;
   q_right_edge: number;
   parabola: (xi: number) => number;
 }
 
-/**
- * Reconstruct cell `i` of a periodic 1D field: compute `q_left_edge[i]`,
- * `q_right_edge[i]`, and capture the parabola closure for sub-cell sampling.
- *
- * Note: per CW84, the left edge of cell `i` is the right edge of cell `i-1`,
- * which is also what `stencil.q_left_edge` evaluated at cell `i` returns.
- * Both forms agree to ULP because the rule's `q_left_edge` coefficients
- * are exactly the `q_right_edge` coefficients shifted by one.
- */
 export function reconstructCell(
   rule: Rule,
   q: CellAverages,
   i: number,
-  bindings: Bindings = new Map(),
 ): CellReconstruction {
   assertPpmRule(rule);
-  const aL = applyEdgeStencil(rule, "q_left_edge", q, i, bindings);
-  const aR = applyEdgeStencil(rule, "q_right_edge", q, i, bindings);
+  const aL = applyEdgeStencil(rule, "q_left_edge", q, i);
+  const aR = applyEdgeStencil(rule, "q_right_edge", q, i);
   const qi = q[periodicIndex(i, q.length)];
   return {
     q_left_edge: aL,
@@ -246,23 +196,15 @@ export function reconstructCell(
   };
 }
 
-/**
- * One-shot dispatch on the rule's declared `outputs` for a single cell.
- *
- *  - `"q_left_edge"`: returns `applyEdgeStencil(rule, "q_left_edge", …)`
- *  - `"q_right_edge"`: returns `applyEdgeStencil(rule, "q_right_edge", …)`
- *  - `"q_parabola"`: requires `xi`; returns the parabola sampled at `xi`
- */
 export function reconstructOutput(
   rule: Rule,
   output: PpmOutputKind,
   q: CellAverages,
   i: number,
-  options: { xi?: number; bindings?: Bindings } = {},
+  options: { xi?: number } = {},
 ): number {
-  const bindings = options.bindings ?? new Map<string, number>();
   if (output === "q_left_edge" || output === "q_right_edge") {
-    return applyEdgeStencil(rule, output, q, i, bindings);
+    return applyEdgeStencil(rule, output, q, i);
   }
   if (output === "q_parabola") {
     if (typeof options.xi !== "number") {
@@ -270,7 +212,7 @@ export function reconstructOutput(
         "reconstructOutput: output 'q_parabola' requires options.xi",
       );
     }
-    const cell = reconstructCell(rule, q, i, bindings);
+    const cell = reconstructCell(rule, q, i);
     return cell.parabola(options.xi);
   }
   throw new Error(`reconstructOutput: unknown output kind '${String(output)}'`);
