@@ -20,14 +20,26 @@ using TestItems
     @test rule.family == :finite_difference
     @test isfile(rule.path)
 
+    # dsc-rar: canonical linear-scheme exemplar — the rule lowers grad(u, dim=x)
+    # via a closed arrayop replacement in §4.2 ops (no scheme-specific
+    # `stencil`/`selector`/`offset` blobs). The replacement is
+    #   (u[$x+1] − u[$x−1]) / (2·dx)
+    # wrapped in an arrayop over output index $x; BC handling is delegated to
+    # downstream BC rules (e.g. periodic_bc) at lowering time.
     content = read(rule.path, String)
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
-    @test occursin("\"stencil\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    @test occursin("\"index\"", content)
+    # The closed-form expression is built from §4.2 ops only — no stencil
+    # coefficient blobs and no off-spec selector/offset fields.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"selector\"", content)
+    @test !occursin("\"offset\"", content)
 end
 
 @testitem "upwind_1st scheme is discoverable and well-formed" begin
