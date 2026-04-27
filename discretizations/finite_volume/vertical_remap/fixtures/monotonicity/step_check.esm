@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "kind": "monotonicity_vertical_remap_step",
+  "rule": "vertical_remap",
+  "rule_family": "finite_volume",
+  "applicable": false,
+  "skip_reason": "Walker has no `vertical_remap` rule materialization yet — see the conservation_check.esm sibling for the full rationale. The equivalent monotonicity check runs today against the runtime path at test/test_vertical_remap.jl::\"Vertical remap monotonicity\".",
+  "comment": "Monotonicity-bound regression for the Lin (2004) PPM+CW84 vertical remap on a step initial condition (q = 0 below mid-column, q = 1 above). The CW84 limiter (rule's `limiter` block) flattens the parabola to a constant inside any cell where the cell average is a local extremum and pulls a runaway interface back to keep the sub-grid parabola monotone, so the remap of a step is bounded by [-eps, 1+eps] up to a small floating-point overshoot. The walker should construct a single column, drive the rule's reconstruction+limiter+sweep pipeline with q[k] = 0 for k <= Nk/2 and q[k] = 1 otherwise, and verify the bound below.",
+  "column": {
+    "Nk": 20,
+    "q_initial": "q[k] = 0 for k <= 10; q[k] = 1 for k >= 11",
+    "dp_old": "dp_old[k] = 100.0 for k in 1..Nk",
+    "dp_new": "dp_new[k] = (100.0 + 5.0*(-1)^k) * (sum(dp_old) / sum(100.0 + 5.0*(-1)^j for j in 1..Nk)) for k in 1..Nk"
+  },
+  "expected_bounds": {
+    "lower": -0.01,
+    "upper":  1.01,
+    "comment": "CW84 §4 monotonicity limiting bounds the remapped value at every new layer to the convex hull of contributing old-layer parabolas. Near a step discontinuity, residual sub-grid overshoot is < 1% (Lin 2004 §4.3); the [-0.01, 1.01] envelope mirrors the runtime test in test/test_vertical_remap.jl."
+  }
+}

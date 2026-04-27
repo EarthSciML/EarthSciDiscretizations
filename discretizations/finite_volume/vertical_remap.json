@@ -1,0 +1,178 @@
+{
+  "discretizations": {
+    "vertical_remap": {
+      "applies_to": {
+        "op": "vertical_remap",
+        "args": ["$q", "$dp_old", "$dp_new"],
+        "dim": "$k"
+      },
+      "grid_family": "vertical",
+      "form": "ppm_conservative_remap",
+      "accuracy": "O(dp^3) interior; degrades to O(dp) within two cells of the column top/bottom and at active CW84 limiter constraints",
+      "reference": "Lin (2004), MWR 132(10):2293-2307, eqs. (16)-(18); reconstruction per Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.6)-(1.10) with the (1.7)-(1.10) monotonicity limiter",
+      "conservative": true,
+      "monotonicity_preserving": true,
+      "outputs": ["q_new"],
+      "inputs": {
+        "q": "cell-averaged scalar on the old vertical layers (column shape [Nk])",
+        "dp_old": "old layer thicknesses (column shape [Nk]); units cancel in q_new",
+        "dp_new": "new layer thicknesses (column shape [Nk]); sum_k dp_new[k] should equal sum_k dp_old[k] for column-mass invariance"
+      },
+      "edge_value_stencil": {
+        "comment": "PPM 4th-order interior interpolation of cell-averaged q to layer interfaces, same coefficients as ppm_reconstruction.json (CW84 eq. 1.6). Re-stated here so vertical_remap is readable standalone; the runtime evaluator may share the materialization with ppm_reconstruction once a `uses_rule` reference syntax lands.",
+        "produces": "q_{k+1/2} (right interface of layer k, left interface of layer k+1)",
+        "interior_stencil": [
+          { "selector": { "kind": "vertical", "axis": "$k", "stagger": "cell_center", "offset": -1 }, "coeff": { "op": "/", "args": [-1, 12] } },
+          { "selector": { "kind": "vertical", "axis": "$k", "stagger": "cell_center", "offset":  0 }, "coeff": { "op": "/", "args": [ 7, 12] } },
+          { "selector": { "kind": "vertical", "axis": "$k", "stagger": "cell_center", "offset":  1 }, "coeff": { "op": "/", "args": [ 7, 12] } },
+          { "selector": { "kind": "vertical", "axis": "$k", "stagger": "cell_center", "offset":  2 }, "coeff": { "op": "/", "args": [-1, 12] } }
+        ],
+        "boundary_handling": {
+          "comment": "Column top/bottom degrade because the 4-cell support of the 4th-order CW84 edge interpolation runs out. Mirrors src/operators/vertical_remap.jl _remap_column!.",
+          "k_eq_1_or_Nk": {
+            "rule": "q_left[k] = q_right[k] = q[k]",
+            "order": "O(1) — constant reconstruction on the boundary layer"
+          },
+          "k_eq_2_or_Nk_minus_1": {
+            "rule": "q_left[k] = 0.5*(q[k-1] + q[k]); q_right[k] = 0.5*(q[k] + q[k+1])",
+            "order": "O(dp^2) — 2nd-order centered average to interior interfaces, then CW84 limiter"
+          },
+          "interior": {
+            "rule": "use the 4-point CW84 stencil above on each interface, then CW84 limiter",
+            "order": "O(dp^4) edge value, O(dp^3) reconstruction"
+          }
+        }
+      },
+      "limiter": {
+        "comment": "Colella & Woodward (1984) §4 monotonicity limiter for the parabolic profile. Implemented as a closed-form ExpressionNode AST so the rule is evaluator-agnostic; matches src/operators/reconstruction.jl _ppm_limit_cw84_sym (the symbolic-tracing-safe form using ifelse) bit-for-bit at the AST level.",
+        "name": "colella_woodward_1984",
+        "inputs": ["ql", "qr", "qi"],
+        "outputs": ["ql_lim", "qr_lim"],
+        "auxiliary": {
+          "is_extremum": {
+            "comment": "True when q[k] is a local extremum within the column — flatten the parabola to a constant.",
+            "op": "<=",
+            "args": [
+              { "op": "*", "args": [
+                  { "op": "-", "args": ["qr", "qi"] },
+                  { "op": "-", "args": ["qi", "ql"] }
+              ]},
+              0
+            ]
+          },
+          "ql1": { "op": "ifelse", "args": ["is_extremum", "qi", "ql"] },
+          "qr1": { "op": "ifelse", "args": ["is_extremum", "qi", "qr"] },
+          "dq": { "op": "-", "args": ["qr1", "ql1"] },
+          "q6": {
+            "op": "*",
+            "args": [
+              6,
+              { "op": "-", "args": [
+                  "qi",
+                  { "op": "*", "args": [
+                      { "op": "/", "args": [1, 2] },
+                      { "op": "+", "args": ["ql1", "qr1"] }
+                  ]}
+              ]}
+            ]
+          },
+          "overshoot_left": {
+            "comment": "Right edge sits past the parabola's interior extremum; pull the LEFT edge inward.",
+            "op": ">",
+            "args": [
+              { "op": "*", "args": ["dq", "q6"] },
+              { "op": "^", "args": ["dq", 2] }
+            ]
+          },
+          "overshoot_right": {
+            "comment": "Left edge sits past the parabola's interior extremum; pull the RIGHT edge inward.",
+            "op": ">",
+            "args": [
+              { "op": "-", "args": [{ "op": "^", "args": ["dq", 2] }] },
+              { "op": "*", "args": ["dq", "q6"] }
+            ]
+          }
+        },
+        "ql_lim": {
+          "op": "ifelse",
+          "args": [
+            "overshoot_left",
+            { "op": "-", "args": [
+                { "op": "*", "args": [3, "qi"] },
+                { "op": "*", "args": [2, "qr1"] }
+            ]},
+            "ql1"
+          ]
+        },
+        "qr_lim": {
+          "op": "ifelse",
+          "args": [
+            "overshoot_right",
+            { "op": "-", "args": [
+                { "op": "*", "args": [3, "qi"] },
+                { "op": "*", "args": [2, "ql1"] }
+            ]},
+            "qr1"
+          ]
+        }
+      },
+      "parabola": {
+        "comment": "Within each old layer k, the limited (q_left[k], q_right[k], q[k]) triple defines the CW84 sub-grid parabola (eqs. 1.5, 1.7, 1.10). Local coordinate xi in [0,1] runs from the layer's lower interface (xi=0) to its upper interface (xi=1).",
+        "a_L": "q_left[k]   (q at lower interface of layer k after CW84 limiting)",
+        "a_R": "q_right[k]  (q at upper interface of layer k after CW84 limiting)",
+        "da":  "a_R - a_L",
+        "a_6": "6*(q[k] - 0.5*(a_L + a_R))",
+        "profile": "a(xi) = a_L + xi*(da + a_6*(1 - xi))"
+      },
+      "indefinite_integral": {
+        "comment": "Closed-form antiderivative of the parabola in local coordinate xi, used by the conservative remap sweep (Lin 2004 eq. 16). Mass over a sub-interval [xi_lo, xi_hi] within old layer k is (F(xi_hi) - F(xi_lo)) * dp_old[k].",
+        "F_of_xi": {
+          "op": "+",
+          "args": [
+            { "op": "*", "args": ["a_L", "xi"] },
+            { "op": "*", "args": [
+                { "op": "/", "args": [1, 2] },
+                { "op": "^", "args": ["xi", 2] },
+                { "op": "+", "args": ["da", "a_6"] }
+            ]},
+            { "op": "-", "args": [
+                { "op": "*", "args": [
+                    { "op": "/", "args": ["a_6", 3] },
+                    { "op": "^", "args": ["xi", 3] }
+                ]}
+            ]}
+          ]
+        }
+      },
+      "remap_sweep": {
+        "comment": "Conservative remap sweep is *not* a fixed stencil over neighbors — the set of old layers that overlap a given new layer depends on the cumulative-pressure intersection of dp_old with dp_new and varies per-column. The schema gap is the conservative-remap rule type tracked in docs/rule-catalog.md (`vertical_remap_lin_2004` row) and the time-varying per-cell metric binding tracked as decision #3 in SELECTOR_KINDS.md. The algorithm is captured here in symbolic prose so the rule is reproducible from this file alone; runtime materialization currently lives in src/operators/vertical_remap.jl::_remap_column! pending the schema extension.",
+        "interfaces": {
+          "comment": "Cumulative pressure at layer interfaces, k = 0..Nk; reference p_old[0] = p_new[0] = 0 (only differences matter under conservation).",
+          "p_old_recurrence": "p_old[k+1] = p_old[k] + dp_old[k]",
+          "p_new_recurrence": "p_new[k+1] = p_new[k] + dp_new[k]"
+        },
+        "per_new_layer": {
+          "comment": "For each new layer kn in 1..Nk, integrate the (limited) PPM parabolas of every old layer ko whose interface span [p_old[ko-1], p_old[ko]] intersects [p_new[kn-1], p_new[kn]], summing mass and dividing by dp_new[kn].",
+          "local_coordinate": "xi(p, ko) = (p - p_old[ko-1]) / dp_old[ko]",
+          "integral": "integral[kn] = sum_{ko: overlap} (F(xi(min(p_new[kn], p_old[ko]), ko)) - F(xi(max(p_new[kn-1], p_old[ko-1]), ko))) * dp_old[ko]",
+          "output": "q_new[kn] = integral[kn] / dp_new[kn]   (degenerate dp_new[kn] -> 0 falls back to q_new[kn] = q[ko] for the bracketing old layer; matches the dp < 1e-30 short-circuit in the reference implementation)"
+        },
+        "conservation_invariant": {
+          "comment": "Column-integrated mass is preserved exactly in real arithmetic; floating-point error is bounded by O(Nk * eps * sum_k |q[k]| * dp_old[k]).",
+          "identity": "sum_kn q_new[kn] * dp_new[kn] = sum_ko q[ko] * dp_old[ko]   (when sum_kn dp_new[kn] = sum_ko dp_old[ko])"
+        }
+      },
+      "schema_gaps": {
+        "comment": "Two ESS schema extensions are required before this rule is fully materializable from JSON alone. Until they land, the runtime path is src/operators/vertical_remap.jl. The rule file is authored declaratively (matching the weno5_advection.json precedent for nonlinear_weights) so the math, references, and AST fragments are reproducible.",
+        "conservative_remap_rule_type": {
+          "tracker": "docs/rule-catalog.md row `vertical_remap_lin_2004` (schema_gaps: needs conservative-remap rule type)",
+          "summary": "ESS §7 stencils encode a fixed neighbor list combined by `+`/`*`/min/max. Conservative remap is a variable-arity overlap sweep whose neighbor list is data-dependent (cumulative-pressure intersection of dp_old with dp_new). The natural shape is a new rule kind that emits an `arrayop` over old layers gated by the overlap predicate, parallel in spirit to the §4 `reduction` selector for unstructured grids."
+        },
+        "time_varying_vertical_metric_binding": {
+          "tracker": "discretizations/SELECTOR_KINDS.md decision #3",
+          "summary": "Layer thicknesses dp_old and dp_new vary in time and (in the Lagrangian-vertical use case) per column; the ESS MMS harness today binds only scalar per-axis spacing symbols. Until per-cell time-varying metric bindings land, walker fixtures for this rule must declare applicable=false."
+        }
+      }
+    }
+  }
+}

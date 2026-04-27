@@ -62,6 +62,28 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   wired only for 1D periodic Cartesian stencils today, so the 2D
   staggered MMS sweep awaits an ESS harness extension; numeric
   coverage continues to live alongside the runtime tests.
+- [`vertical_remap.json`](vertical_remap.json) — Lin (2004) MWR
+  PPM-based conservative vertical remap with Colella-Woodward (1984)
+  monotonicity limiting. Each old layer's parabolic profile is
+  reconstructed (interior 4-point CW84 stencil; 1st/2nd-order near
+  the column top and bottom), CW84-limited (encoded as a closed-form
+  ifelse-based AST under the rule's `limiter` block), and the
+  closed-form parabolic antiderivative is summed across the
+  cumulative-pressure intersection of the new layers with the old
+  layers. The rule is *conservative* (column-integrated `q · dp`
+  is preserved exactly in real arithmetic) and *monotonicity-
+  preserving* under the CW84 limiter. The conservative-remap rule
+  type and the time-varying per-cell vertical metric binding are two
+  ESS schema extensions that this rule needs before it can be
+  materialized straight from JSON; both are documented in the rule's
+  `schema_gaps` block (see also `docs/rule-catalog.md` row
+  `vertical_remap_lin_2004` and `discretizations/SELECTOR_KINDS.md`
+  decision #3). Walker fixtures under
+  `vertical_remap/fixtures/{convergence,conservation,monotonicity}/`
+  declare `applicable: false` and link to the runtime coverage at
+  `test/test_vertical_remap.jl` until the schema gaps land. The
+  Julia runtime path at `src/operators/vertical_remap.jl` remains
+  the live implementation.
 
 ## Composing a limiter with a reconstruction
 
