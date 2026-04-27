@@ -85,15 +85,19 @@ using TestItems
     # rules pending ESS harness extension, periodic_bc) skip with a
     # fixture-declared reason. Rules with no convergence fixture at all also
     # skip.
-    pass_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
-                        ("finite_difference", "centered_2nd_uniform_vertical"),
+    pass_layer_b = Set([("finite_difference", "centered_2nd_uniform_vertical"),
                         ("finite_difference", "centered_2nd_uniform_latlon"),
                         ("finite_difference", "upwind_1st"),
                         ("finite_volume", "ppm_reconstruction"),
                         ("finite_volume", "weno5_advection"),
                         ("finite_volume", "weno5_advection_2d"),
                         ("finite_volume", "divergence_arakawa_c")])
-    not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
+    # centered_2nd_uniform skips Layer-B until ESS gains an AST-walker
+    # dispatch in mms_convergence — the rule (dsc-rar) was rewritten as a
+    # closed arrayop replacement in §4.2 ops, dropping the `stencil` field
+    # the existing kernels dispatch on. Tracked by hq-2t0k4.
+    not_applicable_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
+                                   ("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
@@ -123,15 +127,24 @@ using TestItems
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
         key = (String(r.family), r.name)
-        if r.family === :finite_difference && r.name in ("centered_2nd_uniform", "centered_2nd_uniform_vertical")
-            # Both centered_2nd_uniform (cartesian) and
-            # centered_2nd_uniform_vertical (vertical) ship a canonical/
-            # fixture, so Layer A passes via the ESS rule engine (dsc-3sg /
-            # dsc-cjh) in addition to the Layer B convergence sweep.
+        if r.family === :finite_difference && r.name == "centered_2nd_uniform_vertical"
+            # centered_2nd_uniform_vertical (vertical) ships a canonical/
+            # fixture, so Layer A passes via the ESS rule engine (dsc-cjh)
+            # in addition to the Layer B convergence sweep.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
+            # centered_2nd_uniform (cartesian) ships a canonical/ fixture
+            # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer-B
+            # is skipped pending hq-2t0k4 (dsc-rar): the rule was rewritten
+            # as a closed arrayop replacement; ESS's mms_convergence dispatches
+            # on `stencil` and needs an AST-walker path to re-enable the sweep.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif key in pass_layer_b_canonical_drift
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
@@ -172,14 +185,15 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Eight layer-B cases pass (centered_2nd_uniform,
-    # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st,
-    # ppm_reconstruction, weno5_advection, weno5_advection_2d,
-    # divergence_arakawa_c); the rest skip. weno5_advection_2d joined the
-    # pass set once ESS esm-hsa landed the 2D axis-split WENO5 dispatch
-    # (mms_weno5_convergence reads `axes.x`/`axes.y` and dispatches on
-    # `haskey(spec, "axes")`); the prior Layer-C operational substitute was
-    # retired in dsc-7hx.
+    # Seven layer-B cases pass (centered_2nd_uniform_vertical,
+    # centered_2nd_uniform_latlon, upwind_1st, ppm_reconstruction,
+    # weno5_advection, weno5_advection_2d, divergence_arakawa_c); the rest
+    # skip. centered_2nd_uniform skips pending hq-2t0k4 (dsc-rar — rule
+    # rewritten as closed arrayop replacement; needs ESS AST-walker
+    # dispatch). weno5_advection_2d joined the pass set once ESS esm-hsa
+    # landed the 2D axis-split WENO5 dispatch (mms_weno5_convergence reads
+    # `axes.x`/`axes.y` and dispatches on `haskey(spec, "axes")`); the prior
+    # Layer-C operational substitute was retired in dsc-7hx.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -192,7 +206,7 @@ using TestItems
     # fixture exists.
     layer_d_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_d; init = 0)
-    @test layer_b_passes == 8
+    @test layer_b_passes == 7
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
