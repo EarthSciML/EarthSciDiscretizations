@@ -6,6 +6,10 @@ discretization runtime. Conforms to the cross-binding contract in
 
 ## Install
 
+This package depends on the unpublished `earthsci-toolkit` from
+[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization);
+pip resolves it via a `git+` URL with `subdirectory=packages/earthsci_toolkit`.
+
 ```bash
 pip install -e .[dev]
 # Optional ecosystem integration:

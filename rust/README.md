@@ -5,6 +5,18 @@ to the cross-binding contract in [`docs/GRIDS_API.md`](../docs/GRIDS_API.md).
 
 ## Build
 
+This crate has a `path` dependency on the unpublished `earthsci-toolkit` crate
+from [EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization).
+Check out ESS as a sibling of this repo:
+
+```
+parent/
+├── EarthSciDiscretizations/   # this repo
+└── EarthSciSerialization/     # https://github.com/EarthSciML/EarthSciSerialization
+```
+
+Then:
+
 ```bash
 cargo build
 cargo test

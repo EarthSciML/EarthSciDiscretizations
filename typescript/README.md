@@ -6,7 +6,22 @@ conforming to the cross-binding contract in
 
 ## Install
 
+This package depends on the unpublished `earthsci-toolkit` package from
+[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization)
+via a `file:` reference. Check out ESS as a sibling to this repo, then install:
+
+```
+parent/
+├── EarthSciDiscretizations/   # this repo
+└── EarthSciSerialization/     # https://github.com/EarthSciML/EarthSciSerialization
+```
+
 ```bash
+# from parent/
+git clone https://github.com/EarthSciML/EarthSciSerialization.git
+(cd EarthSciSerialization/packages/earthsci-toolkit && npm install && npm run build)
+
+# then in this directory:
 npm install
 ```
 
