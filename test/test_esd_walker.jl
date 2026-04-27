@@ -89,13 +89,13 @@ using TestItems
                         ("finite_difference", "centered_2nd_uniform_latlon"),
                         ("finite_difference", "upwind_1st"),
                         ("finite_volume", "ppm_reconstruction"),
-                        ("finite_volume", "weno5_advection"),
                         ("finite_volume", "weno5_advection_2d"),
                         ("finite_volume", "divergence_arakawa_c")])
-    # centered_2nd_uniform skips Layer-B until ESS gains an AST-walker
-    # dispatch in mms_convergence — the rule (dsc-rar) was rewritten as a
-    # closed arrayop replacement in §4.2 ops, dropping the `stencil` field
-    # the existing kernels dispatch on. Tracked by hq-2t0k4.
+    # centered_2nd_uniform (dsc-rar) and weno5_advection (dsc-b78) skip
+    # Layer-B until ESS gains an AST-walker dispatch in mms_convergence —
+    # both rules were rewritten as closed arrayop replacements in §4.2 ops,
+    # dropping the `stencil` field the existing kernels dispatch on.
+    # Tracked by hq-2t0k4.
     not_applicable_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
                                    ("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
@@ -103,6 +103,7 @@ using TestItems
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
                                    ("finite_volume", "transport_2d"),
+                                   ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "ppm_edge_cubed_sphere")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
@@ -185,15 +186,16 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Seven layer-B cases pass (centered_2nd_uniform_vertical,
+    # Six layer-B cases pass (centered_2nd_uniform_vertical,
     # centered_2nd_uniform_latlon, upwind_1st, ppm_reconstruction,
-    # weno5_advection, weno5_advection_2d, divergence_arakawa_c); the rest
-    # skip. centered_2nd_uniform skips pending hq-2t0k4 (dsc-rar — rule
-    # rewritten as closed arrayop replacement; needs ESS AST-walker
-    # dispatch). weno5_advection_2d joined the pass set once ESS esm-hsa
-    # landed the 2D axis-split WENO5 dispatch (mms_weno5_convergence reads
-    # `axes.x`/`axes.y` and dispatches on `haskey(spec, "axes")`); the prior
-    # Layer-C operational substitute was retired in dsc-7hx.
+    # weno5_advection_2d, divergence_arakawa_c); the rest skip.
+    # centered_2nd_uniform (dsc-rar) and weno5_advection (dsc-b78) skip
+    # pending hq-2t0k4 — both rewritten as closed arrayop replacements; need
+    # ESS AST-walker dispatch in mms_convergence. weno5_advection_2d joined
+    # the pass set once ESS esm-hsa landed the 2D axis-split WENO5 dispatch
+    # (mms_weno5_convergence reads `axes.x`/`axes.y` and dispatches on
+    # `haskey(spec, "axes")`); the prior Layer-C operational substitute was
+    # retired in dsc-7hx.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -206,7 +208,7 @@ using TestItems
     # fixture exists.
     layer_d_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_d; init = 0)
-    @test layer_b_passes == 7
+    @test layer_b_passes == 6
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
