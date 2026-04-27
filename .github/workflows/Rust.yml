@@ -21,10 +21,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-defaults:
-  run:
-    working-directory: rust
-
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
@@ -37,8 +33,20 @@ jobs:
       fail-fast: false
       matrix:
         toolchain: [stable, "1.75"]
+    defaults:
+      run:
+        working-directory: EarthSciDiscretizations/rust
     steps:
-      - uses: actions/checkout@v6
+      - name: "Checkout EarthSciDiscretizations"
+        uses: actions/checkout@v6
+        with:
+          path: EarthSciDiscretizations
+
+      - name: "Checkout EarthSciSerialization (sibling for unpublished earthsci-toolkit)"
+        uses: actions/checkout@v6
+        with:
+          repository: EarthSciML/EarthSciSerialization
+          path: EarthSciSerialization
 
       - name: "Install Rust ${{ matrix.toolchain }}"
         uses: dtolnay/rust-toolchain@master
@@ -48,7 +56,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: EarthSciDiscretizations/rust
 
       - name: "Format"
         if: matrix.toolchain == 'stable'
