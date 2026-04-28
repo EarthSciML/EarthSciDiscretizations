@@ -1,0 +1,12 @@
+{
+  "rule": "lax_friedrichs_flux_cubed_sphere_xi",
+  "applicable": false,
+  "skip_reason": "lax_friedrichs_flux_cubed_sphere_xi is the cubed-sphere face-stagger ξ-direction wrapper for the dissipative first-order LF numerical flux. The §7 verify_mms_convergence harness is wired for 1D Cartesian periodic stencils with bindings of only {dx, h} and has no panel-connectivity awareness — neither the cubed_sphere selector kind, the cross-panel ghost extension, nor the per-face Courant binding `$c` at u_edge stagger is evaluable in that harness today. Three layered gaps block this fixture: (1) cubed_sphere walker dispatch (shared with `ppm_edge_cubed_sphere` and `covariant_laplacian_cubed_sphere`), (2) face-stagger / time-varying binding contract for `$c` at u_edge (shared with the Cartesian `lax_friedrichs_flux` rule, the limiter rules' Layer-B′ TVD harness, and `transport_2d`), and (3) the LF face flux is at face stagger, not cell-centered, so the smooth-MMS sweep needs a face-staggered output mode. When applied as part of a full transport scheme (LF flux + cubed-sphere FV divergence + forward Euler under the Williamson-style transport benchmark), the scheme is theoretically O(h) in L_inf — a follow-up Layer-B′ MMS-transport fixture mirroring the limiter `tvd_check.esm` is the right shape, not a bare reconstruction-style sweep. Hand-pinned per-face flux equivalence on c4 lives in the Layer-A canonical fixture; numeric coverage of `flux_1d` on real cubed-sphere transport problems lives in `test/test_arrayop.jl` and `test/integration_cases/cubed_sphere_advection.jl` (PPM-driven, but the LF wrapper shares the same boundary-handling code paths).",
+  "manufactured_solution_proposed": "q(ξ, η) = 1 + 0.3·sin(2·ξ)·cos(η) on each panel of a gnomonic equidistant cubed sphere; constant velocity u₀ = 1 m/s in the contravariant ξ-direction. Run forward-Euler under the LF flux + FV-divergence transport for one full revolution (T = 2π·R/u₀); compare cell-mean error against the analytic transported field. Layer-B′ harness (transport convergence) rather than a bare reconstruction sweep is required — the LF flux alone is non-evolutionary.",
+  "grids_proposed": [
+    { "n": 24, "label": "c24" },
+    { "n": 48, "label": "c48" },
+    { "n": 96, "label": "c96" }
+  ],
+  "expected_min_order_proposed": 0.9
+}

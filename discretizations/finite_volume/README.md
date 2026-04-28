@@ -148,6 +148,31 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   per-face-binding gap as the limiter rules — a follow-up Layer-B′
   MMS-transport fixture (LF + divergence + forward Euler) is the right
   shape.
+- [`lax_friedrichs_flux_cubed_sphere_xi.json`](lax_friedrichs_flux_cubed_sphere_xi.json)
+  / [`lax_friedrichs_flux_cubed_sphere_eta.json`](lax_friedrichs_flux_cubed_sphere_eta.json)
+  — sibling-pair cubed-sphere face-stagger wrappers for the LF flux,
+  one rule per axis (ξ → emits at u_edge, η → emits at v_edge).
+  Two-point in-panel stencil at offsets `{-1, 0}` along the chosen
+  axis at `cell_center` stagger; the face-staggered Courant `$c` is
+  consumed via a `reads` block at u_edge / v_edge offset 0, matching
+  the pattern from `fv3_sinsg_flux_xi.json`. The closed-form
+  upwind-blended F = (c+|c|)/2·q_west + (c-|c|)/2·q_east mirrors the
+  Cartesian core (`lax_friedrichs_flux.json`) coefficient-for-
+  coefficient — only selector kind / stagger differs. Cross-panel
+  ghost extension and panel-boundary distance handling for the
+  Courant precomputation live in the cubed_sphere grid accessor
+  (`src/grids/panel_connectivity.jl` + `_get_courant_xi/eta` in
+  `src/operators/flux_1d.jl`); selectors carry no `panel` field per
+  SELECTOR_KINDS.md decision #13. Layer-A canonical fixture pins
+  per-face flux equivalence on c4 against the imperative `flux_1d`
+  reference within `1e-12`; Layer-B convergence is `applicable: false`
+  pending the cubed_sphere walker dispatch + face-stagger MMS-transport
+  harness; Layer-C integration carries a Williamson-1 cosine-bell stub
+  behind ESD_RUN_INTEGRATION=1. The η rule's Layer-A fixture is
+  skip-only and points at the ξ fixture (the algebra is symmetric
+  under coordinate reflection). Tracked at dsc-0fd; the `boundary_policy`
+  schema feature that would let these rules reference
+  `grid.dist_xi_bnd` / `grid.dist_eta_bnd` directly is a follow-up.
 
 ## Composing a limiter with a reconstruction
 

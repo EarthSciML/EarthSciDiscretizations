@@ -1,0 +1,90 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "lax_friedrichs_flux_cubed_sphere_eta": {
+      "applies_to": {
+        "op": "flux",
+        "args": ["$q", "$c"],
+        "dim": "eta"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "form": "lax_friedrichs",
+      "requires_locations": ["cell_center", "v_edge"],
+      "emits_location": "v_edge",
+      "accuracy": "O(h)",
+      "reference": "Lax & Friedrichs (1954), Comm. Pure Appl. Math. 7(1):159-193 (LF flux); src/operators/flux_1d.jl `flux_1d` ArrayOp on `CubedSphereGrid` (imperative reference). η-direction sibling of `lax_friedrichs_flux_cubed_sphere_xi.json` — see that rule for the full schema-features rationale; the algebra and bindings here are the coordinate-mirror image.",
+      "produces": "F_{j+1/2}",
+      "outputs": ["F_{j+1/2}"],
+      "monotone": true,
+      "tvd": true,
+      "notes": "η-direction Lax-Friedrichs numerical flux at a VEdge interface on the gnomonic equidistant cubed sphere. Uses cell-center scalars `$q` from the two cells flanking the η-face (offsets -1, 0 along η at cell_center stagger) and a face-staggered Courant `$c` (offset 0 along η at v_edge stagger). The closed-form upwind-blended stencil F = (c+|c|)/2·q_south + (c-|c|)/2·q_north mirrors `lax_friedrichs_flux_cubed_sphere_xi` coefficient-for-coefficient with (xi, west, east) ↔ (eta, south, north). Cross-panel ghost extension at the southern v_edge of panel p (j=1) and the northern v_edge (j=Nc+1) is resolved by the cubed_sphere grid accessor; panel-boundary distance handling for the Courant precomputation (grid.dist_eta_bnd ↔ grid.dist_eta) is encapsulated in `_get_courant_eta` / `compute_courant_numbers_arrayop` (src/operators/flux_1d.jl). Selectors carry no `panel` field per SELECTOR_KINDS.md decision #13.",
+      "panel_handling": "lives in the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); the rule references in-panel offsets only.",
+      "metric_bindings": {
+        "comment": "η-direction sibling of `lax_friedrichs_flux_cubed_sphere_xi`'s metric_bindings.",
+        "c": "face-staggered Courant number c[p,i,j] = vel[p,i,j]·dt / dist_eta[p,i,j] at v_edge stagger; interior interfaces use grid.dist_eta, panel-boundary interfaces (j=1, j=Nc+1) use grid.dist_eta_bnd. Precomputed by the accessor and consumed as a single face-staggered binding."
+      },
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "eta", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        }
+      ],
+      "reads": [
+        { "name": "$c", "selector": { "kind": "cubed_sphere", "stagger": "v_edge", "axis": "eta", "offset": 0 } }
+      ],
+      "flux_form": {
+        "produces": "F_{j+1/2} at v_edge along η",
+        "comment": "F_{j+1/2} = (c+|c|)/2·q_south + (c-|c|)/2·q_north = max(c,0)·q_south + min(c,0)·q_north. `q_south` is the cell at η-offset -1 from the face, `q_north` at offset 0; `c` is the face's own Courant at v_edge offset 0.",
+        "expression": {
+          "op": "+",
+          "args": [
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_south"
+            ] },
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_north"
+            ] }
+          ]
+        }
+      },
+      "composition_hint": "η-direction sibling of `lax_friedrichs_flux_cubed_sphere_xi`'s composition. Caller precomputes `c[p,i,j] = v_face[p,i,j]·dt / dist[p,i,j]` then applies this rule at every η-interface. Cell-centred tendency: T[p,i,j] = -(F[p,i,j+1]·dy[p,i,j+1] - F[p,i,j]·dy[p,i,j]) / area[p,i,j].",
+      "schema_notes": "See `lax_friedrichs_flux_cubed_sphere_xi.json` schema_notes; symmetric story for the η axis.",
+      "limitations": [
+        "Output is at v_edge stagger; the ξ-direction sibling is `lax_friedrichs_flux_cubed_sphere_xi`.",
+        "Same-direction panel-boundary flux matching (`_match_boundary_fluxes_eta!` in `src/operators/flux_1d.jl`) is a downstream conservation step; encoding the matcher in the schema is a follow-up.",
+        "Rotated-boundary flux matching (`_match_rotated_boundary_fluxes!` — applies to ξ↔η panel connections) is a coupled-axis post-processing step that cannot be expressed by either of the per-axis sibling rules in isolation; remains in the imperative wrapper until a multi-axis post-processing schema feature lands."
+      ]
+    }
+  }
+}

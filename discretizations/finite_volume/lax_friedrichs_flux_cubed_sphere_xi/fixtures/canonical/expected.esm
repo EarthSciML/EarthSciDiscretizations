@@ -1,0 +1,12 @@
+{
+  "rule": "lax_friedrichs_flux_cubed_sphere_xi",
+  "result": {
+    "name": "F_xi",
+    "shape": [6, 5, 4],
+    "sampling": "u_edge",
+    "form": "F[p, i, j] = (c[p,i,j] + |c[p,i,j]|)/2 · q[p, i-1, j] + (c[p,i,j] - |c[p,i,j]|)/2 · q[p, i, j], with q and c as defined in input.esm and cross-panel offsets resolved by the cubed_sphere accessor. The closed-form upwind-blended formula has F = max(c,0)·q_west + min(c,0)·q_east — when c=0 the flux is exactly zero (no caller-side branching); when c<0 the east cell q_east contributes; when c>0 the west cell q_west contributes."
+  },
+  "tolerance": 1.0e-12,
+  "comment": "Bit-equivalence check against the imperative reference. The `flux_1d` ArrayOp in `src/operators/flux_1d.jl` computes the Lax-Friedrichs face flux as F_e_a - F_e_d with F_e_a = c·(q_west + q_east)/2, F_e_d = |c|·(q_east - q_west)/2; the algebraic identity F = (c+|c|)/2·q_west + (c-|c|)/2·q_east holds bit-for-bit in IEEE-754 arithmetic (associative-symmetric add chains; the equivalence is exercised in `test/test_lax_friedrichs_flux_rule.jl` for the Cartesian core). The canonical fixture pins the per-face equivalence on c4 cubed_sphere with a non-trivial mixed-sign Courant; once the ESS Layer-A canonical-form rule engine accepts cubed_sphere face-stagger selectors and routes cross-panel offsets through the panel-connectivity accessor, the walker materializes the rule against this input and byte-compares to the imperative reference.",
+  "notes": "Cross-panel ghost extension at face i=1 on each panel is exercised by the input — cell (i-1, j) = (0, j) sits on the neighbor panel and is resolved by `extend_with_ghosts` (scalar field, no basis rotation). Face i=Nc+1 = 5 is the eastern panel boundary; cell (i, j) = (5, j) sits on the neighbor panel. Same-direction panel-boundary flux matching (`_match_boundary_fluxes_xi!`) is NOT applied here — the canonical fixture pins the raw per-face flux before any conservation post-processing, since the matcher is not yet expressible in the rule schema (follow-up shared with `ppm_edge_cubed_sphere`'s monotonicity_constraint). The η-direction sibling rule `lax_friedrichs_flux_cubed_sphere_eta` carries a structural skip-only fixture; the η-direction equivalence relies on the symmetry of the algebra under (xi, west, east) ↔ (eta, south, north) plus the Cartesian-core unit tests in `test/test_lax_friedrichs_flux_rule.jl`."
+}
