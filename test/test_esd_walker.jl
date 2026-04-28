@@ -90,21 +90,19 @@ using TestItems
                         ("finite_difference", "centered_2nd_uniform_latlon"),
                         ("finite_difference", "upwind_1st"),
                         ("finite_volume", "ppm_reconstruction"),
+                        ("finite_volume", "weno5_advection"),
                         ("finite_volume", "weno5_advection_2d"),
                         ("finite_volume", "divergence_arakawa_c")])
-    # weno5_advection (dsc-b78) skips Layer-B until ESS gains an AST-walker
-    # dispatch in mms_convergence — the rule was rewritten as a closed
-    # arrayop replacement in §4.2 ops, dropping the `stencil` field the
-    # existing kernels dispatch on. Tracked by hq-2t0k4.
     # centered_2nd_uniform rejoined pass_layer_b once ESS esm-4gw landed
-    # the AST-walker dispatch (dsc-66f).
+    # the AST-walker dispatch (dsc-66f). weno5_advection rejoined once
+    # ESS esm-8i9 extended the AST-walker to reach form=weno + multi-input
+    # lowering rules (dsc-nh1).
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
                                    ("finite_volume", "transport_2d"),
-                                   ("finite_volume", "weno5_advection"),
                                    ("finite_volume", "ppm_edge_cubed_sphere")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
@@ -186,17 +184,19 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Seven layer-B cases pass (centered_2nd_uniform,
+    # Eight layer-B cases pass (centered_2nd_uniform,
     # centered_2nd_uniform_vertical, centered_2nd_uniform_latlon, upwind_1st,
-    # ppm_reconstruction, weno5_advection_2d, divergence_arakawa_c); the
-    # rest skip. centered_2nd_uniform joined the pass set once ESS esm-4gw
-    # landed the AST-walker dispatch in mms_convergence (dsc-66f — rule was
-    # rewritten as a closed arrayop replacement in dsc-rar). weno5_advection
-    # (dsc-b78) skips pending hq-2t0k4 — same closed-arrayop rewrite needs
-    # the AST-walker dispatch. weno5_advection_2d joined earlier when ESS
-    # esm-hsa landed the 2D axis-split WENO5 dispatch (mms_weno5_convergence
-    # reads `axes.x`/`axes.y` and dispatches on `haskey(spec, "axes")`); the
-    # prior Layer-C operational substitute was retired in dsc-7hx.
+    # ppm_reconstruction, weno5_advection, weno5_advection_2d,
+    # divergence_arakawa_c); the rest skip. centered_2nd_uniform joined the
+    # pass set once ESS esm-4gw landed the AST-walker dispatch in
+    # mms_convergence (dsc-66f — rule was rewritten as a closed arrayop
+    # replacement in dsc-rar). weno5_advection joined once ESS esm-8i9
+    # extended the AST-walker to reach form=weno + multi-input lowering
+    # rules (dsc-nh1 — same closed-arrayop rewrite from dsc-b78).
+    # weno5_advection_2d joined earlier when ESS esm-hsa landed the 2D
+    # axis-split WENO5 dispatch (mms_weno5_convergence reads `axes.x`/
+    # `axes.y` and dispatches on `haskey(spec, "axes")`); the prior Layer-C
+    # operational substitute was retired in dsc-7hx.
     layer_b_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_b; init = 0)
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
@@ -209,7 +209,7 @@ using TestItems
     # fixture exists.
     layer_d_passes = sum(1 for r in results
                          if (String(r.family), r.name) in pass_layer_d; init = 0)
-    @test layer_b_passes == 7
+    @test layer_b_passes == 8
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
