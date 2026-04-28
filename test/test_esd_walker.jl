@@ -97,13 +97,21 @@ using TestItems
     # the AST-walker dispatch (dsc-66f). weno5_advection rejoined once
     # ESS esm-8i9 extended the AST-walker to reach form=weno + multi-input
     # lowering rules (dsc-nh1).
+    # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
+    # → Eulerian re-gridding between timesteps), not a §7 stencil rule. The
+    # JSON file is retained as a reference artifact documenting the Lin (2004)
+    # PPM-remap math and AST shape for the eventual phase-hook contract; there
+    # is no imperative implementation in any binding. The convergence fixture
+    # ships applicable:false with a phase-hook deferral reason so the walker
+    # SKIPs Layer-B with "fixture-declared not applicable".
     not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
                                    ("finite_volume", "transport_2d"),
-                                   ("finite_volume", "ppm_edge_cubed_sphere")])
+                                   ("finite_volume", "ppm_edge_cubed_sphere"),
+                                   ("finite_volume", "vertical_remap")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs

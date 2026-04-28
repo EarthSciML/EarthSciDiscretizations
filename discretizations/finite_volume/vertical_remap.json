@@ -163,15 +163,12 @@
         }
       },
       "schema_gaps": {
-        "comment": "Two ESS schema extensions are required before this rule is fully materializable from JSON alone. Until they land, the runtime path is src/operators/vertical_remap.jl. The rule file is authored declaratively (matching the weno5_advection.json precedent for nonlinear_weights) so the math, references, and AST fragments are reproducible.",
-        "conservative_remap_rule_type": {
-          "tracker": "docs/rule-catalog.md row `vertical_remap_lin_2004` (schema_gaps: needs conservative-remap rule type)",
-          "summary": "ESS §7 stencils encode a fixed neighbor list combined by `+`/`*`/min/max. Conservative remap is a variable-arity overlap sweep whose neighbor list is data-dependent (cumulative-pressure intersection of dp_old with dp_new). The natural shape is a new rule kind that emits an `arrayop` over old layers gated by the overlap predicate, parallel in spirit to the §4 `reduction` selector for unstructured grids."
+        "comment": "Conservative remap is structurally a phase-hook operation, not a §7 stencil rule. ESS will introduce a phase_hooks schema block in a future RFC; until then this file documents the math and AST shape but is not executed by the rule engine and is excluded from walker layer-B / layer-D membership. Imperative implementations in any language MUST NOT be added back — see ESD/dsc-otd for context. The rule file is authored declaratively (matching the weno5_advection.json precedent for nonlinear_weights) so the math, references, and AST fragments remain a reproducible reference for the eventual phase-hook contract.",
+        "disposition": "deferred-to-phase-hook-rfc",
+        "phase_hook_rationale": {
+          "summary": "Conservative remap runs between timesteps as a phase hook (Lagrangian → Eulerian re-gridding), has a variable-arity data-dependent neighbor list (cumulative-pressure intersection of dp_old with dp_new), and binds time-varying per-column metrics that the §7 stencil schema does not encode. ESS §7 stencils encode a fixed neighbor list combined by `+`/`*`/min/max — forcing remap into that shape would require a one-off rule kind. The honest shape is a declarative phase-hook / integration-callback contract (vertical remap, coupler exchange, restart IO), which is deferred to a future ESS RFC."
         },
-        "time_varying_vertical_metric_binding": {
-          "tracker": "discretizations/SELECTOR_KINDS.md decision #3",
-          "summary": "Layer thicknesses dp_old and dp_new vary in time and (in the Lagrangian-vertical use case) per column; the ESS MMS harness today binds only scalar per-axis spacing symbols. Until per-cell time-varying metric bindings land, walker fixtures for this rule must declare applicable=false."
-        }
+        "executability": "documentation-only; no imperative implementation exists in any binding (Julia/Python/Rust/TypeScript) and none is to be re-added. Models needing a Lagrangian vertical configuration must use an Eulerian-vertical configuration today (e.g. centered_2nd_uniform_vertical) or wait for the phase-hook RFC."
       }
     }
   }

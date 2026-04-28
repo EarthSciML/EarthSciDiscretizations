@@ -37,7 +37,6 @@ include("operators/laplacian.jl")
 include("operators/reconstruction.jl")
 include("operators/flux_1d.jl")
 include("operators/transport_2d.jl")
-include("operators/vertical_remap.jl")
 
 # FV3-specific operators
 # Wind-field operators (vorticity, kinetic energy, C↔D grid transformation +
@@ -117,7 +116,6 @@ export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 export fv_laplacian
 export flux_1d
 export transport_2d
-export vertical_remap, vertical_remap_tendency
 
 # Exports: Numerical transport operators
 export flux_1d_ppm!, transport_2d_linrood!
