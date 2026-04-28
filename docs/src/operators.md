@@ -99,10 +99,14 @@ invariants any FV operator must — they are still operators on arrays,
 just authored differently. The following examples evaluate the AST that
 the rules emit, confirming each invariant holds.
 
-### Gradient of a linear field
+### Laplacian of a constant
 
-The gradient operator should reproduce the slope of a linear field in
-computational coordinates.
+The Laplacian of a constant field is zero everywhere. `fv_laplacian` is
+the de-facto numeric reference for the schema-gated covariant Laplacian
+on the cubed sphere (see
+`discretizations/finite_difference/covariant_laplacian_cubed_sphere.json`,
+which currently declares `applicable: false` pending ESS multi-axis
+selectors and metric-tensor bindings).
 
 ```@example ops
 using EarthSciDiscretizations
@@ -111,41 +115,6 @@ using EarthSciDiscretizations: evaluate_arrayop
 grid = CubedSphereGrid(8)
 Nc = grid.Nc
 
-# Linear field: phi = 2.0 * xi
-phi = zeros(6, Nc, Nc)
-for p in 1:6, i in 1:Nc, j in 1:Nc
-    phi[p, i, j] = 2.0 * grid.ξ_centers[i]
-end
-
-ao = fv_gradient_xi(phi, grid)
-grad = evaluate_arrayop(ao)
-println("Gradient of linear field (slope=2.0):")
-println("  Size: $(size(grad))")
-println("  Min:  $(minimum(grad))")
-println("  Max:  $(maximum(grad))")
-println("  All equal to 2.0: $(all(isapprox.(grad, 2.0; rtol=1e-12)))")
-```
-
-### Divergence of a zero flux
-
-The divergence of a zero flux field is exactly zero.
-
-```@example ops
-F_xi = zeros(6, Nc + 1, Nc)
-F_eta = zeros(6, Nc, Nc + 1)
-
-ao = fv_divergence(F_xi, F_eta, grid)
-div_result = evaluate_arrayop(ao)
-println("Divergence of zero flux:")
-println("  Size: $(size(div_result))")
-println("  Max absolute value: $(maximum(abs.(div_result)))")
-```
-
-### Laplacian of a constant
-
-The Laplacian of a constant field is zero everywhere.
-
-```@example ops
 phi_const = fill(42.0, 6, Nc, Nc)
 ao = fv_laplacian(phi_const, grid)
 lap = evaluate_arrayop(ao)

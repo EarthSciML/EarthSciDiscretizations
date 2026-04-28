@@ -29,9 +29,10 @@ include("grids/arakawa.jl")
 # Operator utilities
 include("operators/arrayop_utils.jl")
 
-# FV operators (all ArrayOp-based)
-include("operators/divergence.jl")
-include("operators/gradient.jl")
+# FV operators (schema-gated Bucket-B paths + PPM helpers).
+# Bucket-A ArrayOp builders that mirrored already-walker-validated JSON
+# rules — `fv_divergence`, `fv_gradient_xi/eta`, and the loop-form
+# `ppm_reconstruction!`/`ppm_reconstruction` — have been retired (dsc-o05).
 include("operators/laplacian.jl")
 include("operators/reconstruction.jl")
 include("operators/flux_1d.jl")
@@ -113,10 +114,7 @@ export ghost_fill_indices, ghost_fill_arrayop
 export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 
 # Exports: FV operators
-export fv_divergence
-export fv_gradient_xi, fv_gradient_eta
 export fv_laplacian
-export ppm_reconstruction, ppm_reconstruction!
 export flux_1d
 export transport_2d
 export vertical_remap, vertical_remap_tendency

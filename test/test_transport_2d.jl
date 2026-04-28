@@ -280,35 +280,6 @@ end
     @test isarrayop(qr_ao_eta)
 end
 
-@testitem "ppm_reconstruction_arrayop matches loop-based on interior" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
-    Nc = 12
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    # Smooth field for well-behaved PPM
-    q = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        q[p, i, j] = 1.0 + 0.3 * sin(2π * grid.ξ_centers[i] / (π / 2))
-    end
-
-    q_ext = extend_with_ghosts(q, grid)
-
-    # ArrayOp reconstruction
-    ql_ao, qr_ao = ppm_reconstruction_arrayop(q_ext, grid, :xi)
-    ql_vals = evaluate_arrayop(ql_ao)
-    qr_vals = evaluate_arrayop(qr_ao)
-
-    # Loop-based reconstruction (only covers cells 3:Nc-2 mapped to 1:Nc-4)
-    ql_loop, qr_loop = ppm_reconstruction(q, grid, :xi)
-
-    # Compare on overlapping interior cells: loop indices 1:Nc-4 map to cells 3:Nc-2
-    # ArrayOp indices 3:Nc-2 also map to cells 3:Nc-2
-    for p in 1:6, ii in 1:(Nc - 4), j in 1:Nc
-        i_phys = ii + 2  # physical cell index
-        @test isapprox(ql_vals[p, i_phys, j], ql_loop[p, ii, j]; rtol = 1.0e-10)
-        @test isapprox(qr_vals[p, i_phys, j], qr_loop[p, ii, j]; rtol = 1.0e-10)
-    end
-end
-
 @testitem "ghost_fill_arrayop returns extended array" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
     grid = CubedSphereGrid(Nc; R = 1.0)
