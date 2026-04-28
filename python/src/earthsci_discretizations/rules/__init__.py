@@ -8,11 +8,13 @@ applicators for the rule families currently in the catalog.
 
 Cross-binding contract:
 
-* :func:`eval_coeff` matches the Julia ``EarthSciDiscretizations.eval_coeff``
-  passthrough (which delegates to ``EarthSciSerialization.evaluate``) for
-  every op the rule catalog actually uses today: ``+ - * / ^``, the unary
-  function set (``sin cos tan exp log sqrt abs``), and the constants
-  ``pi`` / ``e``. Unbound variables raise :class:`UnboundVariableError`.
+* :func:`eval_coeff` is a thin adapter over
+  ``earthsci_toolkit.evaluate`` (ESS): JSON dict nodes are converted to
+  the typed :class:`earthsci_toolkit.ExprNode` form once, then ESS's
+  evaluator returns the scalar value. The Julia binding's
+  ``EarthSciDiscretizations.eval_coeff`` does the same passthrough to
+  ``EarthSciSerialization.evaluate``. Unbound variables raise
+  :class:`ValueError` (propagated from ESS).
 * :func:`load_rule` reads a rule JSON file and returns a :class:`Rule`.
   Single-stencil rules expose entries via :attr:`Rule.stencil`;
   multi-stencil rules (PPM-style; ESS §7.5) expose them via
@@ -35,7 +37,7 @@ from .cartesian import (
     reference_samples,
     resolve_sub_stencil,
 )
-from .evaluator import UnboundVariableError, eval_coeff
+from .evaluator import eval_coeff
 from .loader import Rule, StencilEntry, load_rule
 from .stencil import apply_stencil_latlon
 
@@ -43,7 +45,6 @@ __all__ = [
     "OUTPUT_KINDS",
     "Rule",
     "StencilEntry",
-    "UnboundVariableError",
     "apply_stencil_latlon",
     "apply_stencil_periodic_1d",
     "eval_coeff",

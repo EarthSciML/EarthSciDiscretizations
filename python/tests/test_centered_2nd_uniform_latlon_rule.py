@@ -118,10 +118,8 @@ def test_stencil_application(rule, fixtures, golden):
 
 
 def test_eval_coeff_unbound_variable_raises(rule):
-    from earthsci_discretizations.rules import UnboundVariableError
-
     entry = rule.stencil[0]
-    with pytest.raises(UnboundVariableError):
+    with pytest.raises(ValueError, match="[Uu]nbound variable"):
         eval_coeff(entry.coeff, {"R": 1.0, "dlon": 0.1})  # missing cos_lat
 
 
