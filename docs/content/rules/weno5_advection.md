@@ -141,8 +141,5 @@ well under the 0.05 tolerance.
 
 The walker-side fixture under
 [<code>discretizations/finite_volume/weno5_advection/fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_volume/weno5_advection/fixtures/convergence)
-is currently marked `applicable: false` pending an ESS upgrade that
-lets `mms_convergence` walk a `replacement`-form rule through the
-existing arrayop / broadcast evaluator (no new scheme-specific
-kernels). Once ESS lands the AST dispatch path, the convergence
-fixture re-enables without modification.
+exercises Layer-B convergence through ESS's AST-walker dispatch over the
+closed `arrayop` + `ifelse` replacement — no scheme-specific kernels.
