@@ -1,70 +1,15 @@
 """
-Piecewise Parabolic Method (PPM) sub-grid reconstruction (Colella & Woodward 1984).
+Piecewise Parabolic Method (PPM) sub-grid reconstruction helpers (Colella &
+Woodward 1984).
 
-Uses the 4th-order interface interpolation formula and the full Colella-Woodward
-monotonicity limiter that preserves cell averages and ensures the parabolic
-profile is monotone within each cell.
+The full reconstruction stencil (4th-order edge interpolation + CW84
+monotonicity limiter) is encoded declaratively in
+`discretizations/finite_volume/ppm_reconstruction.json` and exercised by the
+ESS rule walker (Layer-B convergence). The helpers below remain because
+they are still used by the schema-gated Bucket-B operators
+(`flux_1d.jl`, `vertical_remap.jl`) and by the symbolic ArrayOp variant
+that drives `transport_2d.jl`.
 """
-
-"""
-    ppm_reconstruction!(q_left, q_right, q, grid, dim)
-
-In-place PPM reconstruction. Fills `q_left` and `q_right` with the
-limited left and right interface values for each interior cell.
-"""
-function ppm_reconstruction!(q_left, q_right, q, grid::CubedSphereGrid, dim::Symbol)
-    Nc = grid.Nc
-    return if dim == :xi
-        for p in 1:6, j in 1:Nc
-            # Step 1: Compute 4th-order interface values at all half-points
-            # Interface i+1/2 is between cell i and cell i+1
-            ifaces = Vector{Float64}(undef, Nc + 1)
-            # Use 4th-order formula for interior interfaces (need i-1,i,i+1,i+2)
-            for i in 2:(Nc - 1)
-                ifaces[i] = (7.0 / 12.0) * (q[p, i, j] + q[p, i - 1, j]) -
-                    (1.0 / 12.0) * (q[p, max(1, i - 2), j] + q[p, min(Nc, i + 1), j])
-            end
-            # Boundary interfaces: use cell center value as edge estimate
-            ifaces[1] = q[p, 1, j]
-            ifaces[Nc + 1] = q[p, Nc, j]
-
-            # Step 2: Assign left/right edges and apply CW84 limiter
-            for i in 3:(Nc - 2)
-                ql = ifaces[i]      # left edge of cell i (interface i-1/2)
-                qr = ifaces[i + 1]  # right edge of cell i (interface i+1/2)
-                qi = q[p, i, j]
-
-                ql, qr = _ppm_limit_cw84(ql, qr, qi)
-
-                q_left[p, i - 2, j] = ql
-                q_right[p, i - 2, j] = qr
-            end
-        end
-    elseif dim == :eta
-        for p in 1:6, i in 1:Nc
-            ifaces = Vector{Float64}(undef, Nc + 1)
-            for jj in 2:(Nc - 1)
-                ifaces[jj] = (7.0 / 12.0) * (q[p, i, jj] + q[p, i, jj - 1]) -
-                    (1.0 / 12.0) * (q[p, i, max(1, jj - 2)] + q[p, i, min(Nc, jj + 1)])
-            end
-            if Nc >= 2
-                ifaces[1] = q[p, i, 1]
-                ifaces[Nc + 1] = q[p, i, Nc]
-            end
-
-            for jj in 3:(Nc - 2)
-                ql = ifaces[jj]
-                qr = ifaces[jj + 1]
-                qi = q[p, i, jj]
-
-                ql, qr = _ppm_limit_cw84(ql, qr, qi)
-
-                q_left[p, i, jj - 2] = ql
-                q_right[p, i, jj - 2] = qr
-            end
-        end
-    end
-end
 
 """
 Colella-Woodward (1984) PPM limiter.
@@ -120,17 +65,6 @@ function _ppm_limit_cw84_sym(ql, qr, qi)
     qr2 = ifelse(overshoot_right, 3.0 * qi - 2.0 * ql1, qr1)
 
     return (ql2, qr2)
-end
-
-function ppm_reconstruction(q, grid::CubedSphereGrid, dim::Symbol)
-    Nc = grid.Nc; T = eltype(q)
-    if dim == :xi
-        q_left = zeros(T, 6, Nc - 4, Nc); q_right = zeros(T, 6, Nc - 4, Nc)
-    else
-        q_left = zeros(T, 6, Nc, Nc - 4); q_right = zeros(T, 6, Nc, Nc - 4)
-    end
-    ppm_reconstruction!(q_left, q_right, q, grid, dim)
-    return (q_left, q_right)
 end
 
 """

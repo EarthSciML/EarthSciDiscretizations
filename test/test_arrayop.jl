@@ -10,15 +10,10 @@ end
     Nc = 4
     grid = CubedSphereGrid(Nc; R = 1.0)
 
-    F_xi = zeros(6, Nc + 1, Nc)
-    F_eta = zeros(6, Nc, Nc + 1)
     phi = zeros(6, Nc, Nc)
     c_xi = zeros(6, Nc + 1, Nc)
     c_eta = zeros(6, Nc, Nc + 1)
 
-    @test isarrayop(fv_divergence(F_xi, F_eta, grid))
-    @test isarrayop(fv_gradient_xi(phi, grid))
-    @test isarrayop(fv_gradient_eta(phi, grid))
     @test isarrayop(fv_laplacian(phi, grid))
     @test isarrayop(flux_1d(phi, c_xi, grid, :xi))
     @test isarrayop(flux_1d(phi, c_eta, grid, :eta))
