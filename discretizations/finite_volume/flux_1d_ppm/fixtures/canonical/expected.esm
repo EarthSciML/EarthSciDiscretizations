@@ -1,0 +1,47 @@
+{
+  "rule": "flux_1d_ppm",
+  "applicable": false,
+  "skip_reason": "See input.esm — pending the face-staggered binding contract + ghost-extended input contract pieces of the ESS schema (flux_1d_ppm.json `schema_gaps`). Hand-pinned numeric values below are reproduced bit-for-bit by `flux_1d_ppm_arrayop` (the symbolic ArrayOp reference in src/operators/flux_1d.jl) on the input.esm grid.",
+  "comment": "Two single-face fluxes on the smooth sinusoidal profile from input.esm. The CW84 limiter is inactive on both sides of the interface — `is_extremum`, `overshoot_left`, `overshoot_right` are all false on both the left-cell and right-cell reconstructions — so the reported flux equals the unlimited PPM Courant integral. By symmetry of the sinusoidal sampling around the face (q[k+8] = -q[k] for the antisymmetric profile centred at the face), F_neg = -F_pos to within floating-point roundoff.",
+  "result": {
+    "name": "F_{i+1/2}",
+    "cases": [
+      {
+        "label": "positive_courant",
+        "c": 0.3,
+        "v": 1.0,
+        "selected_branch": "int_left  (upwind cell is the LEFT cell; sign(c) >= 0)",
+        "flux": 1.2494903985806707e-01
+      },
+      {
+        "label": "negative_courant",
+        "c": -0.3,
+        "v": 1.0,
+        "selected_branch": "int_right (upwind cell is the RIGHT cell; sign(c) < 0)",
+        "flux": -1.2494903985806687e-01
+      }
+    ]
+  },
+  "intermediate_values": {
+    "comment": "Reproducible byte-for-byte intermediates for the rule's AST sub-expressions. Useful for diagnosing a future walker materialization that disagrees on F_{i+1/2} only.",
+    "qm3":  9.2387953251128674e-01,
+    "qm2":  9.2387953251128674e-01,
+    "qm1":  3.8268343236508989e-01,
+    "q0":  -3.8268343236508967e-01,
+    "qp1": -9.2387953251128652e-01,
+    "qp2": -9.2387953251128663e-01,
+    "qi_half":      1.1102230246251565e-16,
+    "ql_L_raw":     7.1706205449903671e-01,
+    "qr_L_raw":     1.1102230246251565e-16,
+    "ql_R_raw":     1.1102230246251565e-16,
+    "qr_R_raw":    -7.1706205449903637e-01,
+    "limiter_left":  { "is_extremum": false, "overshoot_left": false, "overshoot_right": false, "ql_lim":  7.1706205449903671e-01, "qr_lim":  1.1102230246251565e-16 },
+    "limiter_right": { "is_extremum": false, "overshoot_left": false, "overshoot_right": false, "ql_lim":  1.1102230246251565e-16, "qr_lim": -7.1706205449903637e-01 },
+    "dq_L":  -7.1706205449903659e-01,
+    "q6_L":   1.4491443069342891e-01,
+    "dq_R":  -7.1706205449903648e-01,
+    "q6_R":  -1.4491443069342924e-01
+  },
+  "tolerance": 1.0e-12,
+  "notes": "Bit-equivalence check vs the imperative `flux_1d_ppm_arrayop` ArrayOp on this single interface. Once the ESS Layer-A canonical-form rule engine accepts op=\"flux\" with per-face bindings (`$c`, `$v`) and a ghost-extended input contract (see flux_1d_ppm.json `schema_gaps`), the walker materializes this rule against the canonical input and byte-compares against the two `flux` signatures above (1e-12 relative tolerance). Convergence of the underlying PPM scheme is verified separately by test/test_transport_2d.jl and test/integration_cases/cubed_sphere_advection.jl on the cubed-sphere wrapper."
+}

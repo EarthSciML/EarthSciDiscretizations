@@ -1,0 +1,56 @@
+{
+  "rule": "flux_1d_ppm",
+  "applicable": false,
+  "skip_reason": "ESS's `discretize` does not yet support op=\"flux\" with the per-face bindings (`$c`, `$v`) and ghost-extended input contract that this rule requires (see flux_1d_ppm.json `schema_gaps`: face_staggered_courant_binding + ghost_extended_input_contract). Once the schema extensions land, the walker should materialize this rule against the input below and byte-compare each interior face flux to the hand-pinned values in expected.esm. Until then, the same hand-pinned single-face values live inline in test/test_flux_1d_ppm_rule.jl as a Layer-A' regression against `flux_1d_ppm_arrayop` (the symbolic ArrayOp form of the imperative reference path).",
+  "comment": "Hand-pinned single-face PPM fluxes on a smooth profile. The grid is uniform 1D Cartesian with one ghost cell on each side beyond the Ng=3 ghost padding required by the {-3,...,+2} stencil — the input field is a length-(N+2*Ng) cell-averaged sampling of a sinusoid, large enough that the CW84 limiter is inactive on every reported face (so the reported flux equals the unlimited PPM Courant integral). Two cases: positive-Courant (c>0) selects int_left; negative-Courant (c<0) selects int_right.",
+  "grid": {
+    "family": "cartesian",
+    "axis": "x",
+    "N_interior": 8,
+    "ghost_width": 3,
+    "comment": "Cell index domain is k in 1..(N_interior+2*ghost_width) = 1..14. Interior cells are at k=4..11. The reported face is F_{i+1/2} where the right cell of the face is i+1 = 8 (interior cell 5); the 6-point stencil consumes cells {5, 6, 7, 8, 9, 10} from the extended array (offsets {-3,-2,-1,0,1,2} relative to right cell)."
+  },
+  "fields": [
+    {
+      "name": "q",
+      "stagger": "cell_center",
+      "shape": [14],
+      "form": "q[k] = sin(2*pi*(k-3.5)/8) for k in 1..14  (sin sampled at the center of each cell, with cell width dx=1 and the interior domain x in [0, 8])",
+      "sampling": "cell_center"
+    },
+    {
+      "name": "c_pos",
+      "stagger": "face",
+      "value": 0.3,
+      "comment": "Positive-Courant case: face value c = 0.3 selects the int_left branch (upwind cell is the LEFT cell)."
+    },
+    {
+      "name": "c_neg",
+      "stagger": "face",
+      "value": -0.3,
+      "comment": "Negative-Courant case: face value c = -0.3 selects the int_right branch (upwind cell is the RIGHT cell)."
+    },
+    {
+      "name": "v",
+      "stagger": "face",
+      "value": 1.0,
+      "comment": "Face velocity. The flux is v * (int_left or int_right); v=1 makes the reported flux equal to the swept-volume average."
+    }
+  ],
+  "operator": {
+    "op": "flux",
+    "args": ["q", "c", "v"],
+    "form": "ppm",
+    "dim": "x"
+  },
+  "interior_face": {
+    "comment": "Single face F_{i+1/2} reported, where the right cell of the face is interior cell 5 (extended index 8). The 6-cell support {extended indices 5..10} sits well within the ghost-padded array, so no ghost-cell handling enters this case.",
+    "i_face_extended": 8
+  },
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "flux_1d_ppm_arrayop",
+    "path": "src/operators/flux_1d.jl",
+    "comment": "Imperative reference. Each `expected.flux` value is computed by `flux_1d_ppm_arrayop` (the symbolic ArrayOp form) on a length-1 panel ghost-extended with this same q profile, with face-Courant `c` and face-velocity `v` from this fixture. The walker's byte-comparison tolerance is 1e-12 relative."
+  }
+}

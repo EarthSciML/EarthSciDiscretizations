@@ -1,0 +1,272 @@
+{
+  "discretizations": {
+    "flux_1d_ppm": {
+      "applies_to": {
+        "op": "flux",
+        "args": ["$q", "$c", "$v"],
+        "form": "ppm",
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "ppm_courant_integral",
+      "accuracy": "O(h^3) on smooth profiles where the CW84 limiter is inactive; degrades to O(h) at active monotonicity-limiter constraints and inside two cells of any boundary that the ghost-fill cannot reach.",
+      "reference": "Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.5)-(1.10): 4th-order interior interpolation of cell-averaged data to the cell edge, sub-grid parabolic profile, and the (1.7)-(1.10) monotonicity limiter. The Courant-fraction flux integral (parabolic profile averaged over the swept volume `c·dx`) is the standard PPM upwind flux of CW84 §4. Flux-form 1D advection composition follows Lin & Rood (1996) MWR. Reference imperative implementation in src/operators/flux_1d.jl (`flux_1d_ppm!`, `flux_1d_ppm_arrayop`, `_build_ppm_face_expr_xi/eta`, `_ppm_limit_cw84_sym`) on a CubedSphereGrid; the Cartesian core encoded here matches that computation in-panel verbatim.",
+      "produces": "F_{i+1/2}",
+      "outputs": ["F_{i+1/2}"],
+      "monotone": true,
+      "tvd": false,
+      "upwind_biased": true,
+      "composes": [
+        "ppm_reconstruction (unlimited 4th-order edge values; same coefficients as discretizations/finite_volume/ppm_reconstruction.json)",
+        "colella_woodward_1984 limiter (closed-form ifelse AST; matches discretizations/finite_volume/vertical_remap.json `limiter` block bit-for-bit at the AST level)",
+        "Courant-fraction flux integral (CW84 §4) — area-averaged value swept through the interface over one time step",
+        "upwind selection by ifelse on sign of `$c`"
+      ],
+      "stencil_support": {
+        "comment": "Six cell-averaged values are consumed at each interface. Indexed relative to the *right cell* of the face (offset 0); the face F_{i+1/2} is the right edge of cell i (offset 0) and the left edge of cell i+1 (offset 1).",
+        "offsets": [-3, -2, -1, 0, 1, 2],
+        "selectors": [
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": -3 }, "role": "qm3 — left tail for the left-cell q_left edge value" },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": -2 }, "role": "qm2 — extreme left of the qi_half stencil" },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset": -1 }, "role": "qm1 — left cell of the interface (cell i)" },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset":  0 }, "role": "q0 — right cell of the interface (cell i+1)" },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset":  1 }, "role": "qp1 — extreme right of the qi_half stencil" },
+          { "selector": { "kind": "cartesian", "axis": "$x", "offset":  2 }, "role": "qp2 — right tail for the right-cell q_right edge value" }
+        ]
+      },
+      "edge_value_stencil": {
+        "comment": "CW84 eq. (1.6): 4th-order interpolation of cell-averaged data to the interface F_{i+1/2}. Same coefficients as ppm_reconstruction.json `stencil.q_right_edge`. The interior-cell q_left / q_right edges are obtained by shifting this stencil one cell.",
+        "produces": "qi_half  (interface value between qm1 and q0)",
+        "expression": {
+          "op": "-",
+          "args": [
+            { "op": "*", "args": [{ "op": "/", "args": [7, 12] }, { "op": "+", "args": ["qm1", "q0"] }] },
+            { "op": "*", "args": [{ "op": "/", "args": [1, 12] }, { "op": "+", "args": ["qm2", "qp1"] }] }
+          ]
+        },
+        "left_cell_edges": {
+          "comment": "Edges of the *left* cell (cell i, offset -1). The right edge of cell i is qi_half; the left edge uses the stencil shifted one cell to the left.",
+          "ql_L_raw": {
+            "comment": "Left edge of cell i — same 4-point CW84 form as qi_half, shifted by -1.",
+            "expression": {
+              "op": "-",
+              "args": [
+                { "op": "*", "args": [{ "op": "/", "args": [7, 12] }, { "op": "+", "args": ["qm2", "qm1"] }] },
+                { "op": "*", "args": [{ "op": "/", "args": [1, 12] }, { "op": "+", "args": ["qm3", "q0"] }] }
+              ]
+            }
+          },
+          "qr_L_raw": "qi_half"
+        },
+        "right_cell_edges": {
+          "comment": "Edges of the *right* cell (cell i+1, offset 0). The left edge of cell i+1 is qi_half; the right edge uses the stencil shifted one cell to the right.",
+          "ql_R_raw": "qi_half",
+          "qr_R_raw": {
+            "comment": "Right edge of cell i+1 — same 4-point CW84 form as qi_half, shifted by +1.",
+            "expression": {
+              "op": "-",
+              "args": [
+                { "op": "*", "args": [{ "op": "/", "args": [7, 12] }, { "op": "+", "args": ["q0", "qp1"] }] },
+                { "op": "*", "args": [{ "op": "/", "args": [1, 12] }, { "op": "+", "args": ["qm1", "qp2"] }] }
+              ]
+            }
+          }
+        }
+      },
+      "limiter": {
+        "comment": "Colella & Woodward (1984) §4 monotonicity limiter applied independently to each upwind cell's reconstruction. Closed-form ExpressionNode AST so the rule is evaluator-agnostic; matches src/operators/reconstruction.jl `_ppm_limit_cw84_sym` (the symbolic-tracing-safe form using ifelse) bit-for-bit at the AST level. Identical block to discretizations/finite_volume/vertical_remap.json `limiter`.",
+        "name": "colella_woodward_1984",
+        "inputs": ["ql", "qr", "qi"],
+        "outputs": ["ql_lim", "qr_lim"],
+        "auxiliary": {
+          "is_extremum": {
+            "comment": "True when q[i] is a local extremum within the stencil — flatten the parabola to a constant.",
+            "op": "<=",
+            "args": [
+              { "op": "*", "args": [
+                  { "op": "-", "args": ["qr", "qi"] },
+                  { "op": "-", "args": ["qi", "ql"] }
+              ]},
+              0
+            ]
+          },
+          "ql1": { "op": "ifelse", "args": ["is_extremum", "qi", "ql"] },
+          "qr1": { "op": "ifelse", "args": ["is_extremum", "qi", "qr"] },
+          "dq": { "op": "-", "args": ["qr1", "ql1"] },
+          "q6": {
+            "op": "*",
+            "args": [
+              6,
+              { "op": "-", "args": [
+                  "qi",
+                  { "op": "*", "args": [
+                      { "op": "/", "args": [1, 2] },
+                      { "op": "+", "args": ["ql1", "qr1"] }
+                  ]}
+              ]}
+            ]
+          },
+          "overshoot_left": {
+            "comment": "Right edge sits past the parabola's interior extremum; pull the LEFT edge inward.",
+            "op": ">",
+            "args": [
+              { "op": "*", "args": ["dq", "q6"] },
+              { "op": "^", "args": ["dq", 2] }
+            ]
+          },
+          "overshoot_right": {
+            "comment": "Left edge sits past the parabola's interior extremum; pull the RIGHT edge inward.",
+            "op": ">",
+            "args": [
+              { "op": "-", "args": [{ "op": "^", "args": ["dq", 2] }] },
+              { "op": "*", "args": ["dq", "q6"] }
+            ]
+          }
+        },
+        "ql_lim": {
+          "op": "ifelse",
+          "args": [
+            "overshoot_left",
+            { "op": "-", "args": [
+                { "op": "*", "args": [3, "qi"] },
+                { "op": "*", "args": [2, "qr1"] }
+            ]},
+            "ql1"
+          ]
+        },
+        "qr_lim": {
+          "op": "ifelse",
+          "args": [
+            "overshoot_right",
+            { "op": "-", "args": [
+                { "op": "*", "args": [3, "qi"] },
+                { "op": "*", "args": [2, "ql1"] }
+            ]},
+            "qr1"
+          ]
+        }
+      },
+      "flux_integral": {
+        "comment": "CW84 §4 Courant-fraction flux integral. Within the upwind cell, integrate the (limited) parabolic profile over the swept fraction `|c|` of the cell; the result is the area-averaged value crossing the interface. Closed-form expressions used in both branches: `dq = qr - ql`, `q6 = 6·(qi − (ql + qr)/2)`, `c_abs = |c|`. The full per-interface flux is `v · ifelse(c >= 0, int_left, int_right)` with the upwind branch encoded directly in the AST — no caller-side branching on sign(c).",
+        "int_left": {
+          "comment": "Positive flow (c >= 0): upwind cell is the LEFT cell. Reconstruction (ql_L, qr_L, qm1) is CW84-limited above. Integrate from x = 1 - c_abs to x = 1.",
+          "expression": {
+            "op": "-",
+            "args": [
+              "qr_L",
+              { "op": "*", "args": [
+                  { "op": "/", "args": [1, 2] },
+                  "c_abs",
+                  { "op": "-", "args": [
+                      "dq_L",
+                      { "op": "*", "args": [
+                          "q6_L",
+                          { "op": "-", "args": [
+                              1,
+                              { "op": "*", "args": [
+                                  { "op": "/", "args": [2, 3] },
+                                  "c_abs"
+                              ]}
+                          ]}
+                      ]}
+                  ]}
+              ]}
+            ]
+          }
+        },
+        "int_right": {
+          "comment": "Negative flow (c < 0): upwind cell is the RIGHT cell. Reconstruction (ql_R, qr_R, q0) is CW84-limited above. Integrate from x = 0 to x = c_abs.",
+          "expression": {
+            "op": "+",
+            "args": [
+              "ql_R",
+              { "op": "*", "args": [
+                  { "op": "/", "args": [1, 2] },
+                  "c_abs",
+                  { "op": "+", "args": [
+                      "dq_R",
+                      { "op": "*", "args": [
+                          "q6_R",
+                          { "op": "-", "args": [
+                              1,
+                              { "op": "*", "args": [
+                                  { "op": "/", "args": [2, 3] },
+                                  "c_abs"
+                              ]}
+                          ]}
+                      ]}
+                  ]}
+              ]}
+            ]
+          }
+        },
+        "auxiliary": {
+          "c_abs": { "op": "abs", "args": ["$c"] },
+          "dq_L": { "op": "-", "args": ["qr_L", "ql_L"] },
+          "q6_L": {
+            "op": "*",
+            "args": [
+              6,
+              { "op": "-", "args": [
+                  "qm1",
+                  { "op": "*", "args": [
+                      { "op": "/", "args": [1, 2] },
+                      { "op": "+", "args": ["ql_L", "qr_L"] }
+                  ]}
+              ]}
+            ]
+          },
+          "dq_R": { "op": "-", "args": ["qr_R", "ql_R"] },
+          "q6_R": {
+            "op": "*",
+            "args": [
+              6,
+              { "op": "-", "args": [
+                  "q0",
+                  { "op": "*", "args": [
+                      { "op": "/", "args": [1, 2] },
+                      { "op": "+", "args": ["ql_R", "qr_R"] }
+                  ]}
+              ]}
+            ]
+          }
+        }
+      },
+      "flux_form": {
+        "produces": "F_{i+1/2}",
+        "comment": "Final face-flux composition: PPM-reconstructed-and-limited cell-edge values from each side of the interface, integrated over the Courant-swept fraction of the upwind cell, multiplied by the face velocity. Upwind cell selection is encoded by `ifelse(c >= 0, int_left, int_right)`; no caller-side branching on sign(c). The CFL-violation guard `|c| <= 1` of the reference imperative implementation (`ppm_flux_integral`) is enforced by the caller via `compute_courant_numbers` clamping — the AST integrand is mathematically continuous beyond `|c| = 1` but no longer represents a swept-volume average.",
+        "expression": {
+          "op": "*",
+          "args": [
+            "$v",
+            { "op": "ifelse", "args": [
+                { "op": ">=", "args": ["$c", 0] },
+                "int_left",
+                "int_right"
+            ]}
+          ]
+        }
+      },
+      "composition_hint": "Caller computes the face-staggered Courant `c_{i+1/2} = u_{i+1/2}·dt/dx` (uniform Cartesian) or via the cubed-sphere panel-boundary-aware accessor (`_get_courant_xi/_get_courant_eta` in src/operators/flux_1d.jl) and the face velocity `v_{i+1/2}`; this rule then yields the per-face PPM flux. The cell-centred tendency follows from the FV divergence `T_i = -(F_{i+1/2}·dx_{i+1/2} - F_{i-1/2}·dx_{i-1/2}) / A_i` (or composes with `divergence_arakawa_c` on a C-grid). Sibling rule to `lax_friedrichs_flux` — same `op=flux` shape, same per-face `$c`/`$v` binding contract, but high-order PPM upwind in place of first-order LF.",
+      "schema_gaps": {
+        "comment": "Three ESS schema extensions are required before this rule is fully materializable from JSON alone. Until they land, the runtime path is src/operators/flux_1d.jl (`flux_1d_ppm!` for the loop form; `flux_1d_ppm_arrayop` for the symbolic form). The rule file is authored declaratively (matching the `vertical_remap` precedent for nonlinear PPM rules and `weno5_advection`'s closed-AST nonlinear-weights pattern) so the math, references, and AST fragments are reproducible.",
+        "face_staggered_courant_binding": {
+          "tracker": "shared with discretizations/finite_volume/lax_friedrichs_flux.json (dsc-35x follow-ups); same gap as the latlon `cos_lat` per dsc-7jc, scoped here as the PPM-specific instance of dsc-cuj's stagger-aware binding follow-up.",
+          "summary": "The face-Courant `$c` and face-velocity `$v` are per-face bindings (analogous to the slope-ratio `$r` in flux_limiter_minmod), not stencil-offset selectors. ESS's verify_mms_convergence today binds only scalar per-axis spacing symbols at sweep time; until per-face bindings land, walker fixtures must declare applicable=false."
+        },
+        "ghost_extended_input_contract": {
+          "tracker": "discretizations/SELECTOR_KINDS.md (face-stagger / time-varying bindings follow-ups off dsc-35x).",
+          "summary": "The 6-point cartesian stencil consumes cell-averaged values at offsets {-3, -2, -1, 0, 1, 2} relative to the right cell of the interface. At domain (or panel) boundaries the {-3, -2} and {+2} offsets reach outside the physical domain; the imperative path resolves this by passing a ghost-extended q_ext (Ng = 3 ghost cells per side). ESS's stencil contract today does not declare how a rule consumes ghost cells — pending a `boundary_policy` / `ghost_width` rule-level field this contract has to live in prose."
+        },
+        "panel_boundary_distance_handling": {
+          "tracker": "shared with discretizations/finite_volume/lax_friedrichs_flux.json (dsc-35x boundary_policy follow-up).",
+          "summary": "On the cubed-sphere wrapper (`flux_1d_ppm!` / `flux_1d_ppm_arrayop`) the per-face Courant uses `grid.dist_xi_bnd` / `grid.dist_eta_bnd` at panel-boundary interfaces and `grid.dist_xi` / `grid.dist_eta` interior. The Cartesian core encoded here uses a single `$c` per face and ignores the panel split; the cubed-sphere wrapper builds a single distance array via `_build_interface_distances` and then applies this rule per face. Encoding the panel split in-rule needs the `boundary_policy` schema feature."
+        }
+      },
+      "limitations": [
+        "Cubed-sphere wrapper (src/operators/flux_1d.jl): in-panel coefficients match the Cartesian core verbatim; cross-panel ghost extension and panel-boundary distance handling live in the cubed_sphere accessor (src/grids/panel_connectivity.jl) and in `_build_interface_distances`. Same convention as `lax_friedrichs_flux` and the limiter rules — the rule references in-panel offsets only and is not yet expressible across the panel split because the cubed_sphere selector kind has no face-stagger slot.",
+        "Cross-panel boundary-flux matching (`_match_boundary_fluxes_xi!`, `_match_boundary_fluxes_eta!`, `_match_rotated_boundary_fluxes!` in src/operators/flux_1d.jl) is a post-stencil mass-flux average over the two panels' independently computed values. This is a non-linear post-processing step (parallel to the FV3 eq. 6.6 monotonicity clamp documented as a non-linear post-processing step in `ppm_edge_cubed_sphere`) and lives outside the §7 stencil contract."
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "rule": "flux_1d_ppm",
+  "applicable": false,
+  "skip_reason": "flux_1d_ppm is a face-staggered nonlinear (CW84-limited + upwind-selected) flux rule parameterised by per-face bindings `$c` and `$v` and a ghost-extended cell-averaged input `$q`. Three issues block the §7 verify_mms_convergence harness today: (1) the rule output is at the face stagger (i+1/2), not cell-centred — the harness's smooth-MMS sweep is wired for cell-centred outputs (same gap as `lax_friedrichs_flux` per dsc-35x); (2) per-face bindings (`$c`, `$v`) are not yet supported by the binding contract (today only scalar bindings like `dx`, `R`, `cos_lat` are bound at sweep time — face fields are the dsc-cuj stagger-aware-binding follow-up); (3) the {-3, -2, ..., +2} stencil reaches three cells past the right cell of the face — the harness has no `ghost_width` / `boundary_policy` rule-level field to declare this consumption. When applied as part of a full transport scheme (PPM flux + FV divergence + RK time stepping on uniform Cartesian linear advection of a smooth profile), the scheme is theoretically O(h^3) in L_inf where the limiter is inactive and degrades to O(h) at active limiter constraints — a follow-up Layer-B' MMS-transport fixture (mirroring the limiter `tvd_check.esm`) is the right shape, not a bare reconstruction-style sweep. Numeric coverage of the underlying PPM scheme today lives at test/test_transport_1d.jl, test/test_transport_2d.jl, and test/integration_cases/cubed_sphere_advection.jl against the runtime path src/operators/flux_1d.jl::flux_1d_ppm! and ::flux_1d_ppm_arrayop. The hand-pinned single-face values in ../canonical/ exercise the closed-form AST shape directly.",
+  "manufactured_solution_proposed": "q(x, t) = sin(2*pi*(x - u*t)/L) on a periodic 1D Cartesian grid with constant velocity u and linear advection dq/dt = -u*dq/dx; analytic flux F(x_face, t) = u*q(x_face, t). At fixed t the face-Courant is c = u*dt/dx (constant per face), so the harness needs only one per-face binding to be a constant scalar; the cell-averaged q is sampled exactly from the analytic profile at cell centres in the smooth (limiter-inactive) regime.",
+  "grids_proposed": [
+    { "n": 32,  "label": "n32"  },
+    { "n": 64,  "label": "n64"  },
+    { "n": 128, "label": "n128" }
+  ],
+  "expected_min_order_proposed": 2.7
+}
