@@ -90,18 +90,25 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   cumulative-pressure intersection of the new layers with the old
   layers. The rule is *conservative* (column-integrated `q · dp`
   is preserved exactly in real arithmetic) and *monotonicity-
-  preserving* under the CW84 limiter. The conservative-remap rule
-  type and the time-varying per-cell vertical metric binding are two
-  ESS schema extensions that this rule needs before it can be
-  materialized straight from JSON; both are documented in the rule's
-  `schema_gaps` block (see also `docs/rule-catalog.md` row
-  `vertical_remap_lin_2004` and `discretizations/SELECTOR_KINDS.md`
-  decision #3). Walker fixtures under
-  `vertical_remap/fixtures/{convergence,conservation,monotonicity}/`
-  declare `applicable: false` and link to the runtime coverage at
-  `test/test_vertical_remap.jl` until the schema gaps land. The
-  Julia runtime path at `src/operators/vertical_remap.jl` remains
-  the live implementation.
+  preserving* under the CW84 limiter.
+
+  **Status: documentation-only — deferred to a future phase-hooks
+  RFC (dsc-otd).** Conservative remap is structurally a phase-hook
+  operation (Lagrangian → Eulerian re-gridding between timesteps)
+  with a variable-arity, data-dependent neighbor list and time-
+  varying per-column metrics, none of which fit the §7 stencil
+  rule schema. ESS will introduce a `phase_hooks` /
+  `integration_callbacks` schema block in a future RFC; until then
+  the rule file is retained as a reference artifact (math,
+  references, AST fragments) and is *not* executed by the rule
+  engine. There is **no imperative implementation in any binding
+  (Julia/Python/Rust/TypeScript) and none is to be re-added** —
+  see the rule's `schema_gaps` block for the disposition. The
+  walker discovers the rule (Layer-A canonical-form discovery
+  exercises the file) and reports Layer-B as
+  "fixture-declared not applicable" with the phase-hook deferral
+  reason (see [`Lagrangian vertical scheme`](#lagrangian-vertical-scheme--vertical-remapping-not-yet-executable)
+  below).
 - [`lax_friedrichs_flux.json`](lax_friedrichs_flux.json) — Lax &
   Friedrichs (1954) numerical flux for linear advection. Two-point
   cartesian flux stencil at the face: F_{i+1/2} = max(c,0)·q_i +
@@ -157,3 +164,30 @@ Combining a limiter with PPM (`ppm_reconstruction.json`) or WENO-5
 interface from the relevant reconstruction values and scale the
 high-order contribution by φ(`r`). The limiter rule is entirely
 reconstruction-agnostic.
+
+## Lagrangian vertical scheme — vertical remapping not yet executable
+
+Atmospheric finite-volume dynamical cores using a Lagrangian vertical
+coordinate (FV3-style) require periodic conservative remapping of fields
+from the drifted Lagrangian layers back to a target Eulerian (hybrid
+sigma-pressure) vertical grid. Conservative remap is structurally a
+phase-hook operation — it runs between timesteps, has a data-dependent
+variable-arity neighbor list (cumulative-pressure overlap of `dp_old`
+with `dp_new`), and does not fit the §7 stencil rule schema. ESD's
+current rule engine and walker operate without this step.
+
+The math is documented declaratively in
+[`vertical_remap.json`](vertical_remap.json) as a reference artifact
+(the same way `weno5_advection` was carried before AST-walker dispatch
+landed in ESS). The rule file is **not** executed today and there is
+**no imperative implementation in any binding**. Models needing a
+Lagrangian vertical configuration must either avoid the Lagrangian
+path or use the Eulerian-vertical configurations supported today
+(e.g. [`centered_2nd_uniform_vertical`](../finite_difference/centered_2nd_uniform_vertical.json)).
+
+Tracking: a future ESS RFC will introduce a `phase_hooks` /
+`integration_callbacks` schema block for declarative phase-hook
+contracts (vertical remap, coupler exchange, restart IO). Until then
+vertical remap is intentionally documentation-only. See
+[`vertical_remap.json`](vertical_remap.json)'s `schema_gaps` block
+and ESD/dsc-otd for the disposition.

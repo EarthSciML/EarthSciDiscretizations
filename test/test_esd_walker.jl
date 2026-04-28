@@ -96,13 +96,21 @@ using TestItems
     # dispatch in mms_convergence — the rule (dsc-rar) was rewritten as a
     # closed arrayop replacement in §4.2 ops, dropping the `stencil` field
     # the existing kernels dispatch on. Tracked by hq-2t0k4.
+    # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
+    # → Eulerian re-gridding between timesteps), not a §7 stencil rule. The
+    # JSON file is retained as a reference artifact documenting the Lin (2004)
+    # PPM-remap math and AST shape for the eventual phase-hook contract; there
+    # is no imperative implementation in any binding. The convergence fixture
+    # ships applicable:false with a phase-hook deferral reason so the walker
+    # SKIPs Layer-B with "fixture-declared not applicable".
     not_applicable_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
                                    ("finite_difference", "periodic_bc"),
                                    ("finite_difference", "covariant_laplacian_cubed_sphere"),
                                    ("finite_difference", "nn_diffusion_mpas"),
                                    ("finite_volume", "flux_limiter_minmod"),
                                    ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "transport_2d")])
+                                   ("finite_volume", "transport_2d"),
+                                   ("finite_volume", "vertical_remap")])
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs
