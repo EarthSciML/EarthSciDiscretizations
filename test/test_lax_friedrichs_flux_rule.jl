@@ -120,3 +120,88 @@ end
     # regardless of the surrounding q values — no caller-side `if c >= 0` branch.
     @test F[5] == 0.0
 end
+
+# ---------------------------------------------------------------------------
+# Cubed-sphere face-stagger sibling rules (dsc-0fd)
+# ---------------------------------------------------------------------------
+# The xi/eta sibling files mirror the Cartesian LF flux algebra
+# coefficient-for-coefficient with cubed_sphere selectors at offsets {-1, 0}
+# at cell_center stagger plus a face-staggered Courant `$c` at u_edge/v_edge.
+# Cross-panel ghost extension and panel-boundary distance handling for `$c`
+# live in the cubed_sphere grid accessor.
+
+@testitem "lax_friedrichs_flux_cubed_sphere_{xi,eta} rules are discoverable and well-formed" begin
+    using EarthSciDiscretizations
+    using EarthSciDiscretizations: load_rules
+    using JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    for (rname, axis, stagger_out) in (
+            ("lax_friedrichs_flux_cubed_sphere_xi", "xi", "u_edge"),
+            ("lax_friedrichs_flux_cubed_sphere_eta", "eta", "v_edge"),
+        )
+        idx = findfirst(r -> r.name == rname, rules)
+        @test idx !== nothing
+        rule = rules[idx]
+        @test rule.family == :finite_volume
+        @test isfile(rule.path)
+
+        content = read(rule.path, String)
+        @test occursin("\"applies_to\"", content)
+        @test occursin("\"op\": \"flux\"", content)
+        @test occursin("\"dim\": \"$axis\"", content)
+        @test occursin("\"grid_family\"", content)
+        @test occursin("\"cubed_sphere\"", content)
+        @test occursin("\"form\": \"lax_friedrichs\"", content)
+        @test occursin("\"emits_location\": \"$stagger_out\"", content)
+        @test occursin("\"cubed_sphere_stagger\"", content)
+        @test occursin("\"O(h)\"", content)
+        # 2-cell stencil at offsets {-1, 0} at cell_center stagger.
+        @test occursin("\"stagger\": \"cell_center\"", content)
+        @test occursin("\"axis\": \"$axis\"", content)
+        @test occursin("\"offset\": -1", content)
+        @test occursin("\"offset\": 0", content)
+        # Face-staggered Courant binding via `reads` block.
+        @test occursin("\"reads\"", content)
+        @test occursin("\"\$c\"", content)
+        @test occursin("\"stagger\": \"$stagger_out\"", content)
+        # Upwind selection encoded directly via `abs` (no panel field).
+        @test occursin("\"abs\"", content)
+        @test !occursin("\"panel\"", content)
+
+        # JSON round-trip + 2-stencil-row shape check.
+        parsed = JSON.parse(content)
+        @test haskey(parsed, "discretizations")
+        @test haskey(parsed["discretizations"], rname)
+        spec = parsed["discretizations"][rname]
+        @test spec["stencil"] isa AbstractArray
+        @test length(spec["stencil"]) == 2
+        offsets = sort([s["selectors"][1]["offset"] for s in spec["stencil"]])
+        @test offsets == [-1, 0]
+        for entry in spec["stencil"]
+            @test entry["selectors"][1]["kind"] == "cubed_sphere"
+            @test entry["selectors"][1]["stagger"] == "cell_center"
+            @test entry["selectors"][1]["axis"] == axis
+        end
+    end
+end
+
+@testitem "lax_friedrichs_flux_cubed_sphere: hand-pinned per-face flux equivalence" begin
+    # The cubed-sphere wrapper's per-face flux algebra is identical to the
+    # Cartesian core: F = (c+|c|)/2·q_west + (c-|c|)/2·q_east. This test
+    # mirrors the Cartesian hand-pinned check on coordinate-reflected naming
+    # (q_west / q_east instead of q_i / q_{i+1}) — same arithmetic, no
+    # cubed_sphere accessor needed because the algebra is selector-blind.
+    q_west = [1.0, 2.0, 4.0, 8.0, 16.0]
+    q_east = [2.0, 4.0, 8.0, 16.0, 32.0]
+    c      = [0.5, -0.5, 0.5, -0.5, 0.0]
+
+    F_closed = [(c[k] + abs(c[k])) / 2 * q_west[k] + (c[k] - abs(c[k])) / 2 * q_east[k] for k in 1:5]
+    F_max    = [max(c[k], 0) * q_west[k] + min(c[k], 0) * q_east[k] for k in 1:5]
+    @test F_closed == F_max
+    @test F_closed == [0.5, -2.0, 2.0, -8.0, 0.0]
+    # c=0 zero-crossing: both coefficients vanish independent of surrounding q.
+    @test F_closed[5] == 0.0
+end

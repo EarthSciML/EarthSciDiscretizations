@@ -1,0 +1,40 @@
+{
+  "rule": "lax_friedrichs_flux_cubed_sphere_xi",
+  "grid": {
+    "family": "cubed_sphere",
+    "Nc": 4,
+    "R": 1.0,
+    "ghost_width": 1,
+    "comment": "c4 gnomonic equidistant cubed sphere; uniform isotropic spacing h = π/8 on each panel. The 2-cell stencil at offsets {-1, 0} along ξ at cell_center stagger does not require ghost cells beyond the immediate neighbor; cross-panel ghost cells (for the western face i=1 on each panel) are filled by the cubed_sphere grid accessor (src/grids/panel_connectivity.jl)."
+  },
+  "field": {
+    "name": "q",
+    "form": "q(p, i, j) = 2^(p-1) · (i + j)",
+    "sampling": "cell_center",
+    "comment": "Mixed integer-valued cell field — picks distinct values per panel/index so any indexing bug surfaces in the bit-pinned output. q ∈ [2, 64] over c4."
+  },
+  "courant": {
+    "name": "c",
+    "form": "c(p, i, j) = ((p + i + j) mod 5 - 2) / 4.0",
+    "sampling": "u_edge",
+    "stagger": "u_edge",
+    "axis": "xi",
+    "comment": "Mixed-sign Courant covering all four upwind branches: c < 0 (east upwind), c = 0 (no flux), c > 0 (west upwind), and the boundary case |c| = 1/2. Precomputed at u_edge stagger; for the canonical fixture the precomputation is pinned at-hand rather than routed through `compute_courant_numbers_arrayop` so the canonical equivalence check does not depend on the imperative Courant precomputation step."
+  },
+  "operator": {
+    "op": "flux",
+    "args": ["q", "c"],
+    "dim": "xi"
+  },
+  "interface_locus": {
+    "axis": "xi",
+    "stagger": "u_edge",
+    "comment": "ξ-direction face flux at u_edge stagger. The 2-cell stencil at offsets {-1, 0} along ξ at cell_center produces the value at the i+1/2 face between offsets 0 and 1; for face index i ∈ 1..Nc+1, the stencil samples cells (i-1, j) and (i, j) — at i=1 the (i-1) cell sits on the neighbor panel through ghost cells, and at i=Nc+1 the (i) cell sits on the neighbor panel through ghost cells."
+  },
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "flux_1d",
+    "path": "src/operators/flux_1d.jl",
+    "comment": "Imperative reference. The `flux_1d` ArrayOp combines LF face flux + FV divergence into a single tendency expression; the canonical fixture extracts the per-face flux F = (c+|c|)/2·q_west + (c-|c|)/2·q_east used inside `flux_1d` and pins it bit-for-bit (within 1e-12 relative tolerance). The Layer-A canonical-form rule engine, once wired with cubed_sphere face-stagger selectors and the panel-connectivity accessor, must produce bit-identical output when applied to this input."
+  }
+}

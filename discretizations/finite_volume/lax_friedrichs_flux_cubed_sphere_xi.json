@@ -1,0 +1,91 @@
+{
+  "enums": {
+    "cubed_sphere_stagger": {
+      "cell_center": 1,
+      "u_edge":      2,
+      "v_edge":      3,
+      "corner":      4
+    }
+  },
+  "discretizations": {
+    "lax_friedrichs_flux_cubed_sphere_xi": {
+      "applies_to": {
+        "op": "flux",
+        "args": ["$q", "$c"],
+        "dim": "xi"
+      },
+      "grid_family": "cubed_sphere",
+      "stagger": "C",
+      "stagger_enum": "cubed_sphere_stagger",
+      "form": "lax_friedrichs",
+      "requires_locations": ["cell_center", "u_edge"],
+      "emits_location": "u_edge",
+      "accuracy": "O(h)",
+      "reference": "Lax & Friedrichs (1954), Comm. Pure Appl. Math. 7(1):159-193 (LF flux); src/operators/flux_1d.jl `flux_1d` ArrayOp on `CubedSphereGrid` (imperative reference). The Cartesian core lives at `discretizations/finite_volume/lax_friedrichs_flux.json`; this rule is the cubed-sphere face-stagger ξ-direction wrapper that pairs the Cartesian LF flux algebra with cubed_sphere selectors and a per-face Courant binding precomputed by the grid accessor. The η-direction sibling lives in `lax_friedrichs_flux_cubed_sphere_eta.json`.",
+      "produces": "F_{i+1/2}",
+      "outputs": ["F_{i+1/2}"],
+      "monotone": true,
+      "tvd": true,
+      "notes": "ξ-direction Lax-Friedrichs numerical flux at a UEdge interface on the gnomonic equidistant cubed sphere. Uses cell-center scalars `$q` from the two cells flanking the ξ-face (offsets -1, 0 along ξ at cell_center stagger) and a face-staggered Courant `$c` (offset 0 along ξ at u_edge stagger). The closed-form upwind-blended stencil F = (c+|c|)/2·q_west + (c-|c|)/2·q_east mirrors `lax_friedrichs_flux` (Cartesian 1D) coefficient-for-coefficient — only the selector kind / stagger and the offset convention differ. Cross-panel ghost extension at the western u_edge of panel p (face index i=1) and the eastern u_edge (i=Nc+1) is resolved by the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); selectors carry no `panel` field per SELECTOR_KINDS.md decision #13. Panel-boundary distance handling for the Courant precomputation (grid.dist_xi_bnd ↔ grid.dist_xi at interior interfaces) is encapsulated in the accessor's `_get_courant_xi` / `compute_courant_numbers_arrayop` (src/operators/flux_1d.jl) — by the time this rule sees `$c` it is a single face-staggered array indexed by (p,i,j), with boundary distances already factored in.",
+      "panel_handling": "lives in the cubed_sphere grid accessor (src/grids/panel_connectivity.jl); the rule references in-panel offsets only. Selectors do NOT carry a `panel` field — cross-panel ghost extension and (for vector quantities) basis rotation happen below the rule layer.",
+      "metric_bindings": {
+        "comment": "The cubed-sphere LF flux algebra carries no metric coefficients of its own — the Courant `c` is the only per-face binding, and the cubed_sphere accessor precomputes it including panel-boundary distance handling. Reported here for cross-reference with the imperative `compute_courant_numbers` / `compute_courant_numbers_arrayop` (src/operators/flux_1d.jl).",
+        "c": "face-staggered Courant number c[p,i,j] = vel[p,i,j]·dt / dist_xi[p,i,j] at u_edge stagger; interior interfaces use grid.dist_xi (cell-center to cell-center distance), panel-boundary interfaces (i=1, i=Nc+1) use grid.dist_xi_bnd (full-cell-width distance to the neighbor-panel ghost cell). Precomputed by the accessor and consumed here as a single face-staggered binding."
+      },
+      "stencil": [
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi", "offset": -1 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        },
+        {
+          "selectors": [
+            { "kind": "cubed_sphere", "stagger": "cell_center", "axis": "xi", "offset": 0 }
+          ],
+          "coeff": {
+            "op": "/",
+            "args": [
+              { "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] },
+              2
+            ]
+          }
+        }
+      ],
+      "reads": [
+        { "name": "$c", "selector": { "kind": "cubed_sphere", "stagger": "u_edge", "axis": "xi", "offset": 0 } }
+      ],
+      "flux_form": {
+        "produces": "F_{i+1/2} at u_edge along ξ",
+        "comment": "Algebraic identity: F_{i+1/2} = (c+|c|)/2·q_west + (c-|c|)/2·q_east = max(c,0)·q_west + min(c,0)·q_east. `q_west` is the cell at ξ-offset -1 from the face (cell_center stagger), `q_east` at offset 0; `c` is the face's own Courant at u_edge offset 0. Upwind cell selection is encoded directly via `abs` — no caller-side branching on sign(c). Identical algebra to `lax_friedrichs_flux` with selector kind / stagger swapped.",
+        "expression": {
+          "op": "+",
+          "args": [
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "+", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_west"
+            ] },
+            { "op": "*", "args": [
+              { "op": "/", "args": [{ "op": "-", "args": ["$c", { "op": "abs", "args": ["$c"] }] }, 2] },
+              "$q_east"
+            ] }
+          ]
+        }
+      },
+      "composition_hint": "Caller precomputes face-staggered Courants `c[p,i,j] = u_face[p,i,j]·dt / dist[p,i,j]` (use `compute_courant_numbers_arrayop` in `src/operators/flux_1d.jl` until the boundary_policy schema feature lands and lets the accessor publish c directly), then applies this rule at every ξ-interface. Cell-centred tendency follows from FV divergence: T[p,i,j] = -(F[p,i+1,j]·dx[p,i+1,j] - F[p,i,j]·dx[p,i,j]) / area[p,i,j] — composes with `divergence_arakawa_c` (or, on cubed_sphere, the metric-aware FV divergence on a C-grid). Same first-order dissipative profile as the Cartesian core; retained as the cubed-sphere debugging / oracle scheme. Production transport on the cubed sphere should use the higher-order PPM-based flux (tracked at dsc-r1i, blocked on the same schema infrastructure).",
+      "schema_notes": "Face-stagger schema features used: (a) `cubed_sphere_stagger` enum (decision #17, pinned by dsc-247), (b) per-cell grid-accessor metric bindings on cubed_sphere (decision #18). The face-staggered Courant `$c` is consumed via the `reads` block at u_edge stagger — analogous to how `fv3_sinsg_flux_xi.json` consumes its face velocity `v` and how the Cartesian `lax_friedrichs_flux` consumes the slope-ratio-style scalar `$c`. Boundary_policy metadata (per dsc-35x follow-up) is NOT yet expressed in the rule schema — instead, panel-boundary distance handling lives in the cubed_sphere grid accessor's Courant precomputation, and this rule consumes the precomputed `$c` opaquely. When the boundary_policy schema feature lands, this rule's metric_bindings block should be extended with an explicit `boundary_policy` reference to grid.dist_xi_bnd; a follow-up bead is tracked off dsc-0fd.",
+      "limitations": [
+        "Output is at u_edge stagger (ξ-direction face flux only); the η-direction sibling is `lax_friedrichs_flux_cubed_sphere_eta`. There is no single multi-axis cubed_sphere LF flux rule because emits_location differs by axis (u_edge vs v_edge); a grid_dispatch / multi-axis rule form is a follow-up shared with dsc-r1i.",
+        "PPM-based cubed-sphere flux-form transport (`flux_1d_ppm_arrayop` in `src/operators/flux_1d.jl`) is a separate higher-order scheme tracked at dsc-r1i; not encoded here.",
+        "Same-direction panel-boundary flux matching (`_match_boundary_fluxes_xi!` in `src/operators/flux_1d.jl`) is a downstream conservation step performed AFTER the rule produces face fluxes; encoding the matcher in the schema (parallel to a post-stencil clamp like the FV3 monotonicity guard) is a follow-up shared with `ppm_edge_cubed_sphere`.",
+        "Rotated-boundary flux matching (`_match_rotated_boundary_fluxes!`, applies to ξ↔η panel connections) is a coupled-axis post-processing step that cannot be expressed by either of the per-axis sibling rules in isolation; remains in the imperative wrapper until a multi-axis post-processing schema feature lands."
+      ]
+    }
+  }
+}
