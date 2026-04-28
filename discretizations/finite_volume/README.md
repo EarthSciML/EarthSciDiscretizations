@@ -127,6 +127,31 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   `test/test_vertical_remap.jl` until the schema gaps land. The
   Julia runtime path at `src/operators/vertical_remap.jl` remains
   the live implementation.
+- [`flux_1d_ppm.json`](flux_1d_ppm.json) — Colella & Woodward (1984)
+  PPM-based 1D flux-form transport face flux. Composes the 4th-order
+  CW84 edge interpolation (eq. 1.6, same coefficients as
+  `ppm_reconstruction.json`) with the §4 monotonicity limiter (closed-
+  form ifelse AST, identical to `vertical_remap.json` `limiter` block
+  and `_ppm_limit_cw84_sym`), the Courant-fraction flux integral over
+  the swept volume of the upwind cell, and `ifelse(c >= 0, int_left,
+  int_right)` upwind selection. 6-point cartesian stencil at offsets
+  `{-3, -2, -1, 0, 1, 2}` relative to the right cell of the interface;
+  per-face Courant `$c` and velocity `$v` carried as bindings (same
+  contract as `lax_friedrichs_flux`). Layer-A canonical fixture under
+  `flux_1d_ppm/fixtures/canonical/` pins single-face flux on a smooth
+  sinusoidal profile (limiter inactive); both walker fixtures declare
+  `applicable: false` until ESS gains the face-staggered binding
+  contract + ghost-extended input contract (see the rule's
+  `schema_gaps` block — same dsc-35x follow-ups as
+  `lax_friedrichs_flux`, plus a `ghost_width` rule-level field for the
+  3-cell ghost reach). Inline regression in
+  `test/test_flux_1d_ppm_rule.jl` exercises the same pinned values
+  against the closed-form AST. Imperative path
+  (`flux_1d_ppm!`, `flux_1d_ppm_arrayop` in
+  `src/operators/flux_1d.jl`) remains the live implementation —
+  callers in `src/operators/transport_2d.jl` and tests are unmigrated;
+  same precedent as `vertical_remap.json` (deletion deferred until the
+  schema gaps land).
 - [`lax_friedrichs_flux.json`](lax_friedrichs_flux.json) — Lax &
   Friedrichs (1954) numerical flux for linear advection. Two-point
   cartesian flux stencil at the face: F_{i+1/2} = max(c,0)·q_i +

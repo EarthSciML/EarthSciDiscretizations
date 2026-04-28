@@ -3,6 +3,16 @@
 
 Provides both the original Lax-Friedrichs ArrayOp operator (for symbolic use)
 and a PPM-based numerical operator (for accurate transport).
+
+The Lax-Friedrichs face-flux core is mirrored declaratively as
+`discretizations/finite_volume/lax_friedrichs_flux.json` (in-panel Cartesian
+core only; the cubed-sphere wrapper awaits schema follow-ups). The PPM
+face-flux composition (`flux_1d_ppm!`, `flux_1d_ppm_arrayop`,
+`_build_ppm_face_expr_xi/eta`) is mirrored declaratively as
+`discretizations/finite_volume/flux_1d_ppm.json` (dsc-r1i); this imperative
+path remains the live implementation pending schema extensions documented
+in the rule's `schema_gaps` block (face-staggered Courant binding contract,
+ghost-extended input contract, panel-boundary distance handling).
 """
 
 """
