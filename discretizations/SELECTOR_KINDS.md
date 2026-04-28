@@ -258,6 +258,78 @@ Two-point centered FV divergence: $\nabla\cdot F = (u_x[i+1,j] - u_x[i,j])/\Delt
 for the encoded form and `divergence_arakawa_c/fixtures/canonical/` for the
 2×2 small-grid sanity fixture.
 
+## More structured-grid decisions (arakawa)
+
+| # | Question | Decision | Pinned by |
+|---|---|---|---|
+| 13 | Stagger-position selector for the `arakawa` family — how does a stencil entry name *which* C/B/D-grid sample location it lives on? | **Categorical `stagger` field on the selector**, with values `cell_center`, `face_x`, `face_y`, `vertex` (closed set; B/D-grids reuse the same vocabulary). The `axis` and `offset` retain their structured-grid meanings: `offset` is the integer step from the output cell along `axis`. The full selector form is `{ kind: "arakawa", stagger: <symbol>, axis: <axis>, offset: <int> }`. | dsc-cuj |
+| 14 | How are the categorical `stagger` values encoded portably across bindings? | **File-local `enums` block per ESS §9.3.** Each Arakawa rule that uses stagger selectors declares an `arakawa_stagger` enum mapping the four symbols to positive integers; the rule's optional `stagger_enum` field names which enum to consult. Bindings lower the selector's string `stagger` to the corresponding integer at load time (mirroring the §4.5 `enum`-op lowering contract), so evaluators only ever see integers. Authors keep human-readable symbols in source. | dsc-cuj (esm-mqc) |
+| 15 | Output stagger for an Arakawa rule — is it implicit from the operator (`div` → cell-center) or declared? | **Declared explicitly** via `emits_location: <stagger symbol>` on the scheme, paired with `requires_locations: [<stagger symbol>, …]` for the input fields. This mirrors the unstructured-C-grid worked example in ESS §7.3 (MPAS divergence) and avoids overloading per-operator implicit conventions when adding new ops (curl, grad-on-C, etc.). | dsc-cuj |
+| 16 | Mapping a multi-component `applies_to: { op: "div", args: ["$F"] }` to per-stencil-entry components on a structured C-grid. | **Implicit dispatch by the entry's `axis` and `stagger`.** A C-grid's `face_x` location is, by construction, where the x-component of any vector field lives; `face_y` is the y-component. The stencil therefore samples the single pattern variable `$F` and the binding picks the matching axis-component array (e.g. `ux` vs `uy`) from the entry's `(stagger, axis)` pair. No new pattern variables are introduced per component; this matches `arakawa_variable_locations(ArakawaC) = (CellCenter, UEdge, VEdge)` in `src/grids/arakawa.jl`. | dsc-cuj |
+
+## Arakawa (structured staggered) — selector schema
+
+Arakawa A/B/C/D/E grids are structured 2D meshes that stagger different
+quantities at four canonical sample locations: cell centers, x-faces,
+y-faces, and corners (vertices). The C-grid is the dominant choice in
+modern atmosphere/ocean dynamical cores (MITgcm, MOM6, MPAS, FV3, NEMO).
+
+Selectors on this family extend the per-family structured form with a
+categorical `stagger` slot:
+
+```jsonc
+{
+  "selector": {
+    "kind":    "arakawa",
+    "stagger": "cell_center" | "face_x" | "face_y" | "vertex",
+    "axis":    "$x" | "$y",
+    "offset":  <int>
+  },
+  "coeff": <ExpressionNode>
+}
+```
+
+Categorical `stagger` values are encoded as a file-local `enums` block per
+ESS §9.3. Each Arakawa rule SHOULD declare:
+
+```jsonc
+{
+  "enums": {
+    "arakawa_stagger": {
+      "cell_center": 1,
+      "face_x":      2,
+      "face_y":      3,
+      "vertex":      4
+    }
+  },
+  "discretizations": { "<rule_name>": { …, "stagger_enum": "arakawa_stagger", … } }
+}
+```
+
+Bindings lower the selector's string `stagger` to the corresponding integer
+at load time (mirroring the §4.5 `enum`-op lowering contract); evaluators
+only ever see integers. The `stagger_enum` field on the scheme names the
+enum to consult so a rule can carry multiple enums without ambiguity.
+
+Schemes additionally declare quantity locations explicitly:
+
+- `emits_location` — output stagger symbol (e.g. `"cell_center"` for `div`).
+- `requires_locations` — list of input stagger symbols, in arg-order.
+
+For multi-component vector arguments (`applies_to: { op: "div", args: ["$F"] }`),
+each stencil entry's `axis` and `stagger` together identify which component
+array to read: on a C-grid, `face_x` selectors sample the x-component and
+`face_y` selectors sample the y-component of `$F`. No per-component pattern
+variables are needed.
+
+### Worked example — divergence on Arakawa C (cartesian base)
+
+Two-point centered FV divergence: $\nabla\cdot F = (u_x[i+1,j] - u_x[i,j])/\Delta x +
+(u_y[i,j+1] - u_y[i,j])/\Delta y$. See
+[`finite_volume/divergence_arakawa_c.json`](finite_volume/divergence_arakawa_c.json)
+for the encoded form and `divergence_arakawa_c/fixtures/canonical/` for the
+2×2 small-grid sanity fixture.
+
 ## When to add a new selector kind
 
 Adding a new family (e.g. `latlon`, `cubed_sphere`):
