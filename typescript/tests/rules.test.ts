@@ -3,7 +3,6 @@ import { describe, it, expect } from "vitest";
 import {
   evaluate,
   evalCoeff,
-  UnboundVariableError,
   parseRuleFile,
   findRule,
 } from "../src/rules/index.js";
@@ -20,8 +19,8 @@ describe("rule expression evaluator", () => {
     expect(evaluate("x", b)).toBe(5);
   });
 
-  it("throws UnboundVariableError for missing variables", () => {
-    expect(() => evaluate("missing", new Map())).toThrow(UnboundVariableError);
+  it("throws for missing variables", () => {
+    expect(() => evaluate("missing", new Map())).toThrow(/Unbound variable/);
   });
 
   it("evaluates arithmetic ops including unary minus and n-ary +/*", () => {
