@@ -1,55 +1,29 @@
 """Discretization-rule runtime for the Python binding.
 
-This package mirrors ``src/rule_eval.jl`` (Julia binding): rule authors
-express stencil coefficients, edge interpolants, and reconstructions as
-JSON ExpressionNode ASTs (ESS spec §7 / §9.2), and the runtime exposes
-a single AST entry point :func:`eval_coeff` plus a thin loader and the
-applicators for the rule families currently in the catalog.
+ESD does not carry a shadow evaluator: rule authors express stencil
+coefficients, edge interpolants, and reconstructions as JSON
+ExpressionNode ASTs (ESS spec §7 / §9.2), and the canonical evaluator
+lives in ``earthsci_toolkit`` (ESS Python). This package exposes only:
 
-Cross-binding contract:
+* :func:`eval_coeff` — thin adapter over ``earthsci_toolkit.evaluate``
+  for a single coefficient AST against a scalar binding map.
+* :func:`load_rule` / :class:`Rule` / :class:`StencilEntry` — read a
+  rule JSON file into a structured view (single-stencil or PPM-style
+  multi-stencil; ESS §7.5).
 
-* :func:`eval_coeff` is a thin adapter over
-  ``earthsci_toolkit.evaluate`` (ESS): JSON dict nodes are converted to
-  the typed :class:`earthsci_toolkit.ExprNode` form once, then ESS's
-  evaluator returns the scalar value. The Julia binding's
-  ``EarthSciDiscretizations.eval_coeff`` does the same passthrough to
-  ``EarthSciSerialization.evaluate``. Unbound variables raise
-  :class:`ValueError` (propagated from ESS).
-* :func:`load_rule` reads a rule JSON file and returns a :class:`Rule`.
-  Single-stencil rules expose entries via :attr:`Rule.stencil`;
-  multi-stencil rules (PPM-style; ESS §7.5) expose them via
-  :attr:`Rule.sub_stencils`.
-* :func:`apply_stencil_latlon` applies a ``selector.kind == "latlon"``
-  stencil at a single cell with periodic-lon / bounded-lat indexing.
-* :func:`apply_stencil_periodic_1d` applies a 1-D stencil (``cartesian``
-  selectors) to a periodic sample vector with ``sub_stencil`` dispatch.
-* :func:`parabola_reconstruct_periodic_1d` composes the named left- and
-  right-edge sub-stencils of a multi-stencil rule into the
-  Colella-Woodward (1984) PPM parabola and samples it at supplied
-  sub-cell points -- the ``output_kind="reconstruction"`` /
-  ``"parabola"`` regime exercised by ``ppm_reconstruction``.
+Stencil application, ghost-cell synthesis, and parabola reconstruction
+are owned by the canonical pipeline (``earthsci_toolkit``: ``discretize``
++ ``simulation`` / ``numpy_interpreter``); ESD does not duplicate them
+here. The Julia binding's ``EarthSciDiscretizations.eval_coeff`` is the
+mirror passthrough on the Julia side.
 """
 
-from .cartesian import (
-    OUTPUT_KINDS,
-    apply_stencil_periodic_1d,
-    parabola_reconstruct_periodic_1d,
-    reference_samples,
-    resolve_sub_stencil,
-)
 from .evaluator import eval_coeff
 from .loader import Rule, StencilEntry, load_rule
-from .stencil import apply_stencil_latlon
 
 __all__ = [
-    "OUTPUT_KINDS",
     "Rule",
     "StencilEntry",
-    "apply_stencil_latlon",
-    "apply_stencil_periodic_1d",
     "eval_coeff",
     "load_rule",
-    "parabola_reconstruct_periodic_1d",
-    "reference_samples",
-    "resolve_sub_stencil",
 ]
