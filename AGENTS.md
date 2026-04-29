@@ -17,12 +17,7 @@ ops. See ESS `esm-spec.md` §9.2 decision tree for when (rarely) a
 Do NOT:
 
 - Write Julia/Python/etc helper functions that implement math a rule
-  should own (limiters, reconstructions, ratio functions). The single
-  supported evaluator entry point in ESD is
-  `EarthSciDiscretizations.eval_coeff`, a thin passthrough to the
-  EarthSciSerialization tree-walk evaluator
-  (`EarthSciSerialization.evaluate`). ESD does not carry a shadow
-  evaluator.
+  should own (limiters, reconstructions, ratio functions).
 - Use `{"op": "call", "fn": "…"}` for anything expressible in existing
   ops.
 - Rely on per-binding runtime names that hide the math.
@@ -30,8 +25,50 @@ Do NOT:
 When in doubt: if the formula fits on paper, it fits in the AST.
 
 See `discretizations/README.md` for the catalog landing and
-`docs/rule-catalog.md` for the full rule manifest. The evaluator
-passthrough source is `src/rule_eval.jl`.
+`docs/rule-catalog.md` for the full rule manifest.
+
+## The single-pathway rule (all bindings)
+
+**ESD never carries a rule evaluator. In every binding, the rule
+evaluator/runner is a THIN PASSTHROUGH to the corresponding ESS
+binding's evaluator.** There is exactly one canonical pipeline:
+
+> rule application in ESS → ArrayOp → eval
+
+No binding may carry a shadow evaluator, a reimplementation of an ESS
+op, or a binding-local fast path that bypasses ESS. If you find one,
+file a bead to retire it; do not extend it.
+
+Per-binding entry points (each is a passthrough to ESS):
+
+| Binding    | ESD entry point                                           | Delegates to                                                      |
+|------------|-----------------------------------------------------------|-------------------------------------------------------------------|
+| Julia      | `EarthSciDiscretizations.eval_coeff` (`src/rule_eval.jl`) | `EarthSciSerialization.evaluate`                                  |
+| Python     | `earthsci_discretizations.rules` (`python/src/earthsci_discretizations/rules/`) | the `earthsci_serialization` Python evaluator        |
+| Rust       | `rule_eval` (`rust/src/rule_eval.rs`)                     | the `earthsci_serialization` Rust evaluator                       |
+| TypeScript | `rules/` (`typescript/src/rules/`)                        | the `earthsci_serialization` TypeScript evaluator                 |
+
+A binding-level file with non-trivial math, branch logic, or op
+dispatch is a bug, not a feature. Passthrough means: marshal inputs,
+call ESS, return outputs. Nothing else.
+
+### Conformance: golden regeneration drives the canonical pipeline
+
+The `regenerate_golden.*` scripts under `tests/conformance/` (e.g.
+`tests/conformance/grids/cartesian/regenerate_golden.jl`,
+`tests/conformance/grids/latlon/regenerate_golden.py`,
+`tests/conformance/rules/centered_2nd_uniform_latlon/regenerate_golden.jl`)
+**MUST drive the canonical pipeline** — rule application in ESS →
+ArrayOp → eval through the ESD passthrough. They must NOT call a
+per-binding shadow evaluator. If a regeneration script computes
+expected values via a binding-local code path, the resulting golden
+will mask divergence between bindings rather than expose it.
+
+### Cross-reference
+
+The single-pathway rule is the project-level expression of the
+workspace-root `CLAUDE.md` (Gas Town mayor) directive that ESD is a
+discretization catalog over ESS, not a parallel runtime.
 
 ## Dependency resolution
 
