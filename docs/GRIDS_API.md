@@ -26,6 +26,10 @@ references those sections; it does not re-specify them.
 - Return-type contract (in-memory grid object + `to_esm` / `toESM` lowering)
 - Cross-language conformance protocol (byte-identical canonical `.esm`,
   float-ULP fallback)
+- ESD's normative rule-evaluation policy: each binding's rule application
+  and evaluation routes through the corresponding EarthSciSerialization
+  (ESS) binding's official evaluator. ESD adds **no** numerical-evaluation
+  code. Per-binding shadow evaluators are non-conforming. (§4.3)
 - Ecosystem integration boundaries per binding
 - Determinism requirements
 - Per-family configuration schema shape (the fields; per-family parameter
@@ -221,7 +225,10 @@ to_esm(grid::AbstractGrid) :: Dict{String,Any}
   canonical contract; ecosystem types are an implementation convenience.
 - `to_esm(grid)` returns a plain `Dict{String,Any}` whose JSON lowering is
   §6-schema-valid.
-- Julia is the **reference binding** for ULP ties (§4).
+- Julia is the comparison anchor for transcendental-ULP ties in
+  **grid-object emission only** (§4.2). Julia is **not** a reference
+  evaluator for rule semantics — every binding routes rule evaluation
+  through its ESS counterpart (§4.3).
 
 ### 3.2 Python
 
@@ -295,35 +302,121 @@ sha256(canonicalize(to_esm_X(grid_X(opts))))
 for every pair `(X, Y)` of bindings and every opts vector in the conformance
 corpus (maintained in `EarthSciSerialization/conformance/grids/`).
 
-### 4.2 Float-ULP fallback
+### 4.2 Float-ULP fallback (grid-object emission)
 
 Some families (e.g., stretched cubed sphere) hit transcendental-function
-boundaries where different math libraries disagree in the last few ULPs.
-When that happens, the primary SHA check fails and the fallback applies:
+boundaries where different math libraries disagree in the last few ULPs
+of a *grid coordinate field*. When that happens, the primary SHA check on
+grid emission fails and the fallback applies:
 
 - Per-field relative tolerance: **1e-14** (default).
 - Per-family override allowed; must be declared in §8 and reviewed by at
   least one polecat per binding.
 - Tolerance is declared at the schema level, not per-test, so it is
   discoverable from `.esm` alone.
+- For ULP ties on transcendental boundaries in **grid-object emission
+  only**, Julia is the comparison anchor (libm-closest behavior on Linux
+  and macOS; Julia's `@fastmath` discipline is off by default in the grid
+  code). The conformance record carries the anchor binding name, the
+  platform + math-lib fingerprint (per §6), and the max relative deviation
+  observed per field.
 
-### 4.3 Reference binding for ULP ties
+This anchor applies **only** to byte/ULP comparison of grid-object output.
+It does **not** authorize a "reference evaluator" for rule semantics. Rule
+evaluation has no reference binding — see §4.3.
 
-When the ULP fallback applies, **Julia is the reference binding**. Rationale:
-libm-closest behavior on Linux and macOS, Julia's `@fastmath` discipline (off
-by default in the grid code), and alignment with the existing ESD source.
+### 4.3 Cross-binding rule-evaluation regime — ESS evaluators only
 
-When reference-binding output is used, the conformance record carries:
+ESD generates grids and authors rule libraries; it does **not** host
+numerical-evaluation code. Each binding's rule application and evaluation
+routes through the corresponding EarthSciSerialization (ESS) binding's
+official simulation runner. This is normative across every ESD binding and
+supersedes any prior "Julia is the reference evaluator" framing.
 
-- the reference binding name,
-- the platform + math-lib fingerprint (per §6),
-- the max relative deviation observed per field.
+**1. Thin passthrough.** Each binding's `rule_eval` / `evaluator` /
+`runner` entry point in ESD (where one exists at all — see §4.3.2) is a
+thin passthrough to an ESS-binding official simulation runner:
+
+| Binding | ESS official runners (representative) |
+|---|---|
+| Julia | `EarthSciSerialization.evaluate` (Symbolics / MTK), `tree_walk.jl` (large-system runtime) |
+| Python | `earthsci_serialization.numpy_interpreter`, `earthsci_toolkit.simulate` |
+| Rust | `earthsci_serialization::simulate`, `simulate_array` |
+| TypeScript | the official ESS-TS evaluator entry point |
+| Go | the official ESS-Go evaluator (consumer-only per §5.5) |
+
+A binding **may** have more than one official ESS runner. Each must (a) be
+documented as official in the binding's package docs, (b) consume the
+ESS-canonical AST directly with no per-rule-shape dispatch in the runner
+itself, and (c) be invokable as a public simulation API by users, not only
+by tests. This list is illustrative; the binding's own AGENTS.md / README
+is authoritative.
+
+**2. No per-binding numerical-evaluation code in ESD.** ESD adds **no**
+numerical interpreter, AST walker, stencil expander, "test-path
+evaluator", "conformance regen" hand-walker, or shadow evaluator under
+any binding. Rules are *authored* in ESD (as ESS-AST patches and rewrite
+metadata); they are *applied* and *evaluated* by ESS. A PR that
+introduces a separate numerical-evaluation pathway under any ESD binding
+is non-conforming and must be rejected, regardless of how it is framed
+("test only", "documentation only", "MMS convergence helper",
+"validate against Julia", "regenerate goldens"). The anti-pattern list
+in the workspace AGENTS / CLAUDE.md is canonical.
+
+**3. Conformance fixtures live at the production-pipeline endpoint.** The
+conformance fixture for any rule (or rule combination) is a pair of
+ESS-canonical values:
+
+- `input.esm` — the pre-discretization model state.
+- `expected.esm` — the post-evaluation state.
+
+The conformance test for binding *X* drives the canonical pipeline
+end-to-end:
+
+```
+state_X    = ESS_X.load("input.esm")
+applied_X  = ESS_X.discretize(state_X, esd_rules)   // ESD rules applied via ESS
+result_X   = ESS_X.<official_runner>(applied_X)     // §4.3.1 runner
+assert canonicalize(ESS_X.dump(result_X)) == bytes("expected.esm")
+```
+
+The "evaluator under test" is ESS's, not ESD's. ESD's role in the test is
+the rule set passed to `discretize`, nothing more. There is no per-binding
+stencil-walker or per-binding interpreter in the test path.
+
+**4. Cross-binding agreement at the same endpoint.** Equivalence between
+bindings is verified at `result_X` vs `result_Y` after ESS-canonical
+serialization — not at any per-binding intermediate (stencil walker,
+interpreter, or numerical helper). Julia and every other binding are
+equally subordinate to ESS; no binding is a reference evaluator for any
+other. The §4.2 ULP fallback applies only if the byte-identical check
+fails on the same transcendental boundary that already affects grid
+emission, bounded by the same per-field tolerance.
+
+#### What this section replaces
+
+This section retires the prior "Julia is the reference evaluator" regime
+that previously lived here. That framing — originally a narrow ULP-tie
+anchor for grid-object emission (now scoped to §4.2) — was being read as
+authorization for per-binding shadow evaluators in ESD on the theory that
+non-Julia bindings needed local numerical machinery to validate against
+Julia output. They do not. ESS provides the evaluator in every binding;
+ESD piggybacks. The regime above is the only one in force.
 
 ### 4.4 Conformance corpus
 
-The corpus is a set of `(family, opts)` vectors with expected canonical
-SHAs. Every implementation bead adds to the corpus. Every binding's CI
-runs the corpus; failures block the merge queue.
+The conformance corpus is a tree of `(input.esm, expected.esm)` fixture
+pairs maintained alongside each rule's definition (e.g.
+`discretizations/<group>/<rule>/fixtures/<scenario>/{input,expected}.esm`).
+Every implementation bead adds at least one fixture pair. Every binding's
+CI runs the corpus through the §4.3 pipeline; failures block the merge
+queue.
+
+Fixtures are full ESS values, not `(family, opts) → SHA` tuples. The
+SHA-only form pre-supposes a single canonical evaluator output, which is
+exactly the regime §4.3 retires. Generation of `expected.esm` MUST come
+from the canonical pipeline — driving `discretize` + an official ESS
+runner — never from a hand-walked stencil or a side-channel evaluator.
 
 ---
 
@@ -407,8 +500,11 @@ ordering in JSON is the main risk; canonicalization eliminates it.
 ### 6.3 Across bindings
 
 Byte-identical after `canonicalize()` in the common case. Within
-per-field ULP tolerance (§4.2) when transcendental-math divergence fires.
-The Julia reference binding (§4.3) breaks ties.
+per-field ULP tolerance (§4.2) when transcendental-math divergence fires
+on grid-object emission; Julia is the comparison anchor for those ULP
+ties (§4.2). Rule evaluation across bindings has **no** reference
+binding — every binding routes through its ESS official runner and
+agreement is verified at the pipeline endpoint (§4.3).
 
 ### 6.4 Build fingerprint
 
@@ -571,5 +667,9 @@ this document but must not be marked landed.
 - EarthSciSerialization §5.4.6 — canonical wire form
 - EarthSciSerialization §6 — grid schema
 - EarthSciSerialization §7 — rule schema
+- EarthSciSerialization per-binding AGENTS.md — list of official
+  simulation runners per binding (authoritative for §4.3.1)
+- ESD / workspace `CLAUDE.md` — Simulation Pathway rule and anti-pattern
+  list (canonical for §4.3.2)
 - ESD `docs/REPO_LAYOUT.md` — repo layout
 - ESD `docs/rule-catalog.md` — Phase 0 rule inventory
