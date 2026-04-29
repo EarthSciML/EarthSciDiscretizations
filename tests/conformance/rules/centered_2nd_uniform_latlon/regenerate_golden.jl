@@ -3,13 +3,15 @@
 Regenerate golden coefficient + stencil-application values for the
 centered_2nd_uniform_latlon cross-binding rule conformance harness.
 
-The Julia binding is the reference evaluator per docs/GRIDS_API.md §4.3:
-this script reads `fixtures.json`, evaluates each stencil entry's
-coefficient AST under each fixture's bindings via
-`EarthSciDiscretizations.eval_coeff` (a thin passthrough to
-`EarthSciSerialization.evaluate`), applies the stencil to a closed-form
-analytic field for the stencil cases, and writes the results to
-`golden/coefficients.json`.
+Per docs/GRIDS_API.md §4.3, ESD adds no numerical-evaluation code under
+any binding. This script drives ESS primitives end-to-end:
+
+- `coefficient_cases` are computed via `EarthSciDiscretizations.eval_coeff`
+  (a thin passthrough to `EarthSciSerialization.evaluate`).
+- `stencil_cases` are computed via `EarthSciSerialization.apply_stencil_2d_latlon`
+  with a `CellBindings` carrying per-cell `cos_lat`. The script does not
+  walk the stencil itself; the rule's stencil JSON is handed to ESS
+  unchanged.
 
 Run from the repo root:
 
@@ -21,6 +23,7 @@ small and structured.
 =#
 
 using EarthSciDiscretizations: eval_coeff
+using EarthSciSerialization: apply_stencil_2d_latlon, CellBindings
 
 const HERE = @__DIR__
 const REPO_ROOT = abspath(joinpath(HERE, "..", "..", "..", ".."))
@@ -254,9 +257,10 @@ function _coefficient_block(rule_body, cases)
     return out
 end
 
-# Mirrors the per-cell binding convention used by Python's
-# `apply_stencil_latlon`: cell-center coordinates from the `regular`
-# lat-lon variant, `cos_lat` evaluated at the anchor cell's latitude.
+# Drive ESS's `apply_stencil_2d_latlon` over the rule's stencil JSON and a
+# closed-form analytic field sampled at cell centers. ESS owns the stencil
+# walk; ESD only assembles the inputs (sample matrix, per-cell `cos_lat`,
+# scalar `R`/`dlon`/`dlat`).
 function _stencil_block(rule_body, cases)
     out = []
     for case in cases
@@ -266,40 +270,35 @@ function _stencil_block(rule_body, cases)
         dlon = 2π / nlon
         dlat = π / nlat
 
-        lon_c(i) = (i + 0.5) * dlon
-        lat_c(j) = -π / 2 + (j + 0.5) * dlat
+        # Cell-center coordinates use 0-based axis-cell offsets:
+        # lon_c(0..nlon-1) = (k + 0.5) * dlon, lat_c(0..nlat-1) = -π/2 + (k + 0.5) * dlat.
+        # ESS uses 1-based indices, so the closures below pull k = idx - 1.
+        lon_c0(k) = (k + 0.5) * dlon
+        lat_c0(k) = -π / 2 + (k + 0.5) * dlat
         f(lon, lat) = sin(lon) * cos(lat)
+
+        u = Matrix{Float64}(undef, nlon, nlat)
+        for j in 1:nlat, i in 1:nlon
+            u[i, j] = f(lon_c0(i - 1), lat_c0(j - 1))
+        end
+
+        cb = CellBindings(
+            Dict{String,Float64}("R" => R, "dlon" => dlon, "dlat" => dlat),
+            Dict{String,Function}(
+                "cos_lat" => (i, j) -> cos(lat_c0(j - 1)),
+            ),
+        )
+        du, _interior = apply_stencil_2d_latlon(rule_body["stencil"], u, cb)
 
         results = []
         for qp in case["interior_query_points"]
             j = Int(qp[1])
             i = Int(qp[2])
-            cos_lat = cos(lat_c(j))
-            bindings = Dict{String,Float64}(
-                "R" => R, "dlon" => dlon, "dlat" => dlat, "cos_lat" => cos_lat,
-            )
-            total = 0.0
-            for entry in rule_body["stencil"]
-                sel = entry["selector"]
-                axis = sel["axis"]
-                offset = Int(sel["offset"])
-                if axis == "lon"
-                    ip = mod(i + offset, nlon)
-                    val = f(lon_c(ip), lat_c(j))
-                elseif axis == "lat"
-                    jp = j + offset
-                    @assert 0 <= jp < nlat "lat-axis offset escaped grid for j=$(j), offset=$(offset)"
-                    val = f(lon_c(i), lat_c(jp))
-                else
-                    error("unexpected axis $(axis) in centered_2nd_uniform_latlon")
-                end
-                total += eval_coeff(entry["coeff"], bindings) * val
-            end
             push!(results, Dict{String,Any}(
                 "j" => j, "i" => i,
-                "cos_lat" => cos_lat,
-                "lon" => lon_c(i), "lat" => lat_c(j),
-                "result" => total,
+                "cos_lat" => cos(lat_c0(j)),
+                "lon" => lon_c0(i), "lat" => lat_c0(j),
+                "result" => du[i + 1, j + 1],
             ))
         end
         push!(out, Dict{String,Any}(
