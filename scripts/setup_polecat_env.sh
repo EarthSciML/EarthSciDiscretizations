@@ -10,16 +10,19 @@
 #   3. Fallback: install from https://github.com/EarthSciML/EarthSciSerialization.git@main
 #
 # Usage:
-#   scripts/setup_polecat_env.sh                # resolves into Project.toml's env
+#   scripts/setup_polecat_env.sh                # resolves into ./Project.toml's env
+#   JULIA_PROJECT=docs scripts/setup_polecat_env.sh   # resolves into docs/Project.toml's env
 #   EARTHSCI_SERIALIZATION_REV=abc123 scripts/setup_polecat_env.sh   # pin URL fallback
 #
-# After this runs, `julia --project=. -e 'using EarthSciSerialization'` works.
+# After this runs, `julia --project=$JULIA_PROJECT -e 'using EarthSciSerialization'` works.
 # Re-running is idempotent: Pkg.develop on the same path is a no-op.
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+
+julia_project="${JULIA_PROJECT:-.}"
 
 ess_path=""
 
@@ -44,10 +47,10 @@ if [[ -z "$ess_path" ]]; then
 fi
 
 if [[ -n "$ess_path" ]]; then
-  echo "Pkg.develop EarthSciSerialization from: $ess_path"
-  julia --project=. -e "using Pkg; Pkg.develop(path=\"$ess_path\"); Pkg.instantiate()"
+  echo "Pkg.develop EarthSciSerialization from: $ess_path (project=$julia_project)"
+  julia --project="$julia_project" -e "using Pkg; Pkg.develop(path=\"$ess_path\"); Pkg.instantiate()"
 else
   rev="${EARTHSCI_SERIALIZATION_REV:-main}"
-  echo "No local EarthSciSerialization.jl checkout found; Pkg.add from GitHub (rev=$rev)"
-  julia --project=. -e "using Pkg; Pkg.add(url=\"https://github.com/EarthSciML/EarthSciSerialization.git\", rev=\"$rev\", subdir=\"packages/EarthSciSerialization.jl\"); Pkg.instantiate()"
+  echo "No local EarthSciSerialization.jl checkout found; Pkg.add from GitHub (rev=$rev, project=$julia_project)"
+  julia --project="$julia_project" -e "using Pkg; Pkg.add(url=\"https://github.com/EarthSciML/EarthSciSerialization.git\", rev=\"$rev\", subdir=\"packages/EarthSciSerialization.jl\"); Pkg.instantiate()"
 fi
