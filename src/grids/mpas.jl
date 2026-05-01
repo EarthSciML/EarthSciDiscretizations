@@ -11,8 +11,8 @@ bytes.
 NetCDF I/O is intentionally not bundled — the caller must supply a
 `reader_fn(path) -> MpasMeshData` when loading from a path. In-memory
 construction via `mpas_mesh_data(...)` is the primary path for tests and
-host-built meshes. Mirrors the Python `reader_fn` and TypeScript `readerFn`
-contracts.
+host-built meshes. Mirrors the Python `reader_fn`, Rust `reader_fn`, and
+TypeScript `readerFn` contracts.
 
 Index convention: Julia is the reference binding and uses 1-based cell and
 edge indices with `0` as the "no neighbor" / "no edge" / "external boundary"
