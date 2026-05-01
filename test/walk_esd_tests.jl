@@ -93,8 +93,13 @@ end
 function _run_canonical_variant(rule::RuleFile, canonical::AbstractString)
     input = joinpath(canonical, "input.esm")
     expected = joinpath(canonical, "expected.esm")
-    if !isfile(input) || !isfile(expected)
-        return LayerResult(LAYER_FAIL, "canonical/ present but missing input.esm or expected.esm")
+    if !isfile(input)
+        return LayerResult(LAYER_FAIL, "canonical/ present but missing input.esm")
+    end
+    skip = _fixture_applicable_skip(input)
+    skip === nothing || return skip
+    if !isfile(expected)
+        return LayerResult(LAYER_FAIL, "canonical/ present but missing expected.esm")
     end
     return apply_rule_and_diff(rule, input, expected)
 end
@@ -102,10 +107,32 @@ end
 function _run_rewrite_variant(rule::RuleFile, rewrite_dir::AbstractString)
     input = joinpath(rewrite_dir, "input.esm")
     expected = joinpath(rewrite_dir, "expected.esm")
-    if !isfile(input) || !isfile(expected)
-        return LayerResult(LAYER_FAIL, "rewrite/ present but missing input.esm or expected.esm")
+    if !isfile(input)
+        return LayerResult(LAYER_FAIL, "rewrite/ present but missing input.esm")
+    end
+    skip = _fixture_applicable_skip(input)
+    skip === nothing || return skip
+    if !isfile(expected)
+        return LayerResult(LAYER_FAIL, "rewrite/ present but missing expected.esm")
     end
     return apply_rewrite_and_diff(rule, input, expected)
+end
+
+# Mirror Layer-B's `applicable:false` honoring (`run_mms_convergence`) for
+# Layer-A: a canonical/rewrite fixture whose input declares the rule isn't
+# yet drivable end-to-end through ESS (e.g. cubed_sphere selectors pending
+# dispatch, face-staggered binding contracts) skips with the fixture's
+# declared `skip_reason` rather than blowing up `discretize`.
+function _fixture_applicable_skip(input_path::AbstractString)
+    parsed = try
+        JSON.parse(read(input_path, String))
+    catch
+        return nothing
+    end
+    parsed isa AbstractDict || return nothing
+    get(parsed, "applicable", true) === false || return nothing
+    reason = get(parsed, "skip_reason", "fixture declares applicable:false (no reason given)")
+    return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
 end
 
 # AND-combine: any FAIL wins (failures dominate); else PASS if any variant
@@ -493,22 +520,27 @@ registered with ESS skip with a descriptive reason.
 function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     input_path = joinpath(convergence_dir, "input.esm")
     expected_path = joinpath(convergence_dir, "expected.esm")
-    if !(isfile(input_path) && isfile(expected_path))
-        return LayerResult(LAYER_FAIL, "convergence/ present but missing input.esm or expected.esm")
+    if !isfile(input_path)
+        return LayerResult(LAYER_FAIL, "convergence/ present but missing input.esm")
     end
     rule_json = JSON.parse(read(rule.path, String))
     input_json = JSON.parse(read(input_path, String))
-    expected_json = JSON.parse(read(expected_path, String))
 
     # Fixture-declared non-applicability: rules whose acceptance signature
     # isn't a manufactured-solution convergence sweep (index-rewrite rules,
     # TVD limiters, reconstruction-style rules pending ESS harness extension)
     # ship an `applicable: false` + `skip_reason` marker so the walker
-    # surfaces a structured SKIP instead of a missing-fixture FAIL.
+    # surfaces a structured SKIP instead of a missing-fixture FAIL. Honored
+    # before requiring expected.esm so structurally skip-only fixtures
+    # (e.g. cubed_sphere η-sibling) need not duplicate the expected payload.
     if get(input_json, "applicable", true) === false
         reason = get(input_json, "skip_reason", "fixture declares applicable:false (no reason given)")
         return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
     end
+    if !isfile(expected_path)
+        return LayerResult(LAYER_FAIL, "convergence/ present but missing expected.esm")
+    end
+    expected_json = JSON.parse(read(expected_path, String))
 
     # Closed-AST replacement-form rules carry a `replacement` template instead
     # of a `stencil` block. ESS's AST-walker dispatch (esm-4gw) reads the
