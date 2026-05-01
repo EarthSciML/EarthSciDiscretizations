@@ -10,9 +10,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use earthsci_grids::mpas::{
-    self, MpasLoader, MpasMeshData, MpasMeshInput, MpasMetricName,
-};
+use earthsci_grids::mpas::{self, MpasLoader, MpasMeshData, MpasMeshInput, MpasMetricName};
 use serde_json::Value;
 
 fn harness_dir() -> PathBuf {
@@ -38,7 +36,10 @@ fn as_f64_vec(v: &Value, label: &str) -> Vec<f64> {
     v.as_array()
         .unwrap_or_else(|| panic!("{label}: not an array"))
         .iter()
-        .map(|x| x.as_f64().unwrap_or_else(|| panic!("{label}: not a number")))
+        .map(|x| {
+            x.as_f64()
+                .unwrap_or_else(|| panic!("{label}: not a number"))
+        })
         .collect()
 }
 
@@ -48,8 +49,7 @@ fn as_i32_vec(v: &Value, label: &str) -> Vec<i32> {
         .iter()
         .map(|x| {
             x.as_i64()
-                .unwrap_or_else(|| panic!("{label}: not an integer"))
-                as i32
+                .unwrap_or_else(|| panic!("{label}: not an integer")) as i32
         })
         .collect()
 }

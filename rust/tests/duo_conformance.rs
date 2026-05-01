@@ -95,7 +95,10 @@ fn duo_matches_golden() {
                 .iter()
                 .map(|v| v.as_i64().unwrap())
                 .collect();
-            assert_eq!(got_nb, expected_nb, "{name}: neighbors mismatch at qp[{k}]=c{c}");
+            assert_eq!(
+                got_nb, expected_nb,
+                "{name}: neighbors mismatch at qp[{k}]=c{c}"
+            );
 
             for m in metric_names {
                 let got = grid.metric_eval(m, c).unwrap();

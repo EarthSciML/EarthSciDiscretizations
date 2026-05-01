@@ -66,9 +66,13 @@ fn build_grid(base_opts: &Value, stagger: Stagger, dtype: Dtype, ghosts: usize) 
         .expect("arakawa grid builds")
 }
 
-fn coord_at(grid_a: &ArakawaGrid, grid_c: &ArakawaGrid, loc: Location, i: usize, j: usize)
-    -> (f64, f64)
-{
+fn coord_at(
+    grid_a: &ArakawaGrid,
+    grid_c: &ArakawaGrid,
+    loc: Location,
+    i: usize,
+    j: usize,
+) -> (f64, f64) {
     match loc {
         Location::CellCenter => grid_a.cell_centers(i, j).unwrap(),
         Location::Corner => grid_a.corners(i, j).unwrap(),
