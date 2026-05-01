@@ -72,9 +72,13 @@ discretization catalog over ESS, not a parallel runtime.
 
 ## Dependency resolution
 
-`EarthSciSerialization` is not yet in the Julia General registry. Both
-local development and CI resolve it via `scripts/setup_polecat_env.sh`,
-which prefers a Gas Town workspace checkout and falls back to
-`Pkg.add(url=...)` from GitHub. Run the script once before
-`julia --project=. -e 'using EarthSciDiscretizations'` in a fresh
-environment.
+`EarthSciSerialization` is not yet in the Julia General registry. ESD's
+`Project.toml` declares a Pkg `[sources]` entry pointing at the GitHub
+repo (`packages/EarthSciSerialization.jl` subdir on `main`), so a plain
+`Pkg.instantiate()` resolves ESS directly from GitHub on Julia ≥ 1.11.
+The project's `julia` compat is therefore `"1.11"`.
+
+For local development against an in-progress ESS checkout (Gas Town
+workspace), `scripts/setup_polecat_env.sh` Pkg.develops a local path —
+the explicit develop entry overrides the `[sources]` URL until you
+remove it. The script is no longer required for CI.

@@ -29,19 +29,17 @@ jobs:
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
 
-      # EarthSciSerialization is not yet in the General registry. Develop a
-      # local copy into the docs env before instantiate so Pkg can resolve the
-      # ESS dep — without this Pkg.instantiate hits "no known versions" because
-      # ESD's Project.toml lists ESS as a dep but ESS isn't on the registry.
+      # ESD's Project.toml uses Pkg [sources] to resolve EarthSciSerialization
+      # (unregistered) directly from GitHub. Pkg.develop'ing ESD into docs/
+      # propagates that [sources] entry into the docs resolution. Requires
+      # Julia ≥ 1.11 (sources support); the setup-julia step selects "1".
       - name: "Install Dependencies"
-        env:
-          JULIA_PROJECT: docs/
         run: |
           julia --project=docs/ -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()
           '
-          scripts/setup_polecat_env.sh
 
       - name: "Build and Deploy Documentation"
         env:
