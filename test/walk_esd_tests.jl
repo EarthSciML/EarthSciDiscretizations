@@ -1,6 +1,6 @@
 module WalkESDTests
 
-using EarthSciDiscretizations: load_rules, RuleFile
+using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff
 import EarthSciSerialization
 using JSON
 
@@ -548,49 +548,6 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING)
 end
 
-# ---------------------------------------------------------------------------
-# Layer B' (limiter) — monotonicity / TVD evaluator scoped to the walker.
-#
-# ESS 0.0.3's `evaluate` does not yet implement the `max`/`min` ops that
-# slope-ratio limiters rely on (a follow-up bead is filed against ESS), so
-# the limiter runner uses a small local AST evaluator confined to this file.
-# This mirrors the precedent in `test/test_flux_limiters_rule.jl` and is
-# allowed by the dsc-8vu risk section. When ESS gains max/min, this can be
-# replaced by `EarthSciDiscretizations.eval_coeff` with no fixture changes.
-# ---------------------------------------------------------------------------
-
-function _eval_limiter_ast(node, bindings::Dict{String, Float64})::Float64
-    if node isa Number
-        return Float64(node)
-    elseif node isa AbstractString
-        name = startswith(node, "\$") ? node[2:end] : node
-        haskey(bindings, name) ||
-            throw(ArgumentError("unbound variable: $(name)"))
-        return bindings[name]
-    elseif node isa AbstractDict
-        op = node["op"]
-        args = [_eval_limiter_ast(a, bindings) for a in node["args"]]
-        if op == "max"
-            return maximum(args)
-        elseif op == "min"
-            return minimum(args)
-        elseif op == "+"
-            return length(args) == 1 ? args[1] : sum(args)
-        elseif op == "-"
-            return length(args) == 1 ? -args[1] : args[1] - args[2]
-        elseif op == "*"
-            return length(args) == 1 ? args[1] : prod(args)
-        elseif op == "/"
-            return args[1] / args[2]
-        elseif op == "abs"
-            return abs(args[1])
-        else
-            throw(ArgumentError("unsupported op in limiter walker: $op"))
-        end
-    end
-    throw(ArgumentError("unrecognized AST node type: $(typeof(node))"))
-end
-
 """
     run_monotonicity_check(rule, monotonicity_dir) -> LayerResult
 
@@ -636,7 +593,7 @@ function run_monotonicity_check(rule::RuleFile, monotonicity_dir::AbstractString
         r = Float64(pair["r"])
         expected = Float64(pair["phi"])
         actual = try
-            _eval_limiter_ast(formula, Dict("r" => r))
+            eval_coeff(formula, Dict("\$r" => r))
         catch err
             return LayerResult(LAYER_FAIL, "AST eval failed at r=$(r): $(sprint(showerror, err))")
         end
@@ -656,7 +613,7 @@ function run_monotonicity_check(rule::RuleFile, monotonicity_dir::AbstractString
     for r in rmin:rstep:rmax
         rf = Float64(r)
         phi = try
-            _eval_limiter_ast(formula, Dict("r" => rf))
+            eval_coeff(formula, Dict("\$r" => rf))
         catch err
             return LayerResult(LAYER_FAIL, "AST eval failed at r=$(rf): $(sprint(showerror, err))")
         end
@@ -671,7 +628,7 @@ function run_monotonicity_check(rule::RuleFile, monotonicity_dir::AbstractString
         end
         n_sweep += 1
     end
-    phi_one = _eval_limiter_ast(formula, Dict("r" => 1.0))
+    phi_one = eval_coeff(formula, Dict("\$r" => 1.0))
     if !isapprox(phi_one, 1.0; atol = tol)
         return LayerResult(LAYER_FAIL, "consistency violated: phi(1)=$(phi_one), expected 1")
     end
@@ -734,7 +691,7 @@ function _run_tvd_advection(formula, tvd::AbstractDict)
 
     modn(j) = mod(j - 1, n) + 1
     tv(q) = sum(abs(q[modn(i + 1)] - q[i]) for i in 1:n)
-    phi(r) = _eval_limiter_ast(formula, Dict("r" => Float64(r)))
+    phi(r) = eval_coeff(formula, Dict("\$r" => Float64(r)))
 
     function step(q, dt)
         Fs = Vector{Float64}(undef, n)
@@ -865,7 +822,7 @@ function _run_conservation_divergence_2d_periodic(rule::RuleFile, fixture::Abstr
             stagger = String(get(sel, "stagger", ""))
             axis = String(get(sel, "axis", ""))
             offset = Int(get(sel, "offset", 0))
-            coeff = _eval_limiter_ast(entry["coeff"], bindings)
+            coeff = eval_coeff(entry["coeff"], bindings)
             value = if stagger == "face_x" && axis == "\$x"
                 Fx[mod(i - 1 + offset, nx) + 1, j]
             elseif stagger == "face_y" && axis == "\$y"
@@ -949,7 +906,7 @@ function _run_conservation_muscl_1d_periodic(rule::RuleFile, fixture::AbstractDi
     end
 
     modn(j) = mod(j - 1, n) + 1
-    phi(r) = _eval_limiter_ast(formula, Dict("r" => Float64(r)))
+    phi(r) = eval_coeff(formula, Dict("\$r" => Float64(r)))
     function step(q, dt)
         Fs = Vector{Float64}(undef, n)
         for i in 1:n
