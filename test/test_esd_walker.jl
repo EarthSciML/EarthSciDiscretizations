@@ -155,6 +155,27 @@ using TestItems
             ("finite_volume", "flux_limiter_minmod"),
         ]
     )
+    # The 8 FV3 rule ports (dsc-247) ship canonical-skip-only fixtures
+    # (dsc-lay1, audit dsc-ztvz / F5) declaring `applicable:false`
+    # pending the cubed_sphere selector + face-stagger emit / multi-axis
+    # / per-cell metric-binding / `kind:"constant"` source-row dispatch
+    # in ESS. Layer-A SKIPs via `_fixture_applicable_skip`; Layer-B
+    # SKIPs with "no convergence fixtures at..." because these ports
+    # carry no convergence fixture either. Once the ESS extensions
+    # land, these stubs can be promoted to hand-pinned canonical
+    # contracts (mirroring `lax_friedrichs_flux_cubed_sphere_xi`).
+    canonical_skip_only_fv3 = Set(
+        [
+            ("finite_volume", "fv3_absolute_vorticity_cellmean"),
+            ("finite_volume", "fv3_d_to_c_eta"),
+            ("finite_volume", "fv3_d_to_c_xi"),
+            ("finite_volume", "fv3_kinetic_energy_cell"),
+            ("finite_volume", "fv3_sinsg_flux_eta"),
+            ("finite_volume", "fv3_sinsg_flux_xi"),
+            ("finite_volume", "fv3_vorticity_cellmean"),
+            ("finite_volume", "fv3_vorticity_corner"),
+        ]
+    )
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -190,6 +211,15 @@ using TestItems
         elseif key in not_applicable_layer_b
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("fixture-declared not applicable", r.layer_b.reason)
+        elseif key in canonical_skip_only_fv3
+            # Layer-A SKIPs via the `_fixture_applicable_skip` honoring
+            # of `applicable:false` in `canonical/input.esm`. Layer-B
+            # SKIPs with "no convergence fixtures at..." because these
+            # ports carry no convergence fixture.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)

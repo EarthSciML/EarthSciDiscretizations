@@ -1,0 +1,15 @@
+{
+  "rule": "fv3_kinetic_energy_cell",
+  "applicable": false,
+  "skip_reason": "Layer-A canonical drive of `fv3_kinetic_energy_cell` requires ESS `discretize` to dispatch four cubed_sphere face-stagger reads at the surrounding D-grid faces of CellCenter(i,j) — two u_edge reads at axis=ξ offsets {0, 1} and two v_edge reads at axis=η offsets {0, 1} — and to resolve the per-cell sub-grid metric bindings `sin_a` and `cos_a` (drawn from `sin_sg[$target, 5]` and `cos_sg[$target, 5]` at super-grid position 5 = cell center) into the closed-form bilinear `expression`. The cubed_sphere multi-axis read + sub-grid metric-binding extension is the same ESS blocker that holds `covariant_laplacian_cubed_sphere` and `transport_2d` Layer-A back today (see audit dsc-ztvz / F7). Once that extension lands, this stub can be replaced by a hand-pinned canonical contract that pins KE = (u_avg² + v_avg² − 2·u_avg·v_avg·cos α) / (2·sin²α) bit-for-bit against the imperative reference on a small cN cubed sphere with non-degenerate α (gnomonic equidistant α ≠ π/2).",
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "fv_kinetic_energy_cell",
+    "path": "src/operators/kinetic_energy.jl",
+    "comment": "Imperative reference for cell-center kinetic energy from D-grid normalized covariant winds on the non-orthogonal gnomonic grid. Follows Harris et al. (2021) Eq. 3.5. The upstream-biased variant (Eq. 6.3) is intentionally NOT used at the rule layer because it requires an A-grid contravariant ghost-extension + vector-rotation pre-pass below the rule layer (`src/ghost_cells.jl::extend_with_ghosts_vector`)."
+  },
+  "audit_provenance": {
+    "bead": "dsc-lay1",
+    "audit": "audits/maintainability_audit_2026-05-01.md (F5)"
+  }
+}
