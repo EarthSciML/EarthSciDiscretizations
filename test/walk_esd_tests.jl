@@ -1,7 +1,6 @@
 module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile
-using EarthSciSerialization: verify_mms_convergence, MMSEvaluatorError
 import EarthSciSerialization
 using JSON
 
@@ -149,9 +148,10 @@ end
 """
     run_layer_b(rule) -> LayerResult
 
-MMS convergence: dispatch to ESS's `verify_mms_convergence`, which evaluates
-all stencil coefficients via the AST evaluator and runs the manufactured-solution
-sweep on a sequence of grids.
+MMS convergence (Layer-B). Defers to `run_mms_convergence`, which honors
+`applicable:false` markers and otherwise SKIPs pending the canonical-pipeline
+replacement for the retired ESS `verify_mms_convergence` (esm-4t5 — see
+`run_mms_convergence` docstring).
 """
 function run_layer_b(rule::RuleFile)
     convergence = joinpath(rule_fixtures_dir(rule), "convergence")
@@ -511,104 +511,41 @@ end
 """
     run_mms_convergence(rule, convergence_dir) -> LayerResult
 
-End-to-end Layer B: parse the rule JSON, the input fixture and the expected
-fixture, then route through `EarthSciSerialization.verify_mms_convergence`.
-ESS owns the manufactured-solution sweep, the AST coefficient evaluator,
-and the order-deficit check. Rules whose manufactured solution is not
-registered with ESS skip with a descriptive reason.
+Layer B: read the convergence fixture, honor `applicable:false` markers, and
+otherwise SKIP pending the canonical-pipeline replacement.
+
+ESS retired `verify_mms_convergence` + `mms_evaluator` in esm-4t5 (the
+2026-04-29 single-evaluation-pathway directive). Layer B previously routed
+the rule + fixture through that ESS harness; the harness was a shadow
+evaluator outside the canonical `discretize → ArrayOp → simulate` pipeline
+and the directive forbade it. The replacement (drive Layer B through the
+canonical pipeline + an official ESS simulation runner per AGENTS.md) is
+tracked at ESD/dsc-kswm; until it lands, applicable:true convergence
+fixtures SKIP with a unified retirement reason instead of FAILing on the
+missing function. Applicable:false fixtures keep their existing
+fixture-declared SKIP path.
 """
+const _LAYER_B_PIPELINE_PENDING = "Layer-B awaits canonical-pipeline replacement: ESS retired verify_mms_convergence in esm-4t5 (2026-04-29 single-pathway directive); Layer-B replacement via discretize → ArrayOp → official ESS simulation runner tracked at ESD/dsc-kswm"
+
 function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     input_path = joinpath(convergence_dir, "input.esm")
-    expected_path = joinpath(convergence_dir, "expected.esm")
     if !isfile(input_path)
         return LayerResult(LAYER_FAIL, "convergence/ present but missing input.esm")
     end
-    rule_json = JSON.parse(read(rule.path, String))
     input_json = JSON.parse(read(input_path, String))
 
     # Fixture-declared non-applicability: rules whose acceptance signature
     # isn't a manufactured-solution convergence sweep (index-rewrite rules,
     # TVD limiters, reconstruction-style rules pending ESS harness extension)
     # ship an `applicable: false` + `skip_reason` marker so the walker
-    # surfaces a structured SKIP instead of a missing-fixture FAIL. Honored
-    # before requiring expected.esm so structurally skip-only fixtures
-    # (e.g. cubed_sphere η-sibling) need not duplicate the expected payload.
+    # surfaces a structured SKIP. Honored before any further fixture handling
+    # so structurally skip-only fixtures (e.g. cubed_sphere η-sibling) need
+    # not duplicate the expected payload.
     if get(input_json, "applicable", true) === false
         reason = get(input_json, "skip_reason", "fixture declares applicable:false (no reason given)")
         return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
     end
-    if !isfile(expected_path)
-        return LayerResult(LAYER_FAIL, "convergence/ present but missing expected.esm")
-    end
-    expected_json = JSON.parse(read(expected_path, String))
-
-    # Closed-AST replacement-form rules carry a `replacement` template instead
-    # of a `stencil` block. ESS's AST-walker dispatch (esm-4gw) reads the
-    # resolved-form `lowering` field. Synthesize one from the rule's
-    # `replacement` by substituting pattern variables (`$u`, `$x`, …) with
-    # canonical names ("u", "i", …) so the walker can exercise the rule.
-    spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
-    if spec isa AbstractDict && haskey(spec, "replacement") &&
-            !haskey(spec, "stencil") && !haskey(spec, "lowering")
-        spec["lowering"] = _synthesize_lowering(
-            spec["replacement"],
-            get(spec, "applies_to", Dict())
-        )
-    end
-
-    try
-        result = verify_mms_convergence(rule_json, input_json, expected_json)
-        observed = round(result.observed_min_order; digits = 3)
-        threshold = expected_json["expected_min_order"]
-        grids = [Int(g["n"]) for g in input_json["grids"]]
-        return LayerResult(
-            LAYER_PASS,
-            "min order $(observed) >= $(threshold) on grids $(grids)"
-        )
-    catch err
-        if err isa MMSEvaluatorError
-            return LayerResult(LAYER_FAIL, sprint(showerror, err))
-        end
-        rethrow()
-    end
-end
-
-# Build a `lowering` AST from a rule's `replacement` template by substituting
-# pattern variables (`$u`, `$x`, …) with the canonical names ESS's AST-walker
-# expects ("u", "i", …). The first array operand in `applies_to.args` becomes
-# "u" (subsequent operands "u2", "u3", …); `applies_to.dim` becomes "i".
-function _synthesize_lowering(replacement, applies_to::AbstractDict)
-    bindings = Dict{String, String}()
-    args_list = get(applies_to, "args", nothing)
-    if args_list isa AbstractVector
-        n_arr = 0
-        for a in args_list
-            if a isa AbstractString && startswith(a, "\$")
-                n_arr += 1
-                bindings[a] = n_arr == 1 ? "u" : "u$(n_arr)"
-            end
-        end
-    end
-    dim = get(applies_to, "dim", nothing)
-    if dim isa AbstractString && startswith(dim, "\$")
-        bindings[dim] = "i"
-    end
-    return _substitute_pattern_vars(replacement, bindings)
-end
-
-function _substitute_pattern_vars(node, bindings::Dict{String, String})
-    if node isa AbstractDict
-        return Dict{String, Any}(
-            String(k) => _substitute_pattern_vars(v, bindings)
-                for (k, v) in node
-        )
-    elseif node isa AbstractVector
-        return Any[_substitute_pattern_vars(v, bindings) for v in node]
-    elseif node isa AbstractString
-        return get(bindings, String(node), node)
-    else
-        return node
-    end
+    return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING)
 end
 
 # ---------------------------------------------------------------------------
