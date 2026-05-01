@@ -67,10 +67,12 @@ const _VERTICAL_METRIC_NAMES = (:dz, :z, :sigma, :pressure, :ak, :bk)
 
 _parse_vertical_coordinate(c::Symbol) =
     c in _VERTICAL_COORDINATES ? c :
-        throw(ArgumentError(
+    throw(
+        ArgumentError(
             "vertical: unknown coordinate :$c; expected one of " *
-                "$(_VERTICAL_COORDINATES)"
-        ))
+            "$(_VERTICAL_COORDINATES)"
+        )
+    )
 _parse_vertical_coordinate(c::AbstractString) =
     _parse_vertical_coordinate(Symbol(c))
 
@@ -96,21 +98,33 @@ function _vertical_coerce_levels(
         lo, hi = T(domain[1]), T(domain[2])
         for x in arr
             (x < lo || x > hi) &&
-                throw(DomainError(x,
-                    "vertical: `$label` entries must lie in [$lo, $hi]"))
+                throw(
+                DomainError(
+                    x,
+                    "vertical: `$label` entries must lie in [$lo, $hi]"
+                )
+            )
         end
     end
     if must_decrease
         for k in 1:(length(arr) - 1)
             arr[k + 1] < arr[k] ||
-                throw(DomainError(arr,
-                    "vertical: `$label` must be strictly decreasing"))
+                throw(
+                DomainError(
+                    arr,
+                    "vertical: `$label` must be strictly decreasing"
+                )
+            )
         end
     else
         for k in 1:(length(arr) - 1)
             arr[k + 1] > arr[k] ||
-                throw(DomainError(arr,
-                    "vertical: `$label` must be strictly increasing"))
+                throw(
+                DomainError(
+                    arr,
+                    "vertical: `$label` must be strictly increasing"
+                )
+            )
         end
     end
     return arr
@@ -123,10 +137,12 @@ function _vertical_coerce_hybrid(
         throw(ArgumentError("vertical: `$label` is required"))
     arr = T[T(x) for x in coeffs]
     length(arr) == expected_len ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "vertical: `$label` must have length nz+1 = $expected_len; " *
                 "got $(length(arr))"
-        ))
+        )
+    )
     for x in arr
         isfinite(x) ||
             throw(DomainError(x, "vertical: `$label` must be finite"))
@@ -194,9 +210,11 @@ function _vertical(;
                 levels, T; must_decrease = true, domain = (0.0, 1.0)
             )
             nz !== nothing && length(lv) != nz + 1 &&
-                throw(ArgumentError(
+                throw(
+                ArgumentError(
                     "vertical: sigma: nz=$nz inconsistent with levels length $(length(lv))"
-                ))
+                )
+            )
         else
             nz === nothing &&
                 throw(ArgumentError("vertical: sigma requires `nz` or `levels`"))
@@ -210,9 +228,11 @@ function _vertical(;
             throw(ArgumentError("vertical: :$coord requires explicit `levels`"))
         lv = _vertical_coerce_levels(levels, T; must_decrease = false)
         nz !== nothing && length(lv) != nz + 1 &&
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "vertical: $coord: nz=$nz inconsistent with levels length $(length(lv))"
-            ))
+            )
+        )
         ak_arr = T[]
         bk_arr = T[]
 
@@ -222,10 +242,12 @@ function _vertical(;
         ak_probe = T[T(x) for x in ak]
         bk_probe = T[T(x) for x in bk]
         length(ak_probe) == length(bk_probe) ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "vertical: :eta ak/bk must have equal length; " *
                     "got $(length(ak_probe)) vs $(length(bk_probe))"
-            ))
+            )
+        )
         nz_eff = nz === nothing ? length(ak_probe) - 1 : nz
         nz_eff ≥ 1 || throw(ArgumentError("vertical: nz must be ≥ 1; got $nz_eff"))
         ak_arr = _vertical_coerce_hybrid(ak, T, nz_eff + 1, "ak")
@@ -233,36 +255,46 @@ function _vertical(;
         sigma = ak_arr ./ p0_T .+ bk_arr
         for k in 1:(length(sigma) - 1)
             sigma[k + 1] < sigma[k] ||
-                throw(DomainError(sigma,
+                throw(
+                DomainError(
+                    sigma,
                     "vertical: :eta synthesized sigma (ak/p0 + bk) must be " *
                         "strictly decreasing"
-                ))
+                )
+            )
         end
         lv = sigma
 
     elseif coord === :hybrid_sigma_theta
         if levels === nothing && nz === nothing
-            throw(ArgumentError(
-                "vertical: :hybrid_sigma_theta requires `nz` or `levels`"
-            ))
+            throw(
+                ArgumentError(
+                    "vertical: :hybrid_sigma_theta requires `nz` or `levels`"
+                )
+            )
         end
         if levels !== nothing
             lv = _vertical_coerce_levels(
                 levels, T; must_decrease = true, domain = (0.0, 1.0)
             )
             nz !== nothing && length(lv) != nz + 1 &&
-                throw(ArgumentError(
+                throw(
+                ArgumentError(
                     "vertical: hybrid_sigma_theta: nz=$nz inconsistent with " *
                         "levels length $(length(lv))"
-                ))
+                )
+            )
         else
             lv = _vertical_uniform_sigma(nz, T)
         end
         if transition !== nothing
             (zero(T) < T(transition) < one(T)) ||
-                throw(DomainError(transition,
+                throw(
+                DomainError(
+                    transition,
                     "vertical: hybrid_sigma_theta `transition` must be in (0, 1)"
-                ))
+                )
+            )
         end
         ak_arr = ak === nothing ? T[] :
             _vertical_coerce_hybrid(ak, T, length(lv), "ak")
@@ -358,19 +390,25 @@ function metric_eval(g::VerticalGrid{T}, name::Symbol, k::Integer) where {T}
     elseif name === :z
         return g.centers[k]
     elseif name === :sigma
-        (g.coordinate === :sigma ||
-            g.coordinate === :hybrid_sigma_theta ||
-            g.coordinate === :eta) ||
-            throw(ArgumentError(
+        (
+            g.coordinate === :sigma ||
+                g.coordinate === :hybrid_sigma_theta ||
+                g.coordinate === :eta
+        ) ||
+            throw(
+            ArgumentError(
                 "vertical: :sigma undefined for coordinate :$(g.coordinate)"
-            ))
+            )
+        )
         return g.centers[k]
     elseif name === :pressure
         (length(g.ak) > 0 && length(g.bk) > 0) ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "vertical: :pressure requires hybrid ak/bk " *
                     "(coordinate :$(g.coordinate) has none)"
-            ))
+            )
+        )
         p_lo = g.ak[k] + g.bk[k] * g.p0
         p_hi = g.ak[k + 1] + g.bk[k + 1] * g.p0
         return (p_lo + p_hi) / T(2)

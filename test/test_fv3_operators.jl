@@ -69,4 +69,3 @@ end
         @test isapprox(grid.cos_sg[p, i, j, 4], grid.cos_sg[p, i, j + 1, 2]; rtol = 1.0e-12)
     end
 end
-

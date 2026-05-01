@@ -10,11 +10,13 @@
         dirname(FIXTURE_DIR), "lat_lon.schema.json",
     )
 
-    fixture_files() = sort([
-        joinpath(FIXTURE_DIR, f)
-            for f in readdir(FIXTURE_DIR)
-            if endswith(f, ".esm")
-    ])
+    fixture_files() = sort(
+        [
+            joinpath(FIXTURE_DIR, f)
+                for f in readdir(FIXTURE_DIR)
+                if endswith(f, ".esm")
+        ]
+    )
 
     load_fixture(path) = JSON.parsefile(path)
 
@@ -34,8 +36,10 @@ end
     for path in fixture_files()
         doc = load_fixture(path)
         # §7 common minimum + grid-level declarative fields.
-        for key in ("family", "version", "dtype", "topology",
-                "variant", "generator", "params")
+        for key in (
+                "family", "version", "dtype", "topology",
+                "variant", "generator", "params",
+            )
             @test haskey(doc, key)
         end
         @test doc["family"] == "lat_lon"

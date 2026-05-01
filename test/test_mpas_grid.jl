@@ -192,10 +192,10 @@ end
     )
     # Invalid reader/check
     @test_throws DomainError EarthSciDiscretizations._coerce_mpas_loader(
-        (path = "x.nc", reader = "bogus",)
+        (path = "x.nc", reader = "bogus")
     )
     @test_throws DomainError EarthSciDiscretizations._coerce_mpas_loader(
-        (path = "x.nc", check = "sloppy",)
+        (path = "x.nc", check = "sloppy")
     )
     # NamedTuple and Dict both accepted
     ldr1 = EarthSciDiscretizations._coerce_mpas_loader(

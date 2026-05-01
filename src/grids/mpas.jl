@@ -519,13 +519,13 @@ total_area(g::MpasGrid) = sum(g.mesh.area_cell)
 family(::MpasGrid) = "mpas"
 
 function _check_mpas_cell(g::MpasGrid, c::Integer)
-    (1 <= c <= g.mesh.n_cells) || throw(
+    return (1 <= c <= g.mesh.n_cells) || throw(
         BoundsError(g.mesh.lon_cell, c)
     )
 end
 
 function _check_mpas_edge(g::MpasGrid, e::Integer)
-    (1 <= e <= g.mesh.n_edges) || throw(
+    return (1 <= e <= g.mesh.n_edges) || throw(
         BoundsError(g.mesh.lon_edge, e)
     )
 end

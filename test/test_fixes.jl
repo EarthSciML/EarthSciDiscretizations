@@ -184,4 +184,3 @@ end
     # Should still return a finite value
     @test isfinite(EarthSciDiscretizations.ppm_flux_integral(ql, qr, qi, 1.5))
 end
-

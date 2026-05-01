@@ -134,11 +134,13 @@ end
             end
         end
     end
-    allowed_ops = Set([
-        "arrayop", "index",
-        "+", "-", "*", "/", "^",
-        ">", "ifelse",
-    ])
+    allowed_ops = Set(
+        [
+            "arrayop", "index",
+            "+", "-", "*", "/", "^",
+            ">", "ifelse",
+        ]
+    )
     walk(repl, allowed_ops)
 end
 

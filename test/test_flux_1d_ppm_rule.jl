@@ -125,14 +125,14 @@ end
     Nc = 8
     q(k) = sin(2π * (k - 3.5) / Nc)
     qm3 = q(5);  qm2 = q(6);  qm1 = q(7)
-    q0  = q(8);  qp1 = q(9);  qp2 = q(10)
+    q0 = q(8);  qp1 = q(9);  qp2 = q(10)
 
     # 4th-order CW84 edge interpolations (the JSON rule's `edge_value_stencil`)
-    qi_half = (7/12) * (qm1 + q0) - (1/12) * (qm2 + qp1)
-    ql_L = (7/12) * (qm2 + qm1) - (1/12) * (qm3 + q0)
+    qi_half = (7 / 12) * (qm1 + q0) - (1 / 12) * (qm2 + qp1)
+    ql_L = (7 / 12) * (qm2 + qm1) - (1 / 12) * (qm3 + q0)
     qr_L = qi_half
     ql_R = qi_half
-    qr_R = (7/12) * (q0 + qp1) - (1/12) * (qm1 + qp2)
+    qr_R = (7 / 12) * (q0 + qp1) - (1 / 12) * (qm1 + qp2)
 
     # CW84 limiter (the JSON rule's `limiter` block; matches the closed-form
     # ifelse AST in `_ppm_limit_cw84_sym` bit-for-bit).
@@ -150,13 +150,13 @@ end
         c_abs = abs(c)
         dq = qr - ql
         q6 = 6.0 * (qi - 0.5 * (ql + qr))
-        return qr - 0.5 * c_abs * (dq - q6 * (1.0 - (2.0/3.0) * c_abs))
+        return qr - 0.5 * c_abs * (dq - q6 * (1.0 - (2.0 / 3.0) * c_abs))
     end
     function flux_int_right(ql, qr, qi, c)
         c_abs = abs(c)
         dq = qr - ql
         q6 = 6.0 * (qi - 0.5 * (ql + qr))
-        return ql + 0.5 * c_abs * (dq + q6 * (1.0 - (2.0/3.0) * c_abs))
+        return ql + 0.5 * c_abs * (dq + q6 * (1.0 - (2.0 / 3.0) * c_abs))
     end
 
     v = 1.0
@@ -165,8 +165,8 @@ end
 
     # Pinned values from
     # discretizations/finite_volume/flux_1d_ppm/fixtures/canonical/expected.esm.
-    @test F_pos ≈ 1.2494903985806707e-01 atol = 1.0e-15
-    @test F_neg ≈ -1.2494903985806687e-01 atol = 1.0e-15
+    @test F_pos ≈ 1.2494903985806707e-1 atol = 1.0e-15
+    @test F_neg ≈ -1.2494903985806687e-1 atol = 1.0e-15
     # By symmetry of the antisymmetric sinusoid around the face,
     # F_neg = -F_pos to within floating-point roundoff.
     @test abs(F_neg + F_pos) < 1.0e-15

@@ -111,45 +111,61 @@ end
 
 function _latlon_parse_variant(v::Symbol)
     v in _LATLON_VARIANTS ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "lat_lon: variant must be :regular or :reduced_gaussian; got :$v"
-        ))
+        )
+    )
     return v
 end
 _latlon_parse_variant(v::AbstractString) = _latlon_parse_variant(Symbol(v))
 
 function _latlon_parse_pole_policy(p::Symbol)
     p in _LATLON_POLE_POLICIES ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "lat_lon: pole_policy must be one of :none, :average, :fold; got :$p"
-        ))
+        )
+    )
     p === :none ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "lat_lon: non-:none pole policies (:average, :fold) are declared but " *
                 "not implemented in this phase"
-        ))
+        )
+    )
     return p
 end
 _latlon_parse_pole_policy(p::AbstractString) = _latlon_parse_pole_policy(Symbol(p))
 
 function _latlon_validate_lat_edges(edges::Vector{T}, nlat::Int) where {T}
     length(edges) == nlat + 1 ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "lat_lon: lat_edges length $(length(edges)) does not match nlat+1=$(nlat + 1)"
-        ))
+        )
+    )
     for x in edges
         isfinite(x) ||
             throw(DomainError(x, "lat_lon: lat_edges must be finite"))
     end
     for k in 1:nlat
         edges[k + 1] > edges[k] ||
-            throw(DomainError(edges,
-                "lat_lon: lat_edges must be strictly increasing"))
+            throw(
+            DomainError(
+                edges,
+                "lat_lon: lat_edges must be strictly increasing"
+            )
+        )
     end
     tol = T(1.0e-12)
     (edges[1] ≥ -T(pi) / 2 - tol && edges[end] ≤ T(pi) / 2 + tol) ||
-        throw(DomainError(edges,
-            "lat_lon: lat_edges must lie within [-pi/2, pi/2]"))
+        throw(
+        DomainError(
+            edges,
+            "lat_lon: lat_edges must lie within [-pi/2, pi/2]"
+        )
+    )
     return nothing
 end
 
@@ -157,18 +173,24 @@ function _latlon_validate_lat_centers(
         centers::Vector{T}, edges::Vector{T}, nlat::Int
     ) where {T}
     length(centers) == nlat ||
-        throw(ArgumentError(
+        throw(
+        ArgumentError(
             "lat_lon: lat_centers length $(length(centers)) does not match nlat=$nlat"
-        ))
+        )
+    )
     for x in centers
         isfinite(x) ||
             throw(DomainError(x, "lat_lon: lat_centers must be finite"))
     end
     for k in 1:nlat
         (edges[k] ≤ centers[k] ≤ edges[k + 1]) ||
-            throw(DomainError(centers[k],
+            throw(
+            DomainError(
+                centers[k],
                 "lat_lon: lat_centers[$k]=$(centers[k]) outside enclosing edges " *
-                    "[$(edges[k]), $(edges[k + 1])]"))
+                    "[$(edges[k]), $(edges[k + 1])]"
+            )
+        )
     end
     return nothing
 end
@@ -234,24 +256,30 @@ function _latlon(;
     else
         # :reduced_gaussian
         nlon === nothing ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "lat_lon: nlon is not allowed for variant=:reduced_gaussian; " *
                     "use nlon_per_row"
-            ))
+            )
+        )
         nlon_per_row === nothing &&
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "lat_lon: missing required keyword argument `nlon_per_row` " *
                     "for variant=:reduced_gaussian"
-            ))
+            )
+        )
         per_row = Int[Int(x) for x in nlon_per_row]
         nlat_i = nlat === nothing ? length(per_row) : Int(nlat)
         nlat_i ≥ 1 ||
             throw(DomainError(nlat_i, "lat_lon: nlat must be ≥ 1"))
         length(per_row) == nlat_i ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "lat_lon: nlon_per_row length $(length(per_row)) does not match " *
                     "nlat=$nlat_i"
-            ))
+            )
+        )
         for (j, n) in enumerate(per_row)
             n ≥ 1 ||
                 throw(DomainError(n, "lat_lon: nlon_per_row[$j]=$n must be ≥ 1"))

@@ -196,10 +196,10 @@ end
     # cubed_sphere accessor needed because the algebra is selector-blind.
     q_west = [1.0, 2.0, 4.0, 8.0, 16.0]
     q_east = [2.0, 4.0, 8.0, 16.0, 32.0]
-    c      = [0.5, -0.5, 0.5, -0.5, 0.0]
+    c = [0.5, -0.5, 0.5, -0.5, 0.0]
 
     F_closed = [(c[k] + abs(c[k])) / 2 * q_west[k] + (c[k] - abs(c[k])) / 2 * q_east[k] for k in 1:5]
-    F_max    = [max(c[k], 0) * q_west[k] + min(c[k], 0) * q_east[k] for k in 1:5]
+    F_max = [max(c[k], 0) * q_west[k] + min(c[k], 0) * q_east[k] for k in 1:5]
     @test F_closed == F_max
     @test F_closed == [0.5, -2.0, 2.0, -8.0, 0.0]
     # c=0 zero-crossing: both coefficients vanish independent of surrounding q.

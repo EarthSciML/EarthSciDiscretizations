@@ -98,4 +98,3 @@ end
     lab = evaluate_arrayop(fv_laplacian(a + α * b, grid))
     @test isapprox(lab, la + α * lb; rtol = 1.0e-10)
 end
-

@@ -89,8 +89,10 @@ end
 
                     got = neighbors_wire(g_a, loc, i, j)
                     for dkey in ("W", "E", "S", "N")
-                        check_neighbor(got[dkey], ntable[dkey][k],
-                            "loc=$lname dir=$dkey k=$k")
+                        check_neighbor(
+                            got[dkey], ntable[dkey][k],
+                            "loc=$lname dir=$dkey k=$k"
+                        )
                     end
                 end
             end
@@ -99,12 +101,18 @@ end
             mtable = golden["metrics"]
             for (k, qp) in enumerate(mtable["points"])
                 i, j = Int(qp[1]) + 1, Int(qp[2]) + 1
-                @test close_rel(metric_eval(g_a, :dx, i, j),
-                    Float64(mtable["dx"][k]), REL_TOL)
-                @test close_rel(metric_eval(g_a, :dy, i, j),
-                    Float64(mtable["dy"][k]), REL_TOL)
-                @test close_rel(metric_eval(g_a, :area, i, j),
-                    Float64(mtable["area"][k]), REL_TOL)
+                @test close_rel(
+                    metric_eval(g_a, :dx, i, j),
+                    Float64(mtable["dx"][k]), REL_TOL
+                )
+                @test close_rel(
+                    metric_eval(g_a, :dy, i, j),
+                    Float64(mtable["dy"][k]), REL_TOL
+                )
+                @test close_rel(
+                    metric_eval(g_a, :area, i, j),
+                    Float64(mtable["area"][k]), REL_TOL
+                )
             end
 
             # --- per-stagger variable location + shape tables ---
@@ -116,9 +124,9 @@ end
                 stab = golden["staggers"][sname]
                 h_loc, u_loc, v_loc = arakawa_variable_locations(
                     s === :A ? ArakawaA :
-                    s === :B ? ArakawaB :
-                    s === :C ? ArakawaC :
-                    s === :D ? ArakawaD : ArakawaE,
+                        s === :B ? ArakawaB :
+                        s === :C ? ArakawaC :
+                        s === :D ? ArakawaD : ArakawaE,
                 )
                 @test (g_s.stagger === ArakawaE) == stab["rotated"]
                 loc_str(l) = l === CellCenter ? "cell_center" :
@@ -134,11 +142,11 @@ end
                     @test collect(sh) == [Int(ex[1]), Int(ex[2])]
                 end
                 for (lname, loc) in (
-                    ("cell_center", CellCenter),
-                    ("u_edge", UEdge),
-                    ("v_edge", VEdge),
-                    ("corner", Corner),
-                )
+                        ("cell_center", CellCenter),
+                        ("u_edge", UEdge),
+                        ("v_edge", VEdge),
+                        ("corner", Corner),
+                    )
                     sh = arakawa_shape(g_s, loc)
                     ex = stab["location_shapes"][lname]
                     @test collect(sh) == [Int(ex[1]), Int(ex[2])]

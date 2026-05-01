@@ -219,7 +219,7 @@ end
         end
         for j in 1:ny, i in 1:nx
             dq[i, j] = -(Fx[i, j] - Fx[modnx(i - 1), j]) / dx -
-                       (Fy[i, j] - Fy[i, modny(j - 1)]) / dy
+                (Fy[i, j] - Fy[i, modny(j - 1)]) / dy
         end
         return dq
     end
@@ -257,10 +257,9 @@ end
     err = maximum(abs(q[i, j] - q0[i, j]) for j in 1:ny, i in 1:nx)
     overshoot = maximum(q) - 1.0  # IC peak is amp = 1.0
     undershoot = 0.0 - minimum(q)
-    @info "weno5_advection_2d canonical" linf=err overshoot=overshoot undershoot=undershoot
+    @info "weno5_advection_2d canonical" linf = err overshoot = overshoot undershoot = undershoot
     @test isfinite(err) && err >= 0
     @test err <= tol_linf
     @test overshoot <= tol_over
     @test undershoot <= tol_under
 end
-

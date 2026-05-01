@@ -85,10 +85,14 @@ end
     @test length(spec["stencil"]["q_left_edge"]) == 4
     @test length(spec["stencil"]["q_right_edge"]) == 4
     # Union of left/right edge offsets is the canonical 5-cell PPM support.
-    union_offsets = sort(unique(vcat(
-        [s["selector"]["offset"] for s in spec["stencil"]["q_left_edge"]],
-        [s["selector"]["offset"] for s in spec["stencil"]["q_right_edge"]],
-    )))
+    union_offsets = sort(
+        unique(
+            vcat(
+                [s["selector"]["offset"] for s in spec["stencil"]["q_left_edge"]],
+                [s["selector"]["offset"] for s in spec["stencil"]["q_right_edge"]],
+            )
+        )
+    )
     @test union_offsets == [-2, -1, 0, 1, 2]
     # The right-edge sub-stencil computes q_{i+1/2} per CW84 eq. (1.6); the
     # `edge_value_stencil` block is now a human-readable summary that points

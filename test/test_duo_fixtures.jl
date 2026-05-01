@@ -14,8 +14,8 @@
 
     # Canonical ladder: level → expected (cells, vertices, edges).
     const EXPECTED = Dict(
-        "icos_level0" => (level = 0, n_cells = 20,  n_vertices = 12,  n_edges = 30),
-        "icos_level1" => (level = 1, n_cells = 80,  n_vertices = 42,  n_edges = 120),
+        "icos_level0" => (level = 0, n_cells = 20, n_vertices = 12, n_edges = 30),
+        "icos_level1" => (level = 1, n_cells = 80, n_vertices = 42, n_edges = 120),
         "icos_level2" => (level = 2, n_cells = 320, n_vertices = 162, n_edges = 480),
     )
 
@@ -92,9 +92,9 @@ end
         # subdivision at level r: Nc=20·4^r, Nv=10·4^r+2, Ne=30·4^r, and
         # the Euler identity V - E + F = 2.
         r = declared_level
-        @test d_in["n_cells"]    == 20 * 4^r
+        @test d_in["n_cells"] == 20 * 4^r
         @test d_in["n_vertices"] == 10 * 4^r + 2
-        @test d_in["n_edges"]    == 30 * 4^r
+        @test d_in["n_edges"] == 30 * 4^r
         @test d_in["n_vertices"] - d_in["n_edges"] + d_in["n_cells"] == 2
     end
 end
@@ -105,8 +105,10 @@ end
     for fname in readdir(FIXTURES_DIR)
         endswith(fname, ".esm") || continue
         d = JSON.parsefile(joinpath(FIXTURES_DIR, fname); dicttype = Dict{String, Any})
-        for forbidden in ("cells", "edges", "vertices", "faces", "lon", "lat",
-                          "cell_cart", "cell_neighbors", "vertex_faces", "area")
+        for forbidden in (
+                "cells", "edges", "vertices", "faces", "lon", "lat",
+                "cell_cart", "cell_neighbors", "vertex_faces", "area",
+            )
             @test !haskey(d, forbidden)
             @test !haskey(d["options"], forbidden)
         end
@@ -114,9 +116,11 @@ end
 end
 
 @testitem "duo fixtures: icos_level0 topology + metrics" setup = [DuoFixturesSetup] tags = [:grid, :duo, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "icos_level0.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "icos_level0.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test g isa DuoGrid{Float64}
     @test family(g) == "duo"
     @test n_cells(g) == 20
@@ -163,9 +167,11 @@ end
 end
 
 @testitem "duo fixtures: icos_level2 subdivision identity" setup = [DuoFixturesSetup] tags = [:grid, :duo, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "icos_level2.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "icos_level2.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test n_cells(g) == 320
     @test n_vertices(g) == 162
     @test n_edges(g) == 480
@@ -176,6 +182,6 @@ end
 
     # Latitude range covers the sphere (poles reachable after level-1+).
     lats = cell_centers(g).lat
-    @test maximum(lats) >  0.9  # close to +π/2
+    @test maximum(lats) > 0.9  # close to +π/2
     @test minimum(lats) < -0.9  # close to -π/2
 end

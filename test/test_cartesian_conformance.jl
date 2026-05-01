@@ -71,11 +71,13 @@ end
                     for s in (-1, +1)
                         haskey(nbr_dict, (d, s)) || continue
                         nb = nbr_dict[(d, s)]
-                        push!(nbr_list, Dict{String, Any}(
-                            "axis" => d - 1,
-                            "side" => s,
-                            "index" => [Int(x) - 1 for x in nb],
-                        ))
+                        push!(
+                            nbr_list, Dict{String, Any}(
+                                "axis" => d - 1,
+                                "side" => s,
+                                "index" => [Int(x) - 1 for x in nb],
+                            )
+                        )
                     end
                 end
                 gnbrs = golden["neighbors"][k]

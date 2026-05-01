@@ -550,8 +550,10 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
     if spec isa AbstractDict && haskey(spec, "replacement") &&
             !haskey(spec, "stencil") && !haskey(spec, "lowering")
-        spec["lowering"] = _synthesize_lowering(spec["replacement"],
-                                                get(spec, "applies_to", Dict()))
+        spec["lowering"] = _synthesize_lowering(
+            spec["replacement"],
+            get(spec, "applies_to", Dict())
+        )
     end
 
     try
@@ -576,7 +578,7 @@ end
 # expects ("u", "i", …). The first array operand in `applies_to.args` becomes
 # "u" (subsequent operands "u2", "u3", …); `applies_to.dim` becomes "i".
 function _synthesize_lowering(replacement, applies_to::AbstractDict)
-    bindings = Dict{String,String}()
+    bindings = Dict{String, String}()
     args_list = get(applies_to, "args", nothing)
     if args_list isa AbstractVector
         n_arr = 0
@@ -594,10 +596,12 @@ function _synthesize_lowering(replacement, applies_to::AbstractDict)
     return _substitute_pattern_vars(replacement, bindings)
 end
 
-function _substitute_pattern_vars(node, bindings::Dict{String,String})
+function _substitute_pattern_vars(node, bindings::Dict{String, String})
     if node isa AbstractDict
-        return Dict{String,Any}(String(k) => _substitute_pattern_vars(v, bindings)
-                                for (k, v) in node)
+        return Dict{String, Any}(
+            String(k) => _substitute_pattern_vars(v, bindings)
+                for (k, v) in node
+        )
     elseif node isa AbstractVector
         return Any[_substitute_pattern_vars(v, bindings) for v in node]
     elseif node isa AbstractString
@@ -755,7 +759,7 @@ function run_monotonicity_check(rule::RuleFile, monotonicity_dir::AbstractString
 
     return LayerResult(
         LAYER_PASS,
-        "Sweby OK ($(n_ref) refs, $(n_sweep) sweep pts); TVD OK (TV $(round(tv_summary.tv_initial; digits=6)) -> $(round(tv_summary.tv_final; digits=6)))",
+        "Sweby OK ($(n_ref) refs, $(n_sweep) sweep pts); TVD OK (TV $(round(tv_summary.tv_initial; digits = 6)) -> $(round(tv_summary.tv_final; digits = 6)))",
     )
 end
 

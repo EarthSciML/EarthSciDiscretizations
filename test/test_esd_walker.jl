@@ -41,13 +41,13 @@ using TestItems
     # `centered_2nd_uniform_vertical` (dsc-mzu) is the first non-cartesian
     # rule and a design probe for the per-family selector schema.
     for seeded in (
-        "centered_2nd_uniform",
-        "centered_2nd_uniform_vertical",
-        "centered_2nd_uniform_latlon",
-        "nn_diffusion_mpas",
-        "periodic_bc",
-        "upwind_1st",
-    )
+            "centered_2nd_uniform",
+            "centered_2nd_uniform_vertical",
+            "centered_2nd_uniform_latlon",
+            "nn_diffusion_mpas",
+            "periodic_bc",
+            "upwind_1st",
+        )
         @test seeded in names
     end
     # finite_volume/ppm_reconstruction (CW84 §1) joins the walker once landed.
@@ -85,14 +85,18 @@ using TestItems
     # rules pending ESS harness extension, periodic_bc) skip with a
     # fixture-declared reason. Rules with no convergence fixture at all also
     # skip.
-    pass_layer_b = Set([("finite_difference", "centered_2nd_uniform"),
-                        ("finite_difference", "centered_2nd_uniform_vertical"),
-                        ("finite_difference", "centered_2nd_uniform_latlon"),
-                        ("finite_difference", "upwind_1st"),
-                        ("finite_volume", "ppm_reconstruction"),
-                        ("finite_volume", "weno5_advection"),
-                        ("finite_volume", "weno5_advection_2d"),
-                        ("finite_volume", "divergence_arakawa_c")])
+    pass_layer_b = Set(
+        [
+            ("finite_difference", "centered_2nd_uniform"),
+            ("finite_difference", "centered_2nd_uniform_vertical"),
+            ("finite_difference", "centered_2nd_uniform_latlon"),
+            ("finite_difference", "upwind_1st"),
+            ("finite_volume", "ppm_reconstruction"),
+            ("finite_volume", "weno5_advection"),
+            ("finite_volume", "weno5_advection_2d"),
+            ("finite_volume", "divergence_arakawa_c"),
+        ]
+    )
     # centered_2nd_uniform rejoined pass_layer_b once ESS esm-4gw landed
     # the AST-walker dispatch (dsc-66f). weno5_advection rejoined once
     # ESS esm-8i9 extended the AST-walker to reach form=weno + multi-input
@@ -113,17 +117,21 @@ using TestItems
     # has not yet gained cubed_sphere selector dispatch — Layer-A is therefore
     # left unconstrained for these rules and the n_fail tally below absorbs the
     # FAIL dynamically (parallel to `pass_layer_b_canonical_drift`).
-    not_applicable_layer_b = Set([("finite_difference", "periodic_bc"),
-                                   ("finite_difference", "covariant_laplacian_cubed_sphere"),
-                                   ("finite_difference", "nn_diffusion_mpas"),
-                                   ("finite_volume", "flux_1d_ppm"),
-                                   ("finite_volume", "flux_limiter_minmod"),
-                                   ("finite_volume", "flux_limiter_superbee"),
-                                   ("finite_volume", "lax_friedrichs_flux_cubed_sphere_eta"),
-                                   ("finite_volume", "lax_friedrichs_flux_cubed_sphere_xi"),
-                                   ("finite_volume", "transport_2d"),
-                                   ("finite_volume", "ppm_edge_cubed_sphere"),
-                                   ("finite_volume", "vertical_remap")])
+    not_applicable_layer_b = Set(
+        [
+            ("finite_difference", "periodic_bc"),
+            ("finite_difference", "covariant_laplacian_cubed_sphere"),
+            ("finite_difference", "nn_diffusion_mpas"),
+            ("finite_volume", "flux_1d_ppm"),
+            ("finite_volume", "flux_limiter_minmod"),
+            ("finite_volume", "flux_limiter_superbee"),
+            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_eta"),
+            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_xi"),
+            ("finite_volume", "transport_2d"),
+            ("finite_volume", "ppm_edge_cubed_sphere"),
+            ("finite_volume", "vertical_remap"),
+        ]
+    )
     # Rules whose canonical/ fixture has pre-existing layer-A drift that is
     # tracked by a separate bead. We assert layer-B passes via the convergence
     # sweep but do not constrain layer-A here (the n_fail tally below absorbs
@@ -134,15 +142,23 @@ using TestItems
     # fixture kind under discretizations/<rule>/fixtures/ and the walker
     # exercises Sweby-region + 1D advection TVD checks against the rule's
     # AST (dsc-8vu). All other rules SKIP this layer.
-    pass_layer_limiter = Set([("finite_volume", "flux_limiter_minmod"),
-                              ("finite_volume", "flux_limiter_superbee")])
+    pass_layer_limiter = Set(
+        [
+            ("finite_volume", "flux_limiter_minmod"),
+            ("finite_volume", "flux_limiter_superbee"),
+        ]
+    )
     # Layer D (conservation): finite-volume rules that ship a
     # `conservation/` fixture (dsc-559). Currently divergence_arakawa_c
     # exercises the 2D periodic divergence telescoping check, and
     # flux_limiter_minmod exercises the 1D MUSCL telescoping check. All
     # other rules SKIP because they have no conservation/ fixture.
-    pass_layer_d = Set([("finite_volume", "divergence_arakawa_c"),
-                        ("finite_volume", "flux_limiter_minmod")])
+    pass_layer_d = Set(
+        [
+            ("finite_volume", "divergence_arakawa_c"),
+            ("finite_volume", "flux_limiter_minmod"),
+        ]
+    )
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -217,18 +233,24 @@ using TestItems
     # axis-split WENO5 dispatch (mms_weno5_convergence reads `axes.x`/
     # `axes.y` and dispatches on `haskey(spec, "axes")`); the prior Layer-C
     # operational substitute was retired in dsc-7hx.
-    layer_b_passes = sum(1 for r in results
-                         if (String(r.family), r.name) in pass_layer_b; init = 0)
+    layer_b_passes = sum(
+        1 for r in results
+            if (String(r.family), r.name) in pass_layer_b; init = 0
+    )
     # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
     # SKIP that layer because they have no monotonicity/ fixture directory.
-    layer_limiter_passes = sum(1 for r in results
-                               if (String(r.family), r.name) in pass_layer_limiter;
-                               init = 0)
+    layer_limiter_passes = sum(
+        1 for r in results
+            if (String(r.family), r.name) in pass_layer_limiter;
+        init = 0
+    )
     # Two layer-D (conservation) cases pass (divergence_arakawa_c,
     # flux_limiter_minmod). All other rules SKIP because no conservation/
     # fixture exists.
-    layer_d_passes = sum(1 for r in results
-                         if (String(r.family), r.name) in pass_layer_d; init = 0)
+    layer_d_passes = sum(
+        1 for r in results
+            if (String(r.family), r.name) in pass_layer_d; init = 0
+    )
     @test layer_b_passes == 8
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
@@ -307,34 +329,40 @@ end
         family_dir = joinpath(tmp, "finite_difference")
         mkpath(family_dir)
         rule_path = joinpath(family_dir, "synth_periodic.json")
-        write(rule_path, """
-        {
-          "rules": {
-            "grad_to_index_periodic": {
-              "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
-              "where": [
-                {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
-                {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
-              ],
-              "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+        write(
+            rule_path, """
+            {
+              "rules": {
+                "grad_to_index_periodic": {
+                  "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
+                  "where": [
+                    {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
+                    {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
+                  ],
+                  "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+                }
+              }
             }
-          }
-        }
-        """)
+            """
+        )
         rewrite_dir = joinpath(family_dir, "synth_periodic", "fixtures", "rewrite")
         mkpath(rewrite_dir)
-        write(joinpath(rewrite_dir, "input.esm"), """
-        {
-          "kind": "rewrite",
-          "context": {
-            "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
-            "variables": {"T": {"grid": "g1"}}
-          },
-          "expression": {"op": "grad", "args": ["T"], "dim": "x"}
-        }
-        """)
-        write(joinpath(rewrite_dir, "expected.esm"),
-              "{\"args\":[\"T\",\"x\"],\"op\":\"index\"}\n")
+        write(
+            joinpath(rewrite_dir, "input.esm"), """
+            {
+              "kind": "rewrite",
+              "context": {
+                "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
+                "variables": {"T": {"grid": "g1"}}
+              },
+              "expression": {"op": "grad", "args": ["T"], "dim": "x"}
+            }
+            """
+        )
+        write(
+            joinpath(rewrite_dir, "expected.esm"),
+            "{\"args\":[\"T\",\"x\"],\"op\":\"index\"}\n"
+        )
 
         rule = RuleFile(:finite_difference, "synth_periodic", rule_path)
         result = WalkESDTests.run_layer_a(rule)
@@ -377,35 +405,41 @@ end
         family_dir = joinpath(tmp, "finite_difference")
         mkpath(family_dir)
         rule_path = joinpath(family_dir, "synth_mismatch.json")
-        write(rule_path, """
-        {
-          "rules": {
-            "grad_to_index_periodic": {
-              "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
-              "where": [
-                {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
-                {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
-              ],
-              "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+        write(
+            rule_path, """
+            {
+              "rules": {
+                "grad_to_index_periodic": {
+                  "pattern": {"op": "grad", "args": ["\$u"], "dim": "\$x"},
+                  "where": [
+                    {"guard": "var_has_grid", "pvar": "\$u", "grid": "\$g"},
+                    {"guard": "dim_is_periodic", "pvar": "\$x", "grid": "\$g"}
+                  ],
+                  "replacement": {"op": "index", "args": ["\$u", "\$x"]}
+                }
+              }
             }
-          }
-        }
-        """)
+            """
+        )
         rewrite_dir = joinpath(family_dir, "synth_mismatch", "fixtures", "rewrite")
         mkpath(rewrite_dir)
-        write(joinpath(rewrite_dir, "input.esm"), """
-        {
-          "kind": "rewrite",
-          "context": {
-            "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
-            "variables": {"T": {"grid": "g1"}}
-          },
-          "expression": {"op": "grad", "args": ["T"], "dim": "x"}
-        }
-        """)
+        write(
+            joinpath(rewrite_dir, "input.esm"), """
+            {
+              "kind": "rewrite",
+              "context": {
+                "grids": {"g1": {"spatial_dims": ["x"], "periodic_dims": ["x"]}},
+                "variables": {"T": {"grid": "g1"}}
+              },
+              "expression": {"op": "grad", "args": ["T"], "dim": "x"}
+            }
+            """
+        )
         # Wrong: claim the output is `index(U, x)` instead of `index(T, x)`.
-        write(joinpath(rewrite_dir, "expected.esm"),
-              "{\"args\":[\"U\",\"x\"],\"op\":\"index\"}\n")
+        write(
+            joinpath(rewrite_dir, "expected.esm"),
+            "{\"args\":[\"U\",\"x\"],\"op\":\"index\"}\n"
+        )
 
         rule = RuleFile(:finite_difference, "synth_mismatch", rule_path)
         result = WalkESDTests.run_layer_a(rule)
@@ -600,12 +634,16 @@ end
         write(joinpath(mono, "sweby_check.esm"), JSON.json(bad_sweby))
         # Provide a tvd_check.esm so the FAIL surfaces from the Sweby check
         # rather than the missing-file branch.
-        write(joinpath(mono, "tvd_check.esm"), JSON.json(Dict(
-            "grid" => Dict("n" => 8, "dx" => 0.125),
-            "advection" => Dict("velocity" => 1.0, "cfl" => 0.4, "periods" => 1.0),
-            "tvd_tolerance" => 1.0e-10,
-            "eps_denom" => 1.0e-12,
-        )))
+        write(
+            joinpath(mono, "tvd_check.esm"), JSON.json(
+                Dict(
+                    "grid" => Dict("n" => 8, "dx" => 0.125),
+                    "advection" => Dict("velocity" => 1.0, "cfl" => 0.4, "periods" => 1.0),
+                    "tvd_tolerance" => 1.0e-10,
+                    "eps_denom" => 1.0e-12,
+                )
+            )
+        )
 
         rule = RuleFile(:finite_volume, "broken_limiter", rule_path)
         result = WalkESDTests.run_layer_limiter(rule)
@@ -702,10 +740,14 @@ end
             "discretizations" => Dict(
                 "broken_div" => Dict(
                     "stencil" => [
-                        Dict("selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 0),
-                             "coeff" => Dict("op" => "/", "args" => [1, "dx"])),
-                        Dict("selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 1),
-                             "coeff" => Dict("op" => "/", "args" => [1, "dx"])),
+                        Dict(
+                            "selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 0),
+                            "coeff" => Dict("op" => "/", "args" => [1, "dx"])
+                        ),
+                        Dict(
+                            "selector" => Dict("kind" => "arakawa", "stagger" => "face_x", "axis" => "\$x", "offset" => 1),
+                            "coeff" => Dict("op" => "/", "args" => [1, "dx"])
+                        ),
                     ],
                 ),
             ),
@@ -714,13 +756,17 @@ end
 
         cdir = joinpath(family_dir, "broken_div", "fixtures", "conservation")
         mkpath(cdir)
-        write(joinpath(cdir, "conservation_check.esm"), JSON.json(Dict(
-            "kind" => "conservation_divergence_2d_periodic",
-            "rule" => "broken_div",
-            "grid" => Dict("nx" => 8, "ny" => 6, "dx" => 0.125, "dy" => 0.16666666666666666),
-            "seed" => 42,
-            "tolerance" => 1.0e-12,
-        )))
+        write(
+            joinpath(cdir, "conservation_check.esm"), JSON.json(
+                Dict(
+                    "kind" => "conservation_divergence_2d_periodic",
+                    "rule" => "broken_div",
+                    "grid" => Dict("nx" => 8, "ny" => 6, "dx" => 0.125, "dy" => 0.16666666666666666),
+                    "seed" => 42,
+                    "tolerance" => 1.0e-12,
+                )
+            )
+        )
 
         rule = RuleFile(:finite_volume, "broken_div", rule_path)
         result = WalkESDTests.run_layer_d(rule)

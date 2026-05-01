@@ -23,10 +23,12 @@ end
     manifest = JSON.parsefile(joinpath(fixtures_dir, "fixtures.json"))
     @test manifest["family"] == "arakawa"
     names = [f["name"] for f in manifest["fixtures"]]
-    @test sort(names) == sort([
-        "cartesian_n16", "cartesian_n64", "cartesian_n256",
-        "lat_lon_1deg", "lat_lon_0p25deg", "lat_lon_0p1deg",
-    ])
+    @test sort(names) == sort(
+        [
+            "cartesian_n16", "cartesian_n64", "cartesian_n256",
+            "lat_lon_1deg", "lat_lon_0p25deg", "lat_lon_0p1deg",
+        ]
+    )
     # Every listed file exists and parses as JSON.
     for f in manifest["fixtures"]
         path = joinpath(fixtures_dir, f["file"])

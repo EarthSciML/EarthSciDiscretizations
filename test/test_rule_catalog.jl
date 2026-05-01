@@ -271,13 +271,13 @@ end
     # families; only require that the canonical FD rules remain discoverable
     # under :finite_difference.
     for seeded in (
-        "centered_2nd_uniform",
-        "centered_2nd_uniform_vertical",
-        "centered_2nd_uniform_latlon",
-        "nn_diffusion_mpas",
-        "periodic_bc",
-        "upwind_1st",
-    )
+            "centered_2nd_uniform",
+            "centered_2nd_uniform_vertical",
+            "centered_2nd_uniform_latlon",
+            "nn_diffusion_mpas",
+            "periodic_bc",
+            "upwind_1st",
+        )
         @test seeded in names
     end
     fd_rules = filter(r -> r.family == :finite_difference, rules)
@@ -300,15 +300,15 @@ end
     # corner interpolation + Coriolis, kinetic energy, D→C interpolation,
     # and metric-corrected sub-grid sin(α) flux on the cubed sphere.
     for fv3_rule in (
-        "fv3_vorticity_cellmean",
-        "fv3_vorticity_corner",
-        "fv3_absolute_vorticity_cellmean",
-        "fv3_kinetic_energy_cell",
-        "fv3_d_to_c_xi",
-        "fv3_d_to_c_eta",
-        "fv3_sinsg_flux_xi",
-        "fv3_sinsg_flux_eta",
-    )
+            "fv3_vorticity_cellmean",
+            "fv3_vorticity_corner",
+            "fv3_absolute_vorticity_cellmean",
+            "fv3_kinetic_energy_cell",
+            "fv3_d_to_c_xi",
+            "fv3_d_to_c_eta",
+            "fv3_sinsg_flux_xi",
+            "fv3_sinsg_flux_eta",
+        )
         @test fv3_rule in names
         @test fv3_rule in Set(r.name for r in fv_rules)
     end

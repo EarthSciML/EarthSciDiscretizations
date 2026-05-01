@@ -76,9 +76,11 @@ end
 end
 
 @testitem "cartesian fixtures: uniform_1d_n16 topology + metrics" setup = [CartesianFixturesSetup] tags = [:grid, :cartesian, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "uniform_1d_n16.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "uniform_1d_n16.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test g isa CartesianGrid{Float64, 1}
     @test g.n == (16,)
     @test g.extent == ((0.0, 1.0),)
@@ -108,9 +110,11 @@ end
 end
 
 @testitem "cartesian fixtures: uniform_2d_n64 topology + metrics" setup = [CartesianFixturesSetup] tags = [:grid, :cartesian, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "uniform_2d_n64.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "uniform_2d_n64.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test g isa CartesianGrid{Float64, 2}
     @test g.n == (64, 64)
     @test all(isapprox.(g.widths[1], 1.0 / 64; atol = 1.0e-14))
@@ -128,9 +132,11 @@ end
 end
 
 @testitem "cartesian fixtures: uniform_3d_n16 topology + metrics" setup = [CartesianFixturesSetup] tags = [:grid, :cartesian, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "uniform_3d_n16.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "uniform_3d_n16.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test g isa CartesianGrid{Float64, 3}
     @test g.n == (16, 16, 16)
     @test cell_volume(g, 8, 8, 8) ≈ (1.0 / 16)^3
@@ -147,9 +153,11 @@ end
 end
 
 @testitem "cartesian fixtures: nonuniform_2d_stretched edges + widths" setup = [CartesianFixturesSetup] tags = [:grid, :cartesian, :fixtures] begin
-    g = _grid_from_fixture(JSON.parsefile(
-        joinpath(FIXTURES_DIR, "nonuniform_2d_stretched.esm"); dicttype = Dict{String, Any}
-    ))
+    g = _grid_from_fixture(
+        JSON.parsefile(
+            joinpath(FIXTURES_DIR, "nonuniform_2d_stretched.esm"); dicttype = Dict{String, Any}
+        )
+    )
     @test g isa CartesianGrid{Float64, 2}
     @test g.n == (4, 3)
     @test g.uniform == (false, false)
