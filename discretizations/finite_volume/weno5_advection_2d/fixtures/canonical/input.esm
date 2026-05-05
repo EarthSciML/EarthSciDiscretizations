@@ -1,0 +1,15 @@
+{
+  "rule": "weno5_advection_2d",
+  "applicable": false,
+  "skip_reason": "Layer-A canonical drive of `weno5_advection_2d` requires ESS `discretize`/`parse_rule` to dispatch the FV `applies_to` + `stencil` schema with multi-axis selector lists. The catalog rule pairs `applies_to: advect($q, $U, dims=[$x, $y])` with a stencil whose entries each carry a `selectors` list (one cartesian selector per axis) plus per-row `role` strings, and a per-axis `axes.x`/`axes.y` block of nested 1D WENO5 reconstruction candidates (Jiang-Shu 1996 / Shu 1998 §2.2 with LeVeque 2002 §20 dimension-by-dimension splitting). ESS `rule_engine.jl::parse_rule` today only consumes `pattern` + `replacement` rules with single-axis `index`/`offset` AST and no multi-axis selector dispatch. Once ESS gains `applies_to` + multi-axis `stencil` dispatch, this stub can be promoted to a hand-pinned canonical contract on a small periodic 2D grid (e.g. nx=ny=8 cells, U=(1,0), q(x,y) = sin(2*pi*x)*cos(2*pi*y)) byte-pinned against the canonicalized `discretize` output of a model whose RHS is `advect(q, U, dims=[x, y])`.",
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "weno5_advection_2d_arrayop (catalog rule axes blocks)",
+    "path": "discretizations/finite_volume/weno5_advection_2d.json",
+    "comment": "The catalog rule's `axes.x` and `axes.y` blocks each carry the 3-candidate WENO5 reconstruction (left-biased and right-biased) used by dimension-by-dimension splitting: convex combination of p_0, p_1, p_2 with Shu (1998) eq. (2.11) coefficients, smoothness indicators beta_k, nonlinear weights alpha_k = d_k / (eps + beta_k)^2, and the upwind ifelse on the cell-to-face-averaged U. The two axis blocks are structurally identical to the 1D weno5_advection rule; only the selector axis differs. Layer-B convergence SKIPs pending the canonical-pipeline replacement of the retired ESS verify_mms_convergence (esm-4t5)."
+  },
+  "audit_provenance": {
+    "bead": "dsc-ntxo",
+    "audit": "audits/maintainability_audit_2026-05-01.md (F6)"
+  }
+}

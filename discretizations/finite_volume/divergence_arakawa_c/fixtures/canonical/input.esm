@@ -1,38 +1,14 @@
 {
   "rule": "divergence_arakawa_c",
-  "grid": {
-    "family": "arakawa",
-    "stagger": "C",
-    "base": {
-      "family": "cartesian",
-      "nx": 2,
-      "ny": 2,
-      "extent": [[0.0, 0.0], [1.0, 1.0]]
-    },
-    "dx": 0.5,
-    "dy": 0.5
+  "applicable": false,
+  "skip_reason": "Layer-A canonical drive of `divergence_arakawa_c` requires ESS `discretize`/`parse_rule` to dispatch the FV `applies_to` + `stencil` schema (kind=arakawa selectors at face_x/face_y staggers, axis $x/$y, offsets {0, 1}, with per-row `coeff` AST). ESS `rule_engine.jl::parse_rule` today only consumes the `pattern` + `replacement` schema (E_RULE_REPLACEMENT_MISSING raised on stencil-form rules), so the catalog rule cannot be materialized end-to-end via the canonical pipeline yet. The legacy hand-pinned fixture previously committed here (rule/grid/fields/operator format with a 2x2 cartesian base + dx=dy=0.5 worked example) was a pre-canonical-pipeline regression artifact; ESS does not consume that schema either and Layer-A was FAILing through the n_fail dynamic absorption in test_esd_walker.jl. Once ESS gains stencil-schema dispatch, this stub can be promoted to a hand-pinned canonical contract on the same 2x2 worked example: ux sampled from u(x,y)=x at face_x positions, uy sampled from v(x,y)=y^2 at face_y positions, expected div_F = [[1.5, 2.5], [1.5, 2.5]] at cell centers.",
+  "reference_implementation": {
+    "module": "EarthSciSerialization",
+    "function": "stencil-schema dispatch (pending)",
+    "comment": "The catalog rule `divergence_arakawa_c.json` declares a 4-row Arakawa-C stencil: face_x at offsets {0, 1} with coeffs {-1/dx, +1/dx} and face_y at offsets {0, 1} with coeffs {-1/dy, +1/dy}. Layer-D conservation already exercises this stencil end-to-end via the walker's `_run_conservation_divergence_2d_periodic` runner (test_esd_walker.jl line 721); Layer-A would byte-pin the canonicalized whole-document discretize output once ESS can apply the stencil to a model equation `div(F)`."
   },
-  "fields": [
-    {
-      "name": "ux",
-      "stagger": "face_x",
-      "axis": "x",
-      "shape": [3, 2],
-      "values": [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]],
-      "sampled_from": "u(x,y) = x at u-faces (i = 1..nx+1, j = 1..ny); u-face i sits on the line x = (i-1)*dx"
-    },
-    {
-      "name": "uy",
-      "stagger": "face_y",
-      "axis": "y",
-      "shape": [2, 3],
-      "values": [[0.0, 0.25, 1.0], [0.0, 0.25, 1.0]],
-      "sampled_from": "v(x,y) = y^2 at v-faces (i = 1..nx, j = 1..ny+1); v-face j sits on the line y = (j-1)*dy"
-    }
-  ],
-  "operator": {
-    "op": "div",
-    "args": ["ux", "uy"]
-  },
-  "boundary": "none"
+  "audit_provenance": {
+    "bead": "dsc-ntxo",
+    "audit": "audits/maintainability_audit_2026-05-01.md (F6)"
+  }
 }

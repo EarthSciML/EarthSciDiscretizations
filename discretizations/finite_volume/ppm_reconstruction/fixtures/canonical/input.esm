@@ -1,0 +1,15 @@
+{
+  "rule": "ppm_reconstruction",
+  "applicable": false,
+  "skip_reason": "Layer-A canonical drive of `ppm_reconstruction` requires ESS `discretize`/`parse_rule` to dispatch the FV `applies_to` + `stencil` schema with multiple named output stencils. The catalog rule pairs `applies_to: reconstruct($q, dim=$x)` with a `stencil` object keyed by output edge (`q_left_edge`, `q_right_edge`), each entry a list of cartesian selectors at axis $x with offsets {-2..1} or {-1..2} and CW84 (Colella & Woodward 1984) coefficient AST `{-1/12, 7/12, 7/12, -1/12}`. The rule emits THREE outputs (`q_left_edge`, `q_right_edge`, `q_parabola`) rather than a single replacement — the parabola block is documented under `parabola.{a_L, a_R, da, a_6}` for downstream consumers but is not currently a stencil row. ESS `rule_engine.jl::parse_rule` today only consumes `pattern` + `replacement` rules with a single replacement expression, so the catalog rule cannot be materialized end-to-end via the canonical pipeline yet. Once ESS gains stencil-schema dispatch with multi-output emission, this stub can be promoted to a hand-pinned canonical contract on a small periodic 1D grid (e.g. N=16 cells, q sampled from a smooth sinusoid) byte-pinned against the canonicalized `discretize` output of a model that consumes `reconstruct(q, dim=x)`.",
+  "reference_implementation": {
+    "module": "EarthSciDiscretizations",
+    "function": "flux_1d_ppm_arrayop (related symbolic ArrayOp form)",
+    "path": "src/operators/flux_1d.jl",
+    "comment": "The catalog rule's stencil rows pin CW84 eq. (1.6): a 4-point centered O(dx^3) interpolation of cell-averaged data to the cell edge. `q_left_edge` for cell i corresponds to the right-edge stencil shifted one cell left; `q_right_edge` is the canonical CW84 form. The `parabola` block (a_L, a_R, da, a_6) is a human-readable summary of CW84 eqs. (1.5),(1.7),(1.10) — a(xi) = a_L + xi*(da + a_6*(1-xi)) with xi = (x - x_{i-1/2})/dx in [0, 1] — used by the imperative `flux_1d_ppm_arrayop` reference path. Layer-B convergence SKIPs pending the canonical-pipeline replacement of the retired ESS verify_mms_convergence (esm-4t5)."
+  },
+  "audit_provenance": {
+    "bead": "dsc-ntxo",
+    "audit": "audits/maintainability_audit_2026-05-01.md (F6)"
+  }
+}

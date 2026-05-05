@@ -96,10 +96,6 @@ using TestItems
             ("finite_difference", "centered_2nd_uniform_vertical"),
             ("finite_difference", "centered_2nd_uniform_latlon"),
             ("finite_difference", "upwind_1st"),
-            ("finite_volume", "ppm_reconstruction"),
-            ("finite_volume", "weno5_advection"),
-            ("finite_volume", "weno5_advection_2d"),
-            ("finite_volume", "divergence_arakawa_c"),
         ]
     )
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
@@ -176,6 +172,22 @@ using TestItems
             ("finite_volume", "fv3_vorticity_corner"),
         ]
     )
+    # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
+    # canonical-skip-only fixtures declaring `applicable:false` pending the
+    # ESS `applies_to` + `stencil` schema dispatch (parse_rule today only
+    # consumes `pattern` + `replacement` — see ESS rule_engine.jl). Layer-A
+    # SKIPs via `_fixture_applicable_skip`. Layer-B keeps its existing
+    # `_LAYER_B_PIPELINE_PENDING` SKIP (these rules also ship convergence
+    # fixtures with applicable:true). Once ESS gains the schema dispatch,
+    # these stubs flip to PASS the same way as the FV3 ports.
+    canonical_skip_only_hot_path = Set(
+        [
+            ("finite_volume", "divergence_arakawa_c"),
+            ("finite_volume", "ppm_reconstruction"),
+            ("finite_volume", "weno5_advection"),
+            ("finite_volume", "weno5_advection_2d"),
+        ]
+    )
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -220,6 +232,14 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif key in canonical_skip_only_hot_path
+            # Layer-A SKIPs via `_fixture_applicable_skip`. Layer-B keeps
+            # the unified `_LAYER_B_PIPELINE_PENDING` SKIP reason because
+            # these rules carry an applicable:true convergence fixture.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
