@@ -1,6 +1,17 @@
 using Documenter
 using EarthSciDiscretizations
 
+# Regenerate the rule catalog from `discretizations/` before each build so
+# the manifest can never drift away from the JSON source of truth.
+include(joinpath(@__DIR__, "generate_rule_catalog.jl"))
+let repo_root = abspath(joinpath(@__DIR__, ".."))
+    RuleCatalogGenerator.generate_rule_catalog(;
+        catalog_dir = joinpath(repo_root, "discretizations"),
+        output_path = joinpath(@__DIR__, "rule-catalog.md"),
+        repo_root   = repo_root,
+    )
+end
+
 makedocs(
     sitename = "EarthSciDiscretizations.jl",
     modules = [EarthSciDiscretizations],
