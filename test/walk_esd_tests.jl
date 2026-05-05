@@ -546,6 +546,26 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = x -> sin(2π * x),
         derivative = x -> 2π * cos(2π * x),
     ),
+    # Spherical-harmonic Y_{2,0} on the unit sphere. Lon-independent
+    # (∂_φ Y_{2,0} ≡ 0); ∂_θ component is the meaningful test signal for
+    # the latlon centered-FD family (`grid_family=latlon`).
+    #
+    #   Y_{2,0}(θ,φ) = (1/4)·√(5/π)·(3·cos²θ − 1)
+    #   ∂_θ Y_{2,0}  = (1/4)·√(5/π)·(−6·cos θ·sin θ) = −(3/2)·√(5/π)·cos θ·sin θ
+    #
+    # `ic(lat, lon)` returns the scalar field; `derivative(lat, lon)` returns
+    # `(d_dlat, d_dlon)` so the 2d_latlon_sphere runner can pick the axis
+    # the rule's `applies_to.dim` selects without reshaping the catalog.
+    # Used by `centered_2nd_uniform_latlon`'s convergence fixture
+    # (`mms_kind="Y_2_0_unit_sphere"`); the runner activates once
+    # ESD/dsc-y0jj lifts stencil-only rules to ESS-replacement form.
+    "Y_2_0_unit_sphere" => (
+        ic = (lat, lon) -> 0.25 * sqrt(5 / π) * (3 * cos(lat)^2 - 1),
+        derivative = (lat, lon) -> (
+            -1.5 * sqrt(5 / π) * cos(lat) * sin(lat),  # ∂/∂lat
+            0.0,                                        # ∂/∂lon (Y_{2,0} is lon-independent)
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -564,8 +584,18 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
 # ---------------------------------------------------------------------------
 const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
-    # Per-topology runners are filled in by follow-up beads. Empty until
-    # the first family lands.
+    # Per-topology runners are filled in by follow-up beads.
+    #
+    # `2d_latlon_sphere` (ESD/dsc-mps8) — runner scaffolded with full
+    # canonical-pipeline shape in `_run_layer_b_2d_latlon_sphere`.
+    # Wired in here per witness Path-C directive so the dispatcher
+    # auto-routes `grid_family=latlon` rules to the runner the moment
+    # `_layer_b_topology_key`'s stencil-form gate retires (today the
+    # only `grid_family=latlon` rule, `centered_2nd_uniform_latlon`,
+    # is stencil-only and routes to `stencil_form_rule` BEFORE the
+    # latlon check, so this entry is forward-compat — no rule reaches
+    # the runner until ESD/dsc-y0jj's lifter lands).
+    "2d_latlon_sphere",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -814,9 +844,67 @@ matching family lands, this dispatcher is unreachable — `run_mms_convergence`
 gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
+    topology_key == "2d_latlon_sphere" && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
           "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
           "for this topology key.")
+end
+
+"""
+    _run_layer_b_2d_latlon_sphere(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for `grid_family=latlon` rules
+(scaffolded by ESD/dsc-mps8). Drives one resolution of the spherical-
+harmonic convergence sweep through the canonical pipeline:
+
+1. Build a parametric `.esm` document that wires `rule` against a
+   `family=latlon` model whose grid is sized `2n × n` (lon × lat).
+2. Run `EarthSciSerialization.discretize` to apply the rule and emit
+   the canonical-form ArrayOp AST (`Earth-radius` + per-cell `cos_lat`
+   bindings come from the ESS latlon grid metadata; the runner does
+   not synthesize them).
+3. Build an evaluator with `EarthSciSerialization.build_evaluator`
+   (the documented official ESS Julia tree-walk runner per
+   ESS/AGENTS.md §"Multiple official runners per binding are OK").
+4. Set `u0` to `mms.ic(lat, lon)` sampled at interior cell centers
+   (`u0` is laid out per `var_map`).
+5. Compute `du = f!(u0, p, 0)` to get the rule's discrete output.
+6. Return the L_inf error against `mms.derivative(lat, lon)` along the
+   axis the rule's `applies_to.dim` selects, taking only interior cells
+   (lat-pole rows excluded — boundary fix-up is the rule's BC
+   contract, not the convergence-sweep concern). The lon axis is
+   periodic and exact for `Y_{2,0}` (φ-independent), so it contributes
+   `0` and never sets the L_inf — the lat axis carries the signal.
+
+# Activation status (ESD/dsc-mps8 partial-land per witness Path C)
+
+This runner is **scaffolded**; `_LAYER_B_SUPPORTED_TOPOLOGIES` does NOT
+yet include `"2d_latlon_sphere"`, so `run_mms_convergence` routes
+`grid_family=latlon` rules to a SKIP before this body executes.
+
+The activation prerequisite is ESD/dsc-y0jj (stencil → replacement
+lift). `centered_2nd_uniform_latlon` ships only a `stencil` spec (no
+`replacement` AST); ESS `parse_rule` rejects stencil-only rules with
+`E_RULE_REPLACEMENT_MISSING` (see `rule_engine.jl:699`), so step (2)
+above cannot succeed today. Once dsc-y0jj's lifter lands:
+
+- the `_layer_b_topology_key` stencil-form gate retires (or routes
+  lifted rules through),
+- `"2d_latlon_sphere"` is added to `_LAYER_B_SUPPORTED_TOPOLOGIES`,
+- this `error(...)` body is replaced by the implementation sketched
+  above, and
+- `centered_2nd_uniform_latlon` moves out of `pending_canonical_layer_b`
+  in `test_esd_walker.jl` (the 1-line follow-up the witness called).
+"""
+function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
+    error("_run_layer_b_2d_latlon_sphere: scaffolding only (ESD/dsc-mps8 partial-land). " *
+          "Activation pends ESD/dsc-y0jj (stencil → replacement lift) since " *
+          "centered_2nd_uniform_latlon — the only `grid_family=latlon` rule today — " *
+          "ships only a `stencil` spec and ESS `parse_rule` rejects stencil-only rules " *
+          "with E_RULE_REPLACEMENT_MISSING. If this error fires, the dispatcher's " *
+          "`_LAYER_B_SUPPORTED_TOPOLOGIES` was advanced past this scaffolding without " *
+          "the runner body being authored — see the docstring for the canonical-pipeline " *
+          "shape (build .esm → discretize → build_evaluator → L_inf vs analytic).")
 end
 
 """
