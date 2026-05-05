@@ -546,6 +546,16 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = x -> sin(2π * x),
         derivative = x -> 2π * cos(2π * x),
     ),
+    # 1D vertical-column sine on the unit column z ∈ [0, 1]: u(z) = sin(2π z);
+    # u'(z) = 2π cos(2π z). Naturally periodic on [0, 1] (sin(0) = sin(2π) = 0),
+    # so the centered_2nd_uniform_vertical canonical fixture (which declares
+    # periodic=true on its single dimension) and any future non-periodic
+    # vertical fixture both consume this MMS shape — only the boundary
+    # treatment in the topology runner differs.
+    "sin_2pi_z_unit_column" => (
+        ic = z -> sin(2π * z),
+        derivative = z -> 2π * cos(2π * z),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -564,8 +574,12 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
 # ---------------------------------------------------------------------------
 const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
-    # Per-topology runners are filled in by follow-up beads. Empty until
-    # the first family lands.
+    # 1D vertical column (dsc-yz0m) — first per-topology runner. Drives the
+    # canonical fixture's discretized RHS through `discretize` →
+    # generic per-cell scalarization → `EarthSciSerialization.build_evaluator`
+    # (the official ESS tree-walk simulation runner) → `f!(du, u, p, 0)` and
+    # compares against the MMS analytic derivative at cell centers.
+    "1d_vertical_column",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -700,7 +714,12 @@ Topology keys (closed set):
 
 - `"1d_cartesian_periodic"` — `grid_family=cartesian`, single-arg pattern,
   canonical fixture declares one periodic dimension.
-- `"1d_vertical_column"` — single-axis but non-periodic vertical spacing.
+- `"1d_vertical_column"` — single-axis vertical-grid rules (`grid_family=vertical`).
+  The seed fixture (`centered_2nd_uniform_vertical`) declares `periodic=true`
+  on its single dimension because the MMS sin(2π z) is naturally periodic on
+  the unit column; the runner reads the dimension's `periodic` flag and
+  selects either modular wrap (periodic) or clamp (non-periodic, e.g. when
+  a future fixture pairs vertical staggering with one-sided BCs).
 - `"2d_cartesian_periodic"` — two periodic Cartesian axes.
 - `"2d_latlon_sphere"` — `grid_family=latlon` (or sphere variant).
 - `"fv_cell_average_1d"` — single arg pattern but `sampling=cell_average`
@@ -724,6 +743,17 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     spec = get(get(rule_doc, "discretizations", Dict{String, Any}()), rule.name, nothing)
     spec isa AbstractDict || return "unsupported"
 
+    grid_family = String(get(spec, "grid_family", ""))
+
+    # Vertical-family rules ride the canonical pipeline via their canonical
+    # fixture's embedded rule (replacement-form), which `discretize` already
+    # consumes for Layer A. The top-level rule.json may still carry only a
+    # `stencil` form (the eventual stencil-form lowering is dsc-y0jj's
+    # scope); routing on `grid_family` here keeps the vertical runner
+    # reachable in the meantime. Other stencil-only rules still gate on the
+    # stencil-form check below.
+    grid_family == "vertical" && return "1d_vertical_column"
+
     # `stencil`-form rules cannot ride the ESS rule engine until their
     # stencil entries are lowered to a `replacement` AST. Tracked
     # separately so a future bead can either author the lowering or
@@ -731,8 +761,6 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     if haskey(spec, "stencil") && !haskey(spec, "replacement")
         return "stencil_form_rule"
     end
-
-    grid_family = String(get(spec, "grid_family", ""))
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || return "unsupported"
     args = get(applies_to, "args", Any[])
@@ -809,14 +837,240 @@ Drive one resolution of the canonical convergence pipeline. Returns the
 L_inf error of the rule's discretized output vs the analytic derivative
 at cell centers on a grid of size `n`.
 
-Per-topology implementations live in dsc-kswm follow-up beads. Until the
-matching family lands, this dispatcher is unreachable — `run_mms_convergence`
-gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
+Per-topology implementations live in dsc-kswm follow-up beads. The
+dispatcher routes on `topology_key` only — the per-topology functions
+walk the canonical AST generically (no per-rule-shape dispatch inside).
+Until the matching family lands, this dispatcher errors with a reference
+to the tracking bead.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
+    if topology_key == "1d_vertical_column"
+        return _run_layer_b_1d_vertical_column(rule, mms, n)
+    end
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
           "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
           "for this topology key.")
+end
+
+"""
+    _run_layer_b_1d_vertical_column(rule, mms, n) -> Float64
+
+Layer-B runner for 1D vertical-column rules (dsc-yz0m). Drives the rule's
+canonical fixture through the canonical pipeline:
+
+1. Read `fixtures/canonical/input.esm`, set the single dimension's `size`
+   to `n`, run `EarthSciSerialization.discretize` (rule engine + canonical-
+   form rewrite). After this step the equation RHS is the rule's
+   replacement AST with `index(u, k+offset)` ops in shape-[k] form.
+2. Identify the column variable (the unique state var with `shape=[<dim>]`)
+   and scalarize the model into per-cell scalar variables `<u>_1 .. <u>_n`,
+   substituting `index(<u>, expr)` → `<u>_<wrap(eval(expr))>` and the
+   dimension symbol → cell index `i`. Periodic wrap (or clamp) is selected
+   from the canonical dimension's `periodic` flag. The grid spacing
+   parameter `h` is bound as a constant `1/n` on the unit column.
+3. Hand the scalarized ESM to `EarthSciSerialization.discretize` (no rules
+   to apply, but the call is the canonical-pipeline tag) and then to
+   `EarthSciSerialization.build_evaluator` — the official ESS tree-walk
+   simulation runner — which compiles the per-cell RHS into `f!(du, u, p, t)`.
+4. Sample the MMS initial condition at cell centers `z_i = (i - 0.5)/n`,
+   call `f!(du, u0, p, 0.0)`, and return the L_inf error vs
+   `mms.derivative(z_i)`.
+
+The scalarization in step 2 walks the AST generically — it dispatches on
+op name (`index` / dim symbol / arithmetic ops), not on rule identity, so
+adding another vertical-column rule with a different RHS shape requires no
+changes here.
+"""
+function _run_layer_b_1d_vertical_column(rule::RuleFile, mms, n::Int)
+    canonical = joinpath(dirname(rule.path), rule.name, "fixtures", "canonical", "input.esm")
+    isfile(canonical) ||
+        error("1d_vertical_column runner requires canonical/input.esm at $(relpath_from_repo(canonical))")
+    template = JSON.parse(read(canonical, String))
+
+    # Locate grid + dimension + the single column state variable.
+    models_doc = get(template, "models", nothing)
+    (models_doc isa AbstractDict && !isempty(models_doc)) ||
+        error("canonical fixture has no models")
+    model_name, model = first(pairs(models_doc))
+    grid_name = String(get(model, "grid", ""))
+    grids = get(template, "grids", Dict{String, Any}())
+    grid = get(grids, grid_name, nothing)
+    grid isa AbstractDict ||
+        error("canonical fixture references unknown grid $(repr(grid_name))")
+    dims = get(grid, "dimensions", Any[])
+    (dims isa AbstractVector && length(dims) == 1) ||
+        error("1d_vertical_column expects a single-dimension grid; got $(length(dims))")
+    dim = dims[1]
+    dim_name = String(get(dim, "name", ""))
+    periodic = get(dim, "periodic", false) === true
+
+    # Parameterize grid size to `n`.
+    dim["size"] = n
+
+    discretized = EarthSciSerialization.discretize(template)
+    disc_model = first(values(get(discretized, "models", Dict{String, Any}())))
+    disc_vars = get(disc_model, "variables", Dict{String, Any}())
+
+    col_var = nothing
+    for (vname, vspec) in disc_vars
+        vspec isa AbstractDict || continue
+        get(vspec, "type", "") == "state" || continue
+        shape = get(vspec, "shape", nothing)
+        if shape isa AbstractVector && length(shape) == 1 && String(shape[1]) == dim_name
+            col_var = String(vname)
+            break
+        end
+    end
+    col_var === nothing &&
+        error("could not identify column state variable (no var with shape=[$(dim_name)])")
+
+    # Cell centers on the unit column z ∈ [0, 1].
+    h = 1.0 / n
+    z(i) = (i - 0.5) * h
+
+    # Build the scalarized ESM. Vars: u_1 .. u_n (state, IC = mms.ic(z_i)),
+    # plus `h` as a parameter so the discretized RHS's free `h` symbol binds.
+    scalar_vars = Dict{String, Any}(
+        "h" => Dict{String, Any}(
+            "type" => "parameter",
+            "default" => h,
+            "units" => "1",
+        ),
+    )
+    for i in 1:n
+        scalar_vars["$(col_var)_$(i)"] = Dict{String, Any}(
+            "type" => "state",
+            "default" => mms.ic(z(i)),
+            "units" => "1",
+        )
+    end
+
+    scalar_equations = Any[]
+    for eq in get(disc_model, "equations", Any[])
+        lhs = eq["lhs"]
+        rhs = eq["rhs"]
+        # The column equation has lhs `D(<col_var>, wrt=t)`; expand into
+        # one scalar derivative per cell. Other equations (none expected
+        # for the seed fixture) pass through unchanged.
+        if !(lhs isa AbstractDict) || String(get(lhs, "op", "")) != "D"
+            push!(scalar_equations, eq)
+            continue
+        end
+        lhs_args = get(lhs, "args", Any[])
+        (length(lhs_args) >= 1 && String(lhs_args[1]) == col_var) || begin
+            push!(scalar_equations, eq)
+            continue
+        end
+        for i in 1:n
+            push!(
+                scalar_equations,
+                Dict{String, Any}(
+                    "lhs" => Dict{String, Any}(
+                        "op" => "D",
+                        "args" => Any["$(col_var)_$(i)"],
+                        "wrt" => "t",
+                    ),
+                    "rhs" => _scalarize_per_cell(rhs, dim_name, i, col_var, n, periodic),
+                ),
+            )
+        end
+    end
+
+    scalar_esm = Dict{String, Any}(
+        "esm" => "0.2.0",
+        "metadata" => Dict{String, Any}(
+            "name" => "layer_b_$(rule.name)_n$(n)",
+        ),
+        "models" => Dict{String, Any}(
+            String(model_name) => Dict{String, Any}(
+                "variables" => scalar_vars,
+                "equations" => scalar_equations,
+            ),
+        ),
+    )
+
+    # Canonical pipeline tag + official ESS tree-walk runner.
+    discretized_scalar = EarthSciSerialization.discretize(scalar_esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(discretized_scalar)
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+
+    err = 0.0
+    for i in 1:n
+        idx = var_map["$(col_var)_$(i)"]
+        analytic = mms.derivative(z(i))
+        err = max(err, abs(du[idx] - analytic))
+    end
+    return err
+end
+
+# Generic per-cell scalarization of a discretized AST. Walks the AST and
+# substitutes `index(<col_var>, expr)` with the corresponding scalar var
+# name and `<dim_name>` (the dimension symbol) with the cell index `i`.
+# Other ops recurse without rule-shape branching, so rules whose RHS uses
+# different op shapes ride this same path.
+function _scalarize_per_cell(node, dim_name::String, i::Int, col_var::String, n::Int, periodic::Bool)
+    if node isa AbstractDict
+        op = String(get(node, "op", ""))
+        args = get(node, "args", Any[])
+        if op == "index" && length(args) == 2
+            varname = args[1] isa AbstractString ? String(args[1]) : ""
+            if varname == col_var
+                idx_value = _eval_index_expr(args[2], dim_name, i)
+                wrapped = if periodic
+                    mod(idx_value - 1, n) + 1
+                else
+                    clamp(idx_value, 1, n)
+                end
+                return "$(col_var)_$(wrapped)"
+            end
+        end
+        new_node = Dict{String, Any}(String(k) => v for (k, v) in node)
+        new_node["args"] = Any[
+            _scalarize_per_cell(a, dim_name, i, col_var, n, periodic) for a in args
+        ]
+        return new_node
+    elseif node isa AbstractString
+        return String(node) == dim_name ? i : node
+    end
+    return node
+end
+
+# Tiny integer-arithmetic evaluator for index expressions like `k+1` or
+# `k-1`. Only the ops that appear in finite-difference index arithmetic
+# need to be supported; anything else is a fixture or rule bug and surfaces
+# as an error so the walker FAILs loudly rather than silently mis-indexing.
+function _eval_index_expr(node, dim_name::String, i::Int)::Int
+    if node isa Bool
+        # Reject explicitly so a stray boolean does not coerce to 0/1.
+        error("boolean literal in index expression")
+    elseif node isa Integer
+        return Int(node)
+    elseif node isa AbstractString
+        s = String(node)
+        s == dim_name && return i
+        error("unknown symbol $(repr(s)) in index expression (dim=$(repr(dim_name)))")
+    elseif node isa AbstractDict
+        op = String(get(node, "op", ""))
+        args = get(node, "args", Any[])
+        if op == "+"
+            return sum(_eval_index_expr(a, dim_name, i) for a in args)
+        elseif op == "-" && length(args) == 1
+            return -_eval_index_expr(args[1], dim_name, i)
+        elseif op == "-" && length(args) == 2
+            return _eval_index_expr(args[1], dim_name, i) - _eval_index_expr(args[2], dim_name, i)
+        elseif op == "*"
+            acc = 1
+            for a in args
+                acc *= _eval_index_expr(a, dim_name, i)
+            end
+            return acc
+        elseif op == "neg" && length(args) == 1
+            return -_eval_index_expr(args[1], dim_name, i)
+        end
+        error("unsupported op $(repr(op)) in index expression")
+    end
+    error("cannot evaluate index node of type $(typeof(node))")
 end
 
 """

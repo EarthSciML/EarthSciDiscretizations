@@ -93,7 +93,6 @@ using TestItems
     pending_canonical_layer_b = Set(
         [
             ("finite_difference", "centered_2nd_uniform"),
-            ("finite_difference", "centered_2nd_uniform_vertical"),
             ("finite_difference", "centered_2nd_uniform_latlon"),
             ("finite_difference", "upwind_1st"),
         ]
@@ -195,12 +194,16 @@ using TestItems
         if r.family === :finite_difference && r.name == "centered_2nd_uniform_vertical"
             # centered_2nd_uniform_vertical (vertical) ships a canonical/
             # fixture, so Layer A passes via the ESS rule engine (dsc-cjh).
-            # Layer B SKIPs pending the canonical-pipeline replacement of the
-            # retired ESS `verify_mms_convergence` (esm-4t5).
+            # Layer B is the first per-topology canonical-pipeline runner
+            # to land (dsc-yz0m): drives the canonical RHS through
+            # discretize → per-cell scalarize → ESS build_evaluator →
+            # f!(du, u, p, 0) and asserts O(h^2) convergence
+            # (expected_min_order=1.9 in expected.esm).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+            @test occursin(">= expected", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
             # centered_2nd_uniform (cartesian) ships a canonical/ fixture
             # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer B
@@ -298,7 +301,11 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 0
+    # dsc-yz0m landed the first per-topology Layer-B runner
+    # (1d_vertical_column), promoting centered_2nd_uniform_vertical to PASS.
+    # The remaining seven previously-passing rules continue to SKIP until
+    # their topology runners land under dsc-kswm.
+    @test layer_b_passes == 1
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
