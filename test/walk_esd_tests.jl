@@ -566,6 +566,27 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
             0.0,                                        # ∂/∂lon (Y_{2,0} is lon-independent)
         ),
     ),
+    # 2D periodic vector field for the Arakawa C-grid divergence MMS:
+    #
+    #   F(x,y) = (sin(2π x)·cos(2π y),  cos(2π x)·sin(2π y))   on [0,1]² periodic
+    #   ∇·F    = ∂_x F_x + ∂_y F_y
+    #          = 2π cos(2π x)·cos(2π y) + 2π cos(2π x)·cos(2π y)
+    #          = 4π cos(2π x)·cos(2π y)
+    #
+    # Both components vary non-trivially in both axes so the sweep
+    # exercises the face_x and face_y stencil arms of the C-grid stencil.
+    # `ic(x, y)` returns the velocity tuple `(F_x, F_y)`; the
+    # 2d_arakawa_periodic runner samples F_x at face_x edges and F_y at
+    # face_y edges. `derivative(x, y)` returns the scalar divergence at
+    # cell centers. Used by `divergence_arakawa_c`'s convergence fixture
+    # (`mms_kind="vec_sincos_2d_periodic"`); the runner activates once
+    # ESD/dsc-y0jj lifts stencil-only rules to ESS-replacement form
+    # (today divergence_arakawa_c is stencil-only and routes to
+    # `stencil_form_rule` before the arakawa branch).
+    "vec_sincos_2d_periodic" => (
+        ic = (x, y) -> (sin(2π * x) * cos(2π * y), cos(2π * x) * sin(2π * y)),
+        derivative = (x, y) -> 4π * cos(2π * x) * cos(2π * y),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -596,6 +617,14 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # latlon check, so this entry is forward-compat — no rule reaches
     # the runner until ESD/dsc-y0jj's lifter lands).
     "2d_latlon_sphere",
+    # `2d_arakawa_periodic` (ESD/dsc-70zp) — runner scaffolded with full
+    # canonical-pipeline shape in `_run_layer_b_2d_arakawa_periodic`.
+    # Same forward-compat pattern as 2d_latlon_sphere: the only
+    # `grid_family=arakawa` rule today (`divergence_arakawa_c`) is
+    # stencil-only (no `replacement` AST) and routes to `stencil_form_rule`
+    # BEFORE the arakawa branch, so this entry is forward-compat — no
+    # rule reaches the runner until ESD/dsc-y0jj's lifter lands.
+    "2d_arakawa_periodic",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -845,6 +874,7 @@ gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
     topology_key == "2d_latlon_sphere" && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
+    topology_key == "2d_arakawa_periodic" && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
           "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
           "for this topology key.")
@@ -905,6 +935,70 @@ function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
           "`_LAYER_B_SUPPORTED_TOPOLOGIES` was advanced past this scaffolding without " *
           "the runner body being authored — see the docstring for the canonical-pipeline " *
           "shape (build .esm → discretize → build_evaluator → L_inf vs analytic).")
+end
+
+"""
+    _run_layer_b_2d_arakawa_periodic(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for `grid_family=arakawa` rules
+(scaffolded by ESD/dsc-70zp). Drives one resolution of the 2D periodic
+divergence convergence sweep through the canonical pipeline:
+
+1. Build a parametric `.esm` document that wires `rule` against a 2D
+   periodic Cartesian model (`family=arakawa`, stagger=C) with grid
+   sized `n × n` over `[0, 1]²`.
+2. Run `EarthSciSerialization.discretize` to apply the rule and emit
+   the canonical-form ArrayOp AST. The C-grid metadata (face-x and
+   face-y face positions) comes from the ESS arakawa grid; the runner
+   does not synthesize face coordinates locally.
+3. Build an evaluator with `EarthSciSerialization.build_evaluator`
+   (the documented official ESS Julia tree-walk runner per
+   ESS/AGENTS.md §"Multiple official runners per binding are OK").
+4. Sample `mms.ic(x, y) = (F_x, F_y)` at face_x edges (i = 0..n-1) and
+   face_y edges (j = 0..n-1) respectively to populate `u0` per
+   `var_map`.
+5. Compute `du = f!(u0, p, 0)` to obtain the discrete divergence at
+   cell centers.
+6. Return the L_inf error against `mms.derivative(x, y)` evaluated at
+   cell centers `((i + 0.5)/n, (j + 0.5)/n)`. Both axes wrap
+   periodically per the C-grid convention; no boundary cells excluded
+   (the grid is fully periodic).
+
+The expected order is O(h²) — the `expected_min_order=1.9` declared
+by `divergence_arakawa_c/fixtures/convergence/expected.esm` leaves a
+0.1 margin for pre-asymptotic drift over the n=16→32→64→128 sweep.
+
+# Activation status (ESD/dsc-70zp partial-land per witness Path C)
+
+This runner is **scaffolded**; `_LAYER_B_SUPPORTED_TOPOLOGIES` already
+contains `"2d_arakawa_periodic"` (forward-compat), but the dispatcher's
+`stencil_form_rule` gate routes `divergence_arakawa_c` to a SKIP before
+this body executes. The activation prerequisite is ESD/dsc-y0jj
+(stencil → replacement lift). `divergence_arakawa_c` ships only a
+`stencil` spec (4-row Arakawa-C: face_x ±1·1/dx, face_y ±1·1/dy, see
+`discretizations/finite_volume/divergence_arakawa_c.json`) and ESS
+`parse_rule` rejects stencil-only rules with `E_RULE_REPLACEMENT_MISSING`
+(`rule_engine.jl:695-699`), so step (2) above cannot succeed today.
+Once dsc-y0jj's lifter lands:
+
+- the `_layer_b_topology_key` stencil-form gate retires (or routes
+  lifted rules through),
+- this `error(...)` body is replaced by the implementation sketched
+  above, and
+- `divergence_arakawa_c` gains its first Layer-B PASS (the
+  `layer_b_passes` assertion in `test_esd_walker.jl` is bumped in the
+  same follow-up).
+"""
+function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
+    error("_run_layer_b_2d_arakawa_periodic: scaffolding only (ESD/dsc-70zp partial-land). " *
+          "Activation pends ESD/dsc-y0jj (stencil → replacement lift) since " *
+          "divergence_arakawa_c — the only `grid_family=arakawa` rule today — " *
+          "ships only a `stencil` spec and ESS `parse_rule` rejects stencil-only rules " *
+          "with E_RULE_REPLACEMENT_MISSING. If this error fires, the dispatcher's " *
+          "`_layer_b_topology_key` stencil-form gate was retired without this runner " *
+          "body being authored — see the docstring for the canonical-pipeline shape " *
+          "(build .esm → discretize → build_evaluator → L_inf vs analytic, sampling " *
+          "F_x at face_x edges and F_y at face_y edges of the n×n periodic grid).")
 end
 
 """
