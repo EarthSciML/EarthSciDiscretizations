@@ -756,15 +756,12 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
         return "fv_cell_average_1d"
     end
 
-    # 2D Cartesian rules: diagnose by the convergence fixture's
-    # `axis` / `dim` field or by inferring from the rule's pattern args.
-    # For now anything that's `grid_family=cartesian` with a 2D fixture
-    # field (e.g. `axis`, multi-axis MMS) routes to 2d_cartesian_periodic.
-    if grid_family == "cartesian" && (haskey(input_json, "axis") ||
-        occursin("y", lowercase(String(get(input_json, "manufactured_solution",
-            get(get(input_json, "manufactured_solution", Dict{String, Any}()),
-                "expression", "")))))
-       )
+    # 2D Cartesian rules: diagnose by the convergence fixture's `axis`
+    # field (a 2D MMS sweep over a single axis at a time, as used by
+    # weno5_advection_2d). The classifier deliberately does NOT pattern-
+    # match on the manufactured_solution description string — that field
+    # is free-form prose, not machine-readable.
+    if grid_family == "cartesian" && haskey(input_json, "axis")
         return "2d_cartesian_periodic"
     end
 
