@@ -512,20 +512,74 @@ end
     run_mms_convergence(rule, convergence_dir) -> LayerResult
 
 Layer B: read the convergence fixture, honor `applicable:false` markers, and
-otherwise SKIP pending the canonical-pipeline replacement.
+otherwise SKIP pending the per-topology canonical-pipeline replacement.
 
 ESS retired `verify_mms_convergence` + `mms_evaluator` in esm-4t5 (the
 2026-04-29 single-evaluation-pathway directive). Layer B previously routed
 the rule + fixture through that ESS harness; the harness was a shadow
 evaluator outside the canonical `discretize → ArrayOp → simulate` pipeline
-and the directive forbade it. The replacement (drive Layer B through the
-canonical pipeline + an official ESS simulation runner per AGENTS.md) is
-tracked at ESD/dsc-kswm; until it lands, applicable:true convergence
-fixtures SKIP with a unified retirement reason instead of FAILing on the
-missing function. Applicable:false fixtures keep their existing
-fixture-declared SKIP path.
+and the directive forbade it. The replacement drives Layer B through the
+canonical pipeline + an official ESS simulation runner per AGENTS.md
+(`discretize` → MTK.System / Symbolics scalarize → evaluate `f!(du, u, p, 0)`
+at the manufactured-solution sample → L_inf vs analytic).
+
+The replacement lands per topology family (one follow-up bead per family
+under dsc-kswm). Until the corresponding family's runner lands, fixtures
+in that family SKIP with the unified `_LAYER_B_PIPELINE_PENDING` reason,
+suffixed with the topology key so the report names the missing piece.
 """
 const _LAYER_B_PIPELINE_PENDING = "Layer-B awaits canonical-pipeline replacement: ESS retired verify_mms_convergence in esm-4t5 (2026-04-29 single-pathway directive); Layer-B replacement via discretize → ArrayOp → official ESS simulation runner tracked at ESD/dsc-kswm"
+
+# ---------------------------------------------------------------------------
+# Generic MMS catalog. Indexed by `mms_kind` declared in the convergence
+# fixture (a fixture attribute, NOT a rule identity), each entry maps a
+# cell-center coordinate to (initial-condition, analytic-derivative) pairs.
+# Layer-B runners look up the MMS by its declared `mms_kind` and never
+# branch on the rule's name or shape — extension is by adding entries here
+# and the corresponding `mms_kind` field in fixture inputs.
+# ---------------------------------------------------------------------------
+const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{Function, Function}}}(
+    # 1D periodic sine: u(x) = sin(2π x); u'(x) = 2π cos(2π x). Used by
+    # centered_2nd_uniform / upwind_1st convergence fixtures (the
+    # historic Layer-B MMS for 1D Cartesian rules).
+    "sin_2pi_x_periodic" => (
+        ic = x -> sin(2π * x),
+        derivative = x -> 2π * cos(2π * x),
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Topology dispatch. The Layer-B runner classifies each (rule, fixture)
+# pair into a topology key derived from generic attributes:
+#   - rule.json `grid_family`
+#   - rule.json `applies_to.args` length (1 for scalar-input rules)
+#   - canonical fixture's grid `dimensions` shape (1D vs 2D, periodic etc.)
+# A canonical fixture is required because Layer-B reuses it as the ESM
+# template, parameterizing only the grid `size`. Rules that lack a
+# canonical fixture cannot be Layer-B-driven yet (they ship neither the
+# ESS-format rule inline nor a parameterizable model template).
+#
+# This dispatch is the legitimate generic kind: it routes on ESM/rule
+# schema attributes, not on rule identity. Per-rule-shape dispatch (e.g.
+# `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
+# ---------------------------------------------------------------------------
+const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
+    # Per-topology runners are filled in by follow-up beads. Empty until
+    # the first family lands.
+])
+
+# Map topology_key → follow-up bead tracking the implementation. Used in
+# SKIP reasons so the walker report points to the open work.
+const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
+    "1d_cartesian_periodic"  => "ESD/dsc-k1li",
+    "1d_vertical_column"     => "ESD/dsc-yz0m",
+    "2d_cartesian_periodic"  => "ESD/dsc-vst2",
+    "2d_arakawa_periodic"    => "ESD/dsc-70zp",
+    "2d_latlon_sphere"       => "ESD/dsc-mps8",
+    "fv_cell_average_1d"     => "ESD/dsc-a7b2",
+    "stencil_form_rule"      => "ESD/dsc-y0jj (prerequisite for ESD/dsc-k1li)",
+    "unsupported"            => "no follow-up bead — out of Layer-B scope",
+)
 
 function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     input_path = joinpath(convergence_dir, "input.esm")
@@ -545,7 +599,227 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
         reason = get(input_json, "skip_reason", "fixture declares applicable:false (no reason given)")
         return LayerResult(LAYER_SKIP, "fixture-declared not applicable: $(reason)")
     end
-    return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING)
+
+    # Validate `expected.esm` exists and parses an `expected_min_order`.
+    # Per-topology runners use this when promoting from SKIP to PASS/FAIL;
+    # validating it here surfaces malformed expected fixtures before any
+    # topology runner lands.
+    expected_path = joinpath(convergence_dir, "expected.esm")
+    if !isfile(expected_path)
+        return LayerResult(LAYER_FAIL, "convergence/ present but missing expected.esm")
+    end
+    expected_json = try
+        JSON.parse(read(expected_path, String))
+    catch err
+        return LayerResult(LAYER_FAIL, "failed to parse $(relpath_from_repo(expected_path)): $(sprint(showerror, err))")
+    end
+    raw_min_order = get(expected_json, "expected_min_order", nothing)
+    if raw_min_order === nothing
+        return LayerResult(LAYER_FAIL, "$(relpath_from_repo(expected_path)) missing required `expected_min_order`")
+    end
+    expected_min_order = Float64(raw_min_order)
+    if !isfinite(expected_min_order)
+        return LayerResult(LAYER_FAIL, "$(relpath_from_repo(expected_path)) `expected_min_order` is not finite: $raw_min_order")
+    end
+
+    # Classify into a topology family using only generic ESM/rule schema
+    # attributes (see `_LAYER_B_SUPPORTED_TOPOLOGIES` docstring above).
+    topology_key = _layer_b_topology_key(rule, input_json)
+    if !(topology_key in _LAYER_B_SUPPORTED_TOPOLOGIES)
+        bead = get(_LAYER_B_TOPOLOGY_TRACKING, topology_key, "no follow-up bead recorded")
+        return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (topology=$topology_key; tracked at $(bead))")
+    end
+
+    # Generic MMS lookup. Only fixtures that declare a registered `mms_kind`
+    # can be driven; bare descriptive `manufactured_solution` strings SKIP
+    # until the fixture is upgraded.
+    mms_kind = String(get(input_json, "mms_kind", ""))
+    mms = get(_LAYER_B_MMS_CATALOG, mms_kind, nothing)
+    if mms === nothing
+        return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (mms_kind=$(repr(mms_kind)) not registered in Layer-B MMS catalog)")
+    end
+
+    # Per-topology runner. Each family's implementation lands in a
+    # follow-up bead under dsc-kswm. The dispatcher is the only place that
+    # routes on topology_key — `_run_layer_b_canonical_grid` itself walks
+    # the canonical-form AST through MTK / Symbolics generically.
+    grids_raw = get(input_json, "grids", Any[])
+    if !(grids_raw isa AbstractVector) || isempty(grids_raw)
+        return LayerResult(LAYER_FAIL, "convergence/input.esm declares no grids")
+    end
+    grids = Int[Int(get(g, "n", 0)) for g in grids_raw]
+    if any(<=(0), grids)
+        return LayerResult(LAYER_FAIL, "convergence/input.esm has non-positive grid sizes: $grids")
+    end
+
+    errors = Float64[]
+    for n in grids
+        err = try
+            _run_layer_b_canonical_grid(topology_key, rule, mms, n)
+        catch e
+            return LayerResult(LAYER_FAIL, "canonical pipeline threw at n=$n: $(sprint(showerror, e))")
+        end
+        if !(err isa Real) || !isfinite(err)
+            return LayerResult(LAYER_FAIL, "canonical pipeline at n=$n returned non-finite/non-numeric: $(typeof(err))")
+        end
+        push!(errors, Float64(err))
+    end
+
+    if any(iszero, errors)
+        return LayerResult(LAYER_FAIL, "zero error in convergence sweep (likely degenerate fixture): $errors")
+    end
+    if length(errors) < 2
+        return LayerResult(LAYER_FAIL, "need ≥ 2 grids for convergence-order calc, got $(length(errors))")
+    end
+    orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
+    min_order = minimum(orders)
+    if min_order >= expected_min_order
+        return LayerResult(
+            LAYER_PASS,
+            "min order $(round(min_order; digits = 2)) >= expected $(expected_min_order) over $(length(grids)) grids " *
+                "(orders=$(round.(orders; digits = 2)))",
+        )
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "min order $(round(min_order; digits = 2)) below expected $(expected_min_order) " *
+                "(orders=$(round.(orders; digits = 2)), errors=$(round.(errors; sigdigits = 3)))",
+        )
+    end
+end
+
+"""
+    _layer_b_topology_key(rule, input_json) -> String
+
+Classify a (rule, convergence-fixture) pair into a topology family name.
+The classifier reads only generic ESM/rule schema attributes — never the
+rule's identity — so adding a new rule that fits an existing family
+auto-routes to the right runner without code changes here.
+
+Topology keys (closed set):
+
+- `"1d_cartesian_periodic"` — `grid_family=cartesian`, single-arg pattern,
+  canonical fixture declares one periodic dimension.
+- `"1d_vertical_column"` — single-axis but non-periodic vertical spacing.
+- `"2d_cartesian_periodic"` — two periodic Cartesian axes.
+- `"2d_latlon_sphere"` — `grid_family=latlon` (or sphere variant).
+- `"fv_cell_average_1d"` — single arg pattern but `sampling=cell_average`
+  in the convergence fixture (FV reconstruction-style).
+- `"stencil_form_rule"` — rule.json declares `stencil` instead of
+  `replacement` (cannot be passed through ESS rule engine until lowered
+  to replacement form).
+- `"unsupported"` — multi-arg patterns, missing canonical fixture, or any
+  shape this classifier hasn't enumerated.
+
+This function returns the key name; only keys present in
+`_LAYER_B_SUPPORTED_TOPOLOGIES` get a real runner. Others SKIP with a
+reason that names the tracking bead.
+"""
+function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
+    rule_doc = try
+        JSON.parse(read(rule.path, String))
+    catch
+        return "unsupported"
+    end
+    spec = get(get(rule_doc, "discretizations", Dict{String, Any}()), rule.name, nothing)
+    spec isa AbstractDict || return "unsupported"
+
+    # `stencil`-form rules cannot ride the ESS rule engine until their
+    # stencil entries are lowered to a `replacement` AST. Tracked
+    # separately so a future bead can either author the lowering or
+    # ship per-rule canonical fixtures with replacement-form rules.
+    if haskey(spec, "stencil") && !haskey(spec, "replacement")
+        return "stencil_form_rule"
+    end
+
+    grid_family = String(get(spec, "grid_family", ""))
+    applies_to = get(spec, "applies_to", nothing)
+    applies_to isa AbstractDict || return "unsupported"
+    args = get(applies_to, "args", Any[])
+    n_args = length(args)
+    sampling = String(get(input_json, "sampling", "cell_center"))
+
+    # Lat-lon sphere is its own topology family, regardless of arg count
+    # (Y_l_m manufactured solutions need spherical geometry handling).
+    grid_family == "latlon" && return "2d_latlon_sphere"
+
+    # Arakawa C-grid (staggered face-centered fluxes on 2D Cartesian) gets
+    # its own family because the canonical-pipeline runner has to handle
+    # face-staggered velocity fields, distinct from the cell-centered 2D
+    # Cartesian path.
+    grid_family == "arakawa" && return "2d_arakawa_periodic"
+
+    # FV cell-average rules (PPM / WENO reconstruction) need their own
+    # IC sampling (cell averages, not point samples) and exact-derivative
+    # comparison, distinct from FD point-sample rules.
+    if sampling == "cell_average"
+        return "fv_cell_average_1d"
+    end
+
+    # 2D Cartesian rules: diagnose by the convergence fixture's
+    # `axis` / `dim` field or by inferring from the rule's pattern args.
+    # For now anything that's `grid_family=cartesian` with a 2D fixture
+    # field (e.g. `axis`, multi-axis MMS) routes to 2d_cartesian_periodic.
+    if grid_family == "cartesian" && (haskey(input_json, "axis") ||
+        occursin("y", lowercase(String(get(input_json, "manufactured_solution",
+            get(get(input_json, "manufactured_solution", Dict{String, Any}()),
+                "expression", "")))))
+       )
+        return "2d_cartesian_periodic"
+    end
+
+    # 1D Cartesian: the default for single-arg cartesian rules. Periodic
+    # vs vertical (non-periodic column) is decided by the canonical
+    # fixture's grid declaration if available; otherwise default to
+    # "1d_cartesian_periodic" — the runner gates on canonical-fixture
+    # presence and SKIPs there if absent.
+    if grid_family == "cartesian" && n_args == 1
+        canonical_input = joinpath(dirname(rule.path), rule.name, "fixtures", "canonical", "input.esm")
+        if isfile(canonical_input)
+            canonical = try
+                JSON.parse(read(canonical_input, String))
+            catch
+                return "1d_cartesian_periodic"
+            end
+            grids = get(canonical, "grids", Dict{String, Any}())
+            if grids isa AbstractDict && !isempty(grids)
+                g = first(values(grids))
+                if g isa AbstractDict
+                    dims = get(g, "dimensions", Any[])
+                    if dims isa AbstractVector && length(dims) == 1
+                        d = first(dims)
+                        if d isa AbstractDict
+                            return get(d, "periodic", false) === true ?
+                                "1d_cartesian_periodic" : "1d_vertical_column"
+                        end
+                    elseif dims isa AbstractVector && length(dims) >= 2
+                        return "2d_cartesian_periodic"
+                    end
+                end
+            end
+        end
+        # No canonical fixture available — assume 1D periodic by default;
+        # the runner will SKIP with "no canonical fixture" reason.
+        return "1d_cartesian_periodic"
+    end
+    return "unsupported"
+end
+
+"""
+    _run_layer_b_canonical_grid(topology_key, rule, mms, n) -> Float64
+
+Drive one resolution of the canonical convergence pipeline. Returns the
+L_inf error of the rule's discretized output vs the analytic derivative
+at cell centers on a grid of size `n`.
+
+Per-topology implementations live in dsc-kswm follow-up beads. Until the
+matching family lands, this dispatcher is unreachable — `run_mms_convergence`
+gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
+"""
+function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
+    error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
+          "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
+          "for this topology key.")
 end
 
 """
