@@ -698,16 +698,20 @@ auto-routes to the right runner without code changes here.
 
 Topology keys (closed set):
 
+- `"fv_cell_average_1d"` — convergence fixture declares
+  `sampling=cell_average` (FV reconstruction-style). Checked first because
+  PPM ships a stencil-only multi-output schema yet structurally belongs to
+  this family; the stencil → replacement lift is a per-rule prerequisite
+  (dsc-x1ry / dsc-y0jj) tracked separately from the FV runner itself.
 - `"1d_cartesian_periodic"` — `grid_family=cartesian`, single-arg pattern,
   canonical fixture declares one periodic dimension.
 - `"1d_vertical_column"` — single-axis but non-periodic vertical spacing.
 - `"2d_cartesian_periodic"` — two periodic Cartesian axes.
 - `"2d_latlon_sphere"` — `grid_family=latlon` (or sphere variant).
-- `"fv_cell_average_1d"` — single arg pattern but `sampling=cell_average`
-  in the convergence fixture (FV reconstruction-style).
 - `"stencil_form_rule"` — rule.json declares `stencil` instead of
   `replacement` (cannot be passed through ESS rule engine until lowered
-  to replacement form).
+  to replacement form). Reached only by point-sample fixtures; cell-average
+  stencil-only rules route to `fv_cell_average_1d` above.
 - `"unsupported"` — multi-arg patterns, missing canonical fixture, or any
   shape this classifier hasn't enumerated.
 
@@ -724,6 +728,18 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     spec = get(get(rule_doc, "discretizations", Dict{String, Any}()), rule.name, nothing)
     spec isa AbstractDict || return "unsupported"
 
+    # FV cell-average rules (PPM / WENO reconstruction): IC sampling becomes
+    # integration over cells and analytic comparison is at faces / cell
+    # centers depending on the rule's output. Routed BEFORE the stencil-form
+    # check so PPM (stencil-only multi-output schema) lands in the FV family
+    # by topology rather than in `stencil_form_rule`; the stencil →
+    # replacement lift remains a per-rule prerequisite (PPM: dsc-x1ry,
+    # upwind_1st: dsc-y0jj) gating actual Layer-B promotion of those rules.
+    sampling = String(get(input_json, "sampling", "cell_center"))
+    if sampling == "cell_average"
+        return "fv_cell_average_1d"
+    end
+
     # `stencil`-form rules cannot ride the ESS rule engine until their
     # stencil entries are lowered to a `replacement` AST. Tracked
     # separately so a future bead can either author the lowering or
@@ -737,7 +753,6 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     applies_to isa AbstractDict || return "unsupported"
     args = get(applies_to, "args", Any[])
     n_args = length(args)
-    sampling = String(get(input_json, "sampling", "cell_center"))
 
     # Lat-lon sphere is its own topology family, regardless of arg count
     # (Y_l_m manufactured solutions need spherical geometry handling).
@@ -748,13 +763,6 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     # face-staggered velocity fields, distinct from the cell-centered 2D
     # Cartesian path.
     grid_family == "arakawa" && return "2d_arakawa_periodic"
-
-    # FV cell-average rules (PPM / WENO reconstruction) need their own
-    # IC sampling (cell averages, not point samples) and exact-derivative
-    # comparison, distinct from FD point-sample rules.
-    if sampling == "cell_average"
-        return "fv_cell_average_1d"
-    end
 
     # 2D Cartesian rules: diagnose by the convergence fixture's `axis`
     # field (a 2D MMS sweep over a single axis at a time, as used by
