@@ -54,6 +54,12 @@ include("rules.jl")
 # AST coefficient evaluator (thin passthrough to EarthSciSerialization)
 include("rule_eval.jl")
 
+# Stencil-form → ESS replacement-form lowerer (dsc-y0jj). Pure AST→AST
+# transform; performs no evaluation. Required so stencil-only catalog
+# rules (e.g. upwind_1st) can drive `discretize` through the canonical
+# Layer-B pipeline.
+include("stencil_lowering.jl")
+
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
 export AbstractCurvilinearGrid, AbstractStaggeredGrid,
@@ -136,6 +142,9 @@ export project_initial_condition
 # Exports: Rule catalog
 export RuleFile, load_rules
 export eval_coeff
+
+# Exports: Stencil-form → replacement-form lowerer (dsc-y0jj)
+export lower_stencil_to_replacement
 
 # Exports: Arakawa staggering runtime
 export ArakawaGrid, ArakawaStagger
