@@ -1,0 +1,73 @@
+{
+  "discretizations": {
+    "ppm_reconstruction_right_edge": {
+      "applies_to": {
+        "op": "q_right_edge",
+        "args": ["$q"],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "fourth_order_edge_interpolation",
+      "limiter": "none",
+      "accuracy": "O(dx^4)",
+      "reference": "Colella & Woodward (1984), JCP 54(1):174-201, eq. (1.6)",
+      "notes": "Single-output sibling of the multi-output `ppm_reconstruction` umbrella rule (dsc-x1ry). Encodes CW84 eq. (1.6) — a 4-point centered O(dx^4) interpolation of cell-averaged data to the right cell edge q_{i+1/2}: (-q_{i-1} + 7*q_i + 7*q_{i+1} - q_{i+2}) / 12. Authored directly in ESS replacement form so ESS rule_engine.jl::parse_rule consumes it without the multi-output dispatch the umbrella rule would require. The matching left-edge sibling (`ppm_reconstruction_left_edge`) encodes the same coefficients shifted one cell left.",
+      "replacement": {
+        "op": "arrayop",
+        "output_idx": ["$x"],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "-", "args": ["$x", 1] }]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    7,
+                    {
+                      "op": "index",
+                      "args": ["$q", "$x"]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    7,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "+", "args": ["$x", 1] }]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "+", "args": ["$x", 2] }]
+                    }
+                  ]
+                }
+              ]
+            },
+            12
+          ]
+        },
+        "args": ["$q"]
+      }
+    }
+  }
+}

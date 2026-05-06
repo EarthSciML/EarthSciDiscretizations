@@ -1,0 +1,73 @@
+{
+  "discretizations": {
+    "ppm_reconstruction_left_edge": {
+      "applies_to": {
+        "op": "q_left_edge",
+        "args": ["$q"],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "form": "fourth_order_edge_interpolation",
+      "limiter": "none",
+      "accuracy": "O(dx^4)",
+      "reference": "Colella & Woodward (1984), JCP 54(1):174-201, eq. (1.6) shifted one cell left",
+      "notes": "Single-output sibling of the multi-output `ppm_reconstruction` umbrella rule (dsc-x1ry). Encodes the left-edge variant of CW84 eq. (1.6) — a 4-point centered O(dx^4) interpolation of cell-averaged data to the left cell edge q_{i-1/2}: (-q_{i-2} + 7*q_{i-1} + 7*q_i - q_{i+1}) / 12. Same coefficients as the right-edge sibling shifted one cell left; equivalent to `ppm_reconstruction_right_edge` evaluated at i-1.",
+      "replacement": {
+        "op": "arrayop",
+        "output_idx": ["$x"],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "-", "args": ["$x", 2] }]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    7,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "-", "args": ["$x", 1] }]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    7,
+                    {
+                      "op": "index",
+                      "args": ["$q", "$x"]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    {
+                      "op": "index",
+                      "args": ["$q", { "op": "+", "args": ["$x", 1] }]
+                    }
+                  ]
+                }
+              ]
+            },
+            12
+          ]
+        },
+        "args": ["$q"]
+      }
+    }
+  }
+}
