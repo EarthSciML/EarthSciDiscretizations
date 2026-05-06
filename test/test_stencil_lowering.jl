@@ -163,6 +163,203 @@ end
     @test idx["args"][2]["args"][2] == 2
 end
 
+@testitem "lower_stencil_to_replacement: lowers divergence_arakawa_c" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    using JSON
+
+    # `divergence_arakawa_c` is the canonical arakawa-kind rule today
+    # (per SELECTOR_KINDS.md decision #13 / #16). The lowering must
+    # produce a 2D `index` op on the operand `\$F` whose positional
+    # axis-args are the sorted axis pattern variables (`\$x` first,
+    # then `\$y`), with the entry's axis slot carrying the offset.
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_volume",
+        "divergence_arakawa_c.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["divergence_arakawa_c"])
+    @test !haskey(rule, "replacement")
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 4
+
+    # Entry 1: face_x, axis $x, offset 0 -> index($F, $x, $y), coeff -1/dx
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test length(idx1["args"]) == 3
+    @test String(idx1["args"][1]) == "\$F"
+    @test String(idx1["args"][2]) == "\$x"   # offset == 0 -> bare axis
+    @test String(idx1["args"][3]) == "\$y"
+
+    # Entry 2: face_x, axis $x, offset 1 -> index($F, $x + 1, $y)
+    e2 = repl["args"][2]
+    idx2 = e2["args"][2]
+    @test length(idx2["args"]) == 3
+    a2_x = idx2["args"][2]
+    @test a2_x["op"] == "+"
+    @test String(a2_x["args"][1]) == "\$x"
+    @test Int(a2_x["args"][2]) == 1
+    @test String(idx2["args"][3]) == "\$y"
+
+    # Entry 3: face_y, axis $y, offset 0 -> index($F, $x, $y)
+    e3 = repl["args"][3]
+    idx3 = e3["args"][2]
+    @test length(idx3["args"]) == 3
+    @test String(idx3["args"][2]) == "\$x"
+    @test String(idx3["args"][3]) == "\$y"
+
+    # Entry 4: face_y, axis $y, offset 1 -> index($F, $x, $y + 1)
+    e4 = repl["args"][4]
+    idx4 = e4["args"][2]
+    @test length(idx4["args"]) == 3
+    @test String(idx4["args"][2]) == "\$x"
+    a4_y = idx4["args"][3]
+    @test a4_y["op"] == "+"
+    @test String(a4_y["args"][1]) == "\$y"
+    @test Int(a4_y["args"][2]) == 1
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered divergence_arakawa_c" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_volume",
+        "divergence_arakawa_c.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["divergence_arakawa_c"])
+    out = lower_stencil_to_replacement(rule)
+
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+end
+
+@testitem "lower_stencil_to_replacement: arakawa errors on bad stagger" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
+        "stencil" => Any[Dict(
+            "selector" => Dict(
+                "kind" => "arakawa",
+                "stagger" => "wat",
+                "axis" => "\$x",
+                "offset" => 0,
+            ),
+            "coeff" => 1,
+        )],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("'wat'", err.msg)
+end
+
+@testitem "lower_stencil_to_replacement: arakawa errors on non-pattern-var axis" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
+        "stencil" => Any[Dict(
+            "selector" => Dict(
+                "kind" => "arakawa",
+                "stagger" => "face_x",
+                "axis" => "x",
+                "offset" => 0,
+            ),
+            "coeff" => 1,
+        )],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("\$", err.msg)
+end
+
+@testitem "lower_stencil_to_replacement: arakawa works without applies_to.dim" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    # Arakawa rules carry no top-level `applies_to.dim` — axis pattern
+    # variables are intrinsic to each stencil entry. The lowerer must
+    # accept this shape (which the cartesian path requires `dim` for).
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
+        "stencil" => Any[
+            Dict(
+                "selector" => Dict(
+                    "kind" => "arakawa", "stagger" => "face_x",
+                    "axis" => "\$x", "offset" => 0,
+                ),
+                "coeff" => -1,
+            ),
+            Dict(
+                "selector" => Dict(
+                    "kind" => "arakawa", "stagger" => "face_x",
+                    "axis" => "\$x", "offset" => 1,
+                ),
+                "coeff" => 1,
+            ),
+        ],
+    )
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+    repl = out["replacement"]
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 2
+end
+
+@testitem "lower_stencil_to_replacement: errors on mixed selector kinds" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
+        "stencil" => Any[
+            Dict(
+                "selector" => Dict(
+                    "kind" => "arakawa", "stagger" => "face_x",
+                    "axis" => "\$x", "offset" => 0,
+                ),
+                "coeff" => 1,
+            ),
+            Dict(
+                "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 0),
+                "coeff" => 1,
+            ),
+        ],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("mixes selector kinds", err.msg)
+end
+
 @testitem "lower_stencil_to_replacement: lowers lax_friedrichs_flux (cartesian)" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
     using JSON
