@@ -32,6 +32,25 @@ end
     @test nb_w[1] != 0
 end
 
+@testitem "cubed_sphere trait: cell_centers(:lon/:lat) physical axes" setup = [CubedSphereTraitSetup] tags = [:grid, :cubed_sphere, :trait] begin
+    Nc = 4
+    g = CubedSphereGrid(Nc; R = 1.0)
+    clons = cell_centers(g, :lon)
+    clats = cell_centers(g, :lat)
+    @test length(clons) == n_cells(g)
+    @test length(clats) == n_cells(g)
+    # Panel 1, (i=1, j=1) flat index is 1; values must match precomputed lon/lat.
+    @test clons[1] ≈ g.lon[1, 1, 1]
+    @test clats[1] ≈ g.lat[1, 1, 1]
+    # lon in [-π, π], lat in [-π/2, π/2]
+    @test all(-π .<= clons .<= π)
+    @test all(-π/2 .<= clats .<= π/2)
+    # Unknown axis still throws
+    @test_throws ArgumentError cell_centers(g, :z)
+    # Memoization: second call returns identical array object
+    @test cell_centers(g, :lon) === cell_centers(g, :lon)
+end
+
 @testitem "cubed_sphere trait: Tier-M tensor shapes" setup = [CubedSphereTraitSetup] tags = [:grid, :cubed_sphere, :trait] begin
     Nc = 4
     g = CubedSphereGrid(Nc; R = 1.0)

@@ -262,6 +262,17 @@ end
 @inline _cs_flat(p::Int, i::Int, j::Int, Nc::Int) = (p - 1) * Nc * Nc + (j - 1) * Nc + i
 
 function cell_centers(g::CubedSphereGrid{T}, axis::Symbol) where {T}
+    if axis === :lon || axis === :lat
+        return _grid_memo!(g, (:cell_centers, axis)) do
+            Nc = g.Nc
+            src = axis === :lon ? g.lon : g.lat
+            out = Vector{T}(undef, 6 * Nc * Nc)
+            @inbounds for p in 1:6, j in 1:Nc, i in 1:Nc
+                out[_cs_flat(p, i, j, Nc)] = src[p, i, j]
+            end
+            return out
+        end
+    end
     _cs_axis_idx(g, axis)
     return _grid_memo!(g, (:cell_centers, axis)) do
         Nc = g.Nc
