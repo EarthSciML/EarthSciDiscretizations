@@ -312,3 +312,183 @@ end
     @test isfinite(maximum(q))
     @test isfinite(minimum(q))
 end
+
+# ---------------------------------------------------------------------------
+# weno5_grad rule tests (esd-ubz: MOL #531 parity — grad(u,x) case)
+# ---------------------------------------------------------------------------
+# MOL #531 rules_weno.jl _weno_template fires on Dx(u) (ESS: grad(u,x)),
+# not on div(U·q). weno5_advection.json applies_to is div(U*q,x) and does
+# NOT match the bare 1st-derivative pattern. weno5_grad.json was added as
+# the thin alias: applies_to = {"op":"grad",...}, replacement = (hp−hm)/dx
+# with the same Jiang-Shu WENO5 math (no new coefficients).
+
+@testitem "weno5_grad rule is discoverable under :finite_difference" begin
+    using EarthSciDiscretizations
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "weno5_grad", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"weighted_essentially_nonoscillatory\"", content)
+    @test occursin("\"O(dx^5)\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    # Must NOT use the div operator (that's weno5_advection, not weno5_grad).
+    @test !occursin("\"op\": \"div\"", content)
+end
+
+@testitem "weno5_grad rule: stencil-level numeric convergence (smooth periodic)" begin
+    using JSON
+    using EarthSciDiscretizations
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    rule_path = joinpath(repo_root, "discretizations", "finite_difference", "weno5_grad.json")
+    raw  = JSON.parsefile(rule_path)
+    body = raw["discretizations"]["weno5_grad"]
+    lw   = lower_stencil_to_replacement(body)
+    repl = lw["replacement"]
+    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
+           repl["expr"] : repl
+
+    # Evaluator with periodic wrapping (same as test_advection_discretization_conformance.jl).
+    function _resolve_idx(ie, ci)
+        ie isa AbstractString && ie == "\$x" && return ci
+        ie isa AbstractDict || error("bad idx")
+        ia = ie["args"]
+        ia[1] == "\$x" || error("lhs not \$x")
+        ie["op"] == "+" && return ci + Int(ia[2])
+        ie["op"] == "-" && return ci - Int(ia[2])
+        error("unsupported idx op $(ie["op"])")
+    end
+
+    function _eval(node, u, ci, bindings, N)
+        node isa Number && return Float64(node)
+        if node isa AbstractString
+            node == "\$x" && return Float64(ci)
+            haskey(bindings, node) && return bindings[node]
+            error("unresolved var $node")
+        end
+        node isa AbstractDict || error("bad node")
+        op = node["op"]
+        args = node["args"]
+        if op == "index"
+            j = _resolve_idx(args[2], ci)
+            return u[mod(j - 1, N) + 1]
+        end
+        ev(a) = _eval(a, u, ci, bindings, N)
+        op == "+"   && return sum(ev(a) for a in args)
+        op == "-"   && return (length(args) == 1 ? -ev(args[1]) : ev(args[1]) - ev(args[2]))
+        op == "*"   && return prod(ev(a) for a in args)
+        op == "/"   && return ev(args[1]) / ev(args[2])
+        op == "^"   && return ev(args[1]) ^ ev(args[2])
+        error("unsupported op $op")
+    end
+
+    import Base.MathConstants
+    using LinearAlgebra
+
+    function linf_err(n)
+        dx = 1.0 / n
+        u  = [sin(2π * (i - 0.5) * dx) for i in 1:n]
+        bindings = Dict{String,Float64}("dx" => dx)
+        du = [_eval(expr, u, i, bindings, n) for i in 1:n]
+        exact = [2π * cos(2π * (i - 0.5) * dx) for i in 1:n]
+        return maximum(abs.(du .- exact))
+    end
+
+    # WENO5-JS yields ≥ 3.9th order for smooth periodic sin on uniform grids
+    # (asymptotic 4th due to JS weight smoothness; MOL oracle matches).
+    ns = [16, 32, 64, 128]
+    errs = [linf_err(n) for n in ns]
+    orders = [log2(errs[i] / errs[i+1]) for i in 1:(length(errs)-1)]
+    @info "weno5_grad smooth convergence" ns errs orders
+    @test minimum(orders) >= 3.8
+    @test all(isfinite, errs) && all(e -> e > 0, errs)
+end
+
+@testitem "weno5_grad conformance: golden matches MOL #531 _weno_template" begin
+    using JSON
+    using EarthSciDiscretizations
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    HARNESS  = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
+                        "rect_1d_advection_weno5_periodic")
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
+
+    @test FIXTURES["_mol531_sha"] == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
+
+    rule_path = joinpath(REPO_ROOT, FIXTURES["rule_path"])
+    raw  = JSON.parsefile(rule_path)
+    body = raw["discretizations"][FIXTURES["rule"]]
+    lw   = lower_stencil_to_replacement(body)
+    repl = lw["replacement"]
+    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
+           repl["expr"] : repl
+
+    function _resolve_idx(ie, ci)
+        ie isa AbstractString && ie == "\$x" && return ci
+        ie isa AbstractDict || error("bad idx")
+        ia = ie["args"]
+        ia[1] == "\$x" || error("lhs not \$x")
+        ie["op"] == "+" && return ci + Int(ia[2])
+        ie["op"] == "-" && return ci - Int(ia[2])
+        error("unsupported idx op $(ie["op"])")
+    end
+
+    function _eval(node, u, ci, bindings, N)
+        node isa Number && return Float64(node)
+        if node isa AbstractString
+            node == "\$x" && return Float64(ci)
+            haskey(bindings, node) && return bindings[node]
+            error("unresolved $node")
+        end
+        node isa AbstractDict || error("bad node")
+        op = node["op"]; args = node["args"]
+        if op == "index"
+            j = _resolve_idx(args[2], ci)
+            return u[mod(j - 1, N) + 1]
+        end
+        ev(a) = _eval(a, u, ci, bindings, N)
+        op == "+"  && return sum(ev(a) for a in args)
+        op == "-"  && return (length(args)==1 ? -ev(args[1]) : ev(args[1])-ev(args[2]))
+        op == "*"  && return prod(ev(a) for a in args)
+        op == "/"  && return ev(args[1]) / ev(args[2])
+        op == "^"  && return ev(args[1]) ^ ev(args[2])
+        error("unsupported op $op")
+    end
+
+    for fx in FIXTURES["fixtures"]
+        g      = fx["grid"]
+        ic     = fx["initial_condition"]
+        N      = Int(g["n_cells"])
+        dx     = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        amp    = Float64(ic["scale_factor"]) / (Float64(ic["sigma"]) * sqrt(2π))
+        x_c    = [Float64(g["x_start"]) + (i - 0.5) * dx for i in 1:N]
+        u      = [amp * exp(-(xi - Float64(ic["center"]))^2 / (2 * Float64(ic["sigma"])^2)) for xi in x_c]
+
+        bindings = Dict{String,Float64}("dx" => dx)
+        du_dx = [_eval(expr, u, i, bindings, N) for i in 1:N]
+
+        golden = JSON.parsefile(joinpath(HARNESS, "golden", "$(fx["name"]).json"))
+        @test golden["_mol531_sha"] == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
+
+        g_du_dx = Float64.(golden["du_dx"])
+        g_u     = Float64.(golden["field_u"])
+
+        rel_tol = Float64(FIXTURES["tolerance"]["relative"])
+        scale   = max(maximum(abs.(g_du_dx)), 1e-30)
+        @test maximum(abs.(du_dx .- g_du_dx)) / scale <= rel_tol
+        @test maximum(abs.(Float64.(u) .- g_u)) <= 1e-15
+    end
+end
