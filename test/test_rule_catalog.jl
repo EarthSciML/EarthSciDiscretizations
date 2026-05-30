@@ -645,3 +645,41 @@ end
     @test !occursin("\"stencil\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
+
+@testitem "spherical_laplacian_uniform scheme is discoverable and well-formed (esd-thf)" begin
+    using EarthSciDiscretizations
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "spherical_laplacian_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Scheme identified by the spherical_laplacian op on the radial dimension.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"spherical_laplacian\"", content)
+    @test occursin("\"\$u\"", content)
+    @test occursin("\"\$r\"", content)
+    # Inline arrayop replacement — conservative face-flux form.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    # Half-point face radii: 0.5*(r[i] + r[i+1]) and 0.5*(r[i-1] + r[i]).
+    @test occursin("0.5", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Coordinate array r and spacing dr appear in denominator.
+    @test occursin("\"dr\"", content)
+    @test occursin("\"r\"", content)
+    # Squared face radii appear as ^ 2.
+    @test occursin("\"op\": \"^\"", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end

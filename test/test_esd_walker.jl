@@ -54,6 +54,7 @@ using TestItems
             "nonlinear_laplacian_uniform",
             "dirichlet_bc",
             "neumann_bc",
+            "spherical_laplacian_uniform",
         )
         @test seeded in names
     end
@@ -103,6 +104,7 @@ using TestItems
             ("finite_difference", "upwind_1st"),
             ("finite_difference", "centered_2nd_deriv_uniform"),
             ("finite_difference", "laplacian_2nd_uniform_cartesian"),
+            ("finite_difference", "spherical_laplacian_uniform"),
         ]
     )
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
