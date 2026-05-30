@@ -1,13 +1,94 @@
 {
-  "rule": "centered_2nd_uniform_latlon",
-  "applicable": false,
-  "skip_reason": "Layer-A canonical drive of `centered_2nd_uniform_latlon` requires ESS `discretize` to consume the rule's `stencil`-form spec (4 entries: lon ±1, lat ±1 with per-cell `cos_lat` + scalar `R`/`dlon`/`dlat` bindings). ESS rule_engine.parse_rule (rule_engine.jl:695-699) currently throws E_RULE_REPLACEMENT_MISSING for any rule lacking a `replacement` field — the MVP supports only the replacement form. The generic stencil → replacement lift is tracked at ESD/dsc-y0jj as the prerequisite for promoting stencil-only rules through Layer-A and Layer-B; once it lands, this stub can be replaced by a hand-pinned canonical contract pinning the 4-point lat-lon centered FD AST against the rule output. See ESD/dsc-mps8 for the Layer-B runner scaffolding (Y_{2,0} spherical-harmonic MMS, `2d_latlon_sphere` topology) that will activate the moment dsc-y0jj makes the rule routable.",
-  "reference_implementation": {
-    "module": "EarthSciDiscretizations",
-    "comment": "Imperative reference for the 4-point centered FD on a uniform lat-lon grid lives at `src/grids/latlon.jl::apply_stencil_2d_latlon` (the cross-binding conformance reference per `tests/conformance/grids/latlon/rules/centered_2nd_uniform_latlon/`). The rule's coefficient AST contains only +, *, /, unary -, and a single per-cell `cos_lat` binding."
+  "esm": "0.2.0",
+  "metadata": {
+    "name": "centered_2nd_uniform_latlon_canonical"
   },
-  "audit_provenance": {
-    "bead": "dsc-mps8",
-    "blocker": "dsc-y0jj"
+  "grids": {
+    "gll": {
+      "family": "latlon",
+      "dimensions": [
+        { "name": "lon", "size": 8, "periodic": true },
+        { "name": "lat", "size": 8 }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "centered_2nd_uniform_latlon",
+      "pattern": { "op": "grad", "args": ["$u"], "dim": "$k" },
+      "replacement": {
+        "op": "+",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [-1, { "op": "*", "args": [2, "R", "cos_lat", "dlon"] }] },
+              { "op": "index", "args": ["$u", "lat", { "op": "+", "args": ["lon", -1] }] }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [1, { "op": "*", "args": [2, "R", "cos_lat", "dlon"] }] },
+              { "op": "index", "args": ["$u", "lat", { "op": "+", "args": ["lon", 1] }] }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [-1, { "op": "*", "args": [2, "R", "dlat"] }] },
+              { "op": "index", "args": ["$u", { "op": "+", "args": ["lat", -1] }, "lon"] }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [1, { "op": "*", "args": [2, "R", "dlat"] }] },
+              { "op": "index", "args": ["$u", { "op": "+", "args": ["lat", 1] }, "lon"] }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "models": {
+    "M": {
+      "grid": "gll",
+      "variables": {
+        "u": {
+          "type": "state",
+          "default": 0.0,
+          "units": "1",
+          "shape": ["lon", "lat"],
+          "location": "cell_center"
+        },
+        "cos_lat": {
+          "type": "parameter",
+          "default": 1.0,
+          "units": "1"
+        },
+        "R": {
+          "type": "parameter",
+          "default": 1.0,
+          "units": "1"
+        },
+        "dlon": {
+          "type": "parameter",
+          "default": 1.0,
+          "units": "1"
+        },
+        "dlat": {
+          "type": "parameter",
+          "default": 1.0,
+          "units": "1"
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": { "op": "grad", "args": ["u"], "dim": "lon" }
+        }
+      ]
+    }
   }
 }

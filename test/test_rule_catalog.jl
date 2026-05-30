@@ -1136,3 +1136,36 @@ end
     transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
     @test all(abs.(tendency) .< 1.0e-12)
 end
+
+@testitem "centered_2nd_nonuniform_vertical scheme is discoverable and well-formed (esd-9qs)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_2nd_nonuniform_vertical", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"vertical\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"stencil\"", content)
+    # Per-cell dz[k] binding via index op — the S2 per-cell binding contract (SELECTOR_KINDS #3).
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"dz\"", content)
+    @test occursin("\"\$k\"", content)
+    # Face-staggered selectors: face_bottom and face_top at offset 0.
+    @test occursin("\"face_bottom\"", content)
+    @test occursin("\"face_top\"", content)
+    @test occursin("\"offset\": 0", content)
+    # No flat scalar spacing — must always be indexed.
+    @test !occursin("\"args\": [-1, \"dz\"]", content)
+    @test !occursin("\"args\": [1, \"dz\"]", content)
+    # No call op.
+    @test !occursin("\"op\": \"call\"", content)
+end
