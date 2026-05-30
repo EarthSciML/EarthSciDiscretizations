@@ -65,6 +65,36 @@ end
     @test occursin("\"offset\": 0", content)
 end
 
+@testitem "upwind_1st_nonuniform scheme is discoverable and well-formed (esd-02z)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "upwind_1st_nonuniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    # Same one-sided stencil shape as upwind_1st: offsets -1 and 0.
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    # Non-uniform variant: coefficients index dx per-cell via index("dx", "$x").
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"dx\"", content)
+    @test occursin("\"\$x\"", content)
+    # No flat scalar "dx" coefficient — must always be indexed.
+    @test !occursin("\"args\": [-1, \"dx\"]", content)
+    @test !occursin("\"args\": [1, \"dx\"]", content)
+end
+
 @testitem "periodic_bc rule is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 
@@ -390,6 +420,7 @@ end
             "nn_diffusion_mpas",
             "periodic_bc",
             "upwind_1st",
+            "upwind_1st_nonuniform",
             "dirichlet_bc",
             "neumann_bc",
             "robin_bc",
@@ -404,6 +435,7 @@ end
     @test "nn_diffusion_mpas" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
+    @test "upwind_1st_nonuniform" in fd_names
     @test "dirichlet_bc" in fd_names
     @test "neumann_bc" in fd_names
     @test "robin_bc" in fd_names

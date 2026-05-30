@@ -55,6 +55,7 @@ Columns:
 | `robin_bc_xmin` | rules | `bc` | — | — | — | `discretizations/finite_difference/robin_bc.json` |
 | `spherical_laplacian_uniform` | discretizations | `spherical_laplacian` | cartesian | O(dr^2) | — | `discretizations/finite_difference/spherical_laplacian_uniform.json` |
 | `upwind_1st` | discretizations | `grad` | cartesian | O(dx) | — | `discretizations/finite_difference/upwind_1st.json` |
+| `upwind_1st_nonuniform` | discretizations | `grad` | cartesian | O(dx_i) | — | `discretizations/finite_difference/upwind_1st_nonuniform.json` |
 
 ## Finite-volume rules (`finite_volume`)
 

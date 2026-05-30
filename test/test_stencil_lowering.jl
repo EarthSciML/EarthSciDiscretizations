@@ -80,6 +80,83 @@ end
     @test expr !== nothing
 end
 
+@testitem "lower_stencil_to_replacement: lowers cartesian upwind_1st_nonuniform (esd-02z)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "upwind_1st_nonuniform.json",
+    )
+    raw  = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st_nonuniform"])
+    @test !haskey(rule, "replacement")
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 2
+
+    # Entry 1: offset = -1, coeff = -1/index(dx,$x) -> term * index($u, $x+(-1))
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    coeff1 = e1["args"][1]
+    @test coeff1["op"] == "/"
+    # numerator is -1
+    @test Int(coeff1["args"][1]) == -1
+    # denominator is index("dx", "$x")
+    denom1 = coeff1["args"][2]
+    @test denom1["op"] == "index"
+    @test String(denom1["args"][1]) == "dx"
+    @test String(denom1["args"][2]) == "\$x"
+    # operand index
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    arg1 = idx1["args"][2]
+    @test arg1["op"] == "+"
+    @test String(arg1["args"][1]) == "\$x"
+    @test Int(arg1["args"][2]) == -1
+
+    # Entry 2: offset = 0, coeff = 1/index(dx,$x) -> term * index($u, $x)
+    e2 = repl["args"][2]
+    @test e2["op"] == "*"
+    coeff2 = e2["args"][1]
+    @test coeff2["op"] == "/"
+    @test Int(coeff2["args"][1]) == 1
+    denom2 = coeff2["args"][2]
+    @test denom2["op"] == "index"
+    @test String(denom2["args"][1]) == "dx"
+    @test String(denom2["args"][2]) == "\$x"
+    idx2 = e2["args"][2]
+    @test idx2["op"] == "index"
+    @test String(idx2["args"][1]) == "\$u"
+    @test String(idx2["args"][2]) == "\$x"
+end
+
+@testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st_nonuniform AST (esd-02z)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "upwind_1st_nonuniform.json",
+    )
+    raw  = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st_nonuniform"])
+    out  = lower_stencil_to_replacement(rule)
+
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+end
+
 @testitem "lower_stencil_to_replacement: errors on missing stencil and replacement" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
 
