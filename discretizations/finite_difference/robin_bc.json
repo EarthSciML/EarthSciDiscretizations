@@ -1,0 +1,96 @@
+{
+  "rules": {
+    "robin_bc_xmin": {
+      "description": "Robin ghost-cell prescription at xmin for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). Robin BC: a·u + b·∂u/∂n = g, where ∂u/∂n is the outward normal derivative; at xmin the outward normal is -x so ∂u/∂n = (u_ghost - u[0]) / dx (centered diff across the boundary face, consistent with the Neumann convention). Solving for the ghost cell: u_ghost = (2·dx·g + (2·b - a·dx)·u[0]) / (a·dx + 2·b). Pattern matches the synthetic `bc` node (§9.2); `kind`, `side`, and `robin_alpha/beta/gamma` fields are spec-compliant annotations — ESS pattern matching on these fields is pending. `produces` declares the ghost variable per §9.4 (not yet processed by the current rule engine; documented for forward compatibility). Analytic check: a*(u_ghost+u[0])/2 + b*(u_ghost-u[0])/dx = g. Pure Dirichlet limit (b=0, a=1, g=u_bc): u_ghost = 2*u_bc - u[0]. Pure Neumann limit (a=0, b=1): u_ghost = u[0] + dx*g.",
+      "pattern": {
+        "op": "bc",
+        "kind": "robin",
+        "side": "xmin",
+        "args": ["$u"],
+        "robin_alpha": "$a",
+        "robin_beta": "$b",
+        "robin_gamma": "$g"
+      },
+      "replacement": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  { "op": "*", "args": [2, "dx"] },
+                  "$g"
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      { "op": "*", "args": [2, "$b"] },
+                      { "op": "*", "args": ["$a", "dx"] }
+                    ]
+                  },
+                  { "op": "index", "args": ["$u", 0] }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": ["$a", "dx"] },
+              { "op": "*", "args": [2, "$b"] }
+            ]
+          }
+        ]
+      },
+      "produces": [
+        {
+          "kind": "ghost_var",
+          "name": "robin_bc__$u__xmin",
+          "emit": {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "*", "args": [2, "dx"] },
+                      "$g"
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "*", "args": [2, "$b"] },
+                          { "op": "*", "args": ["$a", "dx"] }
+                        ]
+                      },
+                      { "op": "index", "args": ["$u", 0] }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": ["$a", "dx"] },
+                  { "op": "*", "args": [2, "$b"] }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -55,6 +55,7 @@ using TestItems
             "dirichlet_bc",
             "neumann_bc",
             "spherical_laplacian_uniform",
+            "robin_bc",
         )
         @test seeded in names
     end
@@ -185,6 +186,11 @@ using TestItems
             # convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
             ("finite_difference", "neumann_bc"),
+            # robin_bc (esd-m9v): rewrite fixture ships `applicable:false`
+            # pending ESS support for kind/side/robin_alpha/beta/gamma
+            # pattern matching on the bc OpExpr (layer-A SKIP) and carries
+            # no convergence fixture (layer-B SKIP "no convergence fixtures").
+            ("finite_difference", "robin_bc"),
         ]
     )
     # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship

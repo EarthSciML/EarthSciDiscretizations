@@ -12,14 +12,14 @@ Hand-authored planning prose (aspirational rules not yet committed, audit lenses
 |---|---|
 | Generator | `docs/generate_rule_catalog.jl` |
 | Catalog root | `discretizations` |
-| Total rule entries | 40 |
+| Total rule entries | 41 |
 | Families discovered | finite_difference, finite_volume, grids |
 
 ## Counts by family
 
 | Family | Entries |
 |---|---:|
-| `finite_difference` | 13 |
+| `finite_difference` | 14 |
 | `finite_volume` | 23 |
 | `grids` | 4 |
 
@@ -52,6 +52,7 @@ Columns:
 | `nn_diffusion_mpas` | discretizations | `laplacian` | unstructured | O(h^2) on a quasi-uniform Voronoi mesh | — | `discretizations/finite_difference/nn_diffusion_mpas.json` |
 | `nonlinear_laplacian_uniform` | discretizations | `grad` | cartesian | O(dx^2) | — | `discretizations/finite_difference/nonlinear_laplacian_uniform.json` |
 | `periodic_wrap_x` | rules | `index` | xmin_boundary | — | — | `discretizations/finite_difference/periodic_bc.json` |
+| `robin_bc_xmin` | rules | `bc` | — | — | — | `discretizations/finite_difference/robin_bc.json` |
 | `spherical_laplacian_uniform` | discretizations | `spherical_laplacian` | cartesian | O(dr^2) | — | `discretizations/finite_difference/spherical_laplacian_uniform.json` |
 | `upwind_1st` | discretizations | `grad` | cartesian | O(dx) | — | `discretizations/finite_difference/upwind_1st.json` |
 

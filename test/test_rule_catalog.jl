@@ -157,6 +157,49 @@ end
     @test occursin("__xmin", content)
 end
 
+@testitem "robin_bc rule is discoverable and well-formed (esd-m9v)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "robin_bc", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Robin BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
+    # `kind:"robin"` and `side:"xmin"`, `robin_alpha/beta/gamma` coefficients
+    # for αu + β∂u/∂n = γ, `replacement` giving the ghost-cell value
+    # u_ghost = (2·dx·γ + (2·β - α·dx)·u[0]) / (α·dx + 2·β),
+    # and `produces` declaring the ghost_var per §9.4.
+    @test occursin("\"pattern\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"kind\": \"robin\"", content)
+    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"op\": \"bc\"", content)
+    # Coefficients: robin_alpha (α), robin_beta (β), robin_gamma (γ).
+    @test occursin("\"robin_alpha\"", content)
+    @test occursin("\"robin_beta\"", content)
+    @test occursin("\"robin_gamma\"", content)
+    # Ghost-cell formula uses division, addition, subtraction, multiplication,
+    # index into u[0], and the grid spacing dx.
+    @test occursin("\"op\": \"/\"", content)
+    @test occursin("\"op\": \"+\"", content)
+    @test occursin("\"op\": \"-\"", content)
+    @test occursin("\"op\": \"*\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"dx\"", content)
+    # §9.4 ghost_var produces declaration.
+    @test occursin("\"produces\"", content)
+    @test occursin("\"ghost_var\"", content)
+    # Ghost variable named per §9.4 scheme__logical__side convention.
+    @test occursin("robin_bc__", content)
+    @test occursin("__xmin", content)
+end
+
 @testitem "centered_2nd_uniform_vertical scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 
@@ -349,6 +392,7 @@ end
             "upwind_1st",
             "dirichlet_bc",
             "neumann_bc",
+            "robin_bc",
         )
         @test seeded in names
     end
@@ -362,6 +406,7 @@ end
     @test "upwind_1st" in fd_names
     @test "dirichlet_bc" in fd_names
     @test "neumann_bc" in fd_names
+    @test "robin_bc" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
     @test "ppm_reconstruction" in names
     fv_rules = filter(r -> r.family == :finite_volume, rules)
