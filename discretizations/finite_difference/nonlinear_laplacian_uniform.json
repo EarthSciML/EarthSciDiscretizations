@@ -1,0 +1,87 @@
+{
+  "discretizations": {
+    "nonlinear_laplacian_uniform": {
+      "applies_to": {
+        "op": "grad",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "$f",
+              { "op": "grad", "args": ["$u"], "dim": "$x" }
+            ]
+          }
+        ],
+        "dim": "$x"
+      },
+      "grid_family": "cartesian",
+      "accuracy": "O(dx^2)",
+      "replacement": {
+        "op": "arrayop",
+        "output_idx": ["$x"],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "index", "args": ["$f", "$x"] },
+                            { "op": "index", "args": ["$f", { "op": "+", "args": ["$x", 1] }] }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["$u", { "op": "+", "args": ["$x", 1] }] },
+                        { "op": "index", "args": ["$u", "$x"] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "index", "args": ["$f", { "op": "-", "args": ["$x", 1] }] },
+                            { "op": "index", "args": ["$f", "$x"] }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["$u", "$x"] },
+                        { "op": "index", "args": ["$u", { "op": "-", "args": ["$x", 1] }] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            { "op": "*", "args": ["dx", "dx"] }
+          ]
+        },
+        "args": ["$u", "$f"]
+      }
+    }
+  }
+}

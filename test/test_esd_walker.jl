@@ -51,6 +51,7 @@ using TestItems
             "upwind_1st",
             "centered_2nd_deriv_uniform",
             "laplacian_2nd_uniform_cartesian",
+            "nonlinear_laplacian_uniform",
         )
         @test seeded in names
     end
@@ -214,6 +215,14 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
+            # nonlinear_laplacian_uniform (esd-1p7) ships a canonical/ fixture
+            # so Layer-A passes via the ESS rule engine. Layer B SKIPs pending
+            # the canonical-pipeline replacement of `verify_mms_convergence`.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test !isempty(r.layer_b.reason)
         elseif key in pending_canonical_layer_b
             # The remaining `applicable:true` convergence fixtures: Layer-A
             # is unconstrained here (centered_2nd_uniform's canonical fixture
@@ -318,6 +327,7 @@ using TestItems
     @test occursin("classname=\"finite_difference.centered_2nd_uniform\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_latlon\"", xml)
+    @test occursin("classname=\"finite_difference.nonlinear_laplacian_uniform\"", xml)
     @test occursin("classname=\"finite_difference.covariant_laplacian_cubed_sphere\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)

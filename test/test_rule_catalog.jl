@@ -534,3 +534,40 @@ end
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
 end
+
+@testitem "nonlinear_laplacian_uniform scheme is discoverable and well-formed (esd-1p7)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "nonlinear_laplacian_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Scheme is identified by a depth-2 grad pattern: Dx(f * Dx(u)).
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    # Depth-2: the applies_to args contain a nested * with an inner grad.
+    @test occursin("\"op\": \"*\"", content)
+    @test occursin("\"\$f\"", content)
+    @test occursin("\"\$u\"", content)
+    @test occursin("\"\$x\"", content)
+    # Inline replacement — face-interpolated flux difference as arrayop.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    # Face interpolation: 0.5*(f[i]+f[i+1]) — must use index and 0.5.
+    @test occursin("0.5", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Flux difference over dx^2.
+    @test occursin("\"dx\"", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end

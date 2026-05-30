@@ -1,0 +1,132 @@
+{
+  "esm": "0.2.0",
+  "metadata": {
+    "name": "nonlinear_laplacian_uniform_canonical"
+  },
+  "grids": {
+    "gx": {
+      "family": "cartesian",
+      "dimensions": [
+        { "name": "i", "size": 8, "periodic": true, "spacing": "uniform" }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "nonlinear_laplacian_uniform",
+      "pattern": {
+        "op": "grad",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "$f",
+              { "op": "grad", "args": ["$u"], "dim": "$x" }
+            ]
+          }
+        ],
+        "dim": "$x"
+      },
+      "replacement": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      0.5,
+                      {
+                        "op": "+",
+                        "args": [
+                          { "op": "index", "args": ["$f", "$x"] },
+                          { "op": "index", "args": ["$f", { "op": "+", "args": ["$x", 1] }] }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      { "op": "index", "args": ["$u", { "op": "+", "args": ["$x", 1] }] },
+                      { "op": "index", "args": ["$u", "$x"] }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      0.5,
+                      {
+                        "op": "+",
+                        "args": [
+                          { "op": "index", "args": ["$f", { "op": "-", "args": ["$x", 1] }] },
+                          { "op": "index", "args": ["$f", "$x"] }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      { "op": "index", "args": ["$u", "$x"] },
+                      { "op": "index", "args": ["$u", { "op": "-", "args": ["$x", 1] }] }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "op": "*", "args": ["dx", "dx"] }
+        ]
+      }
+    }
+  ],
+  "models": {
+    "M": {
+      "grid": "gx",
+      "variables": {
+        "u": {
+          "type": "state",
+          "default": 0.0,
+          "units": "1",
+          "shape": ["i"],
+          "location": "cell_center"
+        },
+        "f": {
+          "type": "parameter",
+          "default": 1.0,
+          "units": "1",
+          "shape": ["i"],
+          "location": "cell_center"
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "grad",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "f",
+                  { "op": "grad", "args": ["u"], "dim": "i" }
+                ]
+              }
+            ],
+            "dim": "i"
+          }
+        }
+      ]
+    }
+  }
+}

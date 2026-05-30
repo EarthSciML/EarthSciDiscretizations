@@ -12,14 +12,14 @@ Hand-authored planning prose (aspirational rules not yet committed, audit lenses
 |---|---|
 | Generator | `docs/generate_rule_catalog.jl` |
 | Catalog root | `discretizations` |
-| Total rule entries | 36 |
+| Total rule entries | 37 |
 | Families discovered | finite_difference, finite_volume, grids |
 
 ## Counts by family
 
 | Family | Entries |
 |---|---:|
-| `finite_difference` | 9 |
+| `finite_difference` | 10 |
 | `finite_volume` | 23 |
 | `grids` | 4 |
 
@@ -48,6 +48,7 @@ Columns:
 | `covariant_laplacian_cubed_sphere` | discretizations | `laplacian` | cubed_sphere | O(h^2) | src/operators/laplacian.jl (imperative reference); Putman & Lin (2007), JCP 227(1):55-78 — gnomonic cubed-sphere covariant FV operators. | `discretizations/finite_difference/covariant_laplacian_cubed_sphere.json` |
 | `laplacian_2nd_uniform_cartesian` | discretizations | `laplacian` | cartesian | O(dx^2) | — | `discretizations/finite_difference/laplacian_2nd_uniform_cartesian.json` |
 | `nn_diffusion_mpas` | discretizations | `laplacian` | unstructured | O(h^2) on a quasi-uniform Voronoi mesh | — | `discretizations/finite_difference/nn_diffusion_mpas.json` |
+| `nonlinear_laplacian_uniform` | discretizations | `grad` | cartesian | O(dx^2) | — | `discretizations/finite_difference/nonlinear_laplacian_uniform.json` |
 | `periodic_wrap_x` | rules | `index` | xmin_boundary | — | — | `discretizations/finite_difference/periodic_bc.json` |
 | `upwind_1st` | discretizations | `grad` | cartesian | O(dx) | — | `discretizations/finite_difference/upwind_1st.json` |
 
