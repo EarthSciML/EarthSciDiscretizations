@@ -182,9 +182,9 @@ end
     using EarthSciDiscretizations: lower_stencil_to_replacement
 
     rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
         "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "latlon", "axis" => "lon", "offset" => 1),
+            "selector" => Dict("kind" => "indirect", "axis" => "n", "offset" => 0),
             "coeff" => 1,
         )],
     )
@@ -195,7 +195,7 @@ end
         e
     end
     @test err isa ArgumentError
-    @test occursin("'latlon'", err.msg)
+    @test occursin("'indirect'", err.msg)
     @test occursin("not yet supported", err.msg)
 end
 
@@ -717,4 +717,320 @@ end
 
     # Idempotence
     @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+# =============================================================================
+# Latlon family tests
+# =============================================================================
+
+@testitem "lower_stencil_to_replacement: lowers centered_2nd_uniform_latlon (latlon)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "centered_2nd_uniform_latlon.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform_latlon"])
+    @test !haskey(rule, "replacement")
+    @test rule["grid_family"] == "latlon"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # 4 stencil entries (2 for lon, 2 for lat) → combine(4 terms)
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 4
+
+    # All terms: coeff * index($u, lat_arg, lon_arg) — axes sorted: lat < lon
+    for (i, term) in enumerate(repl["args"])
+        @test term["op"] == "*"
+        idx = term["args"][2]
+        @test idx["op"] == "index"
+        @test length(idx["args"]) == 3  # operand + lat_arg + lon_arg
+        @test String(idx["args"][1]) == "\$u"
+    end
+
+    # Entry 1: axis=lon, offset=-1 → index($u, "lat", "lon" + (-1))
+    e1 = repl["args"][1]
+    idx1 = e1["args"][2]
+    @test String(idx1["args"][2]) == "lat"   # lat bare (not the shifted axis)
+    a1_lon = idx1["args"][3]
+    @test a1_lon["op"] == "+"
+    @test String(a1_lon["args"][1]) == "lon"
+    @test Int(a1_lon["args"][2]) == -1
+
+    # Entry 2: axis=lon, offset=+1 → index($u, "lat", "lon" + 1)
+    e2 = repl["args"][2]
+    idx2 = e2["args"][2]
+    @test String(idx2["args"][2]) == "lat"
+    a2_lon = idx2["args"][3]
+    @test a2_lon["op"] == "+"
+    @test String(a2_lon["args"][1]) == "lon"
+    @test Int(a2_lon["args"][2]) == 1
+
+    # Entry 3: axis=lat, offset=-1 → index($u, "lat" + (-1), "lon")
+    e3 = repl["args"][3]
+    idx3 = e3["args"][2]
+    a3_lat = idx3["args"][2]
+    @test a3_lat["op"] == "+"
+    @test String(a3_lat["args"][1]) == "lat"
+    @test Int(a3_lat["args"][2]) == -1
+    @test String(idx3["args"][3]) == "lon"   # lon bare
+
+    # Entry 4: axis=lat, offset=+1 → index($u, "lat" + 1, "lon")
+    e4 = repl["args"][4]
+    idx4 = e4["args"][2]
+    a4_lat = idx4["args"][2]
+    @test a4_lat["op"] == "+"
+    @test String(a4_lat["args"][1]) == "lat"
+    @test Int(a4_lat["args"][2]) == 1
+    @test String(idx4["args"][3]) == "lon"
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: latlon errors on \$-prefixed axis" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+        "stencil" => Any[Dict(
+            "selector" => Dict("kind" => "latlon", "axis" => "\$lon", "offset" => 0),
+            "coeff" => 1,
+        )],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("literal geographic axis name", err.msg)
+end
+
+# =============================================================================
+# Cubed-sphere family tests
+# =============================================================================
+
+@testitem "lower_stencil_to_replacement: lowers covariant_laplacian_cubed_sphere (cubed_sphere)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "covariant_laplacian_cubed_sphere.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["covariant_laplacian_cubed_sphere"])
+    @test !haskey(rule, "replacement")
+    @test rule["grid_family"] == "cubed_sphere"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # 9 stencil entries → combine(9 terms)
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 9
+
+    # All terms: coeff * index($phi, eta_arg, xi_arg) — axes sorted: eta < xi
+    for (i, term) in enumerate(repl["args"])
+        @test term["op"] == "*"
+        idx = term["args"][2]
+        @test idx["op"] == "index"
+        @test length(idx["args"]) == 3   # operand + eta_arg + xi_arg
+        @test String(idx["args"][1]) == "\$phi"
+    end
+
+    # Entry 1: selectors [{xi, offset=0}, {eta, offset=0}] → index($phi, "eta", "xi") — both bare
+    e1 = repl["args"][1]
+    idx1 = e1["args"][2]
+    @test String(idx1["args"][2]) == "eta"
+    @test String(idx1["args"][3]) == "xi"
+
+    # Entry 2: selectors [{xi, offset=1}, {eta, offset=0}] → index($phi, "eta", "xi" + 1)
+    e2 = repl["args"][2]
+    idx2 = e2["args"][2]
+    @test String(idx2["args"][2]) == "eta"
+    a2_xi = idx2["args"][3]
+    @test a2_xi["op"] == "+"
+    @test String(a2_xi["args"][1]) == "xi"
+    @test Int(a2_xi["args"][2]) == 1
+
+    # Entry 3: selectors [{xi, offset=-1}, {eta, offset=0}] → index($phi, "eta", "xi" + (-1))
+    e3 = repl["args"][3]
+    idx3 = e3["args"][2]
+    @test String(idx3["args"][2]) == "eta"
+    a3_xi = idx3["args"][3]
+    @test a3_xi["op"] == "+"
+    @test Int(a3_xi["args"][2]) == -1
+
+    # Entry 4: selectors [{xi, offset=0}, {eta, offset=1}] → index($phi, "eta" + 1, "xi")
+    e4 = repl["args"][4]
+    idx4 = e4["args"][2]
+    a4_eta = idx4["args"][2]
+    @test a4_eta["op"] == "+"
+    @test String(a4_eta["args"][1]) == "eta"
+    @test Int(a4_eta["args"][2]) == 1
+    @test String(idx4["args"][3]) == "xi"
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: lowers transport_2d (cubed_sphere, finite_volume)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_volume",
+        "transport_2d.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["transport_2d"])
+    @test !haskey(rule, "replacement")
+    @test rule["grid_family"] == "cubed_sphere"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # 5 stencil entries → combine(5 terms); axes: eta < xi
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 5
+
+    for term in repl["args"]
+        @test term["op"] == "*"
+        idx = term["args"][2]
+        @test idx["op"] == "index"
+        @test length(idx["args"]) == 3
+        @test String(idx["args"][1]) == "\$q"
+    end
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+# =============================================================================
+# Vertical family tests
+# =============================================================================
+
+@testitem "lower_stencil_to_replacement: lowers centered_2nd_uniform_vertical (vertical)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "centered_2nd_uniform_vertical.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform_vertical"])
+    @test !haskey(rule, "replacement")
+    @test rule["grid_family"] == "vertical"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # 2 stencil entries → combine(2 terms)
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 2
+
+    # Both entries: coeff * index($u, $k) — offset=0, no `+ 0` wrapper
+    # Stagger (face_bottom / face_top) is NOT in the AST
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    @test String(idx1["args"][2]) == "\$k"   # offset=0 → bare axis var
+
+    e2 = repl["args"][2]
+    @test e2["op"] == "*"
+    idx2 = e2["args"][2]
+    @test idx2["op"] == "index"
+    @test String(idx2["args"][1]) == "\$u"
+    @test String(idx2["args"][2]) == "\$k"   # offset=0 → bare axis var
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: vertical errors on bad stagger" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+        "stencil" => Any[Dict(
+            "selector" => Dict(
+                "kind" => "vertical", "axis" => "\$k",
+                "stagger" => "unknown_stagger", "offset" => 0,
+            ),
+            "coeff" => 1,
+        )],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("'unknown_stagger'", err.msg)
+end
+
+@testitem "lower_stencil_to_replacement: vertical errors on axis mismatch" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+
+    rule = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+        "stencil" => Any[Dict(
+            "selector" => Dict(
+                "kind" => "vertical", "axis" => "\$z",
+                "stagger" => "face_bottom", "offset" => 0,
+            ),
+            "coeff" => 1,
+        )],
+    )
+    err = try
+        lower_stencil_to_replacement(rule)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("disagrees", err.msg)
 end

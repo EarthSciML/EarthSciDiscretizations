@@ -26,8 +26,8 @@ Public surface:
 
 - [`lower_stencil_to_replacement`](@ref) — single-rule lowerer.
 
-Selector kinds currently supported: `cartesian`, `arakawa`. Other
-families (`vertical`, `latlon`, `cubed_sphere`, `indirect`, `reduction`)
+Selector kinds currently supported: `cartesian`, `arakawa`, `latlon`,
+`cubed_sphere`, `vertical`. Other families (`indirect`, `reduction`)
 raise `ArgumentError` until their lowering rows are added; each new
 kind composes here as a separate dispatch branch.
 """
@@ -70,6 +70,30 @@ The shape of `axis_args_i` depends on the stencil family:
   `face_y` ↔ y-component). `applies_to.dim` is NOT required for arakawa
   rules — axis pattern variables are intrinsic to the stencil entries.
 
+- **latlon** (`kind="latlon"`): multi-axis with literal geographic axis
+  names (e.g. `"lon"`, `"lat"`). Unlike arakawa, the axis field is a
+  literal string (not a `\$`-prefixed pattern variable). The sorted set
+  of unique axis names defines the positional dimension order. Each entry
+  contributes `index(operand, lon_arg, lat_arg)` where the entry's axis
+  slot carries `axis + offset` and other slots carry the bare literal axis
+  name. No `stagger` field is required. `applies_to.dim` is present but
+  not used — axis names are intrinsic to the stencil entries.
+
+- **cubed_sphere** (`kind="cubed_sphere"`): multi-axis using a plural
+  `selectors` array (not the singular `selector` key). Each stencil entry
+  carries one selector per axis (e.g. `xi` and `eta`), each specifying an
+  independent integer offset. The sorted set of all unique axis names
+  defines the positional dimension order. Each entry contributes
+  `index(operand, xi_arg, eta_arg)` built from its own selector offsets.
+  `applies_to.dim` is not required.
+
+- **vertical** (`kind="vertical"`): single-axis with a required `stagger`
+  field (`face_bottom`, `face_top`, `cell_center`). Uses `applies_to.dim`
+  as the axis pattern variable (like cartesian). The stagger is NOT
+  encoded in the lowered AST — the binding-side runner recovers it from
+  the preserved `stencil` field to choose the correct physical array
+  (analogous to arakawa stagger per decision #16).
+
 A stencil with a single entry lowers to the bare term — no `combine_op`
 wrapper is emitted. An offset of `0` lowers to `axis_pat` (the trivial
 `+ 0` is omitted) at that axis slot.
@@ -81,11 +105,17 @@ Errors:
   malformed.
 - `ArgumentError` if entries declare conflicting selector kinds.
 - `ArgumentError` if any selector kind is not yet supported.
-- `ArgumentError` if a cartesian rule is missing `applies_to.dim` or
-  has an entry whose axis disagrees with `applies_to.dim`.
+- `ArgumentError` if a cartesian or vertical rule is missing
+  `applies_to.dim` or has an entry whose axis disagrees with it.
 - `ArgumentError` if an arakawa entry's `axis` is not a `\$`-prefixed
   pattern variable, or its `stagger` is not one of the four allowed
   symbols.
+- `ArgumentError` if a latlon entry's `axis` is a `\$`-prefixed variable
+  (must be a literal geographic axis name).
+- `ArgumentError` if a cubed_sphere entry is missing its `selectors` array
+  or a selector within it is missing its axis or offset.
+- `ArgumentError` if a vertical entry's `stagger` is not one of
+  `"face_bottom"`, `"face_top"`, `"cell_center"`.
 - `ArgumentError` if `combine` is not one of `"+"`, `"*"`, `"min"`, `"max"`.
 """
 function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
@@ -140,12 +170,24 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
         axis_vars = _arakawa_collect_axis_vars(stencil)
         Any[_lower_arakawa_entry_unpack(entry, operand_var, axis_vars, i)
             for (i, entry) in enumerate(stencil)]
+    elseif family == "latlon"
+        axis_names = _latlon_collect_axis_names(stencil)
+        Any[_lower_latlon_entry_unpack(entry, operand_var, axis_names, i)
+            for (i, entry) in enumerate(stencil)]
+    elseif family == "cubed_sphere"
+        axis_names = _cubed_sphere_collect_axis_names(stencil)
+        Any[_lower_cubed_sphere_entry_unpack(entry, operand_var, axis_names, i)
+            for (i, entry) in enumerate(stencil)]
+    elseif family == "vertical"
+        axis_var = _stencil_axis_pattern_var(applies_to)
+        Any[_lower_vertical_entry_unpack(entry, operand_var, axis_var, i)
+            for (i, entry) in enumerate(stencil)]
     else
         throw(
             ArgumentError(
                 "lower_stencil_to_replacement: stencil selector kind " *
                     "'$family' is not yet supported (currently supported: " *
-                    "'cartesian', 'arakawa')",
+                    "'cartesian', 'arakawa', 'latlon', 'cubed_sphere', 'vertical')",
             ),
         )
     end
@@ -201,9 +243,12 @@ end
 """
     _stencil_family(stencil) -> String
 
-Inspect every entry's `selector.kind` and return the (single) family name
+Inspect every entry's selector kind and return the (single) family name
 shared across the stencil. All entries must agree; mixed-kind stencils
 are not supported.
+
+Handles both the singular `selector` key (cartesian, arakawa, latlon,
+vertical) and the plural `selectors` array (cubed_sphere).
 """
 function _stencil_family(stencil::AbstractVector)::String
     family = ""
@@ -213,13 +258,32 @@ function _stencil_family(stencil::AbstractVector)::String
                 "lower_stencil_to_replacement: stencil entry $i must be an object",
             ),
         )
-        selector = get(entry, "selector", nothing)
-        selector isa AbstractDict || throw(
-            ArgumentError(
-                "lower_stencil_to_replacement: stencil entry $i missing 'selector' object",
-            ),
-        )
-        kind = String(get(selector, "kind", ""))
+        kind = if haskey(entry, "selectors")
+            sels = entry["selectors"]
+            (sels isa AbstractVector && !isempty(sels)) || throw(
+                ArgumentError(
+                    "lower_stencil_to_replacement: stencil entry $i 'selectors' " *
+                        "must be a non-empty array",
+                ),
+            )
+            first_sel = sels[1]
+            first_sel isa AbstractDict || throw(
+                ArgumentError(
+                    "lower_stencil_to_replacement: stencil entry $i 'selectors[1]' " *
+                        "must be an object",
+                ),
+            )
+            String(get(first_sel, "kind", ""))
+        else
+            selector = get(entry, "selector", nothing)
+            selector isa AbstractDict || throw(
+                ArgumentError(
+                    "lower_stencil_to_replacement: stencil entry $i missing " *
+                        "'selector' object (or 'selectors' array for multi-axis families)",
+                ),
+            )
+            String(get(selector, "kind", ""))
+        end
         if isempty(family)
             family = kind
         elseif kind != family
@@ -428,5 +492,306 @@ function _lower_arakawa_entry(
     )
 
     index_node = Dict{String, Any}("op" => "index", "args" => index_args)
+    return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
+end
+
+# -----------------------------------------------------------------------------
+# Latlon lowering
+# -----------------------------------------------------------------------------
+
+"""
+    _latlon_collect_axis_names(stencil) -> Vector{String}
+
+Walk every entry's `selector.axis` and return the sorted set of unique
+literal geographic axis names (e.g. `"lon"`, `"lat"`). Unlike arakawa,
+latlon axes are NOT `\$`-prefixed pattern variables. `\$`-prefixed values
+are rejected.
+"""
+function _latlon_collect_axis_names(stencil::AbstractVector)::Vector{String}
+    seen = Set{String}()
+    for (i, entry) in enumerate(stencil)
+        selector, _ = _entry_selector_and_coeff(entry, i)
+        axis_raw = get(selector, "axis", nothing)
+        axis_raw isa AbstractString || throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: latlon entry $i 'selector.axis' " *
+                    "must be a string",
+            ),
+        )
+        axis = String(axis_raw)
+        startswith(axis, "\$") && throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: latlon entry $i 'selector.axis' " *
+                    "must be a literal geographic axis name, not a '\$'-prefixed " *
+                    "pattern variable (got '$axis')",
+            ),
+        )
+        push!(seen, axis)
+    end
+    return sort!(collect(seen))
+end
+
+function _lower_latlon_entry_unpack(
+        entry, operand_var::String, axis_names::Vector{String}, idx::Int)
+    selector, coeff = _entry_selector_and_coeff(entry, idx)
+    return _lower_latlon_entry(selector, coeff, operand_var, axis_names, idx)
+end
+
+function _lower_latlon_entry(
+        selector::AbstractDict,
+        coeff,
+        operand_var::String,
+        axis_names::Vector{String},
+        idx::Int,
+    )
+    sel_axis_raw = get(selector, "axis", nothing)
+    sel_axis_raw isa AbstractString || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: latlon entry $idx 'selector.axis' " *
+                "must be a string",
+        ),
+    )
+    sel_axis = String(sel_axis_raw)
+    startswith(sel_axis, "\$") && throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: latlon entry $idx 'selector.axis' " *
+                "must be a literal geographic axis name, not a '\$'-prefixed " *
+                "pattern variable (got '$sel_axis')",
+        ),
+    )
+
+    offset_raw = get(selector, "offset", nothing)
+    (offset_raw isa Integer && !(offset_raw isa Bool)) || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: latlon entry $idx 'selector.offset' " *
+                "must be an integer",
+        ),
+    )
+    offset = Int(offset_raw)
+
+    # Same multi-axis pattern as arakawa but with literal axis names.
+    # Entry's axis slot carries `axis + offset` (or bare `axis` if offset == 0);
+    # all other axis slots carry the bare literal axis name.
+    index_args = Any[operand_var]
+    sel_axis_found = false
+    for ax in axis_names
+        if ax == sel_axis
+            sel_axis_found = true
+            push!(
+                index_args,
+                offset == 0 ? ax :
+                    Dict{String, Any}("op" => "+", "args" => Any[ax, offset]),
+            )
+        else
+            push!(index_args, ax)
+        end
+    end
+    sel_axis_found || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: latlon entry $idx 'selector.axis' " *
+                "= '$sel_axis' is not in the stencil's collected axis set " *
+                "$(axis_names) (this should not happen)",
+        ),
+    )
+
+    index_node = Dict{String, Any}("op" => "index", "args" => index_args)
+    return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
+end
+
+# -----------------------------------------------------------------------------
+# Cubed-sphere lowering
+# -----------------------------------------------------------------------------
+
+"""
+    _cubed_sphere_entry_selectors_and_coeff(entry, idx) -> (AbstractVector, coeff)
+
+For cubed_sphere entries that use the plural `selectors` key (an array of
+per-axis selector objects), extract the selectors array and the coefficient.
+"""
+function _cubed_sphere_entry_selectors_and_coeff(entry, idx::Int)
+    entry isa AbstractDict || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: stencil entry $idx must be an object",
+        ),
+    )
+    selectors = get(entry, "selectors", nothing)
+    selectors isa AbstractVector || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: cubed_sphere stencil entry $idx " *
+                "missing 'selectors' array",
+        ),
+    )
+    coeff = get(entry, "coeff", nothing)
+    coeff === nothing && throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: stencil entry $idx missing 'coeff'",
+        ),
+    )
+    return selectors, coeff
+end
+
+"""
+    _cubed_sphere_collect_axis_names(stencil) -> Vector{String}
+
+Walk every entry's `selectors` array and return the sorted set of unique
+literal axis names (e.g. `"eta"`, `"xi"`).
+"""
+function _cubed_sphere_collect_axis_names(stencil::AbstractVector)::Vector{String}
+    seen = Set{String}()
+    for (i, entry) in enumerate(stencil)
+        selectors, _ = _cubed_sphere_entry_selectors_and_coeff(entry, i)
+        for (j, sel) in enumerate(selectors)
+            sel isa AbstractDict || throw(
+                ArgumentError(
+                    "lower_stencil_to_replacement: cubed_sphere entry $i " *
+                        "selector $j must be an object",
+                ),
+            )
+            axis_raw = get(sel, "axis", nothing)
+            axis_raw isa AbstractString || throw(
+                ArgumentError(
+                    "lower_stencil_to_replacement: cubed_sphere entry $i " *
+                        "selector $j 'axis' must be a string",
+                ),
+            )
+            push!(seen, String(axis_raw))
+        end
+    end
+    return sort!(collect(seen))
+end
+
+function _lower_cubed_sphere_entry_unpack(
+        entry, operand_var::String, axis_names::Vector{String}, idx::Int)
+    selectors, coeff = _cubed_sphere_entry_selectors_and_coeff(entry, idx)
+    return _lower_cubed_sphere_entry(selectors, coeff, operand_var, axis_names, idx)
+end
+
+function _lower_cubed_sphere_entry(
+        selectors::AbstractVector,
+        coeff,
+        operand_var::String,
+        axis_names::Vector{String},
+        idx::Int,
+    )
+    # Build a map from axis name -> offset for this entry from its selectors array.
+    axis_offset = Dict{String, Int}()
+    for (j, sel) in enumerate(selectors)
+        sel isa AbstractDict || throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: cubed_sphere entry $idx " *
+                    "selector $j must be an object",
+            ),
+        )
+        axis_raw = get(sel, "axis", nothing)
+        axis_raw isa AbstractString || throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: cubed_sphere entry $idx " *
+                    "selector $j 'axis' must be a string",
+            ),
+        )
+        axis = String(axis_raw)
+        offset_raw = get(sel, "offset", nothing)
+        (offset_raw isa Integer && !(offset_raw isa Bool)) || throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: cubed_sphere entry $idx " *
+                    "selector $j 'offset' must be an integer",
+            ),
+        )
+        axis_offset[axis] = Int(offset_raw)
+    end
+
+    # Build index args in sorted axis order; every axis must appear in this entry.
+    index_args = Any[operand_var]
+    for ax in axis_names
+        offset = get(axis_offset, ax, nothing)
+        offset === nothing && throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: cubed_sphere entry $idx " *
+                    "missing selector for axis '$ax' (expected in every entry)",
+            ),
+        )
+        push!(
+            index_args,
+            offset == 0 ? ax :
+                Dict{String, Any}("op" => "+", "args" => Any[ax, offset]),
+        )
+    end
+
+    index_node = Dict{String, Any}("op" => "index", "args" => index_args)
+    return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
+end
+
+# -----------------------------------------------------------------------------
+# Vertical lowering
+# -----------------------------------------------------------------------------
+
+const _VERTICAL_STAGGERS = ("face_bottom", "face_top", "cell_center")
+
+function _lower_vertical_entry_unpack(
+        entry, operand_var::String, axis_var::String, idx::Int)
+    selector, coeff = _entry_selector_and_coeff(entry, idx)
+    return _lower_vertical_entry(selector, coeff, operand_var, axis_var, idx)
+end
+
+function _lower_vertical_entry(
+        selector::AbstractDict,
+        coeff,
+        operand_var::String,
+        axis_var::String,
+        idx::Int,
+    )
+    sel_axis_raw = get(selector, "axis", nothing)
+    sel_axis_raw isa AbstractString || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: vertical entry $idx 'selector.axis' " *
+                "must be a string",
+        ),
+    )
+    sel_axis = String(sel_axis_raw)
+    if sel_axis != axis_var
+        throw(
+            ArgumentError(
+                "lower_stencil_to_replacement: vertical entry $idx 'selector.axis' " *
+                    "= '$sel_axis' disagrees with 'applies_to.dim' = '$axis_var'",
+            ),
+        )
+    end
+
+    stagger_raw = get(selector, "stagger", nothing)
+    stagger_raw isa AbstractString || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: vertical entry $idx 'selector.stagger' " *
+                "must be a string",
+        ),
+    )
+    stagger = String(stagger_raw)
+    stagger in _VERTICAL_STAGGERS || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: vertical entry $idx 'selector.stagger' " *
+                "= '$stagger' is not one of $(_VERTICAL_STAGGERS)",
+        ),
+    )
+
+    offset_raw = get(selector, "offset", nothing)
+    (offset_raw isa Integer && !(offset_raw isa Bool)) || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: vertical entry $idx 'selector.offset' " *
+                "must be an integer",
+        ),
+    )
+    offset = Int(offset_raw)
+
+    # Stagger is NOT encoded in the lowered AST — binding-side recovers it from
+    # the preserved `stencil` field (same convention as arakawa, decision #16).
+    index_arg = if offset == 0
+        axis_var
+    else
+        Dict{String, Any}("op" => "+", "args" => Any[axis_var, offset])
+    end
+
+    index_node = Dict{String, Any}(
+        "op" => "index", "args" => Any[operand_var, index_arg],
+    )
+
     return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
 end
