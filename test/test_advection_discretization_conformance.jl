@@ -15,6 +15,7 @@ end
 
 @testsnippet AdvectionConformanceHelpers begin
     using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using JSON
 
     function _has_index(node)::Bool
         node isa AbstractDict || return false
