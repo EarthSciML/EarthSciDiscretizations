@@ -1,0 +1,102 @@
+{
+  "esm": "0.2.0",
+  "metadata": {
+    "name": "mixed_deriv_2nd_uniform_canonical"
+  },
+  "grids": {
+    "gxy": {
+      "family": "cartesian",
+      "dimensions": [
+        { "name": "i", "size": 4, "periodic": true, "spacing": "uniform" },
+        { "name": "j", "size": 4, "periodic": true, "spacing": "uniform" }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "mixed_deriv_2nd_uniform",
+      "pattern": {
+        "op": "grad",
+        "args": [{ "op": "grad", "args": ["$u"], "dim": "$y" }],
+        "dim": "$x"
+      },
+      "replacement": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "index",
+                    "args": [
+                      "$u",
+                      { "op": "+", "args": ["$x", 1] },
+                      { "op": "+", "args": ["$y", 1] }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "$u",
+                      { "op": "+", "args": ["$x", 1] },
+                      { "op": "-", "args": ["$y", 1] }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "index",
+                    "args": [
+                      "$u",
+                      { "op": "-", "args": ["$x", 1] },
+                      { "op": "+", "args": ["$y", 1] }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "$u",
+                      { "op": "-", "args": ["$x", 1] },
+                      { "op": "-", "args": ["$y", 1] }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "op": "*", "args": [4, { "op": "*", "args": ["dx", "dy"] }] }
+        ]
+      }
+    }
+  ],
+  "models": {
+    "M": {
+      "grid": "gxy",
+      "variables": {
+        "u": {
+          "type": "state",
+          "default": 0.0,
+          "units": "1",
+          "shape": ["i", "j"],
+          "location": "cell_center"
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "grad",
+            "args": [{ "op": "grad", "args": ["u"], "dim": "j" }],
+            "dim": "i"
+          }
+        }
+      ]
+    }
+  }
+}

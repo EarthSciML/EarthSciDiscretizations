@@ -790,3 +790,40 @@ end
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
 end
+
+@testitem "mixed_deriv_2nd_uniform scheme is discoverable and well-formed (esd-wdv)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "mixed_deriv_2nd_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Depth-2 applies_to: Dx(Dy(u)) — outer grad dim=$x, inner grad dim=$y.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    # Nested pattern: inner grad carries dim=$y, outer carries dim=$x.
+    @test occursin("\"\$y\"", content)
+    @test occursin("\"\$x\"", content)
+    @test occursin("\"\$u\"", content)
+    # Inline replacement — 4-point stencil as arrayop over 2D output.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    # 4-point stencil reads at ±1 offsets in both axes.
+    @test occursin("\"op\": \"index\"", content)
+    # Denominator: 4*dx*dy.
+    @test occursin("\"dx\"", content)
+    @test occursin("\"dy\"", content)
+    @test occursin("4", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end

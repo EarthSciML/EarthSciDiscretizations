@@ -389,3 +389,98 @@ end
         end
     end
 end
+
+# ---------------------------------------------------------------------------
+# 2D mixed cross-derivative Dxy(u) conformance + 2nd-order convergence
+# ---------------------------------------------------------------------------
+
+@testitem "Discretization conformance: rect_2d_mixed_deriv_periodic" setup=[Diffusion2DConformanceHelpers] tags=[:conformance, :discretization] begin
+    HARNESS   = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
+                         "rect_2d_mixed_deriv_periodic")
+    REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
+    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+
+    @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc953ac7d3619738bd77b250c1ed162f"
+
+    raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
+    rule_name = FIXTURES["rule"]
+    rule_body = raw_rule["discretizations"][rule_name]
+    rule_lowered = lower_stencil_to_replacement(rule_body)
+    repl_raw  = rule_lowered["replacement"]
+    replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
+                  repl_raw["expr"] : repl_raw
+
+    for fx in FIXTURES["fixtures"]
+        g   = fx["grid"]
+        Nx  = Int(g["n_cells_x"])
+        Ny  = Int(g["n_cells_y"])
+        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
+        dy  = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
+        x0  = Float64(g["x_start"])
+        y0  = Float64(g["y_start"])
+        xs  = [x0 + (i - 0.5) * dx for i in 1:Nx]
+        ys  = [y0 + (j - 0.5) * dy for j in 1:Ny]
+
+        u = [sin(xs[i]) * sin(ys[j]) for i in 1:Nx, j in 1:Ny]
+
+        bindings = Dict{String, Float64}("dx" => dx, "dy" => dy)
+
+        dxy_u = Matrix{Float64}(undef, Nx, Ny)
+        for iy in 1:Ny, ix in 1:Nx
+            dxy_u[ix, iy] = _eval_replacement_2d(replacement, u, ix, iy, bindings, Nx, Ny)
+        end
+
+        golden = JSON.parsefile(joinpath(HARNESS, "golden", "$(fx["name"]).json"))
+
+        @test golden["_mol531_sha"] == "35cc9143dc953ac7d3619738bd77b250c1ed162f"
+
+        g_dxy = golden["dxy_u"]
+        @test length(g_dxy) == Nx
+        @test length(g_dxy[1]) == Ny
+
+        @testset "fixture=$(fx["name"])" begin
+            for ix in 1:Nx, iy in 1:Ny
+                v     = dxy_u[ix, iy]
+                g_v   = Float64(g_dxy[ix][iy])
+                scale = max(1.0, abs(v), abs(g_v))
+                @test abs(v - g_v) <= REL_TOL * scale
+            end
+        end
+    end
+end
+
+@testitem "Mixed cross-derivative Dxy(u) converges 2nd order on sin(x)*sin(y)" setup=[Diffusion2DConformanceHelpers] tags=[:conformance, :discretization] begin
+    # Verify O(dx^2) convergence of the 4-point stencil on u=sin(x)*sin(y) on
+    # [0,2π]×[0,2π]. Exact Dxy(u) = cos(x)*cos(y). Grid doubles from N=16→32→64;
+    # L∞-error ratio must be ≥ 3.5 (theoretical 4 for exact 2nd order).
+
+    REPO_ROOT = abspath(joinpath(@__DIR__, ".."))
+    rule_body = JSON.parsefile(joinpath(REPO_ROOT, "discretizations", "finite_difference",
+                               "mixed_deriv_2nd_uniform.json"))["discretizations"]["mixed_deriv_2nd_uniform"]
+    rule_lowered = lower_stencil_to_replacement(rule_body)
+    repl_raw  = rule_lowered["replacement"]
+    replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
+                  repl_raw["expr"] : repl_raw
+
+    function _linf_error(N)
+        dx = 2π / N; dy = 2π / N
+        xs = [(i - 0.5) * dx for i in 1:N]
+        ys = [(j - 0.5) * dy for j in 1:N]
+        u  = [sin(xs[i]) * sin(ys[j]) for i in 1:N, j in 1:N]
+        b  = Dict{String,Float64}("dx" => dx, "dy" => dy)
+        err = 0.0
+        for iy in 1:N, ix in 1:N
+            fd  = _eval_replacement_2d(replacement, u, ix, iy, b, N, N)
+            ex  = cos(xs[ix]) * cos(ys[iy])
+            err = max(err, abs(fd - ex))
+        end
+        return err
+    end
+
+    e16 = _linf_error(16)
+    e32 = _linf_error(32)
+    e64 = _linf_error(64)
+    @test e16 / e32 >= 3.5
+    @test e32 / e64 >= 3.5
+end
