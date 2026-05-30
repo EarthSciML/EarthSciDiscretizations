@@ -469,6 +469,10 @@ end
         @test fv3_rule in names
         @test fv3_rule in Set(r.name for r in fv_rules)
     end
+    # finite_volume/fv3_lin_rood_advection (esd-f4i) — Phase 3 dimensional_split
+    # Lin-Rood PPM 2D transport rule (ESS RFC §7.5).
+    @test "fv3_lin_rood_advection" in names
+    @test "fv3_lin_rood_advection" in Set(r.name for r in fv_rules)
 end
 
 @testitem "fv3_vorticity_cellmean scheme is discoverable and well-formed" begin
@@ -1017,4 +1021,118 @@ end
     # No stencil blobs, no call op.
     @test !occursin("\"stencil\"", content)
     @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "fv3_lin_rood_advection dimensional_split rule is discoverable and well-formed (esd-f4i)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "fv3_lin_rood_advection", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Outer composite rule: dimensional_split discriminator (§7.5).
+    @test occursin("\"kind\": \"dimensional_split\"", content)
+    # applies_to: 2D advect on cubed-sphere matching transport_2d.json.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"op\": \"advect\"", content)
+    @test occursin("\"dims\"", content)
+    @test occursin("\"xi\"", content)
+    @test occursin("\"eta\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cubed_sphere\"", content)
+    # Dimensional-split structural fields (§7.5 schema).
+    @test occursin("\"axes\"", content)
+    @test occursin("\"inner_rule\"", content)
+    @test occursin("\"fv3_lin_rood_ppm_1d\"", content)
+    @test occursin("\"splitting\"", content)
+    @test occursin("\"strang\"", content)
+    # Inner rule sibling present in the same file.
+    @test occursin("\"fv3_lin_rood_ppm_1d\"", content)
+    # No flat stencil or combine on the outer dimensional_split entry (§7.5).
+    # (The outer entry has no stencil; stencil may appear inside inner rule docs.)
+    # No call op (AGENTS.md constraint).
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "fv3_lin_rood_advection: inner rule is cartesian 1D PPM and outer matches transport_2d shape (esd-f4i)" begin
+    using EarthSciDiscretizations: load_rules
+    using JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    rule_path = joinpath(
+        repo_root, "discretizations", "finite_volume", "fv3_lin_rood_advection.json"
+    )
+    @test isfile(rule_path)
+    parsed = JSON.parsefile(rule_path)
+    discs = parsed["discretizations"]
+
+    # Both sibling entries must be present.
+    @test haskey(discs, "fv3_lin_rood_ppm_1d")
+    @test haskey(discs, "fv3_lin_rood_advection")
+
+    inner = discs["fv3_lin_rood_ppm_1d"]
+    outer = discs["fv3_lin_rood_advection"]
+
+    # Inner rule: 1D PPM, cartesian grid family.
+    @test get(inner, "grid_family", nothing) == "cartesian"
+    at_inner = inner["applies_to"]
+    @test haskey(at_inner, "dim")
+
+    # Outer rule: dimensional_split kind, cubed_sphere, Strang splitting, xi+eta axes.
+    @test get(outer, "kind", nothing) == "dimensional_split"
+    @test get(outer, "grid_family", nothing) == "cubed_sphere"
+    @test get(outer, "splitting", nothing) == "strang"
+    axes = outer["axes"]
+    @test axes == ["xi", "eta"]
+    @test outer["inner_rule"] == "fv3_lin_rood_ppm_1d"
+
+    # applies_to matches the transport_2d.json op/args shape: advect($q,$U) over dims.
+    at = outer["applies_to"]
+    @test get(at, "op", nothing) == "advect"
+    @test haskey(at, "args")
+    @test haskey(at, "dims")
+end
+
+@testitem "fv3_lin_rood_advection: sweep consumes declaration — fields map to transport_2d_linrood! (esd-f4i)" begin
+    using EarthSciDiscretizations
+    using JSON
+
+    # Confirm that the dimensional_split declaration's fields correspond exactly
+    # to what transport_2d_linrood! implements (ESD sweep loop owns execution).
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    rule_path = joinpath(
+        repo_root, "discretizations", "finite_volume", "fv3_lin_rood_advection.json"
+    )
+    outer = JSON.parsefile(rule_path)["discretizations"]["fv3_lin_rood_advection"]
+
+    # axes: the sweep iterates over xi then eta (cubed-sphere in-panel directions).
+    @test outer["axes"] == ["xi", "eta"]
+
+    # splitting: "strang" — Lin-Rood uses symmetric half-step advective
+    # correction + full flux step (transport_2d_linrood! step 1-3), achieving
+    # O(dt^2) accuracy like Strang splitting.
+    @test outer["splitting"] == "strang"
+
+    # inner_rule: the 1D operator applied per axis is PPM (flux_1d_ppm! in
+    # the sweep; fv3_lin_rood_ppm_1d in the declaration).
+    @test outer["inner_rule"] == "fv3_lin_rood_ppm_1d"
+
+    # Functional contract: constant field with zero velocity has zero tendency
+    # everywhere (transport_2d_linrood! exact null with no flow; matching the
+    # test in test_transport_2d.jl::Lin-Rood 2D transport of constant field).
+    Nc = 8
+    grid = CubedSphereGrid(Nc; R = 1.0)
+    q = fill(3.14, 6, Nc, Nc)
+    vel_xi  = fill(0.0, 6, Nc + 1, Nc)
+    vel_eta = fill(0.0, 6, Nc, Nc + 1)
+    dt = 0.01
+    tendency = zeros(6, Nc, Nc)
+    transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
+    @test all(abs.(tendency) .< 1.0e-12)
 end
