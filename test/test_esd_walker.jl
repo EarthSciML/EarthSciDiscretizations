@@ -101,7 +101,8 @@ using TestItems
             ("finite_difference", "centered_2nd_uniform"),
             ("finite_difference", "centered_2nd_uniform_vertical"),
             ("finite_difference", "centered_2nd_uniform_latlon"),
-            ("finite_difference", "upwind_1st"),
+            # upwind_1st removed from here (esd-0ip): now PASSes Layer-B via
+            # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h)).
             ("finite_difference", "centered_2nd_deriv_uniform"),
             ("finite_difference", "laplacian_2nd_uniform_cartesian"),
         ]
@@ -178,9 +179,9 @@ using TestItems
             ("finite_volume", "fv3_sinsg_flux_xi"),
             ("finite_volume", "fv3_vorticity_cellmean"),
             ("finite_volume", "fv3_vorticity_corner"),
-            # dirichlet_bc / neumann_bc (esd-0eu): rewrite fixture ships
-            # `applicable:false` pending ESS support for kind/side pattern
-            # matching on the bc OpExpr (layer-A SKIP) and carry no
+            # dirichlet_bc / neumann_bc / robin_bc (esd-0eu, esd-m9v): rewrite
+            # fixture ships `applicable:false` pending ESS support for kind/side
+            # pattern matching on the bc OpExpr (layer-A SKIP) and carry no
             # convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
             ("finite_difference", "neumann_bc"),
@@ -226,13 +227,21 @@ using TestItems
             @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
             # centered_2nd_uniform (cartesian) ships a canonical/ fixture
-            # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer B
-            # SKIPs pending the canonical-pipeline replacement of the retired
-            # ESS `verify_mms_convergence` (esm-4t5).
+            # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer-B
+            # now passes via the canonical pipeline (esd-0ip): the fixture
+            # declares mms_kind="sin_2pi_x_periodic", topology key resolves
+            # to 1d_cartesian_periodic, and the runner measures O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "upwind_1st"
+            # upwind_1st ships no canonical/ fixture (Layer-A skips). Layer-B
+            # now passes via the canonical pipeline (esd-0ip): replacement AST
+            # added to rule JSON, fixture declares mms_kind="sin_2pi_x_periodic",
+            # topology key resolves to 1d_cartesian_periodic, runner measures O(h).
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
             # nonlinear_laplacian_uniform (esd-1p7) ships a canonical/ fixture
             # so Layer-A passes via the ESS rule engine. Layer B SKIPs pending
@@ -308,16 +317,11 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Layer B is wholly SKIPped post-esm-4t5: ESS retired the
-    # `verify_mms_convergence` evaluator that previously powered the
-    # convergence sweep. The eight rules that previously passed Layer-B
-    # (centered_2nd_uniform, centered_2nd_uniform_vertical,
-    # centered_2nd_uniform_latlon, upwind_1st, ppm_reconstruction,
-    # weno5_advection, weno5_advection_2d, divergence_arakawa_c) now SKIP
-    # with the unified retirement reason from `_LAYER_B_PIPELINE_PENDING`.
-    # The replacement (drive Layer-B through the canonical
-    # `discretize → ArrayOp → official ESS simulation runner` pipeline) is
-    # tracked at ESD/dsc-kswm.
+    # Layer B: esd-0ip lands the 1d_cartesian_periodic canonical-pipeline runner
+    # (discretize → build_evaluator via per-cell-scalar model). Two rules now
+    # PASS: centered_2nd_uniform (O(h²)) and upwind_1st (O(h)). All remaining
+    # rules with applicable:true convergence fixtures continue to SKIP with
+    # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
         1 for r in results
             if r.layer_b.outcome == WalkESDTests.LAYER_PASS;
@@ -337,7 +341,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 0
+    @test layer_b_passes == 2
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

@@ -1,6 +1,6 @@
 module WalkESDTests
 
-using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff
+using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff, lower_stencil_to_replacement
 import EarthSciSerialization
 using JSON
 
@@ -605,8 +605,11 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
 # ---------------------------------------------------------------------------
 const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
-    # Per-topology runners are filled in by follow-up beads.
-    #
+    # `1d_cartesian_periodic` (esd-0ip) — runner implemented; drives
+    # `discretize → build_evaluator` via a per-cell-scalar ESM model built
+    # from the rule's `replacement` AST (or lowered from stencil form).
+    # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
+    "1d_cartesian_periodic",
     # `2d_latlon_sphere` (ESD/dsc-mps8) — runner scaffolded with full
     # canonical-pipeline shape in `_run_layer_b_2d_latlon_sphere`.
     # Wired in here per witness Path-C directive so the dispatcher
@@ -873,6 +876,7 @@ matching family lands, this dispatcher is unreachable — `run_mms_convergence`
 gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
+    topology_key == "1d_cartesian_periodic" && return _run_layer_b_1d_cartesian_periodic(rule, mms, n)
     topology_key == "2d_latlon_sphere" && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     topology_key == "2d_arakawa_periodic" && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
@@ -999,6 +1003,135 @@ function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
           "body being authored — see the docstring for the canonical-pipeline shape " *
           "(build .esm → discretize → build_evaluator → L_inf vs analytic, sampling " *
           "F_x at face_x edges and F_y at face_y edges of the n×n periodic grid).")
+end
+
+"""
+    _run_layer_b_1d_cartesian_periodic(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for `grid_family=cartesian` rules with a
+single periodic dimension (esd-0ip). Drives one resolution of the MMS
+convergence sweep through the canonical pipeline:
+
+1. Load the rule's replacement AST, lowering from stencil form if necessary
+   via `lower_stencil_to_replacement`. Strip the `arrayop` wrapper if present.
+2. Build a per-cell-scalar ESM model with state variables `u_1, ..., u_n` and
+   parameter `dx`. Each cell equation is constructed by substituting the rule's
+   replacement AST at that cell index: `index(\$u, \$x+off)` → `"u_j"` with
+   1-based periodic wrap.
+3. Run `EarthSciSerialization.discretize` (canonicalization; equations are
+   already in explicit scalar form, so no rule rewriting occurs).
+4. Run `EarthSciSerialization.build_evaluator` to produce the ODE RHS `f!`.
+5. Set each `u_i = mms.ic((i-0.5)/n)`.
+6. Evaluate `f!(du, u0, p, 0)` once to obtain the discrete derivative.
+7. Return the L_inf error against `mms.derivative((i-0.5)/n)`.
+
+The per-cell model builder (step 2) is a generic AST → ESM translator — no
+math is computed outside the official ESS tree-walk in step 4. Works for any
+1D periodic Cartesian rule that carries a `replacement` AST (either authored
+directly or producible via `lower_stencil_to_replacement`).
+"""
+function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
+    # 1. Load and lower the rule spec to replacement form.
+    rule_doc = JSON.parse(read(rule.path, String))
+    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
+    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
+    lowered = lower_stencil_to_replacement(spec)
+    repl = lowered["replacement"]
+    # Strip the arrayop wrapper (centered_2nd_uniform wraps in arrayop; the
+    # scalar expression lives in the `expr` field).
+    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
+           repl["expr"] : repl
+
+    # 2. Build a per-cell-scalar ESM model on the unit interval [0, 1].
+    dx = 1.0 / n
+    cell_x(i) = (i - 0.5) * dx
+
+    variables = Dict{String, Any}()
+    for i in 1:n
+        variables["u_$(i)"] = Dict{String, Any}(
+            "type"    => "state",
+            "default" => mms.ic(cell_x(i)),
+            "units"   => "1",
+        )
+    end
+    variables["dx"] = Dict{String, Any}(
+        "type"    => "parameter",
+        "default" => dx,
+        "units"   => "1",
+    )
+
+    equations = Any[]
+    for i in 1:n
+        rhs = _layer_b_1d_build_cell_expr(expr, i, n)
+        push!(equations, Dict{String, Any}(
+            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(i)"], "wrt" => "t"),
+            "rhs" => rhs,
+        ))
+    end
+
+    esm = Dict{String, Any}(
+        "esm"      => "0.2.0",
+        "metadata" => Dict{String, Any}("name" => "layer_b_1d_cartesian_periodic_n$(n)"),
+        "models"   => Dict{String, Any}(
+            "M" => Dict{String, Any}(
+                "variables" => variables,
+                "equations" => equations,
+            ),
+        ),
+    )
+
+    # 3-4. Canonical pipeline: discretize (canonicalization) → build_evaluator.
+    disc = EarthSciSerialization.discretize(esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    # 5. Set the MMS initial condition (overrides the defaults already set above).
+    for i in 1:n
+        u0[var_map["u_$(i)"]] = mms.ic(cell_x(i))
+    end
+
+    # 6. Evaluate the discrete operator once (du/dt = rule(u) at t=0).
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+
+    # 7. Return L_inf error vs analytic derivative at cell centers.
+    return maximum(abs(du[var_map["u_$(i)"]] - mms.derivative(cell_x(i))) for i in 1:n)
+end
+
+# Translate one node of the rule's replacement AST to a scalar ESM expression
+# for cell `i` in a grid of `n` cells. Resolves `index(\$u, ...)` ops to
+# per-cell variable names `"u_j"` with 1-based periodic wrapping. All other
+# ops and literals (including `"dx"`) pass through unchanged for ESS tree-walk.
+function _layer_b_1d_build_cell_expr(expr, i::Int, n::Int)
+    expr isa Number && return expr
+    if expr isa AbstractString
+        return String(expr)
+    end
+    expr isa AbstractDict || error("unexpected node type in rule expression: $(typeof(expr))")
+    op   = String(expr["op"])
+    args = expr["args"]
+    if op == "index"
+        idx = _layer_b_1d_eval_index(args[2], i)
+        j   = mod(idx - 1, n) + 1   # 1-based periodic wrap
+        return "u_$(j)"
+    end
+    new_args = Any[_layer_b_1d_build_cell_expr(a, i, n) for a in args]
+    return Dict{String, Any}("op" => op, "args" => new_args)
+end
+
+# Evaluate a rule's index sub-expression to a concrete integer cell offset.
+# Recognises `"\$x"` (current-cell pattern variable) and integer offsets.
+function _layer_b_1d_eval_index(expr, i::Int)::Int
+    expr isa AbstractString && String(expr) == "\$x" && return i
+    expr isa Integer && return Int(expr)
+    expr isa AbstractFloat && return Int(expr)
+    expr isa AbstractDict || error("cannot evaluate index expression: $expr")
+    op   = String(expr["op"])
+    args = expr["args"]
+    a    = _layer_b_1d_eval_index(args[1], i)
+    b    = _layer_b_1d_eval_index(args[2], i)
+    op == "+" && return a + b
+    op == "-" && return a - b
+    error("unsupported index op in rule expression: $(op)")
 end
 
 """
