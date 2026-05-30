@@ -87,6 +87,76 @@ end
     @test occursin("\"mod\"", content)
 end
 
+@testitem "dirichlet_bc rule is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "dirichlet_bc", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Dirichlet BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
+    # `kind:"dirichlet"` and `side:"xmin"` (spec-compliant annotations; ESS
+    # kind/side pattern matching is pending), `replacement` giving the ghost-cell
+    # value 2*u_bc - u[0], and `produces` declaring the ghost_var per §9.4.
+    @test occursin("\"pattern\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"kind\": \"dirichlet\"", content)
+    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"op\": \"bc\"", content)
+    # Ghost-cell formula: u_ghost = 2*u_bc - u[0].
+    @test occursin("\"op\": \"-\"", content)
+    @test occursin("\"op\": \"*\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    # §9.4 ghost_var produces declaration.
+    @test occursin("\"produces\"", content)
+    @test occursin("\"ghost_var\"", content)
+    # Ghost variable named per §9.4 scheme__logical__side convention.
+    @test occursin("dirichlet_bc__", content)
+    @test occursin("__xmin", content)
+end
+
+@testitem "neumann_bc rule is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "neumann_bc", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Neumann BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
+    # `kind:"neumann"` and `side:"xmin"` (spec-compliant annotations; ESS
+    # kind/side pattern matching is pending), `replacement` giving the ghost-cell
+    # value u[0] + dx*value (where value is du/dn at xmin, the outward normal
+    # derivative), and `produces` declaring the ghost_var per §9.4.
+    @test occursin("\"pattern\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"kind\": \"neumann\"", content)
+    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"op\": \"bc\"", content)
+    # Ghost-cell formula: u_ghost = u[0] + dx*value.
+    @test occursin("\"op\": \"+\"", content)
+    @test occursin("\"op\": \"*\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"dx\"", content)
+    # §9.4 ghost_var produces declaration.
+    @test occursin("\"produces\"", content)
+    @test occursin("\"ghost_var\"", content)
+    # Ghost variable named per §9.4 scheme__logical__side convention.
+    @test occursin("neumann_bc__", content)
+    @test occursin("__xmin", content)
+end
+
 @testitem "centered_2nd_uniform_vertical scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 
@@ -277,6 +347,8 @@ end
             "nn_diffusion_mpas",
             "periodic_bc",
             "upwind_1st",
+            "dirichlet_bc",
+            "neumann_bc",
         )
         @test seeded in names
     end
@@ -288,6 +360,8 @@ end
     @test "nn_diffusion_mpas" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
+    @test "dirichlet_bc" in fd_names
+    @test "neumann_bc" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
     @test "ppm_reconstruction" in names
     fv_rules = filter(r -> r.family == :finite_volume, rules)

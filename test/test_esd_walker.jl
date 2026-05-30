@@ -52,6 +52,8 @@ using TestItems
             "centered_2nd_deriv_uniform",
             "laplacian_2nd_uniform_cartesian",
             "nonlinear_laplacian_uniform",
+            "dirichlet_bc",
+            "neumann_bc",
         )
         @test seeded in names
     end
@@ -175,6 +177,12 @@ using TestItems
             ("finite_volume", "fv3_sinsg_flux_xi"),
             ("finite_volume", "fv3_vorticity_cellmean"),
             ("finite_volume", "fv3_vorticity_corner"),
+            # dirichlet_bc / neumann_bc (esd-0eu): rewrite fixture ships
+            # `applicable:false` pending ESS support for kind/side pattern
+            # matching on the bc OpExpr (layer-A SKIP) and carry no
+            # convergence fixture (layer-B SKIP "no convergence fixtures").
+            ("finite_difference", "dirichlet_bc"),
+            ("finite_difference", "neumann_bc"),
         ]
     )
     # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
