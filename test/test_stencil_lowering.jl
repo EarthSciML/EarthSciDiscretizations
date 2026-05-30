@@ -824,7 +824,7 @@ end
 # Cubed-sphere family tests
 # =============================================================================
 
-@testitem "lower_stencil_to_replacement: lowers covariant_laplacian_cubed_sphere (cubed_sphere)" begin
+@testitem "covariant_laplacian_cubed_sphere: cross_metric schema + per-axis stencil lowering (esd-p81)" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
     import EarthSciSerialization
     using JSON
@@ -836,65 +836,57 @@ end
         "covariant_laplacian_cubed_sphere.json",
     )
     raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["covariant_laplacian_cubed_sphere"])
-    @test !haskey(rule, "replacement")
+    disc = raw["discretizations"]
+
+    # Top-level rule is now a cross_metric composite — not a stencil rule.
+    rule = Dict{String, Any}(disc["covariant_laplacian_cubed_sphere"])
+    @test rule["kind"] == "cross_metric"
     @test rule["grid_family"] == "cubed_sphere"
+    @test !haskey(rule, "stencil")
+    @test !haskey(rule, "replacement")
 
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
+    # 8 cross_metric terms: 2 diagonal second-deriv, 2 cross-deriv, 4 metric-gradient corrections.
+    terms = rule["terms"]
+    @test length(terms) == 8
 
-    repl = out["replacement"]
-    # 9 stencil entries → combine(9 terms)
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 9
+    # Term metric_component names match the full covariant Laplacian expansion.
+    mc = [t["metric_component"] for t in terms]
+    @test "ginv_xi_xi"  in mc
+    @test "ginv_eta_eta" in mc
+    @test "ginv_xi_eta"  in mc   # two entries (ξη and ηξ for symmetric metric)
+    @test "dJgxx_dxi"   in mc
+    @test "dJgxe_deta"  in mc
+    @test "dJgyy_deta"  in mc
+    @test "dJgxe_dxi"   in mc
 
-    # All terms: coeff * index($phi, eta_arg, xi_arg) — axes sorted: eta < xi
-    for (i, term) in enumerate(repl["args"])
-        @test term["op"] == "*"
-        idx = term["args"][2]
-        @test idx["op"] == "index"
-        @test length(idx["args"]) == 3   # operand + eta_arg + xi_arg
-        @test String(idx["args"][1]) == "\$phi"
+    # All axis_stencil references resolve to entries in the same discretizations block.
+    expected_per_axis = Set([
+        "d2_dxi2_cubed_sphere",
+        "d2_deta2_cubed_sphere",
+        "d2_dxieta_cubed_sphere",
+        "d1_dxi_over_J_cubed_sphere",
+        "d1_deta_over_J_cubed_sphere",
+    ])
+    referenced = Set(t["axis_stencil"] for t in terms)
+    @test referenced ⊆ expected_per_axis
+    for name in referenced
+        @test haskey(disc, name)
     end
 
-    # Entry 1: selectors [{xi, offset=0}, {eta, offset=0}] → index($phi, "eta", "xi") — both bare
-    e1 = repl["args"][1]
-    idx1 = e1["args"][2]
-    @test String(idx1["args"][2]) == "eta"
-    @test String(idx1["args"][3]) == "xi"
+    # Per-axis stencils are still in stencil form and can be lowered to replacement.
+    for name in expected_per_axis
+        pa = Dict{String, Any}(disc[name])
+        @test haskey(pa, "stencil")
+        @test !haskey(pa, "replacement")
+        out = lower_stencil_to_replacement(pa)
+        @test haskey(out, "replacement")
+        expr = EarthSciSerialization.parse_expression(out["replacement"])
+        @test expr !== nothing
+    end
 
-    # Entry 2: selectors [{xi, offset=1}, {eta, offset=0}] → index($phi, "eta", "xi" + 1)
-    e2 = repl["args"][2]
-    idx2 = e2["args"][2]
-    @test String(idx2["args"][2]) == "eta"
-    a2_xi = idx2["args"][3]
-    @test a2_xi["op"] == "+"
-    @test String(a2_xi["args"][1]) == "xi"
-    @test Int(a2_xi["args"][2]) == 1
-
-    # Entry 3: selectors [{xi, offset=-1}, {eta, offset=0}] → index($phi, "eta", "xi" + (-1))
-    e3 = repl["args"][3]
-    idx3 = e3["args"][2]
-    @test String(idx3["args"][2]) == "eta"
-    a3_xi = idx3["args"][3]
-    @test a3_xi["op"] == "+"
-    @test Int(a3_xi["args"][2]) == -1
-
-    # Entry 4: selectors [{xi, offset=0}, {eta, offset=1}] → index($phi, "eta" + 1, "xi")
-    e4 = repl["args"][4]
-    idx4 = e4["args"][2]
-    a4_eta = idx4["args"][2]
-    @test a4_eta["op"] == "+"
-    @test String(a4_eta["args"][1]) == "eta"
-    @test Int(a4_eta["args"][2]) == 1
-    @test String(idx4["args"][3]) == "xi"
-
-    # ESS parse_expression accepts the lowered AST
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
+    # lower_stencil_to_replacement throws on the cross_metric top-level rule
+    # (it has neither stencil nor replacement).
+    @test_throws ArgumentError lower_stencil_to_replacement(rule)
 end
 
 @testitem "lower_stencil_to_replacement: lowers transport_2d (cubed_sphere, finite_volume)" begin

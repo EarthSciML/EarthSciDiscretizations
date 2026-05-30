@@ -170,6 +170,7 @@ def test_centered_2nd_uniform_latlon_well_formed(catalog):
 
 
 def test_covariant_laplacian_cubed_sphere_well_formed(catalog):
+    """covariant_laplacian_cubed_sphere uses cross_metric schema (§7.6, esd-p81)."""
     rule = catalog["covariant_laplacian_cubed_sphere"]
     assert rule.family == "finite_difference"
     assert rule.path.is_file()
@@ -178,17 +179,20 @@ def test_covariant_laplacian_cubed_sphere_well_formed(catalog):
     assert '"applies_to"' in content
     assert '"grid_family"' in content
     assert '"cubed_sphere"' in content
-    assert '"stencil"' in content
     assert '"op": "laplacian"' in content
-    # 9-point covariant stencil: offsets in {-1, 0, 1} along both axes.
+    # Top-level rule uses cross_metric schema (§7.6) — no ad-hoc selectors.
+    assert '"cross_metric"' in content
+    assert '"terms"' in content
+    # Per-axis stencils in the same file use stencil form.
+    assert '"stencil"' in content
     assert '"axis": "xi"' in content
     assert '"axis": "eta"' in content
-    # 2D in-panel offsets are composed via a `selectors` array (one per axis).
+    # Per-axis stencils use the `selectors` array (one per axis).
     assert '"selectors"' in content
     # Cross-panel ghost handling lives in the grid accessor, NOT the selector:
-    # the rule must carry no `panel` field.
+    # neither the top-level rule nor its per-axis stencils carry a `panel` field.
     assert '"panel"' not in content
-    # Metric-tensor bindings the cubed_sphere accessor must supply.
+    # Metric-tensor components appear as cross_metric metric_component names.
     assert "ginv_xi_xi" in content
     assert "ginv_eta_eta" in content
     assert "ginv_xi_eta" in content

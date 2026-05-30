@@ -7,7 +7,7 @@ rule_kinds: "scheme"
 accuracy: "O(h²)"
 applies_to: "laplacian(φ)"
 rule_path: "discretizations/finite_difference/covariant_laplacian_cubed_sphere.json"
-description: "9-point covariant Laplacian on the gnomonic cubed sphere — orthogonal + cross-metric corrections from the inverse metric tensor."
+description: "9-point covariant Laplacian on the gnomonic cubed sphere — expressed as a cross_metric composite (§7.6) with 8 terms covering orthogonal, cross-derivative, and metric-gradient correction contributions."
 tags: ["finite-difference", "cubed-sphere", "covariant", "laplacian"]
 ---
 
@@ -69,9 +69,10 @@ midpoints. The full machine-readable coefficient expressions live in
 | `h` | uniform isotropic spacing `dξ = dη = π / (2 Nc)` |
 
 Cross-panel ghost cells and basis rotation at panel boundaries live in the
-cubed_sphere accessor (`src/grids/panel_connectivity.jl`); the rule
-selectors do **not** carry a `panel` field — `(Δξ, Δη)` offsets resolve
-across panel seams via the accessor's connectivity table.
+cubed_sphere accessor (`src/grids/panel_connectivity.jl`); the per-axis
+stencils within the cross_metric composite do **not** carry a `panel` field —
+`(Δξ, Δη)` offsets resolve across panel seams via the accessor's
+connectivity table.
 
 ## Convergence
 

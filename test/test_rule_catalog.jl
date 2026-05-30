@@ -293,7 +293,7 @@ end
     @test occursin("\"cos_lat\"", content)
 end
 
-@testitem "covariant_laplacian_cubed_sphere scheme is discoverable and well-formed" begin
+@testitem "covariant_laplacian_cubed_sphere scheme is discoverable and well-formed (esd-p81)" begin
     using EarthSciDiscretizations: load_rules
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -309,17 +309,20 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cubed_sphere\"", content)
-    @test occursin("\"stencil\"", content)
     @test occursin("\"op\": \"laplacian\"", content)
-    # 9-point covariant stencil: offsets in {-1, 0, 1} along both axes.
+    # Top-level rule uses cross_metric schema (§7.6) — no ad-hoc selectors.
+    @test occursin("\"cross_metric\"", content)
+    @test occursin("\"terms\"", content)
+    # Per-axis stencils in the same file: offsets in {-1, 0, 1} along both axes.
+    @test occursin("\"stencil\"", content)
     @test occursin("\"axis\": \"xi\"", content)
     @test occursin("\"axis\": \"eta\"", content)
-    # 2D in-panel offsets are composed via a `selectors` array (one per axis).
+    # Per-axis stencils use the `selectors` array (one per axis).
     @test occursin("\"selectors\"", content)
     # Cross-panel ghost handling lives in the grid accessor, NOT the selector:
-    # the rule must carry no `panel` field.
+    # neither the top-level rule nor its per-axis stencils carry a `panel` field.
     @test !occursin("\"panel\"", content)
-    # Metric-tensor bindings the cubed_sphere accessor must supply.
+    # Metric-tensor components appear as cross_metric metric_component names.
     @test occursin("ginv_xi_xi", content)
     @test occursin("ginv_eta_eta", content)
     @test occursin("ginv_xi_eta", content)
