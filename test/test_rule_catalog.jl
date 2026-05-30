@@ -827,3 +827,75 @@ end
     @test !occursin("\"stencil\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
+
+@testitem "centered_4th_uniform scheme is discoverable and well-formed (esd-znb)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_4th_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"order\": 4", content)
+    # Stencil form with cartesian selectors: four offsets for Fornberg 5-point
+    # stencil [1,-8,8,-1]/(12*dx) — offset 0 omitted (zero coefficient).
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -2", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 1", content)
+    @test occursin("\"offset\": 2", content)
+    # Fornberg weights: ±1 and ±8 over denominator 12*dx.
+    @test occursin("12", content)
+    @test occursin("\"dx\"", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+    # AST-only: no call op.
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "centered_6th_uniform scheme is discoverable and well-formed (esd-znb)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_6th_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"order\": 6", content)
+    # Stencil form with cartesian selectors: six offsets for Fornberg 7-point
+    # stencil [-1,9,-45,45,-9,1]/(60*dx) — offset 0 omitted (zero coefficient).
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -3", content)
+    @test occursin("\"offset\": -2", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 1", content)
+    @test occursin("\"offset\": 2", content)
+    @test occursin("\"offset\": 3", content)
+    # Fornberg weights: ±1, ±9, ±45 over denominator 60*dx.
+    @test occursin("60", content)
+    @test occursin("\"dx\"", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+    # AST-only: no call op.
+    @test !occursin("\"op\": \"call\"", content)
+end
