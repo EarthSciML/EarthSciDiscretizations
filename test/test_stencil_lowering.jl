@@ -26,9 +26,13 @@ end
     )
     raw = JSON.parsefile(path)
     rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
-    @test !haskey(rule, "replacement")
+    # Strip the replacement field (added by esd-0ip for the Layer-B runner) so
+    # this test exercises the actual stencil-lowering path and verifies the AST shape.
+    stencil_only = Dict{String, Any}(k => v for (k, v) in rule if k != "replacement")
+    @test haskey(stencil_only, "stencil")
+    @test !haskey(stencil_only, "replacement")
 
-    out = lower_stencil_to_replacement(rule)
+    out = lower_stencil_to_replacement(stencil_only)
     @test haskey(out, "replacement")
 
     repl = out["replacement"]

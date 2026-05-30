@@ -99,8 +99,10 @@ using TestItems
     pending_canonical_layer_b = Set(
         [
             ("finite_difference", "centered_2nd_uniform"),
-            ("finite_difference", "centered_2nd_uniform_vertical"),
-            ("finite_difference", "centered_2nd_uniform_latlon"),
+            # centered_2nd_uniform_vertical removed (esd-bbp): now PASSes Layer-B via
+            # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h²)).
+            # centered_2nd_uniform_latlon removed (esd-bbp): now PASSes Layer-B via
+            # canonical pipeline with mms_kind="Y_2_0_unit_sphere" (O(h²) on lat axis).
             # upwind_1st removed from here (esd-0ip): now PASSes Layer-B via
             # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h)).
             ("finite_difference", "centered_2nd_deriv_uniform"),
@@ -206,7 +208,8 @@ using TestItems
     # these stubs flip to PASS the same way as the FV3 ports.
     canonical_skip_only_hot_path = Set(
         [
-            ("finite_volume", "divergence_arakawa_c"),
+            # divergence_arakawa_c removed (esd-bbp): now PASSes Layer-B via
+            # canonical pipeline with mms_kind="vec_sincos_2d_periodic" (O(h²)).
             ("finite_volume", "ppm_reconstruction"),
             ("finite_volume", "weno5_advection"),
             ("finite_volume", "weno5_advection_2d"),
@@ -219,12 +222,14 @@ using TestItems
         if r.family === :finite_difference && r.name == "centered_2nd_uniform_vertical"
             # centered_2nd_uniform_vertical (vertical) ships a canonical/
             # fixture, so Layer A passes via the ESS rule engine (dsc-cjh).
-            # Layer B SKIPs pending the canonical-pipeline replacement of the
-            # retired ESS `verify_mms_convergence` (esm-4t5).
+            # Layer B now passes via the canonical pipeline (esd-bbp):
+            # replacement AST added to rule JSON, fixture declares
+            # mms_kind="sin_2pi_x_periodic", topology key resolves to
+            # 1d_vertical_column, runner measures O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
             # centered_2nd_uniform (cartesian) ships a canonical/ fixture
             # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer-B
@@ -258,6 +263,27 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_2nd_uniform_latlon"
+            # centered_2nd_uniform_latlon (latlon) ships a canonical/ fixture with
+            # applicable:false (Layer-A skips). Layer-B now passes via the canonical
+            # pipeline (esd-bbp): the fixture declares mms_kind="Y_2_0_unit_sphere",
+            # topology key resolves to 2d_latlon_sphere, and the runner measures O(h²)
+            # on the lat axis (Y_{2,0} is lon-independent so only lat signal matters).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "divergence_arakawa_c"
+            # divergence_arakawa_c (arakawa) ships a canonical/ fixture with
+            # applicable:false (Layer-A skips). Layer-B now passes via the canonical
+            # pipeline (esd-bbp): the fixture declares mms_kind="vec_sincos_2d_periodic",
+            # topology key resolves to 2d_arakawa_periodic, and the runner measures O(h²)
+            # for the divergence of (sin(2πx)cos(2πy), cos(2πx)sin(2πy)).
+            # Layer-D (conservation) continues to pass as before.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif key in pending_canonical_layer_b
             # The remaining `applicable:true` convergence fixtures: Layer-A
             # is unconstrained here (centered_2nd_uniform's canonical fixture
@@ -317,10 +343,12 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Layer B: esd-0ip lands the 1d_cartesian_periodic canonical-pipeline runner
-    # (discretize → build_evaluator via per-cell-scalar model). Two rules now
-    # PASS: centered_2nd_uniform (O(h²)) and upwind_1st (O(h)). All remaining
-    # rules with applicable:true convergence fixtures continue to SKIP with
+    # Layer B: esd-0ip lands the 1d_cartesian_periodic runner; esd-bbp extends
+    # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic. Five
+    # rules now PASS: centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
+    # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
+    # on lat axis), divergence_arakawa_c (O(h²) div test). All remaining rules
+    # with applicable:true convergence fixtures continue to SKIP with
     # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
         1 for r in results
@@ -341,7 +369,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 2
+    @test layer_b_passes == 5
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

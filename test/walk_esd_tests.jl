@@ -610,23 +610,19 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # from the rule's `replacement` AST (or lowered from stencil form).
     # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
     "1d_cartesian_periodic",
-    # `2d_latlon_sphere` (ESD/dsc-mps8) — runner scaffolded with full
-    # canonical-pipeline shape in `_run_layer_b_2d_latlon_sphere`.
-    # Wired in here per witness Path-C directive so the dispatcher
-    # auto-routes `grid_family=latlon` rules to the runner the moment
-    # `_layer_b_topology_key`'s stencil-form gate retires (today the
-    # only `grid_family=latlon` rule, `centered_2nd_uniform_latlon`,
-    # is stencil-only and routes to `stencil_form_rule` BEFORE the
-    # latlon check, so this entry is forward-compat — no rule reaches
-    # the runner until ESD/dsc-y0jj's lifter lands).
+    # `1d_vertical_column` (esd-bbp) — runner implemented; reuses the
+    # 1D Cartesian per-cell-scalar machinery with parameter "h" (spacing).
+    # Activated for `centered_2nd_uniform_vertical` (O(h²)).
+    "1d_vertical_column",
+    # `2d_latlon_sphere` (esd-bbp) — runner implemented; drives
+    # `discretize → build_evaluator` via a per-cell-scalar ESM model on
+    # an n×n lat-lon grid, substituting per-row cos_lat parameters.
+    # Activated for `centered_2nd_uniform_latlon` (O(h²) on lat axis).
     "2d_latlon_sphere",
-    # `2d_arakawa_periodic` (ESD/dsc-70zp) — runner scaffolded with full
-    # canonical-pipeline shape in `_run_layer_b_2d_arakawa_periodic`.
-    # Same forward-compat pattern as 2d_latlon_sphere: the only
-    # `grid_family=arakawa` rule today (`divergence_arakawa_c`) is
-    # stencil-only (no `replacement` AST) and routes to `stencil_form_rule`
-    # BEFORE the arakawa branch, so this entry is forward-compat — no
-    # rule reaches the runner until ESD/dsc-y0jj's lifter lands.
+    # `2d_arakawa_periodic` (esd-bbp) — runner implemented; evaluates the
+    # stencil's coeff ASTs via the canonical pipeline with face values from
+    # the MMS IC embedded as literals. Activated for `divergence_arakawa_c`
+    # (O(h²) divergence test).
     "2d_arakawa_periodic",
 ])
 
@@ -786,12 +782,20 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     spec = get(get(rule_doc, "discretizations", Dict{String, Any}()), rule.name, nothing)
     spec isa AbstractDict || return "unsupported"
 
-    # `stencil`-form rules cannot ride the ESS rule engine until their
-    # stencil entries are lowered to a `replacement` AST. Tracked
-    # separately so a future bead can either author the lowering or
-    # ship per-rule canonical fixtures with replacement-form rules.
+    # `stencil`-form rules without a `replacement` AST are classified via
+    # `lower_stencil_to_replacement`. If the lowering succeeds (all supported
+    # selector families: cartesian, arakawa, latlon, cubed_sphere, vertical),
+    # we proceed to the topology classifier — the runner will call the lowerer
+    # at evaluation time. If the lowering throws (unsupported family), we fall
+    # back to `stencil_form_rule` so the walker surfaces a SKIP with the
+    # tracking bead. Rules that already carry a `replacement` field pass
+    # through unchanged (lowering is idempotent).
     if haskey(spec, "stencil") && !haskey(spec, "replacement")
-        return "stencil_form_rule"
+        try
+            lower_stencil_to_replacement(spec)
+        catch _
+            return "stencil_form_rule"
+        end
     end
 
     grid_family = String(get(spec, "grid_family", ""))
@@ -810,6 +814,10 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     # face-staggered velocity fields, distinct from the cell-centered 2D
     # Cartesian path.
     grid_family == "arakawa" && return "2d_arakawa_periodic"
+
+    # Vertical column: single-axis rules on a vertical grid. The runner
+    # reuses the 1D Cartesian per-cell-scalar machinery.
+    grid_family == "vertical" && return "1d_vertical_column"
 
     # FV cell-average rules (PPM / WENO reconstruction) need their own
     # IC sampling (cell averages, not point samples) and exact-derivative
@@ -877,8 +885,9 @@ gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
     topology_key == "1d_cartesian_periodic" && return _run_layer_b_1d_cartesian_periodic(rule, mms, n)
-    topology_key == "2d_latlon_sphere" && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
-    topology_key == "2d_arakawa_periodic" && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
+    topology_key == "1d_vertical_column"    && return _run_layer_b_1d_vertical_column(rule, mms, n)
+    topology_key == "2d_latlon_sphere"      && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
+    topology_key == "2d_arakawa_periodic"   && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
           "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
           "for this topology key.")
@@ -931,14 +940,139 @@ above cannot succeed today. Once dsc-y0jj's lifter lands:
   in `test_esd_walker.jl` (the 1-line follow-up the witness called).
 """
 function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
-    error("_run_layer_b_2d_latlon_sphere: scaffolding only (ESD/dsc-mps8 partial-land). " *
-          "Activation pends ESD/dsc-y0jj (stencil → replacement lift) since " *
-          "centered_2nd_uniform_latlon — the only `grid_family=latlon` rule today — " *
-          "ships only a `stencil` spec and ESS `parse_rule` rejects stencil-only rules " *
-          "with E_RULE_REPLACEMENT_MISSING. If this error fires, the dispatcher's " *
-          "`_LAYER_B_SUPPORTED_TOPOLOGIES` was advanced past this scaffolding without " *
-          "the runner body being authored — see the docstring for the canonical-pipeline " *
-          "shape (build .esm → discretize → build_evaluator → L_inf vs analytic).")
+    # 1. Load and lower the rule spec to replacement form.
+    rule_doc = JSON.parse(read(rule.path, String))
+    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
+    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
+    lowered = lower_stencil_to_replacement(spec)
+    repl = lowered["replacement"]
+    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
+           repl["expr"] : repl
+
+    # 2. Build an n_lat × n_lon grid on the unit sphere.
+    #    n_lat = n_lon = n (square angular resolution) — Y_{2,0} is lon-independent
+    #    so convergence is driven by the lat axis; uniform n suffices.
+    n_lat = n
+    n_lon = n
+    dlat = Float64(π) / n_lat
+    dlon = Float64(2π) / n_lon
+    lat_coord(i) = (i - 0.5) * dlat - π / 2
+    lon_coord(j) = (j - 0.5) * dlon - π
+
+    # 3. Build per-cell scalar ESM model. cos_lat varies per row, so each row
+    #    gets its own parameter cos_lat_i. R, dlat, dlon are global parameters.
+    variables = Dict{String, Any}()
+    variables["R"]    = Dict{String, Any}("type" => "parameter", "default" => 1.0,  "units" => "1")
+    variables["dlat"] = Dict{String, Any}("type" => "parameter", "default" => dlat, "units" => "1")
+    variables["dlon"] = Dict{String, Any}("type" => "parameter", "default" => dlon, "units" => "1")
+    for i in 1:n_lat
+        variables["cos_lat_$(i)"] = Dict{String, Any}(
+            "type" => "parameter", "default" => cos(lat_coord(i)), "units" => "1",
+        )
+        for j in 1:n_lon
+            variables["u_$(i)_$(j)"] = Dict{String, Any}(
+                "type" => "state", "default" => mms.ic(lat_coord(i), lon_coord(j)), "units" => "1",
+            )
+        end
+    end
+
+    # 4. Build equations: substitute cos_lat → cos_lat_i for each row, then
+    #    resolve index($u, lat_arg, lon_arg) to u_i'_j' with periodic wrap.
+    equations = Any[]
+    for i in 1:n_lat
+        row_expr = _layer_b_sub_str(expr, "cos_lat", "cos_lat_$(i)")
+        for j in 1:n_lon
+            rhs = _layer_b_2d_latlon_build_cell_expr(row_expr, i, j, n_lat, n_lon)
+            push!(equations, Dict{String, Any}(
+                "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(i)_$(j)"], "wrt" => "t"),
+                "rhs" => rhs,
+            ))
+        end
+    end
+
+    esm = Dict{String, Any}(
+        "esm"      => "0.2.0",
+        "metadata" => Dict{String, Any}("name" => "layer_b_latlon_n$(n)"),
+        "models"   => Dict{String, Any}(
+            "M" => Dict{String, Any}("variables" => variables, "equations" => equations),
+        ),
+    )
+
+    # 5-6. Canonical pipeline.
+    disc = EarthSciSerialization.discretize(esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    # 7. Set MMS initial condition.
+    for i in 1:n_lat, j in 1:n_lon
+        u0[var_map["u_$(i)_$(j)"]] = mms.ic(lat_coord(i), lon_coord(j))
+    end
+
+    # 8. Evaluate discrete operator.
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+
+    # 9. L_inf error over interior lat rows (exclude pole rows 1 and n_lat).
+    #    The lat axis carries the convergence signal for Y_{2,0}; the lon terms
+    #    vanish (Y_{2,0} is lon-independent). mms.derivative returns (d/dlat, d/dlon).
+    err = 0.0
+    for i in 2:(n_lat - 1), j in 1:n_lon
+        e = abs(du[var_map["u_$(i)_$(j)"]] - mms.derivative(lat_coord(i), lon_coord(j))[1])
+        err = max(err, e)
+    end
+    return err
+end
+
+# Recursive AST string-variable substitution: replace every string node equal to
+# `old` with `new_name`. Used to bind per-row parameters such as cos_lat → cos_lat_i.
+function _layer_b_sub_str(expr, old::String, new_name::String)
+    if expr isa AbstractString
+        return String(expr) == old ? new_name : String(expr)
+    end
+    expr isa Number && return expr
+    expr isa AbstractDict || return expr
+    return Dict{String, Any}(
+        "op"   => String(expr["op"]),
+        "args" => Any[_layer_b_sub_str(a, old, new_name) for a in expr["args"]],
+    )
+end
+
+# Build a per-cell scalar ESM expression for the 2D lat-lon rule at cell (i, j).
+# Resolves `index($u, lat_arg, lon_arg)` ops to variable names "u_i'_j'" with
+# periodic wrap on both axes. All other nodes pass through unchanged.
+function _layer_b_2d_latlon_build_cell_expr(expr, i::Int, j::Int, n_lat::Int, n_lon::Int)
+    expr isa Number && return expr
+    expr isa AbstractString && return String(expr)
+    expr isa AbstractDict || error("unexpected node in latlon expr: $(typeof(expr))")
+    op   = String(expr["op"])
+    args = expr["args"]
+    if op == "index"
+        # Lowered latlon: args = [variable, lat_arg, lon_arg] (axes sorted "lat" < "lon").
+        lat_idx = _layer_b_2d_eval_axis(args[2], "lat", i)
+        lon_idx = _layer_b_2d_eval_axis(args[3], "lon", j)
+        i_wrap  = mod(lat_idx - 1, n_lat) + 1
+        j_wrap  = mod(lon_idx - 1, n_lon) + 1
+        return "u_$(i_wrap)_$(j_wrap)"
+    end
+    return Dict{String, Any}(
+        "op"   => op,
+        "args" => Any[_layer_b_2d_latlon_build_cell_expr(a, i, j, n_lat, n_lon) for a in args],
+    )
+end
+
+# Evaluate a 2D axis index sub-expression for axis `axis_name` at current index `cur`.
+function _layer_b_2d_eval_axis(expr, axis_name::String, cur::Int)::Int
+    if expr isa AbstractString
+        s = String(expr)
+        s == axis_name && return cur
+        error("unexpected axis name '$(s)' in latlon index (expected '$(axis_name)')")
+    end
+    (expr isa Integer || expr isa AbstractFloat) && return Int(expr)
+    op = String(expr["op"])
+    a  = _layer_b_2d_eval_axis(expr["args"][1], axis_name, cur)
+    b  = _layer_b_2d_eval_axis(expr["args"][2], axis_name, cur)
+    op == "+" && return a + b
+    op == "-" && return a - b
+    error("unsupported axis op '$(op)' in latlon index")
 end
 
 """
@@ -994,15 +1128,95 @@ Once dsc-y0jj's lifter lands:
   same follow-up).
 """
 function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
-    error("_run_layer_b_2d_arakawa_periodic: scaffolding only (ESD/dsc-70zp partial-land). " *
-          "Activation pends ESD/dsc-y0jj (stencil → replacement lift) since " *
-          "divergence_arakawa_c — the only `grid_family=arakawa` rule today — " *
-          "ships only a `stencil` spec and ESS `parse_rule` rejects stencil-only rules " *
-          "with E_RULE_REPLACEMENT_MISSING. If this error fires, the dispatcher's " *
-          "`_layer_b_topology_key` stencil-form gate was retired without this runner " *
-          "body being authored — see the docstring for the canonical-pipeline shape " *
-          "(build .esm → discretize → build_evaluator → L_inf vs analytic, sampling " *
-          "F_x at face_x edges and F_y at face_y edges of the n×n periodic grid).")
+    # 1. Load the stencil from the rule JSON. The arakawa divergence stencil
+    #    has face_x and face_y entries; we need the stagger field to recover
+    #    which component of the MMS vector field (F_x or F_y) to sample.
+    rule_doc = JSON.parse(read(rule.path, String))
+    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
+    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
+    stencil = get(spec, "stencil", nothing)
+    stencil isa AbstractVector || error("rule $(rule.name) has no stencil array")
+
+    dx = 1.0 / n
+    dy = 1.0 / n
+
+    # 2. Build a per-cell scalar ESM model. Each cell (i,j) gets one state
+    #    variable div_i_j. The RHS is built from the stencil's coeff ASTs
+    #    multiplied by the MMS face values (literal numbers pre-sampled from
+    #    mms.ic). Parameters: dx, dy (referenced by the coeff ASTs).
+    variables = Dict{String, Any}()
+    variables["dx"] = Dict{String, Any}("type" => "parameter", "default" => dx, "units" => "1")
+    variables["dy"] = Dict{String, Any}("type" => "parameter", "default" => dy, "units" => "1")
+    for j in 1:n, i in 1:n
+        variables["div_$(i)_$(j)"] = Dict{String, Any}(
+            "type" => "state", "default" => 0.0, "units" => "1",
+        )
+    end
+
+    # 3. Build equations.
+    equations = Any[]
+    for j in 1:n, i in 1:n
+        cx = (i - 0.5) * dx
+        cy = (j - 0.5) * dy
+
+        terms = Any[]
+        for entry in stencil
+            sel     = entry["selector"]
+            stagger = String(sel["stagger"])
+            offset  = Int(sel["offset"])
+            coeff   = entry["coeff"]  # AST (references dx or dy — kept as param)
+
+            # Sample the appropriate MMS component at the face position.
+            # face_x: vertical face at x = (i-1+offset)/n, y_center = cy. Periodic.
+            # face_y: horizontal face at x_center = cx, y = (j-1+offset)/n. Periodic.
+            face_val = if stagger == "face_x"
+                fx_x = mod((i - 1 + offset) * dx, 1.0)
+                mms.ic(fx_x, cy)[1]
+            elseif stagger == "face_y"
+                fy_y = mod((j - 1 + offset) * dy, 1.0)
+                mms.ic(cx, fy_y)[2]
+            else
+                error("unexpected stagger '$(stagger)' in arakawa stencil for $(rule.name)")
+            end
+
+            # term = coeff_AST * literal_face_value. The coeff AST (e.g. {/,[-1,"dx"]})
+            # is evaluated by ESS's tree-walk at f! call time via build_evaluator.
+            push!(terms, Dict{String, Any}("op" => "*", "args" => Any[coeff, face_val]))
+        end
+
+        rhs = length(terms) == 1 ? terms[1] :
+              Dict{String, Any}("op" => "+", "args" => terms)
+        push!(equations, Dict{String, Any}(
+            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["div_$(i)_$(j)"], "wrt" => "t"),
+            "rhs" => rhs,
+        ))
+    end
+
+    esm = Dict{String, Any}(
+        "esm"      => "0.2.0",
+        "metadata" => Dict{String, Any}("name" => "layer_b_arakawa_n$(n)"),
+        "models"   => Dict{String, Any}(
+            "M" => Dict{String, Any}("variables" => variables, "equations" => equations),
+        ),
+    )
+
+    # 4-5. Canonical pipeline.
+    disc = EarthSciSerialization.discretize(esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+
+    # 6. L_inf error vs analytic divergence at cell centers. Both axes are
+    #    periodic — no boundary rows excluded.
+    err = 0.0
+    for j in 1:n, i in 1:n
+        cx = (i - 0.5) * dx
+        cy = (j - 0.5) * dy
+        e  = abs(du[var_map["div_$(i)_$(j)"]] - mms.derivative(cx, cy))
+        err = max(err, e)
+    end
+    return err
 end
 
 """
@@ -1119,9 +1333,13 @@ function _layer_b_1d_build_cell_expr(expr, i::Int, n::Int)
 end
 
 # Evaluate a rule's index sub-expression to a concrete integer cell offset.
-# Recognises `"\$x"` (current-cell pattern variable) and integer offsets.
+# Any `$`-prefixed string (the rule's axis pattern variable, e.g. `"$x"` for
+# cartesian or `"$k"` for vertical) is treated as the current cell index `i`.
 function _layer_b_1d_eval_index(expr, i::Int)::Int
-    expr isa AbstractString && String(expr) == "\$x" && return i
+    if expr isa AbstractString
+        s = String(expr)
+        startswith(s, "\$") && return i
+    end
     expr isa Integer && return Int(expr)
     expr isa AbstractFloat && return Int(expr)
     expr isa AbstractDict || error("cannot evaluate index expression: $expr")
@@ -1132,6 +1350,84 @@ function _layer_b_1d_eval_index(expr, i::Int)::Int
     op == "+" && return a + b
     op == "-" && return a - b
     error("unsupported index op in rule expression: $(op)")
+end
+
+"""
+    _run_layer_b_1d_vertical_column(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for `grid_family=vertical` rules (esd-bbp).
+Identical canonical-pipeline machinery to `_run_layer_b_1d_cartesian_periodic`
+(per-cell-scalar ESM → discretize → build_evaluator) but uses the spacing
+parameter `"h"` instead of `"dx"`.
+
+Loads the replacement AST from the rule's canonical Layer-A fixture rather than
+calling `lower_stencil_to_replacement` — the stencil-lowered form for vertical
+rules uses face-staggered offsets (both zero) that evaluate to zero for
+cell-center inputs, while the canonical fixture carries the correct cell-center
+centered-difference form: `(u[\$x+1] - u[\$x-1]) / (2*h)`.
+"""
+function _run_layer_b_1d_vertical_column(rule::RuleFile, mms, n::Int)
+    # Load the cell-center centered-difference replacement from the canonical fixture.
+    canonical_path = joinpath(dirname(rule.path), rule.name, "fixtures", "canonical", "input.esm")
+    if !isfile(canonical_path)
+        error("_run_layer_b_1d_vertical_column: no canonical fixture at $(relpath_from_repo(canonical_path))")
+    end
+    canonical_doc = JSON.parse(read(canonical_path, String))
+    rules_list = get(canonical_doc, "rules", Any[])
+    isempty(rules_list) && error("canonical fixture for $(rule.name) has no rules entries")
+    canonical_rule = first(rules_list)
+    repl = get(canonical_rule, "replacement", nothing)
+    repl isa AbstractDict || error("canonical fixture for $(rule.name) has no replacement object")
+    expr = (get(repl, "op", nothing) == "arrayop") ? repl["expr"] : repl
+
+    h = 1.0 / n
+    cell_z(k) = (k - 0.5) * h
+
+    variables = Dict{String, Any}()
+    for k in 1:n
+        variables["u_$(k)"] = Dict{String, Any}(
+            "type"    => "state",
+            "default" => mms.ic(cell_z(k)),
+            "units"   => "1",
+        )
+    end
+    variables["h"] = Dict{String, Any}(
+        "type"    => "parameter",
+        "default" => h,
+        "units"   => "1",
+    )
+
+    equations = Any[]
+    for k in 1:n
+        rhs = _layer_b_1d_build_cell_expr(expr, k, n)
+        push!(equations, Dict{String, Any}(
+            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(k)"], "wrt" => "t"),
+            "rhs" => rhs,
+        ))
+    end
+
+    esm = Dict{String, Any}(
+        "esm"      => "0.2.0",
+        "metadata" => Dict{String, Any}("name" => "layer_b_1d_vertical_n$(n)"),
+        "models"   => Dict{String, Any}(
+            "M" => Dict{String, Any}(
+                "variables" => variables,
+                "equations" => equations,
+            ),
+        ),
+    )
+
+    disc = EarthSciSerialization.discretize(esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    for k in 1:n
+        u0[var_map["u_$(k)"]] = mms.ic(cell_z(k))
+    end
+
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+
+    return maximum(abs(du[var_map["u_$(k)"]] - mms.derivative(cell_z(k))) for k in 1:n)
 end
 
 """
