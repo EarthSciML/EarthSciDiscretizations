@@ -2,6 +2,9 @@
     using Test
     using EarthSciDiscretizations
     using JSON
+
+    const _CS_HARNESS_DIR = joinpath(@__DIR__, "..", "tests", "conformance", "grids", "cubed_sphere")
+    const _CS_REPO_ROOT = joinpath(_CS_HARNESS_DIR, "..", "..", "..", "..")
 end
 
 # Mirrors the 0-indexed panel-connectivity logic committed to
@@ -94,6 +97,50 @@ end
                     R, p + 1,
                 )
                 @test close_rel(area, golden["area"][k], REL_TOL)
+            end
+
+            # Rule-eval conformance: verify that eval_coeff (canonical ESS passthrough)
+            # reproduces the per-axis stencil coefficients committed in the golden.
+            # bindings_per_qp are h (uniform grid spacing) and J (Jacobian at cell center).
+            # eval_coeff must match the golden stencil_coeffs to REL_TOL.
+            rule_blocks = get(golden, "rule_evals", [])
+            @test !isempty(rule_blocks)  # golden missing rule_evals → regenerate with regenerate_golden.jl
+            for block in rule_blocks
+                rule_name = block["rule"]
+                rule_path = joinpath(_CS_REPO_ROOT, block["rule_path"])
+                payload = JSON.parsefile(rule_path)
+                rule_def = payload["discretizations"][rule_name]
+                stencil = rule_def["stencil"]
+                golden_coeffs = block["stencil_coeffs"]
+                golden_bindings = block["bindings_per_qp"]
+
+                @testset "rule_eval/$rule_name" begin
+                    @test length(golden_coeffs) == length(fixture["query_points"])
+                    for (k, qp) in enumerate(fixture["query_points"])
+                        p, i, j = Int(qp[1]), Int(qp[2]), Int(qp[3])
+                        h = π / (2 * Nc)
+                        J_val, = gnomonic_metric(grid.ξ_centers[i + 1], grid.η_centers[j + 1], R)
+                        binds = Dict{String,Float64}("h" => h, "J" => J_val)
+
+                        # Binding check: golden bindings_per_qp must match the
+                        # values extracted from the Julia grid accessor.
+                        for (bname, bval) in golden_bindings[k]
+                            got = binds[bname]
+                            expected = Float64(bval)
+                            @test close_rel(got, expected, REL_TOL)
+                        end
+
+                        # Coefficient check: eval_coeff on the rule's AST must match
+                        # the golden stencil_coeffs row.
+                        golden_row = golden_coeffs[k]
+                        @test length(stencil) == length(golden_row)
+                        for (s_idx, entry) in enumerate(stencil)
+                            got = eval_coeff(entry["coeff"], binds)
+                            expected = Float64(golden_row[s_idx])
+                            @test close_rel(got, expected, REL_TOL)
+                        end
+                    end
+                end
             end
         end
     end

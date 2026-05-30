@@ -217,6 +217,68 @@ def _mesh_from_fixture(fixture: dict) -> MpasMeshData:
 _CELL_METRICS = ("lon", "lat", "area", "x", "y", "z", "n_edges_on_cell")
 _EDGE_METRICS = ("lon_edge", "lat_edge", "dc_edge", "dv_edge")
 
+# Path to the nn_diffusion_mpas rule, repo-relative.
+_NN_DIFFUSION_RULE_PATH = "discretizations/finite_difference/nn_diffusion_mpas.json"
+
+
+def _mpas_rule_evals(fixture: dict) -> list[dict]:
+    """Pre-evaluate nn_diffusion_mpas stencil coefficients at each query cell.
+
+    The nn_diffusion_mpas rule's stencil uses ``index`` ops that reference mesh
+    arrays (edges_on_cell, dv_edge, dc_edge, area_cell). The ESS scalar
+    ``eval_coeff`` evaluator does not support ``index`` ops; evaluating those
+    coefficients requires the full ArrayOp pipeline. This function therefore
+    computes the numerical values by direct mesh-array access rather than
+    through eval_coeff, emitting the pre-expanded per-neighbor and center
+    coefficients that the ArrayOp pipeline would produce.
+
+    Format per query cell:
+      reduction_coeffs  — one float per neighbor edge k:
+                          dv_edge[edges_on_cell[c,k]] / (dc_edge[...] * area_cell[c])
+      center_coeff      — negative sum of reduction_coeffs (indirect stencil entry)
+
+    This pre-expanded form is what a conformance-level rule-application test
+    verifies: each binding that implements the full ArrayOp pipeline must
+    reproduce these values to the fixture tolerance.
+    """
+    m = fixture["mesh"]
+    area_cell = m["area_cell"]
+    n_edges_on_cell = m["n_edges_on_cell"]
+    max_edges = int(m["max_edges"])
+    edges_on_cell = m["edges_on_cell"]  # flat row-major: cell * max_edges + k
+    dv_edge = m["dv_edge"]
+    dc_edge = m["dc_edge"]
+
+    per_qp = []
+    for c in fixture["query_cells"]:
+        c = int(c)
+        n_k = int(n_edges_on_cell[c])
+        area_c = float(area_cell[c])
+        reduction_coeffs = []
+        for k in range(n_k):
+            e_k = int(edges_on_cell[c * max_edges + k])
+            coeff_k = float(dv_edge[e_k]) / (float(dc_edge[e_k]) * area_c)
+            reduction_coeffs.append(coeff_k)
+        center_coeff = -sum(reduction_coeffs)
+        per_qp.append({
+            "reduction_coeffs": reduction_coeffs,
+            "center_coeff": center_coeff,
+        })
+
+    return [{
+        "rule": "nn_diffusion_mpas",
+        "rule_path": _NN_DIFFUSION_RULE_PATH,
+        "notes": (
+            "Coefficients pre-expanded from mesh arrays (direct array access). "
+            "The reduction entry's coeff expression uses index ops (not supported "
+            "by the scalar eval_coeff pipeline); this golden records the ArrayOp "
+            "output that a full-pipeline binding must reproduce. "
+            "reduction_coeffs[k] = dv_edge[e_k] / (dc_edge[e_k] * area_cell[c]); "
+            "center_coeff = -sum(reduction_coeffs)."
+        ),
+        "per_qp": per_qp,
+    }]
+
 
 def _build_golden(fixture: dict) -> dict:
     opts = fixture["opts"]
@@ -271,6 +333,7 @@ def _build_golden(fixture: dict) -> dict:
         "edge_length": edge_lengths,
         "cell_distance": cell_distances,
         "edge_metrics": edge_metrics,
+        "rule_evals": _mpas_rule_evals(fixture),
     }
 
 

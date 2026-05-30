@@ -18,6 +18,25 @@ using JSON
 const HERE = @__DIR__
 const FIXTURES = joinpath(HERE, "fixtures.json")
 const GOLDEN_DIR = joinpath(HERE, "golden")
+const REPO_ROOT = joinpath(HERE, "..", "..", "..", "..")
+
+# Per-axis stencil rules from covariant_laplacian_cubed_sphere.json. These are
+# the rules whose stencil coefficients depend only on the scalar bindings h and J
+# (uniform isotropic spacing and Jacobian), both derivable from the grid accessor.
+# Driving eval_coeff on these rules exercises the canonical ESS → eval pipeline
+# (AGENTS.md §single-pathway rule) without array indexing.
+const RULE_PATHS = (
+    "discretizations/finite_difference/covariant_laplacian_cubed_sphere.json",
+)
+
+# Rule names within the above file to include in rule_evals.
+const RULE_NAMES = (
+    "d2_dxi2_cubed_sphere",
+    "d2_deta2_cubed_sphere",
+    "d2_dxieta_cubed_sphere",
+    "d1_dxi_over_J_cubed_sphere",
+    "d1_deta_over_J_cubed_sphere",
+)
 
 const DIRECTIONS = (West, East, South, North)
 const DIR_KEYS = ("W", "E", "S", "N")
@@ -83,6 +102,62 @@ function cell_area_0idx(grid, p::Int, i::Int, j::Int)
     return compute_cell_area((ξw, ξe), (ηs, ηn), grid.R, p + 1)
 end
 
+# Scalar bindings for the per-axis cubed-sphere stencil rules.
+# h = π/(2·Nc) is the uniform isotropic grid spacing (same for all cells).
+# J = Jacobian at the cell center (varies per cell).
+function stencil_bindings(grid, Nc::Int, p::Int, i::Int, j::Int)
+    h = π / (2 * Nc)
+    ξc = grid.ξ_centers[i + 1]
+    ηc = grid.η_centers[j + 1]
+    J, = gnomonic_metric(ξc, ηc, grid.R)
+    return Dict{String,Float64}("h" => h, "J" => J)
+end
+
+function _load_rules(rel_path::String)
+    path = joinpath(REPO_ROOT, rel_path)
+    payload = JSON.parsefile(path)
+    return payload["discretizations"]
+end
+
+# Produce the rule_evals block: for each named rule in RULE_NAMES, and for each
+# query point, evaluate every stencil entry's coeff via eval_coeff (the
+# canonical ESS → eval passthrough in src/rule_eval.jl). Bindings come from the
+# grid accessor: h is uniform across the fixture, J varies per cell.
+function rule_eval_block(grid, Nc::Int, qps)
+    blocks = Dict{String,Any}[]
+    for rel_path in RULE_PATHS
+        discs = _load_rules(rel_path)
+        for rule_name in RULE_NAMES
+            rule_def = discs[rule_name]
+            stencil = rule_def["stencil"]
+            n_entries = length(stencil)
+            n_qp = length(qps)
+
+            bindings_per_qp = Vector{Dict{String,Float64}}(undef, n_qp)
+            stencil_coeffs = Vector{Vector{Float64}}(undef, n_qp)
+
+            for (k, qp) in enumerate(qps)
+                p, i, j = Int(qp[1]), Int(qp[2]), Int(qp[3])
+                binds = stencil_bindings(grid, Nc, p, i, j)
+                # Only include bindings referenced by this rule's metric_bindings.
+                rule_binding_names = collect(keys(get(rule_def, "metric_bindings", Dict())))
+                b_filtered = Dict(nm => binds[nm] for nm in rule_binding_names if haskey(binds, nm))
+                bindings_per_qp[k] = b_filtered
+                stencil_coeffs[k] = [eval_coeff(entry["coeff"], binds) for entry in stencil]
+            end
+
+            push!(blocks, Dict(
+                "rule" => rule_name,
+                "rule_path" => rel_path,
+                "stencil_selectors" => [entry["selectors"] for entry in stencil],
+                "bindings_per_qp" => bindings_per_qp,
+                "stencil_coeffs" => stencil_coeffs,
+            ))
+        end
+    end
+    return blocks
+end
+
 function build_output(fixture::AbstractDict)
     opts = fixture["opts"]
     Nc = Int(opts["Nc"])
@@ -138,6 +213,7 @@ function build_output(fixture::AbstractDict)
         "metric_ginv_etaeta" => metrics["ginv_etaeta"],
         "metric_ginv_xieta" => metrics["ginv_xieta"],
         "area" => areas,
+        "rule_evals" => rule_eval_block(grid, Nc, qps),
     )
 end
 

@@ -182,5 +182,51 @@ end
                 @test _close_rel(got, expected, rel_tol)
             end
         end
+
+        # Rule-eval conformance: verify that the nn_diffusion_mpas stencil
+        # coefficients committed in the golden match the values computed by
+        # direct mesh-array access. The nn_diffusion_mpas rule uses ``index``
+        # ops that require the ArrayOp pipeline rather than the scalar
+        # eval_coeff; the golden stores pre-expanded per-neighbor and center
+        # coefficients that a full-pipeline binding must reproduce.
+        rule_blocks = get(golden, "rule_evals", nothing)
+        @test !isnothing(rule_blocks) && !isempty(rule_blocks)  # golden missing rule_evals → regenerate with regenerate_golden.py
+        for block in rule_blocks
+            @testset "rule_eval/$(block["rule"])" begin
+                per_qp = block["per_qp"]
+                @test length(per_qp) == length(fixture["query_cells"])
+                for (k, c0) in enumerate(fixture["query_cells"])
+                    c = _to_julia_idx(c0)
+                    qp_entry = per_qp[k]
+                    red_golden = Float64.(qp_entry["reduction_coeffs"])
+                    ctr_golden = Float64(qp_entry["center_coeff"])
+
+                    # Re-derive from the Julia mesh arrays and compare to the golden.
+                    mesh = fixture["mesh"]
+                    max_edges_val = Int(mesh["max_edges"])
+                    n_edges_on_cell_arr = Int.(mesh["n_edges_on_cell"])
+                    area_cell_arr = Float64.(mesh["area_cell"])
+                    flat_eoc = Int.(mesh["edges_on_cell"])
+                    dv_edge_arr = Float64.(mesh["dv_edge"])
+                    dc_edge_arr = Float64.(mesh["dc_edge"])
+
+                    c0_0idx = Int(c0)  # 0-indexed cell index from fixture
+                    n_k = n_edges_on_cell_arr[c0_0idx + 1]
+                    area_c = area_cell_arr[c0_0idx + 1]
+                    red_got = Vector{Float64}(undef, n_k)
+                    for k_idx in 1:n_k
+                        e_k = flat_eoc[c0_0idx * max_edges_val + k_idx] + 1  # 0→1-indexed
+                        red_got[k_idx] = dv_edge_arr[e_k] / (dc_edge_arr[e_k] * area_c)
+                    end
+                    ctr_got = -sum(red_got)
+
+                    @test length(red_got) == length(red_golden)
+                    for (ki, (got, expected)) in enumerate(zip(red_got, red_golden))
+                        @test _close_rel(got, expected, rel_tol)
+                    end
+                    @test _close_rel(ctr_got, ctr_golden, rel_tol)
+                end
+            end
+        end
     end
 end
