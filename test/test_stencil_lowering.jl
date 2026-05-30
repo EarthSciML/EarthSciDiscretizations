@@ -387,3 +387,153 @@ end
     @test idx1["op"] == "index"
     @test String(idx1["args"][1]) == "\$q"
 end
+
+@testitem "lower_stencil_to_replacement: lowers centered_2nd_deriv_uniform (cartesian)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "centered_2nd_deriv_uniform.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_deriv_uniform"])
+    @test !haskey(rule, "replacement")
+    @test rule["applies_to"]["op"] == "d2"
+    @test String(rule["applies_to"]["args"][1]) == "\$u"
+    @test String(rule["applies_to"]["dim"]) == "\$x"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # Three stencil entries → combine(term1, term2, term3)
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 3
+
+    # Entry 1: offset -1 → coeff * index($u, $x + (-1))
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    arg1 = idx1["args"][2]
+    @test arg1["op"] == "+"
+    @test String(arg1["args"][1]) == "\$x"
+    @test Int(arg1["args"][2]) == -1
+
+    # Entry 2: offset 0 → coeff * index($u, $x) — no `+ 0` wrapper
+    e2 = repl["args"][2]
+    @test e2["op"] == "*"
+    idx2 = e2["args"][2]
+    @test idx2["op"] == "index"
+    @test String(idx2["args"][1]) == "\$u"
+    @test String(idx2["args"][2]) == "\$x"
+
+    # Entry 3: offset +1 → coeff * index($u, $x + 1)
+    e3 = repl["args"][3]
+    @test e3["op"] == "*"
+    idx3 = e3["args"][2]
+    @test idx3["op"] == "index"
+    @test String(idx3["args"][1]) == "\$u"
+    arg3 = idx3["args"][2]
+    @test arg3["op"] == "+"
+    @test String(arg3["args"][1]) == "\$x"
+    @test Int(arg3["args"][2]) == 1
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence: lowering again returns the same replacement
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: lowers laplacian_2nd_uniform_cartesian (arakawa)" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "laplacian_2nd_uniform_cartesian.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["laplacian_2nd_uniform_cartesian"])
+    @test !haskey(rule, "replacement")
+    @test rule["applies_to"]["op"] == "laplacian"
+    @test String(rule["applies_to"]["args"][1]) == "\$u"
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    # 6 stencil entries (3 for $x, 3 for $y) → combine(6 terms)
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 6
+
+    # All terms are coeff * index($u, $x_arg, $y_arg)
+    for (i, term) in enumerate(repl["args"])
+        @test term["op"] == "*"
+        idx = term["args"][2]
+        @test idx["op"] == "index"
+        @test length(idx["args"]) == 3   # operand + two axis args ($x, $y)
+        @test String(idx["args"][1]) == "\$u"
+    end
+
+    # Entries 1–3 shift $x: each index has $x+offset or bare $x in slot 2, bare $y in slot 3
+    # Entry 1: axis=$x offset=-1 → index($u, $x+(-1), $y)
+    e1 = repl["args"][1]
+    idx1 = e1["args"][2]
+    @test idx1["args"][2]["op"] == "+"       # $x + (-1)
+    @test String(idx1["args"][2]["args"][1]) == "\$x"
+    @test Int(idx1["args"][2]["args"][2]) == -1
+    @test String(idx1["args"][3]) == "\$y"   # $y bare
+
+    # Entry 2: axis=$x offset=0 → index($u, $x, $y) — no `+ 0` wrapper
+    e2 = repl["args"][2]
+    idx2 = e2["args"][2]
+    @test String(idx2["args"][2]) == "\$x"
+    @test String(idx2["args"][3]) == "\$y"
+
+    # Entry 3: axis=$x offset=+1 → index($u, $x+1, $y)
+    e3 = repl["args"][3]
+    idx3 = e3["args"][2]
+    @test idx3["args"][2]["op"] == "+"
+    @test Int(idx3["args"][2]["args"][2]) == 1
+    @test String(idx3["args"][3]) == "\$y"
+
+    # Entries 4–6 shift $y: each index has bare $x in slot 2, $y+offset or bare $y in slot 3
+    # Entry 4: axis=$y offset=-1 → index($u, $x, $y+(-1))
+    e4 = repl["args"][4]
+    idx4 = e4["args"][2]
+    @test String(idx4["args"][2]) == "\$x"   # $x bare
+    @test idx4["args"][3]["op"] == "+"        # $y + (-1)
+    @test String(idx4["args"][3]["args"][1]) == "\$y"
+    @test Int(idx4["args"][3]["args"][2]) == -1
+
+    # Entry 5: axis=$y offset=0 → index($u, $x, $y) — no `+ 0` wrapper
+    e5 = repl["args"][5]
+    idx5 = e5["args"][2]
+    @test String(idx5["args"][2]) == "\$x"
+    @test String(idx5["args"][3]) == "\$y"
+
+    # Entry 6: axis=$y offset=+1 → index($u, $x, $y+1)
+    e6 = repl["args"][6]
+    idx6 = e6["args"][2]
+    @test String(idx6["args"][2]) == "\$x"
+    @test idx6["args"][3]["op"] == "+"
+    @test Int(idx6["args"][3]["args"][2]) == 1
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end

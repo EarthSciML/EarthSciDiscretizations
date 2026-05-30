@@ -476,3 +476,61 @@ end
         @test occursin("\"op\": \"abs\"", content)
     end
 end
+
+@testitem "centered_2nd_deriv_uniform scheme is discoverable and well-formed (esd-8f8)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_2nd_deriv_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"d2\"", content)
+    # Stencil form with cartesian selectors: three offsets for [1,-2,1]/dx^2.
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    @test occursin("\"offset\": 1", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+end
+
+@testitem "laplacian_2nd_uniform_cartesian scheme is discoverable and well-formed (esd-8f8)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "laplacian_2nd_uniform_cartesian", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"laplacian\"", content)
+    # Stencil form with arakawa selectors: six entries covering $x and $y axes.
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"arakawa\"", content)
+    @test occursin("\"\$x\"", content)
+    @test occursin("\"\$y\"", content)
+    @test occursin("\"stagger\": \"cell_center\"", content)
+    # All three offsets per axis.
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    @test occursin("\"offset\": 1", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+end

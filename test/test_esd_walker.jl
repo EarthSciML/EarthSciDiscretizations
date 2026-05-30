@@ -49,6 +49,8 @@ using TestItems
             "nn_diffusion_mpas",
             "periodic_bc",
             "upwind_1st",
+            "centered_2nd_deriv_uniform",
+            "laplacian_2nd_uniform_cartesian",
         )
         @test seeded in names
     end
@@ -96,6 +98,8 @@ using TestItems
             ("finite_difference", "centered_2nd_uniform_vertical"),
             ("finite_difference", "centered_2nd_uniform_latlon"),
             ("finite_difference", "upwind_1st"),
+            ("finite_difference", "centered_2nd_deriv_uniform"),
+            ("finite_difference", "laplacian_2nd_uniform_cartesian"),
         ]
     )
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
