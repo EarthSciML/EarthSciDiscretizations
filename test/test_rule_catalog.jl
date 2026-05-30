@@ -424,6 +424,9 @@ end
             "dirichlet_bc",
             "neumann_bc",
             "robin_bc",
+            "mixed_deriv_2nd_nonuniform",
+            "nonlinear_laplacian_nonuniform",
+            "spherical_laplacian_nonuniform",
         )
         @test seeded in names
     end
@@ -439,6 +442,9 @@ end
     @test "dirichlet_bc" in fd_names
     @test "neumann_bc" in fd_names
     @test "robin_bc" in fd_names
+    @test "mixed_deriv_2nd_nonuniform" in fd_names
+    @test "nonlinear_laplacian_nonuniform" in fd_names
+    @test "spherical_laplacian_nonuniform" in fd_names
     # finite_volume/ppm_reconstruction (CW84 §1) is the first FV rule.
     @test "ppm_reconstruction" in names
     fv_rules = filter(r -> r.family == :finite_volume, rules)
@@ -897,5 +903,118 @@ end
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
     # AST-only: no call op.
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "mixed_deriv_2nd_nonuniform scheme is discoverable and well-formed (esd-2uy)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "mixed_deriv_2nd_nonuniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Depth-2 applies_to: Dx(Dy(u)) — same pattern as mixed_deriv_2nd_uniform.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"\$y\"", content)
+    @test occursin("\"\$x\"", content)
+    @test occursin("\"\$u\"", content)
+    # Inline replacement — 4-point stencil as arrayop over 2D output.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Non-uniform denominator: per-cell dx[$x], dx[$x+1], dy[$y], dy[$y+1].
+    @test occursin("\"dx\"", content)
+    @test occursin("\"dy\"", content)
+    # No flat scalar 4*dx*dy denominator — spacing must be indexed per-cell.
+    @test !occursin("\"args\": [4, {\"op\": \"*\", \"args\": [\"dx\", \"dy\"]}]", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "nonlinear_laplacian_nonuniform scheme is discoverable and well-formed (esd-2uy)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "nonlinear_laplacian_nonuniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Same depth-2 grad pattern as nonlinear_laplacian_uniform: Dx(f * Dx(u)).
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"op\": \"*\"", content)
+    @test occursin("\"\$f\"", content)
+    @test occursin("\"\$u\"", content)
+    @test occursin("\"\$x\"", content)
+    # Inline replacement — conservative flux-difference form as arrayop.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    # Face interpolation: 0.5*(f[i]+f[i+1]).
+    @test occursin("0.5", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Non-uniform: per-cell dx[$x] and dx[$x+1] in both gradient and cell-width terms.
+    @test occursin("\"dx\"", content)
+    # No flat scalar dx² denominator — must be indexed per-cell.
+    @test !occursin("\"args\": [\"dx\", \"dx\"]", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "spherical_laplacian_nonuniform scheme is discoverable and well-formed (esd-2uy)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "spherical_laplacian_nonuniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Same applies_to as spherical_laplacian_uniform.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"spherical_laplacian\"", content)
+    @test occursin("\"\$u\"", content)
+    @test occursin("\"\$r\"", content)
+    # Inline arrayop replacement — conservative face-flux form.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    # Half-point face radii: 0.5*(r[i]+r[i+1]) and 0.5*(r[i-1]+r[i]).
+    @test occursin("0.5", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Coordinate array r and per-cell spacing dr appear in denominator.
+    @test occursin("\"dr\"", content)
+    @test occursin("\"r\"", content)
+    # Squared face radii appear as ^ 2.
+    @test occursin("\"op\": \"^\"", content)
+    # Non-uniform: per-cell dr[$r] and dr[$r+1] instead of flat scalar dr².
+    @test !occursin("\"args\": [\"dr\", \"dr\"]", content)
+    # No stencil blobs, no call op.
+    @test !occursin("\"stencil\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
