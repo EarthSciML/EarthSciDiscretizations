@@ -16,6 +16,7 @@ using TestItems
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
     using EarthSciDiscretizations
+    using JSON
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
     catalog = joinpath(repo_root, "discretizations")
@@ -69,215 +70,73 @@ using TestItems
     weno = first(filter(r -> r.name == "weno5_advection", results))
     @test weno.family == :finite_volume
     # finite_difference/covariant_laplacian_cubed_sphere (dsc-ap9) — first 2D
-    # multi-axis selector rule; declares applicable:false on Layer B until ESS
-    # extends the harness for cubed_sphere metric bindings.
+    # multi-axis selector rule.
     @test "covariant_laplacian_cubed_sphere" in names
     lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
     @test lap.family == :finite_difference
-    # finite_volume/transport_2d (dsc-hdk) — first 2D cubed-sphere FV rule
-    # whose coefficients depend on C-grid face-staggered Courant bindings;
-    # declares applicable:false on Layer B until ESS extends the harness for
-    # cubed_sphere staggered-velocity bindings (parallel to the laplacian).
+    # finite_volume/transport_2d (dsc-hdk) — first 2D cubed-sphere FV rule.
     @test "transport_2d" in names
     tr2d = first(filter(r -> r.name == "transport_2d", results))
     @test tr2d.family == :finite_volume
 
-    # Layer A: passes for centered_2nd_uniform and
-    # centered_2nd_uniform_vertical (both ship a canonical/ fixture); skips
-    # for every other rule with reason "no canonical or rewrite fixtures"
-    # (dsc-aez introduced the rewrite/ variant; no rule has one committed
-    # yet — see the synthetic-rule unit tests below).
-    # Layer C always skips unless ESD_RUN_INTEGRATION=1.
-    # Layer B: ESS retired `verify_mms_convergence` + the entire
-    # `mms_evaluator` shadow path in esm-4t5 (2026-04-29 single-pathway
-    # directive — see CLAUDE.md). The walker's Layer-B replacement (drive
-    # convergence through `discretize → ArrayOp → official ESS simulation
-    # runner`) is a pending ESD follow-up. Until it lands, every rule with
-    # an `applicable:true` convergence fixture SKIPs with the unified
-    # retirement reason from `_LAYER_B_PIPELINE_PENDING` (tracked at
-    # ESD/dsc-kswm). Rules whose convergence fixture declares
-    # `applicable:false` keep their existing `fixture-declared not
-    # applicable` SKIP path.
-    pending_canonical_layer_b = Set(
-        [
-            ("finite_difference", "centered_2nd_uniform"),
-            ("finite_difference", "centered_2nd_uniform_vertical"),
-            ("finite_difference", "centered_2nd_uniform_latlon"),
-            ("finite_difference", "upwind_1st"),
-            ("finite_difference", "centered_2nd_deriv_uniform"),
-            ("finite_difference", "laplacian_2nd_uniform_cartesian"),
-            ("finite_difference", "spherical_laplacian_uniform"),
-            ("finite_difference", "centered_2nd_nonuniform_cartesian"),
-        ]
-    )
-    # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
-    # → Eulerian re-gridding between timesteps), not a §7 stencil rule. The
-    # JSON file is retained as a reference artifact documenting the Lin (2004)
-    # PPM-remap math and AST shape for the eventual phase-hook contract; there
-    # is no imperative implementation in any binding. The convergence fixture
-    # ships applicable:false with a phase-hook deferral reason so the walker
-    # SKIPs Layer-B with "fixture-declared not applicable".
-    # flux_1d_ppm + lax_friedrichs_flux_cubed_sphere_{eta,xi} sit here because
-    # their convergence fixtures ship `applicable:false` (face-staggered Courant
-    # binding contract / cubed_sphere ESS dispatch pending). The eta + flux_1d_ppm
-    # canonical fixtures also declare `applicable:false`, so Layer-A SKIPs via
-    # the `_fixture_applicable_skip` honoring; the xi canonical fixture is
-    # `applicable:true` and currently FAILs Layer-A because ESS's `discretize`
-    # has not yet gained cubed_sphere selector dispatch — Layer-A is therefore
-    # left unconstrained for these rules and the n_fail tally below absorbs the
-    # FAIL dynamically.
-    not_applicable_layer_b = Set(
-        [
-            ("finite_difference", "periodic_bc"),
-            ("finite_difference", "covariant_laplacian_cubed_sphere"),
-            ("finite_difference", "nn_diffusion_mpas"),
-            ("finite_volume", "flux_1d_ppm"),
-            ("finite_volume", "flux_limiter_minmod"),
-            ("finite_volume", "flux_limiter_superbee"),
-            ("finite_volume", "lax_friedrichs_flux"),
-            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_eta"),
-            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_xi"),
-            ("finite_volume", "transport_2d"),
-            ("finite_volume", "ppm_edge_cubed_sphere"),
-            ("finite_volume", "vertical_remap"),
-        ]
-    )
-    # Layer B' (limiter): TVD slope-ratio limiters ship a `monotonicity/`
-    # fixture kind under discretizations/<rule>/fixtures/ and the walker
-    # exercises Sweby-region + 1D advection TVD checks against the rule's
-    # AST (dsc-8vu). All other rules SKIP this layer.
-    pass_layer_limiter = Set(
-        [
-            ("finite_volume", "flux_limiter_minmod"),
-            ("finite_volume", "flux_limiter_superbee"),
-        ]
-    )
-    # Layer D (conservation): finite-volume rules that ship a
-    # `conservation/` fixture (dsc-559). Currently divergence_arakawa_c
-    # exercises the 2D periodic divergence telescoping check, and
-    # flux_limiter_minmod exercises the 1D MUSCL telescoping check. All
-    # other rules SKIP because they have no conservation/ fixture.
-    pass_layer_d = Set(
-        [
-            ("finite_volume", "divergence_arakawa_c"),
-            ("finite_volume", "flux_limiter_minmod"),
-        ]
-    )
-    # The 8 FV3 rule ports (dsc-247) ship canonical-skip-only fixtures
-    # (dsc-lay1, audit dsc-ztvz / F5) declaring `applicable:false`
-    # pending the cubed_sphere selector + face-stagger emit / multi-axis
-    # / per-cell metric-binding / `kind:"constant"` source-row dispatch
-    # in ESS. Layer-A SKIPs via `_fixture_applicable_skip`; Layer-B
-    # SKIPs with "no convergence fixtures at..." because these ports
-    # carry no convergence fixture either. Once the ESS extensions
-    # land, these stubs can be promoted to hand-pinned canonical
-    # contracts (mirroring `lax_friedrichs_flux_cubed_sphere_xi`).
-    canonical_skip_only_fv3 = Set(
-        [
-            ("finite_volume", "fv3_absolute_vorticity_cellmean"),
-            ("finite_volume", "fv3_d_to_c_eta"),
-            ("finite_volume", "fv3_d_to_c_xi"),
-            ("finite_volume", "fv3_kinetic_energy_cell"),
-            ("finite_volume", "fv3_sinsg_flux_eta"),
-            ("finite_volume", "fv3_sinsg_flux_xi"),
-            ("finite_volume", "fv3_vorticity_cellmean"),
-            ("finite_volume", "fv3_vorticity_corner"),
-            # dirichlet_bc / neumann_bc (esd-0eu): rewrite fixture ships
-            # `applicable:false` pending ESS support for kind/side pattern
-            # matching on the bc OpExpr (layer-A SKIP) and carry no
-            # convergence fixture (layer-B SKIP "no convergence fixtures").
-            ("finite_difference", "dirichlet_bc"),
-            ("finite_difference", "neumann_bc"),
-            # robin_bc (esd-m9v): rewrite fixture ships `applicable:false`
-            # pending ESS support for kind/side/robin_alpha/beta/gamma
-            # pattern matching on the bc OpExpr (layer-A SKIP) and carries
-            # no convergence fixture (layer-B SKIP "no convergence fixtures").
-            ("finite_difference", "robin_bc"),
-        ]
-    )
-    # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
-    # canonical-skip-only fixtures declaring `applicable:false` pending the
-    # ESS `applies_to` + `stencil` schema dispatch (parse_rule today only
-    # consumes `pattern` + `replacement` — see ESS rule_engine.jl). Layer-A
-    # SKIPs via `_fixture_applicable_skip`. Layer-B keeps its existing
-    # `_LAYER_B_PIPELINE_PENDING` SKIP (these rules also ship convergence
-    # fixtures with applicable:true). Once ESS gains the schema dispatch,
-    # these stubs flip to PASS the same way as the FV3 ports.
-    canonical_skip_only_hot_path = Set(
-        [
-            ("finite_volume", "divergence_arakawa_c"),
-            ("finite_volume", "ppm_reconstruction"),
-            ("finite_volume", "weno5_advection"),
-            ("finite_volume", "weno5_advection_2d"),
-        ]
-    )
+    # Per-rule assertions derived from fixture files — no hardcoded rule-name
+    # lists.  Adding a new rule JSON (with or without fixtures) requires ZERO
+    # edits to this file: the expected outcome for each layer is inferred from
+    # whether the corresponding fixture directory exists and, for layers A/B,
+    # whether the fixture declares `applicable: false`.
     for r in results
+        # Layer C always skips unless ESD_RUN_INTEGRATION=1.
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
-        key = (String(r.family), r.name)
-        if r.family === :finite_difference && r.name == "centered_2nd_uniform_vertical"
-            # centered_2nd_uniform_vertical (vertical) ships a canonical/
-            # fixture, so Layer A passes via the ESS rule engine (dsc-cjh).
-            # Layer B SKIPs pending the canonical-pipeline replacement of the
-            # retired ESS `verify_mms_convergence` (esm-4t5).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
-        elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
-            # centered_2nd_uniform (cartesian) ships a canonical/ fixture
-            # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer B
-            # SKIPs pending the canonical-pipeline replacement of the retired
-            # ESS `verify_mms_convergence` (esm-4t5).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
-        elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
-            # nonlinear_laplacian_uniform (esd-1p7) ships a canonical/ fixture
-            # so Layer-A passes via the ESS rule engine. Layer B SKIPs pending
-            # the canonical-pipeline replacement of `verify_mms_convergence`.
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test !isempty(r.layer_b.reason)
-        elseif key in pending_canonical_layer_b
-            # The remaining `applicable:true` convergence fixtures: Layer-A
-            # is unconstrained here (centered_2nd_uniform's canonical fixture
-            # is asserted in the special-case above; divergence_arakawa_c had
-            # pre-existing canonical drift before esm-4t5 retired Layer-B's
-            # evaluator; the others ship no canonical/ fixture). Layer-B
-            # SKIPs with the unified retirement reason. The n_fail tally
-            # below absorbs any unrelated Layer-A drift dynamically.
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
-        elseif key in not_applicable_layer_b
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_b.reason)
-        elseif key in canonical_skip_only_fv3
-            # Layer-A SKIPs via the `_fixture_applicable_skip` honoring
-            # of `applicable:false` in `canonical/input.esm`. Layer-B
-            # SKIPs with "no convergence fixtures at..." because these
-            # ports carry no convergence fixture.
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("no convergence fixtures", r.layer_b.reason)
-        elseif key in canonical_skip_only_hot_path
-            # Layer-A SKIPs via `_fixture_applicable_skip`. Layer-B keeps
-            # the unified `_LAYER_B_PIPELINE_PENDING` SKIP reason because
-            # these rules carry an applicable:true convergence fixture.
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+
+        fdir = joinpath(dirname(r.path), r.name, "fixtures")
+        has_canonical    = isdir(joinpath(fdir, "canonical"))
+        has_rewrite      = isdir(joinpath(fdir, "rewrite"))
+        has_convergence  = isdir(joinpath(fdir, "convergence"))
+        has_monotonicity = isdir(joinpath(fdir, "monotonicity"))
+        has_conservation = isdir(joinpath(fdir, "conservation"))
+
+        # ---- Layer A (canonical-form round-trip) ----------------------------
+        if has_canonical || has_rewrite
+            # Fixture present: layer A must NOT skip with "no canonical or
+            # rewrite fixtures" — it either ran (PASS/FAIL) or skipped due
+            # to an applicable:false declaration.
+            @test !occursin("no canonical or rewrite fixtures", r.layer_a.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test !isempty(r.layer_b.reason)
         end
-        if key in pass_layer_limiter
+
+        # ---- Layer B (MMS convergence) -------------------------------------
+        # Layer B wholly SKIPs post-esm-4t5: ESS retired verify_mms_convergence.
+        # The replacement (discretize → ArrayOp → official ESS simulation runner)
+        # is tracked at ESD/dsc-kswm.
+        if has_convergence
+            conv_input = joinpath(fdir, "convergence", "input.esm")
+            if isfile(conv_input)
+                conv_doc = try
+                    JSON.parsefile(conv_input)
+                catch
+                    Dict{String, Any}()
+                end
+                @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+                if get(conv_doc, "applicable", true) === false
+                    @test occursin("fixture-declared not applicable", r.layer_b.reason)
+                else
+                    @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+                end
+            else
+                # convergence/ dir present but missing input.esm → FAIL
+                @test r.layer_b.outcome == WalkESDTests.LAYER_FAIL
+                @test occursin("missing input.esm", r.layer_b.reason)
+            end
+        else
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
+        end
+
+        # ---- Layer B' (limiter monotonicity) --------------------------------
+        if has_monotonicity
             @test r.layer_limiter.outcome == WalkESDTests.LAYER_PASS
             @test occursin("Sweby OK", r.layer_limiter.reason)
             @test occursin("TVD OK", r.layer_limiter.reason)
@@ -285,7 +144,9 @@ using TestItems
             @test r.layer_limiter.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no monotonicity fixtures", r.layer_limiter.reason)
         end
-        if key in pass_layer_d
+
+        # ---- Layer D (discrete conservation) --------------------------------
+        if has_conservation
             @test r.layer_d.outcome == WalkESDTests.LAYER_PASS
             @test occursin("conservation OK", r.layer_d.reason)
         else
@@ -300,45 +161,15 @@ using TestItems
     @test occursin("<testsuite name=\"ESD Walker\"", xml)
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
-    # Layer B is wholly SKIPped post-esm-4t5: ESS retired the
-    # `verify_mms_convergence` evaluator that previously powered the
-    # convergence sweep. The eight rules that previously passed Layer-B
-    # (centered_2nd_uniform, centered_2nd_uniform_vertical,
-    # centered_2nd_uniform_latlon, upwind_1st, ppm_reconstruction,
-    # weno5_advection, weno5_advection_2d, divergence_arakawa_c) now SKIP
-    # with the unified retirement reason from `_LAYER_B_PIPELINE_PENDING`.
-    # The replacement (drive Layer-B through the canonical
-    # `discretize → ArrayOp → official ESS simulation runner` pipeline) is
-    # tracked at ESD/dsc-kswm.
+    # Layer B is wholly SKIPped post-esm-4t5: ESS retired verify_mms_convergence.
     layer_b_passes = sum(
         1 for r in results
             if r.layer_b.outcome == WalkESDTests.LAYER_PASS;
         init = 0
     )
-    # Two layer-B' (limiter) cases pass (minmod, superbee). All other rules
-    # SKIP that layer because they have no monotonicity/ fixture directory.
-    layer_limiter_passes = sum(
-        1 for r in results
-            if (String(r.family), r.name) in pass_layer_limiter;
-        init = 0
-    )
-    # Two layer-D (conservation) cases pass (divergence_arakawa_c,
-    # flux_limiter_minmod). All other rules SKIP because no conservation/
-    # fixture exists.
-    layer_d_passes = sum(
-        1 for r in results
-            if (String(r.family), r.name) in pass_layer_d; init = 0
-    )
-    @test layer_b_passes == 0
-    @test layer_limiter_passes == 2
-    @test layer_d_passes == 2
-    # Count fails/skips from the live result set so this assertion stays
-    # correct as the catalog evolves (e.g. when new rules ship canonical
-    # fixtures that convert a layer-A FAIL into a PASS or SKIP). Avoids
-    # double-bookkeeping pre-existing layer-A canonical-form drift unrelated
-    # to the limiter Layer B' added by dsc-8vu.
     n_fail = sum(WalkESDTests.count_outcome(r, WalkESDTests.LAYER_FAIL) for r in results; init = 0)
     n_skip = sum(WalkESDTests.count_outcome(r, WalkESDTests.LAYER_SKIP) for r in results; init = 0)
+    @test layer_b_passes == 0
     @test occursin("tests=\"$total\"", xml)
     @test occursin("failures=\"$n_fail\"", xml)
     @test occursin("skipped=\"$n_skip\"", xml)

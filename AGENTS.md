@@ -24,8 +24,23 @@ Do NOT:
 
 When in doubt: if the formula fits on paper, it fits in the AST.
 
-See `discretizations/README.md` for the catalog landing and
-`docs/rule-catalog.md` for the full rule manifest.
+See `discretizations/README.md` for the catalog landing and the
+[generated rule catalog](docs/rule-catalog.md) for the full manifest.
+
+### What rule authors must NOT commit
+
+- `docs/rule-catalog.md` — **generated** by `docs/generate_rule_catalog.jl` at
+  doc-build time; gitignored. Do not commit it; do not run the generator and
+  stage its output. The CI doc build regenerates it automatically.
+- Edits to `test/test_esd_walker.jl` — the walker discovers rules and fixture
+  files **dynamically**. Adding a rule JSON (with or without fixtures) requires
+  zero edits to the walker test.
+
+When authoring a new rule, the ONLY files you commit are:
+1. `discretizations/<family>/<name>.json` — the rule itself
+2. `discretizations/<family>/<name>/fixtures/**` — any fixtures (canonical,
+   convergence, rewrite, monotonicity, conservation)
+3. Rule-specific test items in `test/test_rule_catalog.jl` (structural checks)
 
 ## The single-pathway rule (all bindings)
 

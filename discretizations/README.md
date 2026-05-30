@@ -27,9 +27,16 @@ See `../docs/REPO_LAYOUT.md` for the governing convention.
 
 ## Adding a rule
 
-1. Drop a `.json` file into the appropriate family subdirectory
+1. Drop a `.json` file into the appropriate family subdirectory (+ any fixtures under `<name>/fixtures/`)
 2. Ensure it validates against the ESS §7 schema
-3. Add a rule-application test under `../test/` (runs against the rule engine)
+3. Add a rule-specific test under `../test/` if needed (e.g. `test_rule_catalog.jl` structural checks)
+
+**Do NOT:**
+- Commit `../docs/rule-catalog.md` — it is **generated** by `../docs/generate_rule_catalog.jl`
+  at doc-build time and is gitignored. Running `julia --project=docs docs/make.jl` regenerates
+  it; do not hand-edit or commit it.
+- Edit `../test/test_esd_walker.jl` — the walker discovers rules and fixture files
+  **dynamically** via `load_rules`. Adding a rule JSON requires no walker edit.
 
 ## Stencil-form vs replacement-form rules
 
