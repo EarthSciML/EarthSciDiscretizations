@@ -12,7 +12,7 @@ Hand-authored planning prose (aspirational rules not yet committed, audit lenses
 |---|---|
 | Generator | `docs/generate_rule_catalog.jl` |
 | Catalog root | `discretizations` |
-| Total rule entries | 32 |
+| Total rule entries | 34 |
 | Families discovered | finite_difference, finite_volume, grids |
 
 ## Counts by family
@@ -20,7 +20,7 @@ Hand-authored planning prose (aspirational rules not yet committed, audit lenses
 | Family | Entries |
 |---|---:|
 | `finite_difference` | 7 |
-| `finite_volume` | 21 |
+| `finite_volume` | 23 |
 | `grids` | 4 |
 
 ## How to read this catalog
@@ -70,6 +70,8 @@ Columns:
 | `lax_friedrichs_flux_cubed_sphere_xi` | discretizations | `flux` | cubed_sphere | O(h) | Lax & Friedrichs (1954), Comm. Pure Appl. Math. 7(1):159-193 (LF flux); src/operators/flux_1d.jl `flux_1d` ArrayOp on `CubedSphereGrid` (imperative reference). The Cartesian core lives at `discretizat… | `discretizations/finite_volume/lax_friedrichs_flux_cubed_sphere_xi.json` |
 | `ppm_edge_cubed_sphere` | discretizations | `reconstruct_panel_edge` | cubed_sphere | O(h^2) at panel-boundary interfaces (deliberate fallback from the interior O(h^4) PPM edge formula) | Harris et al. (2021), GFDL FV3 Technical Memorandum, Eq. 6.5–6.6. | `discretizations/finite_volume/ppm_edge_cubed_sphere.json` |
 | `ppm_reconstruction` | discretizations | `reconstruct` | cartesian | O(dx^3) | Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.6)-(1.10) | `discretizations/finite_volume/ppm_reconstruction.json` |
+| `ppm_reconstruction_left_edge` | discretizations | `q_left_edge` | cartesian | O(dx^4) | Colella & Woodward (1984), JCP 54(1):174-201, eq. (1.6) shifted one cell left | `discretizations/finite_volume/ppm_reconstruction_left_edge.json` |
+| `ppm_reconstruction_right_edge` | discretizations | `q_right_edge` | cartesian | O(dx^4) | Colella & Woodward (1984), JCP 54(1):174-201, eq. (1.6) | `discretizations/finite_volume/ppm_reconstruction_right_edge.json` |
 | `transport_2d` | discretizations | `advect` | cubed_sphere | O(h) | src/operators/transport_2d.jl `transport_2d` (imperative reference) — first-order Rusanov / local Lax-Friedrichs flux-form 2D transport on the gnomonic cubed sphere with C-grid staggered Courant numbe… | `discretizations/finite_volume/transport_2d.json` |
 | `vertical_remap` | discretizations | `vertical_remap` | vertical | O(dp^3) interior; degrades to O(dp) within two cells of the column top/bottom and at active CW84 limiter constraints | Lin (2004), MWR 132(10):2293-2307, eqs. (16)-(18); reconstruction per Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.6)-(1.10) with the (1.7)-(1.10) monotonicity limiter | `discretizations/finite_volume/vertical_remap.json` |
 | `weno5_advection` | discretizations | `div` | cartesian | O(dx^5) | Jiang & Shu (1996), JCP 126(1):202-228, eqs. (2.5)-(2.10) and (2.16)-(2.18); Shu (1998) NASA/CR-97-206253 Lecture Notes §2.2. | `discretizations/finite_volume/weno5_advection.json` |
