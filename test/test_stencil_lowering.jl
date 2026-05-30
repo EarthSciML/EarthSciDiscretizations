@@ -614,3 +614,107 @@ end
     # Idempotence
     @test lower_stencil_to_replacement(out)["replacement"] == repl
 end
+
+@testitem "lower_stencil_to_replacement: lowers staggered_1st_uniform_cc_to_face" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    # staggered_1st_uniform_cc_to_face: arakawa rule with cell_center selectors,
+    # 1D x-axis, offsets {-1, 0}. Mirrors MOL StaggeredStencilInfo
+    # EdgeAlignedVar: d/dx(u)|_face[j] = (u_cc[j] - u_cc[j-1]) / h.
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "staggered_1st_uniform.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["staggered_1st_uniform_cc_to_face"])
+    @test !haskey(rule, "replacement")
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 2
+
+    # Entry 1: cell_center, axis $x, offset -1 -> index($u, $x + (-1)), coeff -1/h
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    arg1 = idx1["args"][2]
+    @test arg1["op"] == "+"
+    @test String(arg1["args"][1]) == "\$x"
+    @test Int(arg1["args"][2]) == -1
+
+    # Entry 2: cell_center, axis $x, offset 0 -> index($u, $x) (no `+ 0` wrapper)
+    e2 = repl["args"][2]
+    @test e2["op"] == "*"
+    idx2 = e2["args"][2]
+    @test idx2["op"] == "index"
+    @test String(idx2["args"][1]) == "\$u"
+    @test String(idx2["args"][2]) == "\$x"
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(repl)
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end
+
+@testitem "lower_stencil_to_replacement: lowers staggered_1st_uniform_face_to_cc" begin
+    using EarthSciDiscretizations: lower_stencil_to_replacement
+    import EarthSciSerialization
+    using JSON
+
+    # staggered_1st_uniform_face_to_cc: arakawa rule with face_x selectors,
+    # 1D x-axis, offsets {0, +1}. Mirrors MOL StaggeredStencilInfo
+    # CenterAlignedVar: d/dx(u)|_cc[i] = (u_face[i+1] - u_face[i]) / h.
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "staggered_1st_uniform.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["staggered_1st_uniform_face_to_cc"])
+    @test !haskey(rule, "replacement")
+
+    out = lower_stencil_to_replacement(rule)
+    @test haskey(out, "replacement")
+
+    repl = out["replacement"]
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 2
+
+    # Entry 1: face_x, axis $x, offset 0 -> index($u, $x) (no `+ 0` wrapper), coeff -1/h
+    e1 = repl["args"][1]
+    @test e1["op"] == "*"
+    idx1 = e1["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    @test String(idx1["args"][2]) == "\$x"
+
+    # Entry 2: face_x, axis $x, offset 1 -> index($u, $x + 1), coeff +1/h
+    e2 = repl["args"][2]
+    @test e2["op"] == "*"
+    idx2 = e2["args"][2]
+    @test idx2["op"] == "index"
+    @test String(idx2["args"][1]) == "\$u"
+    arg2 = idx2["args"][2]
+    @test arg2["op"] == "+"
+    @test String(arg2["args"][1]) == "\$x"
+    @test Int(arg2["args"][2]) == 1
+
+    # ESS parse_expression accepts the lowered AST
+    expr = EarthSciSerialization.parse_expression(repl)
+    @test expr !== nothing
+
+    # Idempotence
+    @test lower_stencil_to_replacement(out)["replacement"] == repl
+end

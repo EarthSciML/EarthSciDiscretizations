@@ -1,0 +1,14 @@
+{
+  "rule": "staggered_1st_uniform",
+  "applicable": false,
+  "skip_reason": "Layer-A canonical drive of staggered_1st_uniform requires ESS parse_rule to dispatch the stencil schema (kind=arakawa selectors at cell_center and face_x staggers, axis $x, offsets {-1,0} / {0,+1}, with per-row coeff AST). ESS rule_engine.jl::parse_rule today only consumes the pattern + replacement schema (E_RULE_REPLACEMENT_MISSING raised on stencil-form rules), so neither catalog rule can be materialized end-to-end via the canonical pipeline yet. Once ESS gains stencil-schema dispatch (parallel to the divergence_arakawa_c promotion path), this stub can be promoted to a hand-pinned canonical contract encoding the 1D wave staggered-advection fixture described in reference_implementation below.",
+  "reference_implementation": {
+    "module": "EarthSciSerialization",
+    "function": "stencil-schema dispatch (pending)",
+    "comment": "The two catalog rules in staggered_1st_uniform.json encode the staggered 1st-order FD gradient on an Arakawa C-grid in both directions. staggered_1st_uniform_cc_to_face reads cell_center $u at offsets {-1, 0} relative to face_x output index: d/dx(u)|_face[j] = (u[j] - u[j-1]) / h (mirrors MOL StaggeredStencilInfo EdgeAlignedVar offsets [-1,0]). staggered_1st_uniform_face_to_cc reads face_x $u at offsets {0, +1} relative to cell_center output index: d/dx(u)|_cc[i] = (u[i+1] - u[i]) / h (mirrors MOL StaggeredStencilInfo CenterAlignedVar offsets [0,1]). Both achieve O(h^2) accuracy on a uniform grid because the two-point difference is centered at the half-offset evaluation point. The 1D wave canonical fixture encodes a staggered grid wave equation: pressure p at cell_center, velocity u at face_x, dp/dt = -c * staggered_1st_uniform_face_to_cc(u), du/dt = -c * staggered_1st_uniform_cc_to_face(p), on a 1D periodic uniform grid with c=1, Nc=8, h=1/8.",
+    "pinned_mol_ref": "MethodOfLines.jl #531 @ 35cc9143dc553ac7d3619738bd77b250c1ed162f StaggeredStencilInfo (src/discretization/array_fd/stencil_info.jl) — CenterAlignedVar offsets [0,1], EdgeAlignedVar offsets [-1,0]."
+  },
+  "audit_provenance": {
+    "bead": "esd-slh"
+  }
+}

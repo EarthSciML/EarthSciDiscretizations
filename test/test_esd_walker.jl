@@ -184,6 +184,15 @@ using TestItems
             # convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
             ("finite_difference", "neumann_bc"),
+            # robin_bc (esd-m9v): rewrite fixture ships `applicable:false`
+            # pending ESS support for kind/side/robin_alpha/beta/gamma
+            # pattern matching on the bc OpExpr (layer-A SKIP) and carries
+            # no convergence fixture (layer-B SKIP "no convergence fixtures").
+            ("finite_difference", "robin_bc"),
+            # staggered_1st_uniform (esd-slh): arakawa stencil-form rule;
+            # ships canonical/input.esm applicable:false pending ESS
+            # stencil-schema dispatch; no convergence fixture.
+            ("finite_difference", "staggered_1st_uniform"),
         ]
     )
     # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
