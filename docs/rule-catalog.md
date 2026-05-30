@@ -52,7 +52,7 @@ Columns:
 | `nn_diffusion_mpas` | discretizations | `laplacian` | unstructured | O(h^2) on a quasi-uniform Voronoi mesh | — | `discretizations/finite_difference/nn_diffusion_mpas.json` |
 | `nonlinear_laplacian_uniform` | discretizations | `grad` | cartesian | O(dx^2) | — | `discretizations/finite_difference/nonlinear_laplacian_uniform.json` |
 | `periodic_wrap_x` | rules | `index` | xmin_boundary | — | — | `discretizations/finite_difference/periodic_bc.json` |
-| `spherical_laplacian_uniform` | discretizations | `spherical_laplacian` | cartesian | O(dr^2) | conservative face-flux form r^{-2}*Dr(r^2*Dr(u)) with half-point radii; MOL #531 pinned SHA 35cc9143 | `discretizations/finite_difference/spherical_laplacian_uniform.json` |
+| `spherical_laplacian_uniform` | discretizations | `spherical_laplacian` | cartesian | O(dr^2) | — | `discretizations/finite_difference/spherical_laplacian_uniform.json` |
 | `upwind_1st` | discretizations | `grad` | cartesian | O(dx) | — | `discretizations/finite_difference/upwind_1st.json` |
 
 ## Finite-volume rules (`finite_volume`)
