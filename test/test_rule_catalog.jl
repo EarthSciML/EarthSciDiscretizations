@@ -760,3 +760,33 @@ end
     @test !occursin("\"stencil\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
+
+@testitem "centered_2nd_nonuniform_cartesian scheme is discoverable and well-formed (esd-2t4)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_2nd_nonuniform_cartesian", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"d2\"", content)
+    # Stencil form with cartesian selectors: three offsets for non-uniform formula.
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    @test occursin("\"offset\": 1", content)
+    # Non-uniform: explicit index nodes for per-cell dx[i] and dx[i+1] coefficients.
+    @test occursin("\"index\"", content)
+    @test occursin("\"dx\"", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+end

@@ -56,6 +56,7 @@ using TestItems
             "neumann_bc",
             "spherical_laplacian_uniform",
             "robin_bc",
+            "centered_2nd_nonuniform_cartesian",
         )
         @test seeded in names
     end
@@ -106,6 +107,7 @@ using TestItems
             ("finite_difference", "centered_2nd_deriv_uniform"),
             ("finite_difference", "laplacian_2nd_uniform_cartesian"),
             ("finite_difference", "spherical_laplacian_uniform"),
+            ("finite_difference", "centered_2nd_nonuniform_cartesian"),
         ]
     )
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian

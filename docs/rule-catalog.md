@@ -12,14 +12,14 @@ Hand-authored planning prose (aspirational rules not yet committed, audit lenses
 |---|---|
 | Generator | `docs/generate_rule_catalog.jl` |
 | Catalog root | `discretizations` |
-| Total rule entries | 41 |
+| Total rule entries | 42 |
 | Families discovered | finite_difference, finite_volume, grids |
 
 ## Counts by family
 
 | Family | Entries |
 |---|---:|
-| `finite_difference` | 14 |
+| `finite_difference` | 15 |
 | `finite_volume` | 23 |
 | `grids` | 4 |
 
@@ -42,6 +42,7 @@ Columns:
 | name | shape | op | grid_family | accuracy | reference | path |
 |---|---|---|---|---|---|---|
 | `centered_2nd_deriv_uniform` | discretizations | `d2` | cartesian | O(dx^2) | — | `discretizations/finite_difference/centered_2nd_deriv_uniform.json` |
+| `centered_2nd_nonuniform_cartesian` | discretizations | `d2` | cartesian | O(dx^2) | — | `discretizations/finite_difference/centered_2nd_nonuniform_cartesian.json` |
 | `centered_2nd_uniform` | discretizations | `grad` | cartesian | O(dx^2) | — | `discretizations/finite_difference/centered_2nd_uniform.json` |
 | `centered_2nd_uniform_latlon` | discretizations | `grad` | latlon | O(h^2) | — | `discretizations/finite_difference/centered_2nd_uniform_latlon.json` |
 | `centered_2nd_uniform_vertical` | discretizations | `grad` | vertical | O(h^2) | — | `discretizations/finite_difference/centered_2nd_uniform_vertical.json` |
