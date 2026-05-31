@@ -35,9 +35,26 @@ end
 
 Evaluate an ArrayOp built from `Const`-wrapped data to a numerical array.
 
-Scalarizes the ArrayOp and extracts Float64 values. For testing and validation.
+Iterates over the output index ranges, substituting concrete integer values
+into the symbolic expression at each grid point and folding to Float64.
+This is the canonical numeric evaluation path for ArrayOps in this binding.
 """
 function evaluate_arrayop(ao)
-    s = Symbolics.scalarize(wrap(ao))
-    return Float64.(Symbolics.value.(s))
+    output_idx = ao.output_idx
+    ranges = ao.ranges
+    ordered_ranges = map(output_idx) do idx
+        idx isa Int ? (1:1) : ranges[idx]
+    end
+    result = Array{Float64}(undef, length.(ordered_ranges)...)
+    for cidx in Iterators.product(ordered_ranges...)
+        subs = Dict{Any, Any}()
+        for (idx, v) in zip(output_idx, cidx)
+            idx isa Int && continue
+            subs[idx] = v
+        end
+        val = Symbolics.substitute(wrap(ao.expr), subs; fold = Val(true))
+        pos = Tuple(Int(v) - first(r) + 1 for (v, r) in zip(cidx, ordered_ranges))
+        result[pos...] = Float64(Symbolics.value(val))
+    end
+    return result
 end
