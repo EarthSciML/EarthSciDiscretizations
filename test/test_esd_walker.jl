@@ -127,6 +127,10 @@ using TestItems
     # FAIL dynamically.
     not_applicable_layer_b = Set(
         [
+            # centered_2nd_nonuniform_vertical: the 1d_vertical_column runner
+            # loads the replacement from a canonical/ fixture (absent here) and
+            # binds uniform h only — per-cell dz[k] bindings pending dsc-yz0m.
+            ("finite_difference", "centered_2nd_nonuniform_vertical"),
             ("finite_difference", "periodic_bc"),
             ("finite_difference", "covariant_laplacian_cubed_sphere"),
             ("finite_difference", "nn_diffusion_mpas"),
@@ -264,13 +268,16 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform_latlon"
-            # centered_2nd_uniform_latlon (latlon) ships a canonical/ fixture with
-            # applicable:false (Layer-A skips). Layer-B now passes via the canonical
-            # pipeline (esd-bbp): the fixture declares mms_kind="Y_2_0_unit_sphere",
-            # topology key resolves to 2d_latlon_sphere, and the runner measures O(h²)
-            # on the lat axis (Y_{2,0} is lon-independent so only lat signal matters).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            # centered_2nd_uniform_latlon (latlon): the canonical/ fixture was
+            # activated in esd-9qs (applicable:false dropped once ess-sra landed
+            # the per-cell metric-binding evaluator), so Layer-A passes via the
+            # ESS rule engine. Layer-B passes via the canonical pipeline
+            # (esd-bbp): the fixture declares mms_kind="Y_2_0_unit_sphere",
+            # topology key resolves to 2d_latlon_sphere, and the runner measures
+            # O(h²) on the lat axis (Y_{2,0} is lon-independent so only lat
+            # signal matters).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "divergence_arakawa_c"
