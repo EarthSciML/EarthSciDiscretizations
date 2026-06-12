@@ -106,7 +106,9 @@ using TestItems
             # upwind_1st removed from here (esd-0ip): now PASSes Layer-B via
             # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h)).
             ("finite_difference", "centered_2nd_deriv_uniform"),
-            ("finite_difference", "laplacian_2nd_uniform_cartesian"),
+            # laplacian_2nd_uniform_cartesian removed (dsc-vst2): now PASSes
+            # Layer-B via the ArrayOp-native 2d_cartesian_periodic runner with
+            # mms_kind="sin2pix_sin2piy_periodic" (O(h²) 5-point Laplacian).
         ]
     )
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
@@ -250,6 +252,18 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "laplacian_2nd_uniform_cartesian"
+            # laplacian_2nd_uniform_cartesian ships no canonical/ fixture
+            # (Layer-A skips). Layer-B passes via the ArrayOp-native
+            # 2d_cartesian_periodic runner (dsc-vst2): the rule carries a
+            # replacement AST in canonical i/j component form (RFC §7.1),
+            # the fixture declares mms_kind="sin2pix_sin2piy_periodic", the
+            # classifier routes on the stencil's two distinct selector axes,
+            # and the runner measures O(h²).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "upwind_1st"
             # upwind_1st ships no canonical/ fixture (Layer-A skips). Layer-B
             # passes via the ArrayOp-native canonical pipeline (dsc-kswm): the
@@ -359,10 +373,12 @@ using TestItems
     # Parametrize against actual catalog size: 5 layers (A/B/B'/C/D) per rule.
     total = length(results) * 5
     # Layer B: esd-0ip lands the 1d_cartesian_periodic runner; esd-bbp extends
-    # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic. Five
+    # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic;
+    # dsc-vst2 adds the ArrayOp-native 2d_cartesian_periodic runner. Six
     # rules now PASS: centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
-    # on lat axis), divergence_arakawa_c (O(h²) div test). All remaining rules
+    # on lat axis), divergence_arakawa_c (O(h²) div test), and
+    # laplacian_2nd_uniform_cartesian (O(h²) 5-point). All remaining rules
     # with applicable:true convergence fixtures continue to SKIP with
     # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
@@ -384,7 +400,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 5
+    @test layer_b_passes == 6
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

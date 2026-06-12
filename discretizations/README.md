@@ -54,7 +54,7 @@ Rules are authored in one of two ESS §7 forms:
   reconstruction rules whose shape varies by stagger (e.g.
   `upwind_1st.json`, `lax_friedrichs_flux.json`).
 
-A stencil-form rule reaches the ESS pipeline by one of two lowerings:
+A stencil-form rule reaches the ESS pipeline by one of three lowerings:
 
 - [`EarthSciDiscretizations.lower_stencil_to_scheme`](../src/stencil_lowering.jl)
   — emits the ESM document parts (`discretizations.<name>` scheme +
@@ -62,6 +62,13 @@ A stencil-form rule reaches the ESS pipeline by one of two lowerings:
   scheme expansion → ArrayOp lift → tree-walk eval. This is the
   canonical-pipeline path; cartesian-only today, mirroring the ESS
   scheme-expansion foundation (esm-j1u).
+- [`EarthSciDiscretizations.lower_stencil_to_canonical_replacement`](../src/stencil_lowering.jl)
+  (dsc-vst2) — a replacement expression whose axis references use ESS's
+  canonical `$target` component names (`i`, `j`, …; RFC §7.1,
+  position-based). The form multi-axis rules with dim-less patterns
+  (e.g. `laplacian($u)`) need to ride ESS `discretize` as plain
+  `pattern` + `replacement` document rules; collocated (cell_center)
+  stencils only.
 - [`EarthSciDiscretizations.lower_stencil_to_replacement`](../src/stencil_lowering.jl)
   (dsc-y0jj) — inserts a scalar `replacement` AST into the rule dict
   (legacy path; supports more selector families, but downstream

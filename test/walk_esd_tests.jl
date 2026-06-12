@@ -1,7 +1,8 @@
 module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
-    lower_stencil_to_replacement, lower_stencil_to_scheme
+    lower_stencil_to_replacement, lower_stencil_to_scheme,
+    lower_stencil_to_canonical_replacement
 import EarthSciSerialization
 using JSON
 
@@ -592,6 +593,18 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (x, y) -> (sin(2π * x) * cos(2π * y), cos(2π * x) * sin(2π * y)),
         derivative = (x, y) -> 4π * cos(2π * x) * cos(2π * y),
     ),
+    # 2D periodic product sine for the cartesian 5-point Laplacian MMS:
+    #
+    #   u(x,y) = sin(2π x)·sin(2π y)   on [0,1]² periodic
+    #   ∇²u    = −2·(2π)²·sin(2π x)·sin(2π y) = −8π²·u
+    #
+    # `ic(x, y)` returns the scalar field at cell centers; `derivative(x, y)`
+    # returns the analytic Laplacian. Used by `laplacian_2nd_uniform_cartesian`'s
+    # convergence fixture (`mms_kind="sin2pix_sin2piy_periodic"`).
+    "sin2pix_sin2piy_periodic" => (
+        ic = (x, y) -> sin(2π * x) * sin(2π * y),
+        derivative = (x, y) -> -8 * π^2 * sin(2π * x) * sin(2π * y),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -632,6 +645,13 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # the MMS IC embedded as literals. Activated for `divergence_arakawa_c`
     # (O(h²) divergence test).
     "2d_arakawa_periodic",
+    # `2d_cartesian_periodic` (dsc-vst2) — ArrayOp-native runner; builds a
+    # 2D periodic PDE ESM document and drives `discretize → ArrayOp →
+    # build_evaluator` with the rule's replacement AST (canonical `$target`
+    # component names i/j per RFC §7.1) as a document rule. No 1D-lift
+    # kwarg needed — multidimensional equations lift by default. Activated
+    # for `laplacian_2nd_uniform_cartesian` (O(h²) 5-point Laplacian).
+    "2d_cartesian_periodic",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -845,10 +865,15 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
 
     # 2D Cartesian rules: diagnose by the convergence fixture's `axis`
     # field (a 2D MMS sweep over a single axis at a time, as used by
-    # weno5_advection_2d). The classifier deliberately does NOT pattern-
-    # match on the manufactured_solution description string — that field
-    # is free-form prose, not machine-readable.
+    # weno5_advection_2d), or by the rule's stencil spanning two distinct
+    # selector axes (e.g. the 5-point Laplacian's $x/$y entries). The
+    # classifier deliberately does NOT pattern-match on the
+    # manufactured_solution description string — that field is free-form
+    # prose, not machine-readable.
     if grid_family == "cartesian" && haskey(input_json, "axis")
+        return "2d_cartesian_periodic"
+    end
+    if grid_family == "cartesian" && _stencil_unique_axis_count(spec) >= 2
         return "2d_cartesian_periodic"
     end
 
@@ -889,6 +914,24 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     return "unsupported"
 end
 
+# Count the distinct selector axes a rule's stencil spans (generic schema
+# attribute — used by the topology classifier to distinguish 1D from 2D
+# cartesian rules). Entries without a `selector.axis` (e.g. cubed_sphere's
+# plural `selectors`) contribute nothing; rules without a stencil count 0.
+function _stencil_unique_axis_count(spec::AbstractDict)::Int
+    stencil = get(spec, "stencil", nothing)
+    stencil isa AbstractVector || return 0
+    axes = Set{String}()
+    for entry in stencil
+        entry isa AbstractDict || continue
+        selector = get(entry, "selector", nothing)
+        selector isa AbstractDict || continue
+        axis = get(selector, "axis", nothing)
+        axis isa AbstractString && push!(axes, String(axis))
+    end
+    return length(axes)
+end
+
 """
     _run_layer_b_canonical_grid(topology_key, rule, mms, n) -> Float64
 
@@ -902,6 +945,7 @@ gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 """
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
     topology_key == "1d_cartesian_periodic" && return _run_layer_b_1d_cartesian_periodic(rule, mms, n)
+    topology_key == "2d_cartesian_periodic" && return _run_layer_b_2d_cartesian_periodic(rule, mms, n)
     topology_key == "1d_vertical_column"    && return _run_layer_b_1d_vertical_column(rule, mms, n)
     topology_key == "2d_latlon_sphere"      && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     topology_key == "2d_arakawa_periodic"   && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
@@ -1253,7 +1297,10 @@ the array variable, and ESS does the rest.
    - stencil form → `lower_stencil_to_scheme` emits the
      `discretizations.<name>` scheme + `use:` rule (ESS RFC §7.2.1); or
    - replacement form → the `applies_to` pattern + the replacement AST
-     (arrayop wrapper stripped) as a plain document rule.
+     lowered to canonical `\$target` component form
+     (`lower_stencil_to_canonical_replacement`: `\$x → i`) as a plain
+     document rule. Canonical component names are position-based, so the
+     document's dimension names stay free on both paths.
 3. `EarthSciSerialization.discretize(esm; lift_1d_arrayop=true)` rewrites
    the PDE op via the rule engine / scheme expansion, lifts the equation
    to arrayop form with ranges from the grid, and folds periodic boundary
@@ -1262,14 +1309,6 @@ the array variable, and ESS does the rest.
    (tree-walk) into the ODE RHS `f!`.
 5. Set each `u[i] = mms.ic((i-0.5)/n)`, evaluate `f!(du, u0, p, 0)` once,
    and return the L_inf error against `mms.derivative((i-0.5)/n)`.
-
-The grid dimension is deliberately named `"i"`: replacement-form rules
-bind their `\$x` pattern variable to the *dimension name*, so naming the
-dimension after ESS's first canonical arrayop index makes the substituted
-`index(u, \$x ± off)` land on the index variable the arrayop lift
-introduces (the same convention ESS's own discretize tests use). Scheme
-expansion is name-independent (it materializes indices by dimension
-position), so the convention is harmless on that path.
 """
 function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     # 1. Load the rule spec.
@@ -1288,7 +1327,7 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
             "g" => Dict{String, Any}(
                 "family"     => "cartesian",
                 "dimensions" => Any[
-                    Dict{String, Any}("name" => "i", "size" => n,
+                    Dict{String, Any}("name" => "x", "size" => n,
                                       "periodic" => true, "spacing" => "uniform"),
                 ],
             ),
@@ -1299,7 +1338,7 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
                 "variables" => Dict{String, Any}(
                     "u" => Dict{String, Any}(
                         "type" => "state", "default" => 0.0, "units" => "1",
-                        "shape" => Any["i"], "location" => "cell_center",
+                        "shape" => Any["x"], "location" => "cell_center",
                     ),
                     "dx" => Dict{String, Any}(
                         "type" => "parameter", "default" => dx, "units" => "1",
@@ -1308,7 +1347,7 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
                 "equations" => Any[
                     Dict{String, Any}(
                         "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
-                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "i"),
+                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
                     ),
                 ],
             ),
@@ -1321,14 +1360,12 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
         esm["discretizations"] = Dict{String, Any}(rule.name => scheme)
         esm["rules"] = Any[use_rule]
     else
-        # Replacement form → plain pattern + replacement document rule.
-        repl = get(spec, "replacement", nothing)
-        repl isa AbstractDict || error("rule $(rule.name) carries neither stencil nor replacement")
-        expr = get(repl, "op", nothing) == "arrayop" ? repl["expr"] : repl
+        # Replacement form → plain pattern + replacement document rule with
+        # axis pattern variables lowered to canonical $target components.
         esm["rules"] = Any[Dict{String, Any}(
             "name"        => rule.name,
             "pattern"     => spec["applies_to"],
-            "replacement" => expr,
+            "replacement" => lower_stencil_to_canonical_replacement(spec),
         )]
     end
 
@@ -1344,6 +1381,98 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     du = similar(u0)
     f!(du, u0, p, 0.0)
     return maximum(abs(du[var_map["u[$(i)]"]] - mms.derivative(cell_x(i))) for i in 1:n)
+end
+
+"""
+    _run_layer_b_2d_cartesian_periodic(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for `grid_family=cartesian` rules whose
+stencil spans two axes (dsc-vst2; ArrayOp-native under dsc-kswm). Same
+document-driven design as `_run_layer_b_1d_cartesian_periodic`, on an
+n×n periodic grid:
+
+1. Build a PDE ESM document: 2D periodic cartesian grid (`x`, `y`, both
+   size `n`), array state `u` with `shape: ["x", "y"]`, parameters
+   `dx = dy = 1/n`, and the equation `D(u, wrt=t) = <applies_to on u>`
+   (e.g. `laplacian(u)`).
+2. Supply the rule as a pattern + replacement document rule, lowering the
+   catalog stencil via `lower_stencil_to_canonical_replacement`: a
+   dim-less pattern like `laplacian(\$u)` binds no axis variables, so the
+   replacement references `\$target`'s components by their canonical
+   names `i`/`j` (RFC §7.1 reserved keywords), which is position-based —
+   the document's dimension names stay free.
+3. `discretize` rewrites the PDE op, lifts to arrayop (multidimensional
+   variables lift by default — no `lift_1d_arrayop` needed), and folds
+   periodic boundary accesses; `build_evaluator` expands the arrayop
+   natively.
+4. Set `u[i,j] = mms.ic(x_i, y_j)`, evaluate `f!` once, and return the
+   L_inf error against `mms.derivative(x_i, y_j)`.
+"""
+function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
+    rule_doc = JSON.parse(read(rule.path, String))
+    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
+    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
+
+    expr = lower_stencil_to_canonical_replacement(spec)
+
+    h = 1.0 / n
+    cell(c) = (c - 0.5) * h
+
+    esm = Dict{String, Any}(
+        "esm"      => "0.4.0",
+        "metadata" => Dict{String, Any}("name" => "layer_b_2d_cartesian_periodic_n$(n)"),
+        "grids"    => Dict{String, Any}(
+            "g" => Dict{String, Any}(
+                "family"     => "cartesian",
+                "dimensions" => Any[
+                    Dict{String, Any}("name" => "x", "size" => n,
+                                      "periodic" => true, "spacing" => "uniform"),
+                    Dict{String, Any}("name" => "y", "size" => n,
+                                      "periodic" => true, "spacing" => "uniform"),
+                ],
+            ),
+        ),
+        "rules" => Any[Dict{String, Any}(
+            "name"        => rule.name,
+            "pattern"     => spec["applies_to"],
+            "replacement" => expr,
+        )],
+        "models" => Dict{String, Any}(
+            "M" => Dict{String, Any}(
+                "grid" => "g",
+                "variables" => Dict{String, Any}(
+                    "u" => Dict{String, Any}(
+                        "type" => "state", "default" => 0.0, "units" => "1",
+                        "shape" => Any["x", "y"], "location" => "cell_center",
+                    ),
+                    "dx" => Dict{String, Any}(
+                        "type" => "parameter", "default" => h, "units" => "1",
+                    ),
+                    "dy" => Dict{String, Any}(
+                        "type" => "parameter", "default" => h, "units" => "1",
+                    ),
+                ),
+                "equations" => Any[
+                    Dict{String, Any}(
+                        "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
+                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
+                    ),
+                ],
+            ),
+        ),
+    )
+
+    disc = EarthSciSerialization.discretize(esm)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    for j in 1:n, i in 1:n
+        u0[var_map["u[$(i),$(j)]"]] = mms.ic(cell(i), cell(j))
+    end
+    du = similar(u0)
+    f!(du, u0, p, 0.0)
+    return maximum(
+        abs(du[var_map["u[$(i),$(j)]"]] - mms.derivative(cell(i), cell(j)))
+        for j in 1:n, i in 1:n)
 end
 
 # Instantiate a rule's `applies_to` pattern as a concrete equation RHS:

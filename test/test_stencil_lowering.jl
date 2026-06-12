@@ -1131,3 +1131,87 @@ end
     @test err isa ArgumentError
     @test occursin("disagrees", err.msg)
 end
+
+@testitem "lower_stencil_to_canonical_replacement: multi-axis laplacian → i/j components" begin
+    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "laplacian_2nd_uniform_cartesian.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["laplacian_2nd_uniform_cartesian"])
+
+    expr = lower_stencil_to_canonical_replacement(rule)
+    @test expr["op"] == "+"
+    @test length(expr["args"]) == 6
+
+    # No axis pattern variables survive; the operand pattern variable does.
+    s = JSON.json(expr)
+    @test !occursin("\$x", s)
+    @test !occursin("\$y", s)
+    @test occursin("\$u", s)
+
+    # Entry 1: $x-axis offset -1 with $y untouched → index($u, i - 1, j)
+    # (sorted axis order: $x → i, $y → j; arakawa lowering keeps the
+    # entry's own axis offset and the bare component elsewhere).
+    idx1 = expr["args"][1]["args"][2]
+    @test idx1["op"] == "index"
+    @test String(idx1["args"][1]) == "\$u"
+    @test idx1["args"][2]["op"] == "+"
+    @test String(idx1["args"][2]["args"][1]) == "i"
+    @test Int(idx1["args"][2]["args"][2]) == -1
+    @test String(idx1["args"][3]) == "j"
+end
+
+@testitem "lower_stencil_to_canonical_replacement: replacement-form rule → dim var becomes i" begin
+    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "centered_2nd_uniform.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform"])
+
+    expr = lower_stencil_to_canonical_replacement(rule)
+    s = JSON.json(expr)
+    # The arrayop wrapper is stripped and $x is substituted with i.
+    @test expr["op"] != "arrayop"
+    @test !occursin("\$x", s)
+    @test occursin("\$u", s)
+    @test occursin("\"i\"", s)
+end
+
+@testitem "lower_stencil_to_canonical_replacement: rejects staggered and literal-axis stencils" begin
+    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
+
+    staggered = Dict{String, Any}(
+        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
+        "stencil" => Any[Dict(
+            "selector" => Dict("kind" => "arakawa", "axis" => "\$x", "offset" => 0,
+                               "stagger" => "face_x"),
+            "coeff" => 1,
+        )],
+    )
+    err = try lower_stencil_to_canonical_replacement(staggered); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("cell_center", err.msg)
+
+    literal_axis = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "lat"),
+        "stencil" => Any[Dict(
+            "selector" => Dict("kind" => "latlon", "axis" => "lat", "offset" => 1),
+            "coeff" => 1,
+        )],
+    )
+    err = try lower_stencil_to_canonical_replacement(literal_axis); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("pattern variable", err.msg)
+end
