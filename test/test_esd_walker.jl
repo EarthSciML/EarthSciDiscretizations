@@ -224,7 +224,11 @@ using TestItems
             # mms_kind="sin_2pi_x_cell_average", O(h⁴) edge interpolation);
             # its Layer-A canonical stub stays applicable:false pending
             # document-level multi-output emission.
-            ("finite_volume", "weno5_advection"),
+            # weno5_advection removed: now PASSes Layer-B via the
+            # ArrayOp-native 1d_cartesian_periodic runner with the auxiliary
+            # velocity field bound from _LAYER_B_MMS_AUX
+            # (mms_kind="sin_2pi_x_unit_advection", O(h⁵) Jiang-Shu FD-WENO);
+            # its Layer-A canonical stub stays applicable:false.
             ("finite_volume", "weno5_advection_2d"),
         ]
     )
@@ -254,6 +258,19 @@ using TestItems
             # measuring O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "weno5_advection"
+            # weno5_advection: Layer-A SKIPs via its applicable:false
+            # canonical stub. Layer-B passes via the ArrayOp-native
+            # 1d_cartesian_periodic runner: the rule's replacement AST
+            # (pattern div($U * $q, dim=$x)) lowers to canonical components,
+            # the auxiliary velocity $U binds to a frozen unit field per
+            # _LAYER_B_MMS_AUX, and the Jiang-Shu FD-WENO divergence
+            # measures O(h⁵) against d(U·u)/dx — clearing the fixture's
+            # expected_min_order of 4.7.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "ppm_reconstruction"
@@ -392,12 +409,14 @@ using TestItems
     # Layer B: esd-0ip lands the 1d_cartesian_periodic runner; esd-bbp extends
     # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic;
     # dsc-vst2 adds the ArrayOp-native 2d_cartesian_periodic runner and
-    # dsc-a7b2 the fv_cell_average_1d runner. Seven rules now PASS:
+    # dsc-a7b2 the fv_cell_average_1d runner; weno5_advection rides the
+    # 1d runner via auxiliary-field bindings. Eight rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
-    # laplacian_2nd_uniform_cartesian (O(h²) 5-point), and
-    # ppm_reconstruction (O(h⁴) CW84 edge interpolation). All remaining rules
+    # laplacian_2nd_uniform_cartesian (O(h²) 5-point), ppm_reconstruction
+    # (O(h⁴) CW84 edge interpolation), and weno5_advection (O(h⁵) FD-WENO
+    # advective divergence). All remaining rules
     # with applicable:true convergence fixtures continue to SKIP with
     # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
@@ -419,7 +438,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 7
+    @test layer_b_passes == 8
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

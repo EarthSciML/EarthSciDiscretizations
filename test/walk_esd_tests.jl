@@ -622,6 +622,34 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (xl, xr) -> (cos(2π * xl) - cos(2π * xr)) / (2π * (xr - xl)),
         derivative = x -> sin(2π * x),
     ),
+    # 1D periodic advection at unit speed, for flux-form advection rules
+    # whose pattern carries an auxiliary velocity field (e.g.
+    # `div($U * $q, dim=$x)`): u(x) = sin(2π x + 1) transported by U ≡ 1,
+    # so the divergence d(U·u)/dx = 2π cos(2π x + 1). The phase shift
+    # matches the fixture's declared `phase_shifted_sine` profile and
+    # keeps the field asymmetric w.r.t. the grid so no error component
+    # cancels by symmetry. The auxiliary binding lives in
+    # `_LAYER_B_MMS_AUX` under the same kind. Used by `weno5_advection`'s
+    # convergence fixture (`mms_kind="sin_2pi_x_unit_advection"`).
+    "sin_2pi_x_unit_advection" => (
+        ic = x -> sin(2π * x + 1.0),
+        derivative = x -> 2π * cos(2π * x + 1.0),
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Auxiliary-field table, keyed by `mms_kind`. Rules whose `applies_to`
+# pattern carries pattern variables beyond the transported state (e.g. the
+# velocity `$U` in `div($U * $q)`) need concrete document fields to bind
+# them to. Each entry maps a STRIPPED pattern-variable name (`"U"` for
+# `$U`) to the field's value — a constant, or a function of the cell-center
+# coordinate for space-varying fields. Runners declare one shaped state per
+# entry the rule's pattern actually uses, with a zero tendency equation,
+# and initialize its cells from the value. Pattern variables NOT named here
+# bind to the transported state `u`.
+# ---------------------------------------------------------------------------
+const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
+    "sin_2pi_x_unit_advection" => Dict{String, Any}("U" => 1.0),
 )
 
 # ---------------------------------------------------------------------------
@@ -755,10 +783,12 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     # can be driven; bare descriptive `manufactured_solution` strings SKIP
     # until the fixture is upgraded.
     mms_kind = String(get(input_json, "mms_kind", ""))
-    mms = get(_LAYER_B_MMS_CATALOG, mms_kind, nothing)
-    if mms === nothing
+    mms_base = get(_LAYER_B_MMS_CATALOG, mms_kind, nothing)
+    if mms_base === nothing
         return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (mms_kind=$(repr(mms_kind)) not registered in Layer-B MMS catalog)")
     end
+    # Attach the kind's auxiliary-field bindings (empty for most kinds).
+    mms = (; mms_base..., aux = get(_LAYER_B_MMS_AUX, mms_kind, Dict{String, Any}()))
 
     # Per-topology runner. Each family's implementation lands in a
     # follow-up bead under dsc-kswm. The dispatcher is the only place that
@@ -1357,6 +1387,40 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     dx = 1.0 / n
     cell_x(i) = (i - 0.5) * dx
 
+    # Pattern bindings: auxiliary pattern variables (declared in the MMS
+    # kind's aux table, e.g. the velocity $U of div($U * $q)) bind to their
+    # own shaped fields; everything else binds to the state u.
+    aux = hasproperty(mms, :aux) ? mms.aux : Dict{String, Any}()
+    bindings = _layer_b_pattern_bindings(spec["applies_to"], aux)
+    aux_fields = sort!(unique(String[v for v in values(bindings) if v != "u"]))
+
+    variables = Dict{String, Any}(
+        "u" => Dict{String, Any}(
+            "type" => "state", "default" => 0.0, "units" => "1",
+            "shape" => Any["x"], "location" => "cell_center",
+        ),
+        "dx" => Dict{String, Any}(
+            "type" => "parameter", "default" => dx, "units" => "1",
+        ),
+    )
+    equations = Any[
+        Dict{String, Any}(
+            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
+            "rhs" => _layer_b_instantiate_applies_to(spec, bindings, "x"),
+        ),
+    ]
+    for name in aux_fields
+        variables[name] = Dict{String, Any}(
+            "type" => "state", "default" => 0.0, "units" => "1",
+            "shape" => Any["x"], "location" => "cell_center",
+        )
+        # Frozen auxiliary field: zero tendency, cells set from the aux value.
+        push!(equations, Dict{String, Any}(
+            "lhs" => Dict{String, Any}("op" => "D", "args" => Any[name], "wrt" => "t"),
+            "rhs" => 0.0,
+        ))
+    end
+
     esm = Dict{String, Any}(
         "esm"      => "0.4.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_1d_cartesian_periodic_n$(n)"),
@@ -1371,22 +1435,9 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
         ),
         "models" => Dict{String, Any}(
             "M" => Dict{String, Any}(
-                "grid" => "g",
-                "variables" => Dict{String, Any}(
-                    "u" => Dict{String, Any}(
-                        "type" => "state", "default" => 0.0, "units" => "1",
-                        "shape" => Any["x"], "location" => "cell_center",
-                    ),
-                    "dx" => Dict{String, Any}(
-                        "type" => "parameter", "default" => dx, "units" => "1",
-                    ),
-                ),
-                "equations" => Any[
-                    Dict{String, Any}(
-                        "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
-                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
-                    ),
-                ],
+                "grid"      => "g",
+                "variables" => variables,
+                "equations" => equations,
             ),
         ),
     )
@@ -1411,9 +1462,16 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
     f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
 
-    # 5. MMS initial condition, single RHS evaluation, L_inf error.
+    # 5. MMS initial conditions (state + frozen auxiliary fields), single
+    # RHS evaluation, L_inf error over the state cells.
     for i in 1:n
         u0[var_map["u[$(i)]"]] = mms.ic(cell_x(i))
+    end
+    for name in aux_fields
+        val = aux[name]
+        for i in 1:n
+            u0[var_map["$(name)[$(i)]"]] = val isa Function ? Float64(val(cell_x(i))) : Float64(val)
+        end
     end
     du = similar(u0)
     f!(du, u0, p, 0.0)
@@ -1622,26 +1680,60 @@ function _run_layer_b_fv_cell_average_1d(rule::RuleFile, mms, n::Int)
     return worst
 end
 
+# Map every pattern variable in `applies_to.args` to a document variable
+# name: variables whose STRIPPED name appears in the MMS kind's auxiliary
+# table keep that name (auxiliary fields, e.g. `$U → U`); every other
+# pattern variable binds to the transported state `"u"`. Purely
+# declarative — the aux table, not rule identity, decides the split.
+function _layer_b_pattern_bindings(applies_to::AbstractDict, aux::AbstractDict)
+    bindings = Dict{String, String}()
+    walk(node) = if node isa AbstractString && startswith(String(node), "\$")
+        s = String(node)
+        bindings[s] = haskey(aux, s[2:end]) ? s[2:end] : "u"
+    elseif node isa AbstractDict
+        foreach(walk, get(node, "args", Any[]))
+    end
+    foreach(walk, get(applies_to, "args", Any[]))
+    return bindings
+end
+
 # Instantiate a rule's `applies_to` pattern as a concrete equation RHS:
-# the operand pattern variable becomes `operand` (the model's array state)
-# and the `dim` pattern variable (when present) becomes `dim_name` (the
-# grid dimension). Purely structural — mirrors how ESS pattern matching
-# will re-bind the same variables during `discretize`.
-function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String, dim_name::String)
+# each pattern variable in the args tree (including nested operands like
+# `div($U * $q)`) is substituted per `bindings`, and the `dim` pattern
+# variable (when present) becomes `dim_name` (the grid dimension). Purely
+# structural — mirrors how ESS pattern matching will re-bind the same
+# variables during `discretize`.
+function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
+                                         dim_name::String)
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || error("rule spec has no applies_to object")
+    subst(node) =
+        node isa AbstractString ? get(bindings, String(node), String(node)) :
+        node isa AbstractDict ? Dict{String, Any}(
+            String(k) => (String(k) == "args" ? Any[subst(a) for a in v] : v)
+            for (k, v) in node) :
+        node
     rhs = Dict{String, Any}(
         "op"   => String(applies_to["op"]),
-        "args" => Any[
-            (a isa AbstractString && startswith(String(a), "\$")) ? operand : a
-            for a in get(applies_to, "args", Any[])
-        ],
+        "args" => Any[subst(a) for a in get(applies_to, "args", Any[])],
     )
     dim = get(applies_to, "dim", nothing)
     if dim isa AbstractString
         rhs["dim"] = startswith(String(dim), "\$") ? dim_name : String(dim)
     end
     return rhs
+end
+
+# Convenience for runners without auxiliary fields: bind every pattern
+# variable to the single operand.
+function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String, dim_name::String)
+    applies_to = get(spec, "applies_to", nothing)
+    applies_to isa AbstractDict || error("rule spec has no applies_to object")
+    bindings = _layer_b_pattern_bindings(applies_to, Dict{String, Any}())
+    for k in keys(bindings)
+        bindings[k] = operand
+    end
+    return _layer_b_instantiate_applies_to(spec, bindings, dim_name)
 end
 
 # Translate one node of the rule's replacement AST to a scalar ESM expression
