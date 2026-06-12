@@ -267,8 +267,8 @@ Extend `u_interior` with ghost cells from neighbor panels, returning the
 ghost-extended array suitable for use with ArrayOp-based operators.
 
 This is the recommended entry point for preparing data for ArrayOp operators
-like `flux_1d_ppm_arrayop`, `fv_laplacian_extended`, and
-`transport_2d_ppm_arrayop`, which expect ghost-extended input arrays.
+like `flux_1d_ppm_arrayop` and `transport_2d_ppm_arrayop`, which expect
+ghost-extended input arrays.
 
 Returns the extended array of size (6, ni+2Ng, nj+2Ng).
 """

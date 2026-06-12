@@ -83,5 +83,6 @@ The committed dimensions are derived from the MPAS atmosphere mesh library
 (`https://mpas-dev.github.io/atmosphere/atmosphere_meshes.html`). If the mesh
 library revises a standard resolution's cell count, regenerate by reading the
 source mesh and updating the corresponding `.esm` dimensions block; then
-re-run the Julia walker (`test/test_mpas_fixtures.jl`) to confirm the closed-
-sphere Euler relations still hold.
+re-run the fixture tests (`python/tests/test_mpas_fixtures.py`, in particular
+`test_dimensions_obey_icosahedral_euler`) to confirm the closed-sphere Euler
+relations still hold.

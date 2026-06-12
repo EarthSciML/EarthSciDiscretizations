@@ -98,13 +98,17 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   per axis, O(h²). The schema decisions for the new `kind` and the
   stagger-enum convention are pinned in
   [`../SELECTOR_KINDS.md`](../SELECTOR_KINDS.md) (rows 6–9).
-  Layer-A fixture under `divergence_arakawa_c/fixtures/canonical/`
-  pins a 2×2 cell example (u(x,y) = x at face_x, v(x,y) = y² at
-  face_y → div = [[1.5, 2.5], [1.5, 2.5]]). Layer-B convergence
-  declares `applicable: false` — ESS's `verify_mms_convergence` is
-  wired only for 1D periodic Cartesian stencils today, so the 2D
-  staggered MMS sweep awaits an ESS harness extension; numeric
-  coverage continues to live alongside the runtime tests.
+  The Layer-A canonical fixture under
+  `divergence_arakawa_c/fixtures/canonical/` declares
+  `applicable: false` — ESS `parse_rule` today only consumes the
+  `pattern` + `replacement` schema, so the stencil-form rule cannot
+  be driven end-to-end through the canonical Layer-A pipeline yet;
+  the stub documents a 2×2 cell example (u(x,y) = x at face_x,
+  v(x,y) = y² at face_y → div = [[1.5, 2.5], [1.5, 2.5]]) for
+  promotion once ESS gains stencil-schema dispatch. Layer-B
+  convergence is **active**: an MMS sweep (F = (sin 2πx · cos 2πy,
+  cos 2πx · sin 2πy) on [0,1]² periodic, n = 16→128) driven by the
+  walker's `2d_arakawa_periodic` runner (`test/walk_esd_tests.jl`).
 - [`vertical_remap.json`](vertical_remap.json) — Lin (2004) MWR
   PPM-based conservative vertical remap with Colella-Woodward (1984)
   monotonicity limiting. Each old layer's parabolic profile is

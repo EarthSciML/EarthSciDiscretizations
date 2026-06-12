@@ -2,7 +2,8 @@
 
 This tutorial walks through writing a new discretization rule end-to-end
 in the closed-AST lowering pattern. The running example is
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) — the
+`centered_2nd_uniform` (rule page: `docs/content/rules/centered_2nd_uniform.md`
+in the Hugo catalog site) — the
 two-point centered finite difference for ∂u/∂x on a uniform Cartesian
 axis. It is the smallest rule in the catalog that exercises every step,
 and it is currently the canonical linear exemplar (commit `7b26ffd`).
@@ -14,8 +15,8 @@ By the end you will have:
 3. Delegated boundary handling to the domain's `boundary_conditions`
    block.
 4. Validated the rule with a Layer-A canonical-form fixture.
-5. Set up the Layer-B convergence sweep with a documented escape hatch
-   for the in-flight ESS prerequisite.
+5. Set up the Layer-B convergence sweep, which runs against the
+   closed-AST lowering for supported topologies.
 
 ## Step 1 — Match a §4.2 PDE operator
 
@@ -103,7 +104,7 @@ rewrites the index expressions at the boundary cells:
 
 | Domain BC | Index transformation applied to `$u[$x ± 1]` |
 |---|---|
-| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see the `periodic_bc` rule) |
 | `dirichlet` / `constant` | boundary cell reads the prescribed value |
 | `neumann` / `zero_gradient` | mirror the in-range neighbor (clamp the index) |
 | `robin` | mixed coefficient row at the boundary |
@@ -136,7 +137,7 @@ The catalog tests are the *defensive* layer — they confirm the rule
 parses, the metavariables resolve, and the lowering walks cleanly. They
 should pass before you proceed to Step 5.
 
-## Step 5 — Layer-B convergence sweep (and the ESS prerequisite)
+## Step 5 — Layer-B convergence sweep
 
 Layer B is an MMS (manufactured-solution) convergence sweep that
 verifies the rule's empirical order of accuracy on a refinement
@@ -144,14 +145,14 @@ sequence. Each rule ships an `input.esm` that names the manufactured
 solution and a sweep of grid sizes; the harness measures L∞ / L₂ error
 and fits a slope.
 
-There is an **in-flight prerequisite** worth flagging: the ESS
-`mms_evaluator` currently dispatches via the legacy `spec['stencil']`
-kernels rather than walking the closed `arrayop` lowering. Until ESS
-gains an AST-walker dispatch path (tracked as ESS `esm-4gw`), Layer B
-cannot exercise a closed-AST rule against the symbolic harness.
-
-The right escape hatch for this **specific** prerequisite is
-`applicable: false` with a `skip_reason` that names the blocker:
+Layer B is **active**: the walker (`test/walk_esd_tests.jl`) drives the
+sweep through the canonical `discretize → build_evaluator` pipeline for
+every topology with an implemented runner. The supported set is the
+walker's `_LAYER_B_SUPPORTED_TOPOLOGIES` — currently
+`1d_cartesian_periodic`, `1d_vertical_column`, `2d_latlon_sphere`, and
+`2d_arakawa_periodic`. The fixture declares a registered `mms_kind` so
+the runner can construct the manufactured solution; for our running
+example:
 
 ```json
 {
@@ -161,34 +162,33 @@ The right escape hatch for this **specific** prerequisite is
   "grids": [
     { "n": 16 }, { "n": 32 }, { "n": 64 }, { "n": 128 }
   ],
-  "applicable": false,
-  "skip_reason": "rule rewritten as closed arrayop replacement (dsc-rar); ESS mms_evaluator currently dispatches via spec['stencil'] kernels — Layer-B re-enables once ESS gains an AST-walker dispatch (see follow-up bead)."
+  "applicable": true,
+  "mms_kind": "sin_2pi_x_periodic"
 }
 ```
 
-`applicable: false` is **only** for blockers of this kind: an upstream
-prerequisite that, once landed, lets the *unmodified* fixture re-enable.
-It is **not** a general escape hatch for "the convergence test is hard
-to write", "we haven't verified the order yet", or "the MMS choice is
-wrong". A `skip_reason` that doesn't name a tracked blocker should not
-land.
-
-When ESS lands `esm-4gw`, the fixture flips to `applicable: true`
-without other edits and the sweep exercises the rule's `arrayop`
-lowering through the same evaluator the canonical tests use.
+`applicable: false` (paired with a `skip_reason` naming the tracked
+blocker) is the escape hatch for rules whose topology does not yet have
+a Layer-B runner, or whose acceptance signature isn't a
+manufactured-solution sweep (index-rewrite BC rules, TVD limiters). The
+walker surfaces those fixtures as structured SKIPs; once the runner for
+that topology lands, the fixture flips to `applicable: true` without
+other edits. It is **not** a general escape hatch for "the convergence
+test is hard to write", "we haven't verified the order yet", or "the
+MMS choice is wrong". A `skip_reason` that doesn't name a tracked
+blocker should not land.
 
 ## Step 6 — Document and link
 
 Each rule has a doc page under `docs/content/rules/<rule>.md`. Follow
-the structure of
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) —
+the structure of `docs/content/rules/centered_2nd_uniform.md` —
 overview, `applies_to` and `replacement` AST, BC handoff table,
 truncation derivation, convergence figure / status. Cross-link to
 related rules and to `esm-spec.md` §4.2 / §11.5 for the definitive
 operator and BC vocabulary.
 
 The catalog landing page at
-[`docs/content/rules/_index.md`]({{< ref "/rules" >}}) advertises the
+`docs/content/rules/_index.md` advertises the
 closed-AST lowering pattern as the default. New rules should match its
 framing; rules predating the migration carry a "legacy form" note on
 their page until they are rewritten.
@@ -215,7 +215,8 @@ To author a different rule, swap each piece:
 
 For a contributor-oriented walk through the surrounding repository
 infrastructure (paths, CI layers, registration), see the
-[Add a new discretization rule]({{< ref "/tutorials/add-a-rule" >}})
-companion tutorial — note that until that tutorial migrates to the new
+*Add a new discretization rule* companion tutorial
+(`docs/content/tutorials/add-a-rule/` in the Hugo catalog site) — note
+that until that tutorial migrates to the new
 pedagogy it still describes the legacy stencil/coefficient form on some
 steps.

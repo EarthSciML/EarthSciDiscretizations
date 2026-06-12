@@ -170,8 +170,10 @@ to the computational (ξ, η) coordinate system via the chain rule:
 
 Computed by analytically inverting the 2×2 forward Jacobian d(lon,lat)/d(ξ,η).
 Near the poles the determinant vanishes because (lon,lat) coordinates are
-singular there. A smooth regularization ensures the inverse remains bounded;
-for typical even-Nc grids no cell center falls on a pole.
+singular there. A threshold guard at |det| < 1e-10 keeps the inverse bounded
+(though the scaling is discontinuous at the threshold); for |det| ≥ 1e-10 the
+exact inverse 1/det is used. For typical even-Nc grids no cell center falls
+on a pole.
 """
 function compute_coord_jacobian(ξ, η, panel)
     fwd = compute_forward_jacobian(ξ, η, panel)
@@ -180,12 +182,14 @@ function compute_coord_jacobian(ξ, η, panel)
 
     det = dlon_dξ * dlat_dη - dlon_dη * dlat_dξ
 
-    # Smooth regularization near poles: use det² / (det² + ε²) scaling to
-    # avoid a hard clamp discontinuity. For |det| >> ε this is ~1; for
-    # |det| → 0 the result smoothly approaches zero.
+    # Threshold guard near poles: for |det| ≥ 1e-10 use the exact inverse
+    # 1/det; below the threshold switch to det/(det² + ε) so the scale stays
+    # bounded as |det| → 0 (approaching zero). Note this guard is
+    # discontinuous at the |det| = 1e-10 threshold — it is a bounded fallback,
+    # not a smooth regularization.
     ε_reg = 1.0e-14
     if abs(det) < 1.0e-10
-        scale = det / (det^2 + ε_reg)  # = 1/det · det²/(det² + ε) ≈ 1/det for |det| >> √ε
+        scale = det / (det^2 + ε_reg)  # bounded: |scale| ≤ 1/(2√ε); → 0 as det → 0
     else
         scale = 1.0 / det
     end

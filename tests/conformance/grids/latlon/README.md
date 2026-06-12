@@ -1,8 +1,10 @@
 # Lat-lon cross-language conformance harness
 
-Verifies that the grid-accessor bindings (Python, Rust, TypeScript — and
-Julia once `dsc-1ts` lands) produce numerically equivalent accessor output
-for the `lat_lon` family on a shared set of query points.
+Verifies that the grid-accessor bindings (Python, Rust, TypeScript)
+produce numerically equivalent accessor output for the `lat_lon` family
+on a shared set of query points. The Julia `lat_lon` runtime is on `main`
+(`src/grids/latlon.jl`); only its dedicated conformance runner against
+this golden is still pending (see "Reference binding").
 
 Scope follows the 2026-04-20 mayor correction (bead `dsc-suu`): the `.esm`
 grid artifact is a **declarative config**, not a serialized geometry blob.
@@ -23,15 +25,17 @@ points rather than serialized geometry bytes.
 ## Reference binding
 
 `docs/GRIDS_API.md` §4.3 pins **Julia as the reference binding** for ULP
-ties. The Julia `lat_lon` runtime is not yet on `main` (tracked by bead
-`dsc-1ts`), so the initial golden corpus is produced by the Python binding.
+ties. The Julia `lat_lon` runtime is on `main` (`src/grids/latlon.jl`,
+wired as `grids.lat_lon`, with unit tests in `test/test_lat_lon_grid.jl`
+and friends), but the golden corpus was produced by the Python binding
+before it landed.
 
 Downstream tests treat the golden as authoritative — they don't care which
-binding emitted it. Once `dsc-1ts` lands:
+binding emitted it. Still pending:
 
-1. Add a Julia conformance test under `test/test_lat_lon_conformance.jl`
+1. A dedicated Julia conformance test under `test/test_lat_lon_conformance.jl`
    mirroring the three existing per-binding tests.
-2. Regenerate the golden from Julia (or keep the Python script as a
+2. Regenerating the golden from Julia (or keeping the Python script as a
    cross-check); the contract is unchanged.
 
 ## Fixtures
@@ -93,9 +97,9 @@ this corpus by `rust/tests/lat_lon_rule_conformance.rs`.
 ## Indexing
 
 All query points and accessor outputs are `0`-indexed for row `j` and
-column `i`. The three implemented bindings use 0-based indexing natively;
-the Julia binding, once added, will convert at the boundary (matching the
-existing cubed-sphere pattern).
+column `i`. The Python, Rust, and TypeScript bindings use 0-based indexing
+natively; the Julia binding is 1-based and converts at the boundary
+(matching the existing cubed-sphere pattern).
 
 Neighbors for the `reduced_gaussian` variant use nearest-center column
 mapping between rows of differing `nlon` — each binding must implement the
@@ -127,5 +131,6 @@ cd rust && cargo test --test lat_lon_rule_conformance
 cd typescript && npm test -- lat_lon.conformance
 ```
 
-All three exiting 0 ⇒ bindings conform on this corpus. Once the Julia
-binding (bead `dsc-1ts`) lands, the Julia test will round out the matrix.
+All three exiting 0 ⇒ bindings conform on this corpus. A dedicated Julia
+conformance runner (`test/test_lat_lon_conformance.jl`) is still pending
+and will round out the matrix.

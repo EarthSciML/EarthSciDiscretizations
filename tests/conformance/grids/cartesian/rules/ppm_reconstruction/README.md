@@ -1,9 +1,13 @@
 # ppm_reconstruction — rule-eval cross-binding fixture
 
-Verifies that each binding's PPM reconstruction evaluator (TypeScript landed
-in dsc-rys; Python and Rust siblings in flight) reproduces the closed-form
-edge values and parabola samples to within the declared tolerance when fed
-the same on-disk multi-stencil rule and the same cell-averaged input field.
+Verifies that each binding's PPM reconstruction evaluator reproduces the
+closed-form edge values and parabola samples to within the declared
+tolerance when fed the same on-disk multi-stencil rule and the same
+cell-averaged input field. This fixture directory is consumed by the
+TypeScript test (landed in dsc-rys); the Rust sibling
+(`rust/tests/ppm_reconstruction_rule_conformance.rs`) drives the sibling
+harness `tests/conformance/rules/ppm_reconstruction/`. A Python sibling
+has not landed yet.
 
 ## Layout
 
@@ -48,5 +52,11 @@ is checked against an external reference rather than itself.
 cd typescript && npm test -- ppm_reconstruction.conformance
 ```
 
-### Python (in flight)
-### Rust (in flight)
+### Rust
+Runs against the sibling harness
+`tests/conformance/rules/ppm_reconstruction/`, not this fixture directory:
+```bash
+cd rust && cargo test --test ppm_reconstruction_rule_conformance
+```
+
+### Python (not yet landed)

@@ -9,8 +9,8 @@ The transport algorithms are based on the Lin-Rood (1996) dimensionally-split sc
 - **Cubed-sphere grid construction** with gnomonic equidistant projection, automatic metric tensor computation, and panel connectivity
 - **C-grid staggering** for scalar fields (cell centers), velocity components (U/V edges), and corner quantities
 - **Ghost cell management** for seamless inter-panel communication
-- **Finite-volume operators** implemented as symbolic `ArrayOp` expressions: divergence, gradient, Laplacian, PPM reconstruction, 1D flux, and 2D transport
-- **Discretization pipeline** with `FVCubedSphere` specification, operator registry, and initial condition projection
+- **Finite-volume operators** implemented as symbolic `ArrayOp` expressions: Laplacian, PPM reconstruction, 1D flux, and 2D transport
+- **Discretization pipeline** built on the JSON rule catalog (`discretizations/`): rule loading (`load_rules`), stencil-form → replacement-form lowering (`lower_stencil_to_replacement`), AST coefficient evaluation (`eval_coeff`), and initial-condition projection (`project_initial_condition`)
 
 ## Quick Start
 

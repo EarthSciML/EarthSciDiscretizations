@@ -12,7 +12,9 @@ pip resolves it via a `git+` URL with `subdirectory=packages/earthsci_toolkit`.
 
 ```bash
 pip install -e .[dev]
-# Optional ecosystem integration:
+# The `xarray` extra (xarray + pyproj) is declared for the planned
+# ecosystem grid views (docs/GRIDS_API.md §5.2); no integration code
+# consumes it yet:
 pip install -e .[dev,xarray]
 ```
 
@@ -21,7 +23,10 @@ pip install -e .[dev,xarray]
 - `src/earthsci_discretizations/` — package source
 - `src/earthsci_discretizations/grids/` — per-family grid accessor modules (one file per family)
 - `src/earthsci_discretizations/rules/` — discretization-rule runtime (AST
-  `eval_coeff`, rule loader, structured stencil application). Mirrors
+  `eval_coeff` adapter over `earthsci_toolkit.evaluate`, plus the
+  `load_rule` / `Rule` / `StencilEntry` rule loader). Stencil application,
+  ghost-cell synthesis, and parabola reconstruction are owned by the
+  canonical `earthsci_toolkit` pipeline, not duplicated here. Mirrors
   `src/rule_eval.jl` in the Julia binding.
 - `tests/` — pytest suite
 

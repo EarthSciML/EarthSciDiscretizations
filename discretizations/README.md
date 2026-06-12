@@ -5,8 +5,11 @@ describes how a continuous PDE operator maps onto a discrete stencil, grid
 staggering, and boundary-condition handling.
 
 Rule files are validated against the EarthSciSerialization discretization
-schema (§7). Validation and application are performed by the ESS rule engine
-once it lands; until then, these files are parsed as opaque JSON.
+schema (§7). Validation and application are performed by the live ESS rule
+engine: `parse_rule` consumes replacement-form rules, coefficient ASTs
+evaluate via `eval_coeff` (a passthrough to ESS
+`parse_expression`/`evaluate_expr`), and `discretize → ArrayOp → eval`
+drives the canonical pipeline exercised by `../test/walk_esd_tests.jl`.
 
 **AST-first authoring policy.** Express all math directly in the
 ExpressionNode AST (ESS §7; see `../AGENTS.md` "Authoring discretization
@@ -56,6 +59,7 @@ To drive a stencil-form rule through `discretize`, lower it to
 replacement form first via
 [`EarthSciDiscretizations.lower_stencil_to_replacement`](../src/stencil_lowering.jl)
 (dsc-y0jj). The lowerer is a pure AST → AST transform — no per-rule-shape
-dispatch, no numerical evaluation. Currently supports `cartesian` selector
-kind; other kinds raise `ArgumentError` until their lowering rows are
-added (composes as a separate dispatch branch per kind).
+dispatch, no numerical evaluation. Currently supports the `cartesian`,
+`arakawa`, `latlon`, `cubed_sphere`, and `vertical` selector kinds; other
+kinds (`indirect`, `reduction`, …) raise `ArgumentError` until their
+lowering rows are added (composes as a separate dispatch branch per kind).

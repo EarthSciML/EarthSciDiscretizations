@@ -58,10 +58,10 @@ Per-binding entry points (each is a passthrough to ESS):
 
 | Binding    | ESD entry point                                           | Delegates to                                                      |
 |------------|-----------------------------------------------------------|-------------------------------------------------------------------|
-| Julia      | `EarthSciDiscretizations.eval_coeff` (`src/rule_eval.jl`) | `EarthSciSerialization.evaluate`                                  |
-| Python     | `earthsci_discretizations.rules` (`python/src/earthsci_discretizations/rules/`) | the `earthsci_serialization` Python evaluator        |
-| Rust       | `rule_eval` (`rust/src/rule_eval.rs`)                     | the `earthsci_serialization` Rust evaluator                       |
-| TypeScript | `rules/` (`typescript/src/rules/`)                        | the `earthsci_serialization` TypeScript evaluator                 |
+| Julia      | `EarthSciDiscretizations.eval_coeff` (`src/rule_eval.jl`) | `EarthSciSerialization.parse_expression` + `evaluate_expr`        |
+| Python     | `earthsci_discretizations.rules` (`python/src/earthsci_discretizations/rules/`) | `earthsci_toolkit.evaluate` (Python)                 |
+| Rust       | `rule_eval` (`rust/src/rule_eval.rs`)                     | `earthsci_toolkit::evaluate` (the `earthsci-toolkit` crate)       |
+| TypeScript | `rules/` (`typescript/src/rules/`)                        | `evaluate` from the `earthsci-toolkit` npm package                |
 
 A binding-level file with non-trivial math, branch logic, or op
 dispatch is a bug, not a feature. Passthrough means: marshal inputs,
@@ -96,4 +96,5 @@ The project's `julia` compat is therefore `"1.11"`.
 For local development against an in-progress ESS checkout (Gas Town
 workspace), `scripts/setup_polecat_env.sh` Pkg.develops a local path —
 the explicit develop entry overrides the `[sources]` URL until you
-remove it. The script is no longer required for CI.
+remove it. CI still runs this same script as a mandatory step
+(`.github/workflows/Tests.yml`), so polecats and CI share one setup path.

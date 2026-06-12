@@ -22,7 +22,10 @@ cargo build
 cargo test
 ```
 
-Optional ecosystem features (per `docs/GRIDS_API.md` §5.3):
+The `geo` and `proj` cargo features are declared placeholders for the
+planned ecosystem integrations (`docs/GRIDS_API.md` §5.3); they pull in
+the dependencies but gate no code yet, so enabling them currently adds
+no functionality:
 
 ```bash
 cargo build --features geo,proj

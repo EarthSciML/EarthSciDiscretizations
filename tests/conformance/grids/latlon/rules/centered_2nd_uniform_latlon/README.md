@@ -1,10 +1,14 @@
 # centered_2nd_uniform_latlon — rule-eval cross-binding fixture
 
-Verifies that the per-binding rule evaluators (Julia `eval_coeff`, the
-TypeScript `rules.evaluate` introduced in dsc-e1g, and the Python +
-Rust siblings under dsc-ve1 / dsc-k86) produce numerically identical
-coefficient values when fed the same ESS-emitted ExpressionNode AST and
-the same bindings.
+Binding-independent golden for the `centered_2nd_uniform_latlon` rule's
+stencil coefficients, consumed by the TypeScript conformance tests
+(`typescript/tests/centered_2nd_uniform_latlon.conformance.test.ts`,
+exercising the `rules.evaluate` evaluator introduced in dsc-e1g). The
+other bindings' rule evaluators are checked against sibling harnesses:
+Python (`python/tests/test_lat_lon_rule_conformance.py`) drives
+`tests/conformance/rules/centered_2nd_uniform_latlon/`, and Rust
+(`rust/tests/lat_lon_rule_conformance.rs`) drives the `rule_evals`
+blocks in `tests/conformance/grids/latlon/golden/`.
 
 ## Layout
 
@@ -52,5 +56,10 @@ against an external reference rather than itself.
 cd typescript && npm test -- centered_2nd_uniform_latlon.conformance
 ```
 
-### Python (dsc-ve1, in flight)
-### Rust (dsc-k86, in flight)
+The Python (dsc-ve1) and Rust (dsc-k86) rule-conformance tests run
+against the sibling harnesses noted above, not this fixture directory:
+
+```bash
+cd python && PYTHONPATH=src pytest tests/test_lat_lon_rule_conformance.py
+cd rust && cargo test --test lat_lon_rule_conformance
+```

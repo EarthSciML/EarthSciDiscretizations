@@ -73,8 +73,9 @@ The shape of `axis_args_i` depends on the stencil family:
 - **latlon** (`kind="latlon"`): multi-axis with literal geographic axis
   names (e.g. `"lon"`, `"lat"`). Unlike arakawa, the axis field is a
   literal string (not a `\$`-prefixed pattern variable). The sorted set
-  of unique axis names defines the positional dimension order. Each entry
-  contributes `index(operand, lon_arg, lat_arg)` where the entry's axis
+  of unique axis names defines the positional dimension order (`"lat"`
+  sorts before `"lon"`). Each entry
+  contributes `index(operand, lat_arg, lon_arg)` where the entry's axis
   slot carries `axis + offset` and other slots carry the bare literal axis
   name. No `stagger` field is required. `applies_to.dim` is present but
   not used — axis names are intrinsic to the stencil entries.
@@ -83,8 +84,9 @@ The shape of `axis_args_i` depends on the stencil family:
   `selectors` array (not the singular `selector` key). Each stencil entry
   carries one selector per axis (e.g. `xi` and `eta`), each specifying an
   independent integer offset. The sorted set of all unique axis names
-  defines the positional dimension order. Each entry contributes
-  `index(operand, xi_arg, eta_arg)` built from its own selector offsets.
+  defines the positional dimension order (`"eta"` sorts before `"xi"`).
+  Each entry contributes
+  `index(operand, eta_arg, xi_arg)` built from its own selector offsets.
   `applies_to.dim` is not required.
 
 - **vertical** (`kind="vertical"`): single-axis with a required `stagger`

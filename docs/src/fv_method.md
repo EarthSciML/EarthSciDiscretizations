@@ -39,7 +39,8 @@ cell area. The rule does not need a custom dispatcher to express this: the
 ## Worked example: `centered_2nd_uniform`
 
 The smallest rule in the catalog —
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}),
+`centered_2nd_uniform` (rule page:
+`docs/content/rules/centered_2nd_uniform.md` in the Hugo catalog site),
 landed in commit `7b26ffd` — is the canonical exemplar of the closed-AST
 lowering pattern. It targets `grad(u, dim=x)` on a uniform Cartesian axis.
 
@@ -114,7 +115,7 @@ concrete indices**. The lowered AST does not contain `bc:*` ops.
 
 | Domain BC | Index transformation applied to `$u[$x ± 1]` |
 |---|---|
-| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see the `periodic_bc` rule) |
 | `dirichlet` / `constant` | boundary cell reads the prescribed value |
 | `neumann` / `zero_gradient` | mirror in-range neighbor (clamp the index) |
 | `robin` | mixed coefficient row at the boundary |

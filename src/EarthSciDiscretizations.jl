@@ -45,7 +45,7 @@ include("operators/transport_2d.jl")
 # PPM edge reconstruction (`ppm_edge.jl`) ported to
 # `discretizations/finite_volume/ppm_edge_cubed_sphere.json`. See dsc-9yh.
 
-# Boundary-condition handler
+# Initial-condition projection
 include("bc_handler.jl")
 
 # Discretization rule catalog (parser delegator; ESS integration pending)

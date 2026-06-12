@@ -6,9 +6,10 @@ The full reconstruction stencil (4th-order edge interpolation + CW84
 monotonicity limiter) is encoded declaratively in
 `discretizations/finite_volume/ppm_reconstruction.json` and exercised by the
 ESS rule walker (Layer-B convergence). The helpers below remain because
-they are still used by the schema-gated Bucket-B operators
-(`flux_1d.jl`, `vertical_remap.jl`) and by the symbolic ArrayOp variant
-that drives `transport_2d.jl`.
+they are still used by the schema-gated Bucket-B operator (`flux_1d.jl`)
+and by the symbolic ArrayOp variant that drives `transport_2d.jl`. The
+former vertical-remap consumer has been ported to the JSON rule
+`discretizations/finite_volume/vertical_remap.json`.
 """
 
 """

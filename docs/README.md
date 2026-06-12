@@ -33,8 +33,9 @@ docsets coexist without conflict.
 ## Build
 
 ```bash
-# 1. Render plot artifacts into static/plots/.
-python3 ../tools/render_doc_plots.py
+# 1. Render plot artifacts into static/plots/ (run from docs/; the
+#    script's default --out is repo-root-relative `docs/static/plots`).
+python3 ../tools/render_doc_plots.py --out static/plots
 
 # 2. Build the Hugo site.
 hugo --source . --minify --destination public
@@ -51,12 +52,15 @@ cartopy, no Julia. It produces:
 
 - 7 grid-family visualizations (cartesian, latlon, cubed_sphere, mpas,
   duo, vertical, arakawa)
-- 11 rule stencil / coefficient diagrams
-- 3 convergence plots — for the rules whose Layer-B fixtures are
-  currently producing (`centered_2nd_uniform`,
-  `centered_2nd_uniform_vertical`, `upwind_1st`).
+- a stencil / coefficient diagram for each rule in the script's
+  `ALL_RULES` list — currently 13
+- a convergence plot for each rule in the script's `APPLICABLE` list
+  (the rules whose Layer-B fixtures are currently producing) —
+  currently 6: `centered_2nd_uniform`, `centered_2nd_uniform_vertical`,
+  `centered_2nd_uniform_latlon`, `upwind_1st`, `ppm_reconstruction`,
+  `weno5_advection_2d`.
 
-Convergence plots for the other 8 rules are **gated on in-flight ESS
+Convergence plots for the remaining 7 rules are **gated on in-flight ESS
 harness extensions** in
 `EarthSciSerialization/packages/EarthSciSerialization.jl/src/mms_evaluator.jl`
 (2D dispatch + per-cell metric callables, MPAS unstructured support,

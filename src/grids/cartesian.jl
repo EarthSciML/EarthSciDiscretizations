@@ -362,15 +362,15 @@ end
 """
     as_meshes(grid::CartesianGrid)
 
-Return a `Meshes.CartesianGrid` view of the grid. Requires `Meshes.jl` to
-be loaded; if not available, an `ArgumentError` instructs the caller. Per
-GRIDS_API.md §5.1, the fallback (no Meshes.jl) is always usable through
-the accessors above.
+Placeholder for a `Meshes.CartesianGrid` view of the grid. The Meshes.jl
+integration is not yet implemented, so this method always throws an
+`ArgumentError` regardless of whether Meshes.jl is loaded. Per
+GRIDS_API.md §5.1, the grid is always usable through the accessors above.
 """
 function as_meshes(::CartesianGrid)
     throw(
         ArgumentError(
-            "as_meshes requires Meshes.jl. Install and `using Meshes` to enable; " *
+            "as_meshes: Meshes.jl integration is not yet implemented; " *
                 "the cartesian generator + accessors work without it."
         )
     )

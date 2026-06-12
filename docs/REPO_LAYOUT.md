@@ -37,7 +37,10 @@ EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 ├── discretizations/      Discretization rule JSON files (catalog)
 │   ├── finite_difference/
 │   ├── finite_volume/
+│   ├── grids/            Grid-family schemas + fixtures (cartesian, lat_lon, mpas, vertical, …)
 │   └── spectral/
+├── tests/                Cross-binding conformance fixtures (grids, rules, discretization)
+├── tools/                Doc plot / rule-matrix rendering scripts
 ├── .github/workflows/    CI workflows (Tests, Python, Rust, TypeScript, …)
 └── README.md
 ```

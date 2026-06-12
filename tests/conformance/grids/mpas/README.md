@@ -19,7 +19,6 @@ rather than serialized geometry bytes.
   see below)
 - `regenerate_golden.py` — Python regenerator; see "Regenerating" below
 - `../../../../test/test_mpas_conformance.jl` — Julia conformance test
-  (currently `@test_skip` pending bead dsc-7j0)
 - `../../../../python/tests/test_mpas_conformance.py` — Python test
 - `../../../../rust/tests/mpas_conformance.rs` — Rust test
 - `../../../../typescript/tests/mpas.conformance.test.ts` — TypeScript test
@@ -85,28 +84,25 @@ use `-1` to mark "no neighbor" / "no edge" in the `cells_on_cell` /
 `edges_on_cell` / `cells_on_edge` slots, matching the Python/Rust/TS
 convention documented in each binding's `mpas` module.
 
-## Reference binding (interim)
+## Reference binding
 
 Per `docs/GRIDS_API.md` §4.3, Julia is the canonical reference binding
-for ULP ties. The mpas-specific complication is that the Julia mpas
-runtime is still landing on bead **dsc-7j0**
-(`src/grids/mpas.jl`). Until that bead closes, **Python is the interim
-reference binding** for the mpas family:
+for ULP ties. For the mpas family the golden corpus was emitted by the
+Python binding (the harness predates the Julia mpas runtime, which
+landed on bead dsc-7j0 as `src/grids/mpas.jl`):
 
 - `regenerate_golden.py` uses `earthsci_discretizations.grids.mpas` to emit
   `golden/*.json`.
-- `test/test_mpas_conformance.jl` asserts the harness files exist and
-  `@test_skip`s the accessor comparison with a clear message pointing at
-  dsc-7j0. When the Julia `MpasGrid` lands, that skip guard flips and the
-  Julia runner runs the same accessor comparison as the other three
-  bindings.
+- `test/test_mpas_conformance.jl` builds the Julia `MpasGrid` from the
+  inline mesh arrays and runs the same accessor comparison as the other
+  three bindings.
 
 The accessor output on this mesh is stored, not recomputed — so the
 Python-vs-Julia reference choice does not materially affect observed
 golden values beyond the existing `1e-12` tolerance. A follow-up polecat
-can re-emit `golden/*.json` from Julia once dsc-7j0 lands; if the
-numbers shift within tolerance, the harness will still pass for all
-bindings without further changes.
+can re-emit `golden/*.json` from Julia; if the numbers shift within
+tolerance, the harness will still pass for all bindings without further
+changes.
 
 ## Regenerating the golden
 
@@ -134,8 +130,6 @@ The Python package must be importable: run with
 ```bash
 julia --project=. -e 'using Pkg; Pkg.test(test_args=["--tag=mpas"])'
 ```
-(Until dsc-7j0 lands, the accessor step is `@test_skip`; the structural
-file-presence checks still run.)
 
 ### Python
 ```bash
@@ -152,5 +146,4 @@ cd rust && cargo test --test mpas_conformance
 cd typescript && npm test -- mpas.conformance
 ```
 
-All three currently-wired bindings exit 0 ⇒ bindings conform on this
-corpus. The Julia runner will join once dsc-7j0 lands.
+All four bindings exit 0 ⇒ bindings conform on this corpus.

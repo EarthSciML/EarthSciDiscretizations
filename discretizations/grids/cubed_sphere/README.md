@@ -43,9 +43,10 @@ cross-binding byte-identity is promised on the declarative portion alone
 ## Provenance
 
 - **Reference binding**: Julia (per `docs/GRIDS_API.md` §4.3 tie-break rule).
-- **Generated via**: the canonical declarative shape emitted by
-  `EarthSciDiscretizations.grids.cubed_sphere(Nc = N, R = 6.371e6).to_esm()`
-  with `provenance` stripped.
+- **Generated via**: the hand-built declarative document in the
+  [Regenerating](#regenerating) script below (family / version / dtype /
+  topology / generator plus `params` with `Nc`, `R = 6.371e6`,
+  `ghosts = 0`); no `provenance` block is emitted.
 - **Verified cross-binding**: the same `(family, generator, params)` tuple
   produces bit-identical accessor outputs under the cubed-sphere conformance
   harness at `tests/conformance/grids/cubed_sphere/` (landed in `dsc-fgq`),
