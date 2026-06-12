@@ -214,7 +214,8 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
 end
 
 """
-    lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict)
+    lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
+                            output::Union{Nothing,AbstractString}=nothing)
         -> (scheme::Dict{String,Any}, use_rule::Dict{String,Any})
 
 Lower a stencil-form catalog rule to the two ESM document parts ESS's
@@ -242,13 +243,24 @@ ESS `expand_scheme`. Mirroring the ESS cartesian foundation, only
 corresponding selector dispatch — cubed-sphere panel esm-57f,
 unstructured esm-bpr).
 
+Multi-output rules (catalog extension ahead of the RFC: `stencil` is an
+**object keyed by output name**, e.g. `ppm_reconstruction`'s
+`q_left_edge` / `q_right_edge`) lower **one output at a time**: pass
+`output=<name>` to select the entry list. Each output is an ordinary
+single-axis cartesian stencil from ESS's point of view, so the emitted
+scheme + `use:` rule drive the canonical pipeline unchanged; one ESM
+document carries one output's scheme. Document-level multi-output
+emission (a single rewrite producing every named output) awaits an RFC
+§7 extension and is not expressible here.
+
 Errors (`ArgumentError`): missing/empty `stencil`; malformed
 `applies_to` (no `\$`-operand or non-`\$` `dim`); `grid_family` other
 than `"cartesian"`; any selector with `kind != "cartesian"`, a
 non-integer `offset`, or an `axis` disagreeing with `applies_to.dim`;
 unsupported `combine`.
 """
-function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict)
+function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
+                                 output::Union{Nothing, AbstractString} = nothing)
     haskey(rule, "stencil") || throw(
         ArgumentError(
             "lower_stencil_to_scheme: rule has no 'stencil' array (replacement-form " *
@@ -274,7 +286,31 @@ function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict)
         ),
     )
 
-    stencil = rule["stencil"]
+    stencil_field = rule["stencil"]
+    stencil = if stencil_field isa AbstractDict
+        output === nothing && throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: rule carries a multi-output stencil object " *
+                    "(outputs: $(join(sort!(collect(String.(keys(stencil_field)))), ", "))); " *
+                    "pass output=<name> to select one",
+            ),
+        )
+        haskey(stencil_field, output) || throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: no stencil output named '$output' " *
+                    "(available: $(join(sort!(collect(String.(keys(stencil_field)))), ", ")))",
+            ),
+        )
+        stencil_field[output]
+    else
+        output === nothing || throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: output='$output' given but the rule's " *
+                    "stencil is a flat (single-output) array",
+            ),
+        )
+        stencil_field
+    end
     stencil isa AbstractVector && !isempty(stencil) || throw(
         ArgumentError(
             "lower_stencil_to_scheme: 'stencil' must be a non-empty array",

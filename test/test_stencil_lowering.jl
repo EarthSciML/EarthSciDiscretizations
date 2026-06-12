@@ -1215,3 +1215,53 @@ end
     @test err isa ArgumentError
     @test occursin("pattern variable", err.msg)
 end
+
+@testitem "lower_stencil_to_scheme: multi-output stencil object lowers per output" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_volume",
+        "ppm_reconstruction.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["ppm_reconstruction"])
+
+    # Without output= the multi-output object is ambiguous.
+    err = try lower_stencil_to_scheme("ppm_reconstruction", rule); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("multi-output", err.msg)
+    @test occursin("q_left_edge", err.msg)
+
+    # Unknown output names are rejected with the available set.
+    err = try lower_stencil_to_scheme("ppm_reconstruction", rule; output = "nope"); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("q_right_edge", err.msg)
+
+    # Each named output lowers to an ordinary single-axis cartesian scheme.
+    scheme, use_rule = lower_stencil_to_scheme("ppm_reconstruction", rule; output = "q_left_edge")
+    @test scheme["grid_family"] == "cartesian"
+    @test length(scheme["stencil"]) == 4
+    offsets = [e["selector"]["offset"] for e in scheme["stencil"]]
+    @test offsets == [-2, -1, 0, 1]
+    @test use_rule["pattern"] == rule["applies_to"]
+    @test use_rule["use"] == "ppm_reconstruction"
+
+    scheme_r, _ = lower_stencil_to_scheme("ppm_reconstruction", rule; output = "q_right_edge")
+    @test [e["selector"]["offset"] for e in scheme_r["stencil"]] == [-1, 0, 1, 2]
+
+    # output= on a flat single-output stencil is an authoring error.
+    flat = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
+        "grid_family" => "cartesian",
+        "stencil" => Any[Dict(
+            "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 0),
+            "coeff" => 1,
+        )],
+    )
+    err = try lower_stencil_to_scheme("r", flat; output = "q_left_edge"); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("flat", err.msg)
+end

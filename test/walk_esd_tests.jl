@@ -605,6 +605,23 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (x, y) -> sin(2π * x) * sin(2π * y),
         derivative = (x, y) -> -8 * π^2 * sin(2π * x) * sin(2π * y),
     ),
+    # 1D periodic sine in CELL-AVERAGE form, for FV reconstruction rules
+    # (`fv_cell_average_1d` topology). Unlike the point-sample kinds above,
+    # `ic(xl, xr)` returns the EXACT average of sin(2πx) over the cell
+    # [xl, xr]:
+    #
+    #   (1/(xr−xl)) ∫ sin(2πx) dx = (cos(2π xl) − cos(2π xr)) / (2π (xr−xl))
+    #
+    # and `derivative(x)` is the point VALUE sin(2πx) at the queried
+    # coordinate — reconstruction rules estimate point values (e.g. cell-edge
+    # values) from cell averages, so the analytic target is the field itself,
+    # evaluated wherever the output's stencil support says it lives. Used by
+    # `ppm_reconstruction`'s convergence fixture
+    # (`mms_kind="sin_2pi_x_cell_average"`).
+    "sin_2pi_x_cell_average" => (
+        ic = (xl, xr) -> (cos(2π * xl) - cos(2π * xr)) / (2π * (xr - xl)),
+        derivative = x -> sin(2π * x),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -652,6 +669,15 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # kwarg needed — multidimensional equations lift by default. Activated
     # for `laplacian_2nd_uniform_cartesian` (O(h²) 5-point Laplacian).
     "2d_cartesian_periodic",
+    # `fv_cell_average_1d` (dsc-a7b2) — ArrayOp-native runner for FV
+    # reconstruction rules: the IC is the EXACT cell average of the MMS
+    # field, and each named stencil output (multi-output stencil objects
+    # lower one output per ESM document via
+    # `lower_stencil_to_scheme(...; output=...)`) is compared against the
+    # point value at the location its offset-support midpoint implies
+    # (±1/2 → cell edge). Activated for `ppm_reconstruction` (CW84
+    # unlimited edge interpolation, O(h³)+).
+    "fv_cell_average_1d",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -718,9 +744,9 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
         bead = get(_LAYER_B_TOPOLOGY_TRACKING, topology_key, "no follow-up bead recorded")
         return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (topology=$topology_key; tracked at $(bead))")
     end
-    if topology_key == "1d_cartesian_periodic" && !_ESS_SUPPORTS_LIFT_1D
+    if topology_key in ("1d_cartesian_periodic", "fv_cell_average_1d") && !_ESS_SUPPORTS_LIFT_1D
         return LayerResult(LAYER_SKIP,
-            "1d_cartesian_periodic runner requires EarthSciSerialization.discretize(...; " *
+            "$(topology_key) runner requires EarthSciSerialization.discretize(...; " *
             "lift_1d_arrayop=true); the resolved ESS version predates it — update ESS to " *
             "enable the ArrayOp-native Layer-B path")
     end
@@ -826,12 +852,22 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     # at evaluation time. If the lowering throws (unsupported family), we fall
     # back to `stencil_form_rule` so the walker surfaces a SKIP with the
     # tracking bead. Rules that already carry a `replacement` field pass
-    # through unchanged (lowering is idempotent).
+    # through unchanged (lowering is idempotent). Multi-output stencil
+    # OBJECTS (keyed by output name, e.g. ppm_reconstruction) are drivable
+    # one output at a time by the fv_cell_average_1d runner when the
+    # fixture declares cell-average sampling; otherwise they remain
+    # `stencil_form_rule` (document-level multi-output emission pends an
+    # RFC §7 extension).
     if haskey(spec, "stencil") && !haskey(spec, "replacement")
-        try
-            lower_stencil_to_replacement(spec)
-        catch _
-            return "stencil_form_rule"
+        if spec["stencil"] isa AbstractDict
+            sampling_early = String(get(input_json, "sampling", "cell_center"))
+            sampling_early == "cell_average" || return "stencil_form_rule"
+        else
+            try
+                lower_stencil_to_replacement(spec)
+            catch _
+                return "stencil_form_rule"
+            end
         end
     end
 
@@ -946,6 +982,7 @@ gates on `_LAYER_B_SUPPORTED_TOPOLOGIES` first.
 function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFile, mms, n::Int)
     topology_key == "1d_cartesian_periodic" && return _run_layer_b_1d_cartesian_periodic(rule, mms, n)
     topology_key == "2d_cartesian_periodic" && return _run_layer_b_2d_cartesian_periodic(rule, mms, n)
+    topology_key == "fv_cell_average_1d"    && return _run_layer_b_fv_cell_average_1d(rule, mms, n)
     topology_key == "1d_vertical_column"    && return _run_layer_b_1d_vertical_column(rule, mms, n)
     topology_key == "2d_latlon_sphere"      && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     topology_key == "2d_arakawa_periodic"   && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
@@ -1473,6 +1510,116 @@ function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     return maximum(
         abs(du[var_map["u[$(i),$(j)]"]] - mms.derivative(cell(i), cell(j)))
         for j in 1:n, i in 1:n)
+end
+
+"""
+    _run_layer_b_fv_cell_average_1d(rule, mms, n) -> Float64
+
+Layer-B canonical-pipeline runner for FV reconstruction rules whose
+convergence fixture declares `sampling: "cell_average"` (dsc-a7b2;
+ArrayOp-native under dsc-kswm). Reconstruction rules estimate point
+values from cell AVERAGES, so this runner differs from the point-sample
+families in two ways:
+
+- The IC is the **exact cell average** of the MMS field:
+  `u[i] = mms.ic(x_{i-1}, x_i)` over the cell bounds (no quadrature
+  error pollutes the convergence order).
+- The analytic target for each output is the **point value**
+  `mms.derivative(x)` at the location the output's stencil support
+  implies: the midpoint of the offset range. CW84's `q_left_edge`
+  spans offsets `{-2..1}` → midpoint −1/2 → the cell's left edge
+  `x_{i-1/2}`; `q_right_edge` spans `{-1..2}` → +1/2 → `x_{i+1/2}`.
+  This is a generic schema attribute (stencil support), not per-rule
+  dispatch.
+
+Multi-output stencil objects (the catalog's extension ahead of the RFC —
+`stencil` keyed by output name) lower **one output per ESM document**
+via `lower_stencil_to_scheme(...; output=...)`; each document drives the
+ordinary scheme + `use:` pipeline and the runner returns the worst
+L_inf error across outputs. Document-level multi-output emission (one
+rewrite producing all named outputs at once, needed for the Layer-A
+canonical byte contract) awaits an RFC §7 extension — this runner
+covers the numerical-convergence acceptance only.
+
+Outputs documented without stencil rows (e.g. CW84's `parabola.{a_L,
+a_R, da, a_6}` block) cannot be driven through the pipeline and are not
+exercised here.
+"""
+function _run_layer_b_fv_cell_average_1d(rule::RuleFile, mms, n::Int)
+    rule_doc = JSON.parse(read(rule.path, String))
+    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
+    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
+    stencil_field = get(spec, "stencil", nothing)
+    stencil_field !== nothing || error(
+        "fv_cell_average_1d runner requires a stencil-form rule; $(rule.name) has none")
+
+    outputs = stencil_field isa AbstractDict ?
+        Any[String(k) for k in sort!(collect(String.(keys(stencil_field))))] :
+        Any[nothing]
+
+    h = 1.0 / n
+    worst = 0.0
+    for output in outputs
+        scheme, use_rule = lower_stencil_to_scheme(rule.name, spec; output = output)
+
+        esm = Dict{String, Any}(
+            "esm"      => "0.4.0",
+            "metadata" => Dict{String, Any}(
+                "name" => "layer_b_fv_cell_average_1d_n$(n)" *
+                          (output === nothing ? "" : "_$(output)")),
+            "grids"    => Dict{String, Any}(
+                "g" => Dict{String, Any}(
+                    "family"     => "cartesian",
+                    "dimensions" => Any[
+                        Dict{String, Any}("name" => "x", "size" => n,
+                                          "periodic" => true, "spacing" => "uniform"),
+                    ],
+                ),
+            ),
+            "discretizations" => Dict{String, Any}(rule.name => scheme),
+            "rules"           => Any[use_rule],
+            "models" => Dict{String, Any}(
+                "M" => Dict{String, Any}(
+                    "grid" => "g",
+                    "variables" => Dict{String, Any}(
+                        "u" => Dict{String, Any}(
+                            "type" => "state", "default" => 0.0, "units" => "1",
+                            "shape" => Any["x"], "location" => "cell_center",
+                        ),
+                        "dx" => Dict{String, Any}(
+                            "type" => "parameter", "default" => h, "units" => "1",
+                        ),
+                    ),
+                    "equations" => Any[
+                        Dict{String, Any}(
+                            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
+                            "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
+                        ),
+                    ],
+                ),
+            ),
+        )
+
+        disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
+        f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+        for i in 1:n
+            u0[var_map["u[$(i)]"]] = mms.ic((i - 1) * h, i * h)
+        end
+        du = similar(u0)
+        f!(du, u0, p, 0.0)
+
+        # Output location from the stencil support midpoint (in cell-width
+        # units relative to the cell center).
+        entries = output === nothing ? stencil_field : stencil_field[output]
+        offsets = Int[Int(e["selector"]["offset"]) for e in entries]
+        mid = (minimum(offsets) + maximum(offsets)) / 2
+        err = maximum(
+            abs(du[var_map["u[$(i)]"]] - mms.derivative((i - 0.5 + mid) * h))
+            for i in 1:n)
+        worst = max(worst, err)
+    end
+    return worst
 end
 
 # Instantiate a rule's `applies_to` pattern as a concrete equation RHS:
