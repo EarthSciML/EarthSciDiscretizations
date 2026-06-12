@@ -145,6 +145,8 @@ export eval_coeff
 
 # Exports: Stencil-form → replacement-form lowerer (dsc-y0jj)
 export lower_stencil_to_replacement
+# Exports: Stencil-form → ESS §7 scheme + use:-rule lowerer (dsc-kswm)
+export lower_stencil_to_scheme
 
 # Exports: Arakawa staggering runtime
 export ArakawaGrid, ArakawaStagger

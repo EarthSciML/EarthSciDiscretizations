@@ -1030,3 +1030,104 @@ end
     @test err isa ArgumentError
     @test occursin("disagrees", err.msg)
 end
+
+@testitem "lower_stencil_to_scheme: lowers cartesian upwind_1st to ESS scheme parts" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "upwind_1st.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
+
+    scheme, use_rule = lower_stencil_to_scheme("upwind_1st", rule)
+
+    # Whitelisted structural subset only — the catalog's sibling
+    # `replacement` AST must not leak into the ESS scheme object.
+    @test Set(keys(scheme)) == Set(["applies_to", "grid_family", "combine", "stencil", "accuracy"])
+    @test scheme["grid_family"] == "cartesian"
+    @test scheme["combine"] == "+"
+    @test scheme["applies_to"] == rule["applies_to"]
+    @test length(scheme["stencil"]) == 2
+    sel1 = scheme["stencil"][1]["selector"]
+    @test sel1 == Dict{String, Any}("kind" => "cartesian", "axis" => "\$x", "offset" => -1)
+    @test scheme["stencil"][1]["coeff"] == rule["stencil"][1]["coeff"]
+
+    # The use: rule re-states applies_to as its pattern so pattern variables
+    # bind one-to-one to the scheme operands.
+    @test use_rule == Dict{String, Any}(
+        "name"    => "upwind_1st",
+        "pattern" => rule["applies_to"],
+        "use"     => "upwind_1st",
+    )
+end
+
+@testitem "lower_stencil_to_scheme: ESS parse_schemes + parse_rule accept the lowered parts" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "upwind_1st.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
+
+    scheme, use_rule = lower_stencil_to_scheme("upwind_1st", rule)
+    schemes = EarthSciSerialization.parse_schemes(Dict{String, Any}("upwind_1st" => scheme))
+    @test haskey(schemes, "upwind_1st")
+    parsed_rule = EarthSciSerialization.parse_rule(use_rule)
+    @test parsed_rule.replacement_scheme == "upwind_1st"
+end
+
+@testitem "lower_stencil_to_scheme: errors on non-cartesian grid_family and selector kind" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+
+    base = Dict{String, Any}(
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
+        "grid_family" => "cartesian",
+        "stencil" => Any[Dict(
+            "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 1),
+            "coeff" => 1,
+        )],
+    )
+
+    vertical = copy(base); vertical["grid_family"] = "vertical"
+    err = try lower_stencil_to_scheme("r", vertical); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("cartesian-only", err.msg)
+
+    bad_kind = copy(base)
+    bad_kind["stencil"] = Any[Dict(
+        "selector" => Dict("kind" => "arakawa", "axis" => "\$x", "offset" => 1,
+                           "stagger" => "cell_center"),
+        "coeff" => 1,
+    )]
+    err = try lower_stencil_to_scheme("r", bad_kind); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("'arakawa'", err.msg)
+
+    no_stencil = Dict{String, Any}(
+        "applies_to" => base["applies_to"], "grid_family" => "cartesian",
+        "replacement" => Dict("op" => "+", "args" => Any[1, 1]),
+    )
+    err = try lower_stencil_to_scheme("r", no_stencil); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("no 'stencil'", err.msg)
+
+    axis_mismatch = copy(base)
+    axis_mismatch["stencil"] = Any[Dict(
+        "selector" => Dict("kind" => "cartesian", "axis" => "\$y", "offset" => 1),
+        "coeff" => 1,
+    )]
+    err = try lower_stencil_to_scheme("r", axis_mismatch); nothing catch e; e end
+    @test err isa ArgumentError
+    @test occursin("disagrees", err.msg)
+end

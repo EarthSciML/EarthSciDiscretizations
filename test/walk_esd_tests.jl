@@ -1,6 +1,7 @@
 module WalkESDTests
 
-using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff, lower_stencil_to_replacement
+using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
+    lower_stencil_to_replacement, lower_stencil_to_scheme
 import EarthSciSerialization
 using JSON
 
@@ -149,9 +150,9 @@ end
     run_layer_b(rule) -> LayerResult
 
 MMS convergence (Layer-B). Defers to `run_mms_convergence`, which honors
-`applicable:false` markers and otherwise SKIPs pending the canonical-pipeline
-replacement for the retired ESS `verify_mms_convergence` (esm-4t5 — see
-`run_mms_convergence` docstring).
+`applicable:false` markers, drives the per-topology canonical-pipeline
+runner where one exists, and otherwise SKIPs naming the missing piece
+(see `run_mms_convergence` docstring).
 """
 function run_layer_b(rule::RuleFile)
     convergence = joinpath(rule_fixtures_dir(rule), "convergence")
@@ -511,24 +512,32 @@ end
 """
     run_mms_convergence(rule, convergence_dir) -> LayerResult
 
-Layer B: read the convergence fixture, honor `applicable:false` markers, and
-otherwise SKIP pending the per-topology canonical-pipeline replacement.
+Layer B: read the convergence fixture, honor `applicable:false` markers,
+and drive the family's runner where one exists; otherwise SKIP pending the
+per-topology canonical-pipeline runner.
 
-ESS retired `verify_mms_convergence` + `mms_evaluator` in esm-4t5 (the
-2026-04-29 single-evaluation-pathway directive). Layer B previously routed
-the rule + fixture through that ESS harness; the harness was a shadow
-evaluator outside the canonical `discretize → ArrayOp → simulate` pipeline
-and the directive forbade it. The replacement drives Layer B through the
-canonical pipeline + an official ESS simulation runner per AGENTS.md
-(`discretize` → MTK.System / Symbolics scalarize → evaluate `f!(du, u, p, 0)`
-at the manufactured-solution sample → L_inf vs analytic).
-
-The replacement lands per topology family (one follow-up bead per family
-under dsc-kswm). Until the corresponding family's runner lands, fixtures
-in that family SKIP with the unified `_LAYER_B_PIPELINE_PENDING` reason,
-suffixed with the topology key so the report names the missing piece.
+History: ESS retired `verify_mms_convergence` + `mms_evaluator` in esm-4t5
+(the 2026-04-29 single-evaluation-pathway directive) — the old harness was
+a shadow evaluator outside the canonical `discretize → ArrayOp → eval`
+pipeline. The replacement lands per topology family under dsc-kswm. The
+ESS side of the pipeline has since landed for the cartesian foundation
+(scheme expansion esm-j1u, arrayop lift + periodic folding, tree-walk
+arrayop evaluation): `1d_cartesian_periodic` drives it ArrayOp-natively.
+The remaining families' runners still scalarize per cell in this file and
+pend either an ESS extension (scheme `grid_family`/selector dispatch beyond
+cartesian — cubed-sphere panel ESS/esm-57f, unstructured ESS/esm-bpr) or a
+runner port. Fixtures in a family without a runner SKIP with the unified
+`_LAYER_B_PIPELINE_PENDING` reason, suffixed with the topology key so the
+report names the missing piece.
 """
-const _LAYER_B_PIPELINE_PENDING = "Layer-B awaits canonical-pipeline replacement: ESS retired verify_mms_convergence in esm-4t5 (2026-04-29 single-pathway directive); Layer-B replacement via discretize → ArrayOp → official ESS simulation runner tracked at ESD/dsc-kswm"
+const _LAYER_B_PIPELINE_PENDING = "Layer-B awaits canonical-pipeline replacement: per-topology runners drive ESS discretize → ArrayOp → eval (tracked at ESD/dsc-kswm); families beyond the implemented set pend ESS scheme dispatch beyond the cartesian foundation (cubed-sphere ESS/esm-57f, unstructured ESS/esm-bpr) or a per-family runner port"
+
+# The ArrayOp-native 1d_cartesian_periodic runner needs the ESS
+# `lift_1d_arrayop` discretize kwarg (1D shaped variables otherwise keep the
+# bare D(u) LHS, which the tree-walk evaluator cannot expand). Detected at
+# load so an older resolved ESS yields a structured SKIP, not a FAIL.
+const _ESS_SUPPORTS_LIFT_1D = hasmethod(
+    EarthSciSerialization.discretize, Tuple{AbstractDict}, (:lift_1d_arrayop,))
 
 # ---------------------------------------------------------------------------
 # Generic MMS catalog. Indexed by `mms_kind` declared in the convergence
@@ -557,8 +566,7 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
     # `(d_dlat, d_dlon)` so the 2d_latlon_sphere runner can pick the axis
     # the rule's `applies_to.dim` selects without reshaping the catalog.
     # Used by `centered_2nd_uniform_latlon`'s convergence fixture
-    # (`mms_kind="Y_2_0_unit_sphere"`); the runner activates once
-    # ESD/dsc-y0jj lifts stencil-only rules to ESS-replacement form.
+    # (`mms_kind="Y_2_0_unit_sphere"`).
     "Y_2_0_unit_sphere" => (
         ic = (lat, lon) -> 0.25 * sqrt(5 / π) * (3 * cos(lat)^2 - 1),
         derivative = (lat, lon) -> (
@@ -579,10 +587,7 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
     # 2d_arakawa_periodic runner samples F_x at face_x edges and F_y at
     # face_y edges. `derivative(x, y)` returns the scalar divergence at
     # cell centers. Used by `divergence_arakawa_c`'s convergence fixture
-    # (`mms_kind="vec_sincos_2d_periodic"`); the runner activates once
-    # ESD/dsc-y0jj lifts stencil-only rules to ESS-replacement form
-    # (today divergence_arakawa_c is stencil-only and routes to
-    # `stencil_form_rule` before the arakawa branch).
+    # (`mms_kind="vec_sincos_2d_periodic"`).
     "vec_sincos_2d_periodic" => (
         ic = (x, y) -> (sin(2π * x) * cos(2π * y), cos(2π * x) * sin(2π * y)),
         derivative = (x, y) -> 4π * cos(2π * x) * cos(2π * y),
@@ -605,9 +610,12 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
 # ---------------------------------------------------------------------------
 const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
-    # `1d_cartesian_periodic` (esd-0ip) — runner implemented; drives
-    # `discretize → build_evaluator` via a per-cell-scalar ESM model built
-    # from the rule's `replacement` AST (or lowered from stencil form).
+    # `1d_cartesian_periodic` (esd-0ip; ArrayOp-native under dsc-kswm) —
+    # runner implemented; builds a PDE ESM document (array state + grad op)
+    # and drives `discretize(lift_1d_arrayop=true) → ArrayOp → build_evaluator`
+    # with the rule supplied as an ESS scheme + `use:` rule (stencil form,
+    # via `lower_stencil_to_scheme`) or a pattern+replacement document rule
+    # (replacement form). No per-cell scalarization.
     # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
     "1d_cartesian_periodic",
     # `1d_vertical_column` (esd-bbp) — runner implemented; reuses the
@@ -635,7 +643,10 @@ const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
     "2d_arakawa_periodic"    => "ESD/dsc-70zp",
     "2d_latlon_sphere"       => "ESD/dsc-mps8",
     "fv_cell_average_1d"     => "ESD/dsc-a7b2",
-    "stencil_form_rule"      => "ESD/dsc-y0jj (prerequisite for ESD/dsc-k1li)",
+    # dsc-y0jj (the stencil → replacement lowerer) landed; this key now only
+    # fires for selector families the lowerer rejects (indirect/reduction),
+    # which pend ESS unstructured dispatch.
+    "stencil_form_rule"      => "ESS/esm-bpr (unstructured selector dispatch)",
     "unsupported"            => "no follow-up bead — out of Layer-B scope",
 )
 
@@ -686,6 +697,12 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     if !(topology_key in _LAYER_B_SUPPORTED_TOPOLOGIES)
         bead = get(_LAYER_B_TOPOLOGY_TRACKING, topology_key, "no follow-up bead recorded")
         return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (topology=$topology_key; tracked at $(bead))")
+    end
+    if topology_key == "1d_cartesian_periodic" && !_ESS_SUPPORTS_LIFT_1D
+        return LayerResult(LAYER_SKIP,
+            "1d_cartesian_periodic runner requires EarthSciSerialization.discretize(...; " *
+            "lift_1d_arrayop=true); the resolved ESS version predates it — update ESS to " *
+            "enable the ArrayOp-native Layer-B path")
     end
 
     # Generic MMS lookup. Only fixtures that declare a registered `mms_kind`
@@ -1223,92 +1240,132 @@ end
     _run_layer_b_1d_cartesian_periodic(rule, mms, n) -> Float64
 
 Layer-B canonical-pipeline runner for `grid_family=cartesian` rules with a
-single periodic dimension (esd-0ip). Drives one resolution of the MMS
-convergence sweep through the canonical pipeline:
+single periodic dimension (esd-0ip; ArrayOp-native under dsc-kswm). Drives
+one resolution of the MMS convergence sweep through the canonical pipeline
+**without per-cell scalarization**: the ESM document describes the PDE on
+the array variable, and ESS does the rest.
 
-1. Load the rule's replacement AST, lowering from stencil form if necessary
-   via `lower_stencil_to_replacement`. Strip the `arrayop` wrapper if present.
-2. Build a per-cell-scalar ESM model with state variables `u_1, ..., u_n` and
-   parameter `dx`. Each cell equation is constructed by substituting the rule's
-   replacement AST at that cell index: `index(\$u, \$x+off)` → `"u_j"` with
-   1-based periodic wrap.
-3. Run `EarthSciSerialization.discretize` (canonicalization; equations are
-   already in explicit scalar form, so no rule rewriting occurs).
-4. Run `EarthSciSerialization.build_evaluator` to produce the ODE RHS `f!`.
-5. Set each `u_i = mms.ic((i-0.5)/n)`.
-6. Evaluate `f!(du, u0, p, 0)` once to obtain the discrete derivative.
-7. Return the L_inf error against `mms.derivative((i-0.5)/n)`.
+1. Load the rule spec from the catalog JSON.
+2. Build a PDE ESM document: a 1D periodic cartesian `grids` entry of size
+   `n`, an array state `u` with `shape: ["i"]`, parameter `dx = 1/n`, and
+   the single equation `D(u, wrt=t) = <applies_to instantiated on u>`
+   (e.g. `grad(u, dim="i")`). The rule rides one of two document forms:
+   - stencil form → `lower_stencil_to_scheme` emits the
+     `discretizations.<name>` scheme + `use:` rule (ESS RFC §7.2.1); or
+   - replacement form → the `applies_to` pattern + the replacement AST
+     (arrayop wrapper stripped) as a plain document rule.
+3. `EarthSciSerialization.discretize(esm; lift_1d_arrayop=true)` rewrites
+   the PDE op via the rule engine / scheme expansion, lifts the equation
+   to arrayop form with ranges from the grid, and folds periodic boundary
+   accesses.
+4. `EarthSciSerialization.build_evaluator` expands the arrayop natively
+   (tree-walk) into the ODE RHS `f!`.
+5. Set each `u[i] = mms.ic((i-0.5)/n)`, evaluate `f!(du, u0, p, 0)` once,
+   and return the L_inf error against `mms.derivative((i-0.5)/n)`.
 
-The per-cell model builder (step 2) is a generic AST → ESM translator — no
-math is computed outside the official ESS tree-walk in step 4. Works for any
-1D periodic Cartesian rule that carries a `replacement` AST (either authored
-directly or producible via `lower_stencil_to_replacement`).
+The grid dimension is deliberately named `"i"`: replacement-form rules
+bind their `\$x` pattern variable to the *dimension name*, so naming the
+dimension after ESS's first canonical arrayop index makes the substituted
+`index(u, \$x ± off)` land on the index variable the arrayop lift
+introduces (the same convention ESS's own discretize tests use). Scheme
+expansion is name-independent (it materializes indices by dimension
+position), so the convention is harmless on that path.
 """
 function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
-    # 1. Load and lower the rule spec to replacement form.
+    # 1. Load the rule spec.
     rule_doc = JSON.parse(read(rule.path, String))
     spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
     spec isa AbstractDict || error("rule spec missing for $(rule.name)")
-    lowered = lower_stencil_to_replacement(spec)
-    repl = lowered["replacement"]
-    # Strip the arrayop wrapper (centered_2nd_uniform wraps in arrayop; the
-    # scalar expression lives in the `expr` field).
-    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-           repl["expr"] : repl
 
-    # 2. Build a per-cell-scalar ESM model on the unit interval [0, 1].
+    # 2. Build the PDE ESM document on the unit interval [0, 1].
     dx = 1.0 / n
     cell_x(i) = (i - 0.5) * dx
 
-    variables = Dict{String, Any}()
-    for i in 1:n
-        variables["u_$(i)"] = Dict{String, Any}(
-            "type"    => "state",
-            "default" => mms.ic(cell_x(i)),
-            "units"   => "1",
-        )
-    end
-    variables["dx"] = Dict{String, Any}(
-        "type"    => "parameter",
-        "default" => dx,
-        "units"   => "1",
-    )
-
-    equations = Any[]
-    for i in 1:n
-        rhs = _layer_b_1d_build_cell_expr(expr, i, n)
-        push!(equations, Dict{String, Any}(
-            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(i)"], "wrt" => "t"),
-            "rhs" => rhs,
-        ))
-    end
-
     esm = Dict{String, Any}(
-        "esm"      => "0.2.0",
+        "esm"      => "0.4.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_1d_cartesian_periodic_n$(n)"),
-        "models"   => Dict{String, Any}(
+        "grids"    => Dict{String, Any}(
+            "g" => Dict{String, Any}(
+                "family"     => "cartesian",
+                "dimensions" => Any[
+                    Dict{String, Any}("name" => "i", "size" => n,
+                                      "periodic" => true, "spacing" => "uniform"),
+                ],
+            ),
+        ),
+        "models" => Dict{String, Any}(
             "M" => Dict{String, Any}(
-                "variables" => variables,
-                "equations" => equations,
+                "grid" => "g",
+                "variables" => Dict{String, Any}(
+                    "u" => Dict{String, Any}(
+                        "type" => "state", "default" => 0.0, "units" => "1",
+                        "shape" => Any["i"], "location" => "cell_center",
+                    ),
+                    "dx" => Dict{String, Any}(
+                        "type" => "parameter", "default" => dx, "units" => "1",
+                    ),
+                ),
+                "equations" => Any[
+                    Dict{String, Any}(
+                        "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
+                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "i"),
+                    ),
+                ],
             ),
         ),
     )
 
-    # 3-4. Canonical pipeline: discretize (canonicalization) → build_evaluator.
-    disc = EarthSciSerialization.discretize(esm)
-    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
-
-    # 5. Set the MMS initial condition (overrides the defaults already set above).
-    for i in 1:n
-        u0[var_map["u_$(i)"]] = mms.ic(cell_x(i))
+    if haskey(spec, "stencil")
+        # Stencil form → ESS scheme + use: rule (canonical §7.2.1 path).
+        scheme, use_rule = lower_stencil_to_scheme(rule.name, spec)
+        esm["discretizations"] = Dict{String, Any}(rule.name => scheme)
+        esm["rules"] = Any[use_rule]
+    else
+        # Replacement form → plain pattern + replacement document rule.
+        repl = get(spec, "replacement", nothing)
+        repl isa AbstractDict || error("rule $(rule.name) carries neither stencil nor replacement")
+        expr = get(repl, "op", nothing) == "arrayop" ? repl["expr"] : repl
+        esm["rules"] = Any[Dict{String, Any}(
+            "name"        => rule.name,
+            "pattern"     => spec["applies_to"],
+            "replacement" => expr,
+        )]
     end
 
-    # 6. Evaluate the discrete operator once (du/dt = rule(u) at t=0).
+    # 3-4. Canonical pipeline: discretize (rule rewrite + arrayop lift +
+    # periodic folding) → tree-walk build_evaluator.
+    disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
+    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    # 5. MMS initial condition, single RHS evaluation, L_inf error.
+    for i in 1:n
+        u0[var_map["u[$(i)]"]] = mms.ic(cell_x(i))
+    end
     du = similar(u0)
     f!(du, u0, p, 0.0)
+    return maximum(abs(du[var_map["u[$(i)]"]] - mms.derivative(cell_x(i))) for i in 1:n)
+end
 
-    # 7. Return L_inf error vs analytic derivative at cell centers.
-    return maximum(abs(du[var_map["u_$(i)"]] - mms.derivative(cell_x(i))) for i in 1:n)
+# Instantiate a rule's `applies_to` pattern as a concrete equation RHS:
+# the operand pattern variable becomes `operand` (the model's array state)
+# and the `dim` pattern variable (when present) becomes `dim_name` (the
+# grid dimension). Purely structural — mirrors how ESS pattern matching
+# will re-bind the same variables during `discretize`.
+function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String, dim_name::String)
+    applies_to = get(spec, "applies_to", nothing)
+    applies_to isa AbstractDict || error("rule spec has no applies_to object")
+    rhs = Dict{String, Any}(
+        "op"   => String(applies_to["op"]),
+        "args" => Any[
+            (a isa AbstractString && startswith(String(a), "\$")) ? operand : a
+            for a in get(applies_to, "args", Any[])
+        ],
+    )
+    dim = get(applies_to, "dim", nothing)
+    if dim isa AbstractString
+        rhs["dim"] = startswith(String(dim), "\$") ? dim_name : String(dim)
+    end
+    return rhs
 end
 
 # Translate one node of the rule's replacement AST to a scalar ESM expression
@@ -1356,9 +1413,11 @@ end
     _run_layer_b_1d_vertical_column(rule, mms, n) -> Float64
 
 Layer-B canonical-pipeline runner for `grid_family=vertical` rules (esd-bbp).
-Identical canonical-pipeline machinery to `_run_layer_b_1d_cartesian_periodic`
-(per-cell-scalar ESM → discretize → build_evaluator) but uses the spacing
-parameter `"h"` instead of `"dx"`.
+Still drives the per-cell-scalar machinery (per-cell ESM → discretize →
+build_evaluator) with spacing parameter `"h"` instead of `"dx"`; an
+ArrayOp-native port like `_run_layer_b_1d_cartesian_periodic`'s awaits ESS
+scheme support for the vertical grid family (the scheme `grid_family` enum
+is cartesian/cubed_sphere/unstructured today).
 
 Loads the replacement AST from the rule's canonical Layer-A fixture rather than
 calling `lower_stencil_to_replacement` — the stencil-lowered form for vertical

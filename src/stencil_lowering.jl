@@ -24,12 +24,19 @@ per-rule-shape logic. The lowered output is the same JSON-shaped
 
 Public surface:
 
-- [`lower_stencil_to_replacement`](@ref) — single-rule lowerer.
+- [`lower_stencil_to_replacement`](@ref) — single-rule lowerer to the
+  scalar `replacement` AST form (legacy path; per-cell scalarization).
+- [`lower_stencil_to_scheme`](@ref) — single-rule lowerer to the ESS §7
+  scheme + `use:` rule document parts consumed natively by ESS
+  `discretize` (scheme expansion → ArrayOp lift → tree-walk eval). This
+  is the canonical-pipeline path; currently cartesian-only, mirroring
+  the ESS scheme-expansion foundation (esm-j1u).
 
-Selector kinds currently supported: `cartesian`, `arakawa`, `latlon`,
-`cubed_sphere`, `vertical`. Other families (`indirect`, `reduction`)
-raise `ArgumentError` until their lowering rows are added; each new
-kind composes here as a separate dispatch branch.
+Selector kinds currently supported by `lower_stencil_to_replacement`:
+`cartesian`, `arakawa`, `latlon`, `cubed_sphere`, `vertical`. Other
+families (`indirect`, `reduction`) raise `ArgumentError` until their
+lowering rows are added; each new kind composes here as a separate
+dispatch branch.
 """
 
 """
@@ -199,6 +206,144 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
 
     out["replacement"] = replacement
     return out
+end
+
+"""
+    lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict)
+        -> (scheme::Dict{String,Any}, use_rule::Dict{String,Any})
+
+Lower a stencil-form catalog rule to the two ESM document parts ESS's
+canonical pipeline consumes natively (RFC §7.2.1, ESS scheme-expansion
+foundation esm-j1u):
+
+- `scheme` — the entry to place under the document's
+  `discretizations.<name>` block. A whitelisted structural subset of the
+  catalog spec: `applies_to`, `grid_family`, `stencil`, `combine`, and
+  (when present) `accuracy` / `order`. Catalog-side extras such as a
+  sibling `replacement` AST are dropped — ESS `parse_scheme` owns the
+  schema from here.
+- `use_rule` — the entry to append to the document's `rules` array:
+  `{"name": name, "pattern": <applies_to>, "use": name}`. The pattern is
+  the scheme's `applies_to` verbatim, so ESS `_check_applies_to` is
+  satisfied by construction and the pattern variables bind one-to-one
+  to the scheme operands.
+
+This is a pure structural transform — no math is computed, no selector
+is materialized; expansion to `coeff * index(...)` terms happens inside
+ESS `expand_scheme`. Mirroring the ESS cartesian foundation, only
+`grid_family == "cartesian"` rules whose selectors are all
+`kind == "cartesian"` are lowerable; anything else raises
+`ArgumentError` (the per-family extension lands when ESS grows the
+corresponding selector dispatch — cubed-sphere panel esm-57f,
+unstructured esm-bpr).
+
+Errors (`ArgumentError`): missing/empty `stencil`; malformed
+`applies_to` (no `\$`-operand or non-`\$` `dim`); `grid_family` other
+than `"cartesian"`; any selector with `kind != "cartesian"`, a
+non-integer `offset`, or an `axis` disagreeing with `applies_to.dim`;
+unsupported `combine`.
+"""
+function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict)
+    haskey(rule, "stencil") || throw(
+        ArgumentError(
+            "lower_stencil_to_scheme: rule has no 'stencil' array (replacement-form " *
+                "rules go through the document 'rules' path directly)",
+        ),
+    )
+
+    applies_to = get(rule, "applies_to", nothing)
+    applies_to isa AbstractDict || throw(
+        ArgumentError(
+            "lower_stencil_to_scheme: rule missing 'applies_to' object",
+        ),
+    )
+    _stencil_operand_pattern_var(applies_to)  # validates the $-operand exists
+    axis_var = _stencil_axis_pattern_var(applies_to)
+
+    grid_family = String(get(rule, "grid_family", ""))
+    grid_family == "cartesian" || throw(
+        ArgumentError(
+            "lower_stencil_to_scheme: grid_family '$grid_family' is not lowerable " *
+                "to an ESS scheme (ESS scheme expansion is cartesian-only; " *
+                "cubed-sphere tracked at ESS/esm-57f, unstructured at ESS/esm-bpr)",
+        ),
+    )
+
+    stencil = rule["stencil"]
+    stencil isa AbstractVector && !isempty(stencil) || throw(
+        ArgumentError(
+            "lower_stencil_to_scheme: 'stencil' must be a non-empty array",
+        ),
+    )
+
+    combine_op = String(get(rule, "combine", "+"))
+    combine_op in ("+", "*", "min", "max") || throw(
+        ArgumentError(
+            "lower_stencil_to_scheme: unsupported combine '$combine_op' " *
+                "(expected one of '+', '*', 'min', 'max')",
+        ),
+    )
+
+    lowered_stencil = Any[]
+    for (i, entry) in enumerate(stencil)
+        entry isa AbstractDict || throw(
+            ArgumentError("lower_stencil_to_scheme: stencil entry $i is not an object"),
+        )
+        selector = get(entry, "selector", nothing)
+        selector isa AbstractDict || throw(
+            ArgumentError("lower_stencil_to_scheme: stencil entry $i has no 'selector' object"),
+        )
+        kind = String(get(selector, "kind", ""))
+        kind == "cartesian" || throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: stencil entry $i has selector kind '$kind' " *
+                    "(ESS scheme expansion accepts 'cartesian' only)",
+            ),
+        )
+        axis = get(selector, "axis", nothing)
+        axis == axis_var || throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: stencil entry $i selector axis '$axis' " *
+                    "disagrees with applies_to.dim '$axis_var'",
+            ),
+        )
+        offset = get(selector, "offset", nothing)
+        offset isa Integer || throw(
+            ArgumentError(
+                "lower_stencil_to_scheme: stencil entry $i selector offset must be " *
+                    "an integer (got $(repr(offset)))",
+            ),
+        )
+        haskey(entry, "coeff") || throw(
+            ArgumentError("lower_stencil_to_scheme: stencil entry $i has no 'coeff'"),
+        )
+        push!(lowered_stencil, Dict{String, Any}(
+            "selector" => Dict{String, Any}(
+                "kind"   => "cartesian",
+                "axis"   => String(axis),
+                "offset" => Int(offset),
+            ),
+            "coeff" => entry["coeff"],
+        ))
+    end
+
+    scheme = Dict{String, Any}(
+        "applies_to"  => applies_to,
+        "grid_family" => "cartesian",
+        "combine"     => combine_op,
+        "stencil"     => lowered_stencil,
+    )
+    for passthrough in ("accuracy", "order")
+        haskey(rule, passthrough) && (scheme[passthrough] = rule[passthrough])
+    end
+
+    use_rule = Dict{String, Any}(
+        "name"    => String(name),
+        "pattern" => applies_to,
+        "use"     => String(name),
+    )
+
+    return scheme, use_rule
 end
 
 # -----------------------------------------------------------------------------

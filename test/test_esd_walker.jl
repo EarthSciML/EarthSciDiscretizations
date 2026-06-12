@@ -4,15 +4,17 @@ using TestItems
 # Tests for the multi-layer CI walker that validates rule files under
 # discretizations/. The walker discovers rules via load_rules and runs five
 # layers per rule: (A) canonical-form byte-diff via ESS's `discretize`
-# rule engine, (B) MMS convergence (currently SKIPped pending the
-# canonical-pipeline replacement of the retired ESS `verify_mms_convergence`
-# — esm-4t5 / 2026-04-29 single-pathway directive), (B') TVD/monotonicity
-# for slope-ratio limiters, (C) integration benchmarks, (D) discrete
-# conservation for finite-volume rules. Layer A skips until canonical-form
-# fixtures are authored; Layer C is gated on ESD_RUN_INTEGRATION=1 and
-# skipped by default; Layer D skips for rules without a conservation/ fixture.
+# rule engine, (B) MMS convergence via the per-topology canonical-pipeline
+# runners (`discretize → ArrayOp → eval`; 1d_cartesian_periodic is
+# ArrayOp-native, the other implemented families still scalarize per cell;
+# families without a runner SKIP naming the missing piece), (B')
+# TVD/monotonicity for slope-ratio limiters, (C) integration benchmarks,
+# (D) discrete conservation for finite-volume rules. Layer A skips until
+# canonical-form fixtures are authored; Layer C is gated on
+# ESD_RUN_INTEGRATION=1 and skipped by default; Layer D skips for rules
+# without a conservation/ fixture.
 
-@testitem "walker: discovers seeded rules; layer B SKIPs pending canonical-pipeline replacement" begin
+@testitem "walker: discovers seeded rules; per-layer outcomes match the catalog ledger" begin
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
     using EarthSciDiscretizations
@@ -86,16 +88,14 @@ using TestItems
     # (dsc-aez introduced the rewrite/ variant; no rule has one committed
     # yet — see the synthetic-rule unit tests below).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
-    # Layer B: ESS retired `verify_mms_convergence` + the entire
-    # `mms_evaluator` shadow path in esm-4t5 (2026-04-29 single-pathway
-    # directive — see CLAUDE.md). The walker's Layer-B replacement (drive
-    # convergence through `discretize → ArrayOp → official ESS simulation
-    # runner`) is a pending ESD follow-up. Until it lands, every rule with
-    # an `applicable:true` convergence fixture SKIPs with the unified
-    # retirement reason from `_LAYER_B_PIPELINE_PENDING` (tracked at
-    # ESD/dsc-kswm). Rules whose convergence fixture declares
-    # `applicable:false` keep their existing `fixture-declared not
-    # applicable` SKIP path.
+    # Layer B: per-topology canonical-pipeline runners (dsc-kswm) drive
+    # `discretize → ArrayOp → eval` for the implemented families
+    # (1d_cartesian_periodic ArrayOp-native; vertical/latlon/arakawa still
+    # per-cell-scalar pending ESS scheme dispatch beyond the cartesian
+    # foundation). Rules in families without a runner SKIP with the
+    # unified `_LAYER_B_PIPELINE_PENDING` reason; rules whose convergence
+    # fixture declares `applicable:false` keep their existing
+    # `fixture-declared not applicable` SKIP path.
     pending_canonical_layer_b = Set(
         [
             ("finite_difference", "centered_2nd_uniform"),
@@ -202,14 +202,17 @@ using TestItems
             ("finite_difference", "staggered_1st_uniform"),
         ]
     )
-    # The 4 hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
-    # canonical-skip-only fixtures declaring `applicable:false` pending the
-    # ESS `applies_to` + `stencil` schema dispatch (parse_rule today only
-    # consumes `pattern` + `replacement` — see ESS rule_engine.jl). Layer-A
-    # SKIPs via `_fixture_applicable_skip`. Layer-B keeps its existing
-    # `_LAYER_B_PIPELINE_PENDING` SKIP (these rules also ship convergence
-    # fixtures with applicable:true). Once ESS gains the schema dispatch,
-    # these stubs flip to PASS the same way as the FV3 ports.
+    # The hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
+    # canonical-skip-only fixtures declaring `applicable:false`. ESS now
+    # dispatches single-output cartesian stencils via `use:`-schemes
+    # (esm-j1u), but these reconstruction/flux rules need what ESS still
+    # lacks: multi-output emission (stencil objects keyed by output edge)
+    # and face-staggered bindings — see each fixture's `skip_reason` for
+    # the per-rule contract. Layer-A SKIPs via `_fixture_applicable_skip`.
+    # Layer-B keeps its existing `_LAYER_B_PIPELINE_PENDING` SKIP (these
+    # rules also ship convergence fixtures with applicable:true). Once ESS
+    # gains multi-output emission, these stubs flip to PASS the same way
+    # as the FV3 ports.
     canonical_skip_only_hot_path = Set(
         [
             # divergence_arakawa_c removed (esd-bbp): now PASSes Layer-B via
@@ -237,18 +240,23 @@ using TestItems
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform"
             # centered_2nd_uniform (cartesian) ships a canonical/ fixture
             # (dsc-3sg) so Layer-A passes via the ESS rule engine. Layer-B
-            # now passes via the canonical pipeline (esd-0ip): the fixture
-            # declares mms_kind="sin_2pi_x_periodic", topology key resolves
-            # to 1d_cartesian_periodic, and the runner measures O(h²).
+            # passes via the ArrayOp-native canonical pipeline (dsc-kswm):
+            # the fixture declares mms_kind="sin_2pi_x_periodic", topology
+            # key resolves to 1d_cartesian_periodic, and the runner rides
+            # the rule's replacement AST as a document rule through
+            # `discretize(lift_1d_arrayop=true) → ArrayOp → build_evaluator`,
+            # measuring O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "upwind_1st"
             # upwind_1st ships no canonical/ fixture (Layer-A skips). Layer-B
-            # now passes via the canonical pipeline (esd-0ip): replacement AST
-            # added to rule JSON, fixture declares mms_kind="sin_2pi_x_periodic",
-            # topology key resolves to 1d_cartesian_periodic, runner measures O(h).
+            # passes via the ArrayOp-native canonical pipeline (dsc-kswm): the
+            # stencil form lowers to an ESS scheme + use: rule via
+            # `lower_stencil_to_scheme`, fixture declares
+            # mms_kind="sin_2pi_x_periodic", topology key resolves to
+            # 1d_cartesian_periodic, runner measures O(h).
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"

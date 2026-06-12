@@ -3,7 +3,10 @@
 EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 
 1. A Julia package at the repo root (`src/`, `test/`, `Project.toml`) that
-   implements discretization operators and the discretization pipeline.
+   implements grid runtimes, rule-form lowering, and transitional reference
+   operators. The discretization pipeline itself lives in
+   EarthSciSerialization (`discretize → ArrayOp → eval`); the package side
+   is a thin passthrough per the single-pathway rule in `AGENTS.md`.
 2. Sibling package trees for the Python, Rust, and TypeScript bindings
    (`python/`, `rust/`, `typescript/`) that implement the cross-binding
    grid accessor runtime defined in [`GRIDS_API.md`](GRIDS_API.md).
