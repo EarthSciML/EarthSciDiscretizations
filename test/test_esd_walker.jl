@@ -96,21 +96,16 @@ using TestItems
     # unified `_LAYER_B_PIPELINE_PENDING` reason; rules whose convergence
     # fixture declares `applicable:false` keep their existing
     # `fixture-declared not applicable` SKIP path.
-    pending_canonical_layer_b = Set(
-        [
-            ("finite_difference", "centered_2nd_uniform"),
-            # centered_2nd_uniform_vertical removed (esd-bbp): now PASSes Layer-B via
-            # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h²)).
-            # centered_2nd_uniform_latlon removed (esd-bbp): now PASSes Layer-B via
-            # canonical pipeline with mms_kind="Y_2_0_unit_sphere" (O(h²) on lat axis).
-            # upwind_1st removed from here (esd-0ip): now PASSes Layer-B via
-            # canonical pipeline with mms_kind="sin_2pi_x_periodic" (O(h)).
-            ("finite_difference", "centered_2nd_deriv_uniform"),
-            # laplacian_2nd_uniform_cartesian removed (dsc-vst2): now PASSes
-            # Layer-B via the ArrayOp-native 2d_cartesian_periodic runner with
-            # mms_kind="sin2pix_sin2piy_periodic" (O(h²) 5-point Laplacian).
-        ]
-    )
+    # The pending-canonical set is EMPTY as of the dsc-kswm follow-ups:
+    # every rule with an applicable:true convergence fixture now has a
+    # Layer-B runner. History (rules that once sat here): the esd-bbp
+    # vertical/latlon/arakawa activations, upwind_1st (esd-0ip),
+    # laplacian_2nd_uniform_cartesian (dsc-vst2), and
+    # centered_2nd_deriv_uniform (whose second-derivative MMS landed with
+    # the pending-set retirement). A rule re-enters by shipping an
+    # applicable:true convergence fixture for a topology family without a
+    # runner.
+    pending_canonical_layer_b = Set(Tuple{String, String}[])
     # vertical_remap (dsc-otd) is structurally a phase-hook operation (Lagrangian
     # → Eulerian re-gridding between timesteps), not a §7 stencil rule. The
     # JSON file is retained as a reference artifact documenting the Lin (2004)
@@ -260,6 +255,16 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_2nd_deriv_uniform"
+            # centered_2nd_deriv_uniform ships no canonical/ fixture (Layer-A
+            # skips). Layer-B passes via the ArrayOp-native
+            # 1d_cartesian_periodic runner on the scheme + use: path,
+            # mms_kind="sin_2pi_x_second_derivative" (O(h²) 3-point second
+            # derivative).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "weno5_advection"
             # weno5_advection: Layer-A SKIPs via its applicable:false
             # canonical stub. Layer-B passes via the ArrayOp-native
@@ -309,20 +314,28 @@ using TestItems
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
             # nonlinear_laplacian_uniform (esd-1p7) ships a canonical/ fixture
-            # so Layer-A passes via the ESS rule engine. Layer B SKIPs pending
-            # the canonical-pipeline replacement of `verify_mms_convergence`.
+            # so Layer-A passes via the ESS rule engine. Layer-B passes via the
+            # ArrayOp-native 1d_cartesian_periodic runner: the flux-form
+            # pattern grad($f * grad($u, $x), $x) binds the coefficient $f to
+            # a frozen space-varying field (f = 2 + sin(2πx)) per
+            # _LAYER_B_MMS_AUX, mms_kind="sin_2pi_x_nonlinear_diffusion",
+            # and the conservative discretization measures O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test !isempty(r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "mixed_deriv_2nd_uniform"
             # mixed_deriv_2nd_uniform (esd-wdv) ships a canonical/ fixture so
-            # Layer-A passes via the ESS rule engine. Layer B SKIPs pending
-            # the canonical-pipeline replacement of `verify_mms_convergence`.
+            # Layer-A passes via the ESS rule engine. Layer-B passes via the
+            # ArrayOp-native 2d_cartesian_periodic runner: the nested pattern
+            # grad(grad($u, dim=$y), dim=$x) lowers with both dim pattern
+            # variables mapped to canonical components ($x → i, $y → j),
+            # mms_kind="sin2pix_sin2piy_mixed_deriv", and the 4-corner cross
+            # stencil measures O(h²).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test !isempty(r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform_latlon"
             # centered_2nd_uniform_latlon (latlon): the canonical/ fixture was
             # activated in esd-9qs (applicable:false dropped once ess-sra landed
@@ -409,14 +422,18 @@ using TestItems
     # Layer B: esd-0ip lands the 1d_cartesian_periodic runner; esd-bbp extends
     # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic;
     # dsc-vst2 adds the ArrayOp-native 2d_cartesian_periodic runner and
-    # dsc-a7b2 the fv_cell_average_1d runner; weno5_advection rides the
-    # 1d runner via auxiliary-field bindings. Eight rules now PASS:
+    # dsc-a7b2 the fv_cell_average_1d runner; weno5_advection and
+    # nonlinear_laplacian_uniform ride the 1d runner via auxiliary-field
+    # bindings; centered_2nd_deriv_uniform and mixed_deriv_2nd_uniform
+    # land with the pending-set retirement. Eleven rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
     # laplacian_2nd_uniform_cartesian (O(h²) 5-point), ppm_reconstruction
-    # (O(h⁴) CW84 edge interpolation), and weno5_advection (O(h⁵) FD-WENO
-    # advective divergence). All remaining rules
+    # (O(h⁴) CW84 edge interpolation), weno5_advection (O(h⁵) FD-WENO
+    # advective divergence), centered_2nd_deriv_uniform (O(h²)),
+    # mixed_deriv_2nd_uniform (O(h²) cross stencil), and
+    # nonlinear_laplacian_uniform (O(h²) flux form). All remaining rules
     # with applicable:true convergence fixtures continue to SKIP with
     # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
@@ -438,7 +455,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 8
+    @test layer_b_passes == 11
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

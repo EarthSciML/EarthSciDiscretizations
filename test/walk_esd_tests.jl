@@ -635,6 +635,36 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = x -> sin(2π * x + 1.0),
         derivative = x -> 2π * cos(2π * x + 1.0),
     ),
+    # 1D periodic sine, SECOND derivative: u(x) = sin(2π x);
+    # u''(x) = −(2π)²·sin(2π x). Used by `centered_2nd_deriv_uniform`'s
+    # convergence fixture (`mms_kind="sin_2pi_x_second_derivative"`).
+    "sin_2pi_x_second_derivative" => (
+        ic = x -> sin(2π * x),
+        derivative = x -> -4π^2 * sin(2π * x),
+    ),
+    # 2D periodic product sine, MIXED second derivative:
+    # u(x,y) = sin(2π x)·sin(2π y); ∂²u/∂x∂y = 4π²·cos(2π x)·cos(2π y).
+    # Used by `mixed_deriv_2nd_uniform`'s convergence fixture
+    # (`mms_kind="sin2pix_sin2piy_mixed_deriv"`).
+    "sin2pix_sin2piy_mixed_deriv" => (
+        ic = (x, y) -> sin(2π * x) * sin(2π * y),
+        derivative = (x, y) -> 4π^2 * cos(2π * x) * cos(2π * y),
+    ),
+    # 1D periodic nonlinear diffusion: u(x) = sin(2π x) with the
+    # space-varying coefficient f(x) = 2 + sin(2π x) (strictly positive),
+    # so with g = 2πx:
+    #
+    #   d/dx( f·du/dx ) = f'·u' + f·u''
+    #                   = (2π cos g)(2π cos g) + (2 + sin g)(−4π² sin g)
+    #                   = 4π²·(cos²g − 2·sin g − sin²g)
+    #
+    # The coefficient binding lives in `_LAYER_B_MMS_AUX` under the same
+    # kind. Used by `nonlinear_laplacian_uniform`'s convergence fixture
+    # (`mms_kind="sin_2pi_x_nonlinear_diffusion"`).
+    "sin_2pi_x_nonlinear_diffusion" => (
+        ic = x -> sin(2π * x),
+        derivative = x -> 4π^2 * (cos(2π * x)^2 - 2 * sin(2π * x) - sin(2π * x)^2),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -649,7 +679,8 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # bind to the transported state `u`.
 # ---------------------------------------------------------------------------
 const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
-    "sin_2pi_x_unit_advection" => Dict{String, Any}("U" => 1.0),
+    "sin_2pi_x_unit_advection"      => Dict{String, Any}("U" => 1.0),
+    "sin_2pi_x_nonlinear_diffusion" => Dict{String, Any}("f" => (x -> 2 + sin(2π * x))),
 )
 
 # ---------------------------------------------------------------------------
@@ -1550,7 +1581,7 @@ function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
                 "equations" => Any[
                     Dict{String, Any}(
                         "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
-                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
+                        "rhs" => _layer_b_instantiate_applies_to(spec, "u", ["x", "y"]),
                     ),
                 ],
             ),
@@ -1699,41 +1730,69 @@ end
 
 # Instantiate a rule's `applies_to` pattern as a concrete equation RHS:
 # each pattern variable in the args tree (including nested operands like
-# `div($U * $q)`) is substituted per `bindings`, and the `dim` pattern
-# variable (when present) becomes `dim_name` (the grid dimension). Purely
-# structural — mirrors how ESS pattern matching will re-bind the same
-# variables during `discretize`.
+# `div($U * $q)`) is substituted per `bindings`, and every `dim` pattern
+# variable — including those on NESTED operators, e.g.
+# grad(grad($u, dim=$y), dim=$x) — maps to a document dimension name.
+# Dim pattern variables map positionally by sorted name onto `dim_names`
+# (the same order `lower_stencil_to_canonical_replacement` assigns
+# canonical components: sorted $x → dim 1 → i, $y → dim 2 → j), so the
+# equation's dims, the document's grid, and the lowered replacement's
+# components stay aligned. Purely structural — mirrors how ESS pattern
+# matching will re-bind the same variables during `discretize`.
 function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
-                                         dim_name::String)
+                                         dim_names::Vector{String})
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || error("rule spec has no applies_to object")
+
+    dim_vars = String[]
+    _collect_dims(node) = if node isa AbstractDict
+        d = get(node, "dim", nothing)
+        if d isa AbstractString && startswith(String(d), "\$") && !(String(d) in dim_vars)
+            push!(dim_vars, String(d))
+        end
+        foreach(_collect_dims, get(node, "args", Any[]))
+    end
+    _collect_dims(applies_to)
+    sort!(dim_vars)
+    length(dim_vars) <= length(dim_names) || error(
+        "applies_to binds $(length(dim_vars)) dim pattern variables but the document " *
+        "declares only $(length(dim_names)) dimensions")
+    dim_map = Dict{String, String}(v => dim_names[k] for (k, v) in enumerate(dim_vars))
+
     subst(node) =
         node isa AbstractString ? get(bindings, String(node), String(node)) :
-        node isa AbstractDict ? Dict{String, Any}(
-            String(k) => (String(k) == "args" ? Any[subst(a) for a in v] : v)
-            for (k, v) in node) :
+        node isa AbstractDict ? begin
+            out = Dict{String, Any}(
+                String(k) => (String(k) == "args" ? Any[subst(a) for a in v] : v)
+                for (k, v) in node)
+            d = get(out, "dim", nothing)
+            if d isa AbstractString && startswith(String(d), "\$")
+                out["dim"] = dim_map[String(d)]
+            end
+            out
+        end :
         node
-    rhs = Dict{String, Any}(
-        "op"   => String(applies_to["op"]),
-        "args" => Any[subst(a) for a in get(applies_to, "args", Any[])],
-    )
-    dim = get(applies_to, "dim", nothing)
-    if dim isa AbstractString
-        rhs["dim"] = startswith(String(dim), "\$") ? dim_name : String(dim)
-    end
-    return rhs
+    return subst(applies_to)
+end
+
+# Single-dimension convenience used by the 1D runners.
+function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
+                                         dim_name::String)
+    return _layer_b_instantiate_applies_to(spec, bindings, [dim_name])
 end
 
 # Convenience for runners without auxiliary fields: bind every pattern
 # variable to the single operand.
-function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String, dim_name::String)
+function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String,
+                                         dim_names::Union{String, Vector{String}})
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || error("rule spec has no applies_to object")
     bindings = _layer_b_pattern_bindings(applies_to, Dict{String, Any}())
     for k in keys(bindings)
         bindings[k] = operand
     end
-    return _layer_b_instantiate_applies_to(spec, bindings, dim_name)
+    dims = dim_names isa String ? [dim_names] : dim_names
+    return _layer_b_instantiate_applies_to(spec, bindings, dims)
 end
 
 # Translate one node of the rule's replacement AST to a scalar ESM expression

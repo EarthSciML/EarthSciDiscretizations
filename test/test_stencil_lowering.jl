@@ -1265,3 +1265,27 @@ end
     @test err isa ArgumentError
     @test occursin("flat", err.msg)
 end
+
+@testitem "lower_stencil_to_canonical_replacement: nested-dim pattern maps every axis" begin
+    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "mixed_deriv_2nd_uniform.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["mixed_deriv_2nd_uniform"])
+
+    # The pattern is grad(grad($u, dim=$y), dim=$x): both nested dim pattern
+    # variables must map to canonical components (sorted: $x → i, $y → j).
+    expr = lower_stencil_to_canonical_replacement(rule)
+    s = JSON.json(expr)
+    @test !occursin("\$x", s)
+    @test !occursin("\$y", s)
+    @test occursin("\$u", s)
+    @test occursin("\"i\"", s)
+    @test occursin("\"j\"", s)
+end

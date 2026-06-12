@@ -456,13 +456,13 @@ function lower_stencil_to_canonical_replacement(rule::AbstractDict)::Dict{String
             end
         end
     else
-        # Replacement-form rule: the only axis variable is applies_to.dim.
+        # Replacement-form rule: axis variables are the `dim` pattern
+        # variables of `applies_to`, collected RECURSIVELY — nested-operator
+        # patterns like grad(grad($u, dim=$y), dim=$x) bind one axis per
+        # nesting level.
         applies_to = get(rule, "applies_to", nothing)
         if applies_to isa AbstractDict
-            dim = get(applies_to, "dim", nothing)
-            if dim isa AbstractString && startswith(String(dim), "\$")
-                push!(axis_vars, String(dim))
-            end
+            _collect_dim_pattern_vars!(axis_vars, applies_to)
         end
     end
     sort!(axis_vars)
@@ -481,6 +481,22 @@ function lower_stencil_to_canonical_replacement(rule::AbstractDict)::Dict{String
            repl["expr"] : repl
 
     return _substitute_axis_vars(expr, subst)
+end
+
+# Collect `$`-prefixed `dim` pattern variables from an applies_to tree,
+# recursing through nested operator args (first occurrence order; caller
+# sorts). Non-`$` (literal) dims are not axis variables.
+function _collect_dim_pattern_vars!(acc::Vector{String}, node)
+    node isa AbstractDict || return acc
+    dim = get(node, "dim", nothing)
+    if dim isa AbstractString && startswith(String(dim), "\$")
+        d = String(dim)
+        d in acc || push!(acc, d)
+    end
+    for a in get(node, "args", Any[])
+        _collect_dim_pattern_vars!(acc, a)
+    end
+    return acc
 end
 
 # Replace axis pattern-variable string leaves with their canonical component
