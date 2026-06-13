@@ -82,11 +82,17 @@ using TestItems
     tr2d = first(filter(r -> r.name == "transport_2d", results))
     @test tr2d.family == :finite_volume
 
-    # Layer A: passes for centered_2nd_uniform and
-    # centered_2nd_uniform_vertical (both ship a canonical/ fixture); skips
-    # for every other rule with reason "no canonical or rewrite fixtures"
-    # (dsc-aez introduced the rewrite/ variant; no rule has one committed
-    # yet — see the synthetic-rule unit tests below).
+    # Layer A: passes for the rules that ship a canonical/ fixture
+    # (centered_2nd_uniform, centered_2nd_uniform_vertical,
+    # centered_2nd_uniform_latlon, nonlinear_laplacian_uniform,
+    # mixed_deriv_2nd_uniform, and — since the dsc-kswm follow-ups
+    # authored byte contracts through the live pipeline — upwind_1st and
+    # centered_2nd_deriv_uniform (scheme + use: form),
+    # laplacian_2nd_uniform_cartesian (2D arrayop lift + periodic-fold
+    # contract), and weno5_advection (promoted from its applicable:false
+    # stub)); skips for every other rule with reason "no canonical or
+    # rewrite fixtures" (dsc-aez introduced the rewrite/ variant; no rule
+    # has one committed yet — see the synthetic-rule unit tests below).
     # Layer C always skips unless ESD_RUN_INTEGRATION=1.
     # Layer B: per-topology canonical-pipeline runners (dsc-kswm) drive
     # `discretize → ArrayOp → eval` for the implemented families
@@ -256,26 +262,29 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_deriv_uniform"
-            # centered_2nd_deriv_uniform ships no canonical/ fixture (Layer-A
-            # skips). Layer-B passes via the ArrayOp-native
-            # 1d_cartesian_periodic runner on the scheme + use: path,
-            # mms_kind="sin_2pi_x_second_derivative" (O(h²) 3-point second
-            # derivative).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            # centered_2nd_deriv_uniform: Layer-A passes via its canonical
+            # byte contract in scheme + use: form. Layer-B passes via the
+            # ArrayOp-native 1d_cartesian_periodic runner on the scheme +
+            # use: path, mms_kind="sin_2pi_x_second_derivative" (O(h²)
+            # 3-point second derivative).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "weno5_advection"
-            # weno5_advection: Layer-A SKIPs via its applicable:false
-            # canonical stub. Layer-B passes via the ArrayOp-native
+            # weno5_advection: Layer-A passes via its canonical byte
+            # contract (promoted from the applicable:false stub once the
+            # replacement-form document path landed; the 39KB expected doc
+            # is the regression net for the largest AST in the catalog).
+            # Layer-B passes via the ArrayOp-native
             # 1d_cartesian_periodic runner: the rule's replacement AST
             # (pattern div($U * $q, dim=$x)) lowers to canonical components,
             # the auxiliary velocity $U binds to a frozen unit field per
             # _LAYER_B_MMS_AUX, and the Jiang-Shu FD-WENO divergence
             # measures O(h⁵) against d(U·u)/dx — clearing the fixture's
             # expected_min_order of 4.7.
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "ppm_reconstruction"
@@ -292,24 +301,28 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "laplacian_2nd_uniform_cartesian"
-            # laplacian_2nd_uniform_cartesian ships no canonical/ fixture
-            # (Layer-A skips). Layer-B passes via the ArrayOp-native
-            # 2d_cartesian_periodic runner (dsc-vst2): the rule carries a
-            # replacement AST in canonical i/j component form (RFC §7.1),
+            # laplacian_2nd_uniform_cartesian: Layer-A passes via its
+            # canonical byte contract — the first to pin the 2D arrayop lift
+            # and periodic ifelse folding. Layer-B passes via the
+            # ArrayOp-native 2d_cartesian_periodic runner (dsc-vst2): the
+            # stencil lowers to canonical i/j component form (RFC §7.1),
             # the fixture declares mms_kind="sin2pix_sin2piy_periodic", the
             # classifier routes on the stencil's two distinct selector axes,
             # and the runner measures O(h²).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "upwind_1st"
-            # upwind_1st ships no canonical/ fixture (Layer-A skips). Layer-B
+            # upwind_1st: Layer-A passes via its canonical byte contract in
+            # scheme + use: form (the §7.2.1 production path). Layer-B
             # passes via the ArrayOp-native canonical pipeline (dsc-kswm): the
             # stencil form lowers to an ESS scheme + use: rule via
             # `lower_stencil_to_scheme`, fixture declares
             # mms_kind="sin_2pi_x_periodic", topology key resolves to
             # 1d_cartesian_periodic, runner measures O(h).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
