@@ -386,3 +386,13 @@ across all four layers.
   before extending the schema.** The decisions log records both the
   resolution and the rejected alternatives for every selector-shape
   question that has come up so far.
+- **Multi-output stencils.** A rule whose `applies_to` produces more
+  than one named output (e.g. `ppm_reconstruction` emits both
+  `q_left_edge` and `q_right_edge`) uses `kind: "multi_output_stencil"`
+  in the canonical fixture's `discretizations` block, with `outputs`
+  listing each name and `primary` selecting the one carried in the
+  model's observed equations. The Layer-A fixture follows the same
+  nine-step flow above; Layer-B drives each output independently via
+  `lower_stencil_to_scheme(rule; output=<name>)`. See
+  [`discretizations/finite_volume/ppm_reconstruction/fixtures/canonical/`]({{< param repoURL >}}/tree/main/discretizations/finite_volume/ppm_reconstruction/fixtures/canonical)
+  for the reference example (ess-7hb/ess-ebe).
