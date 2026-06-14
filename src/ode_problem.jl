@@ -514,10 +514,34 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                 push!(rules, use_rule)
             elseif kind in ("latlon", "vertical")
                 lowered = lower_stencil_to_replacement(spec)
+                replacement = lowered["replacement"]
+                if kind == "latlon"
+                    # Translate literal geographic axis names ("lat", "lon", …) in
+                    # the replacement to canonical arrayop loop-variable names
+                    # ("i", "j", …) so that build_evaluator's {i→val, j→val}
+                    # substitution can resolve all index expressions.  The latlon
+                    # lowerer already sorts axis names alphabetically, giving a
+                    # stable position→canonical mapping.
+                    axis_names_set = Set{String}()
+                    for entry in stencil
+                        entry isa AbstractDict || continue
+                        sel_e = get(entry, "selector", nothing)
+                        sel_e isa AbstractDict || continue
+                        ax = get(sel_e, "axis", nothing)
+                        ax isa AbstractString && !startswith(String(ax), "\$") &&
+                            push!(axis_names_set, String(ax))
+                    end
+                    sorted_axes = sort!(collect(axis_names_set))
+                    _CANONICAL = ("i", "j", "k", "l", "m")
+                    axis_map = Dict{String,String}(
+                        ax => _CANONICAL[d] for (d, ax) in enumerate(sorted_axes)
+                    )
+                    replacement = _subst_axis_names(replacement, axis_map)
+                end
                 push!(rules, Dict{String, Any}(
                     "name"        => rname,
                     "pattern"     => spec["applies_to"],
-                    "replacement" => lowered["replacement"],
+                    "replacement" => replacement,
                 ))
             elseif kind in ("reduction", "indirect")
                 throw(ArgumentError(
@@ -540,6 +564,23 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                 "replacement" => spec["replacement"],
             ))
         end
+    end
+end
+
+function _subst_axis_names(expr, mapping::Dict{String,String})
+    if expr isa AbstractString
+        s = String(expr)
+        return get(mapping, s, s)
+    elseif expr isa AbstractDict
+        out = Dict{String,Any}()
+        for (k, v) in expr
+            out[String(k)] = _subst_axis_names(v, mapping)
+        end
+        return out
+    elseif expr isa AbstractVector
+        return Any[_subst_axis_names(a, mapping) for a in expr]
+    else
+        return expr
     end
 end
 

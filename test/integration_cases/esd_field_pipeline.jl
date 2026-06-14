@@ -166,6 +166,32 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
                 for k in k_lo:k_hi
             )
         end,
+
+    # 2-D lat-lon Y_{2,0} colatitude advection (unit sphere, R=1).
+    # ESM shape ["lat","lon"] → var_map key "u[i_lat,j_lon]".
+    # Axes sorted alphabetically: axes[1]=lat, axes[2]=lon.
+    # IC: Y_{2,0}(lat) = 0.25*sqrt(5/pi)*(3*cos^2(lat)-1), lat in [0,pi] colatitude.
+    # Exact solution: Y_{2,0}(lat + t).  Pole rows i=1 and i=N_lat skipped
+    # (interior-lat scope per bead esd-sqb); lon terms cancel for this lon-independent IC.
+    "Y_2_0_latlon_advection_lat" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+            lat_ax = axes[findfirst(a -> a.name == "lat", axes)]
+            lon_ax = axes[findfirst(a -> a.name == "lon", axes)]
+            N_lat = lat_ax.N
+            N_lon = lon_ax.N
+            c = 0.25 * sqrt(5.0 / pi)
+            err = 0.0
+            for i in 2:(N_lat - 1)
+                lat_c = lat_ax.lo + (i - 0.5) * lat_ax.h
+                exact = c * (3 * cos(lat_c + t)^2 - 1)
+                for j in 1:N_lon
+                    idx = get(var_map, "u[$i,$j]", nothing)
+                    idx === nothing && continue
+                    err = max(err, abs(u_vec[idx] - exact))
+                end
+            end
+            err
+        end,
 )
 
 # ---------------------------------------------------------------------------
