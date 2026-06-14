@@ -1,0 +1,61 @@
+name: "Integration Tests"
+
+# Dedicated Layer-C integration CI job.  Runs the full ESD walker with
+# ESD_RUN_INTEGRATION=1 so every rule with integration fixtures is exercised:
+# the full ESM+GDD → build_ode_problem → ODE solve → tolerance-check pipeline.
+#
+# This job is intentionally separate from the unit-test job (Tests.yml) because
+# the integration solve requires full ODE precompile time and is heavier than
+# the structure/unit checks.  A regression in any integration case fails this
+# job independently of the unit suite.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-'
+    paths-ignore:
+      - 'docs/**'
+      - 'python/**'
+      - 'rust/**'
+      - 'typescript/**'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'python/**'
+      - 'rust/**'
+      - 'typescript/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  integration:
+    name: "Layer-C Integration"
+    runs-on: ubuntu-latest
+    env:
+      ESD_RUN_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Setup Julia"
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - uses: julia-actions/cache@v3
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # EarthSciSerialization is not yet in the General registry.  Same
+      # resolution script used by polecats and the unit-test CI job.
+      - name: "Resolve unregistered deps (EarthSciSerialization)"
+        run: scripts/setup_polecat_env.sh
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - name: "Run Layer-C integration suite"
+        run: julia --project=. test/run_integration_tests.jl
