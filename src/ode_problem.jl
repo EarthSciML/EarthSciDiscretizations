@@ -171,35 +171,12 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
     for (domain_key, domain_spec) in gdd_grids
         domain_name = String(domain_key)
         # Read grid family from GDD domain_spec; default "cartesian" for back-compat.
-        family  = String(get(domain_spec, "family", "cartesian"))
-        spatial = get(domain_spec, "spatial", Dict())
-        bcs     = get(domain_spec, "boundary_conditions", Any[])
+        family = String(get(domain_spec, "family", "cartesian"))
 
-        periodic_dims = Set{String}()
-        for bc in bcs
-            get(bc, "type", "") == "periodic" || continue
-            for d in get(bc, "dimensions", Any[])
-                push!(periodic_dims, String(d))
-            end
-        end
-
-        sorted_axes = sort!(String[String(k) for k in keys(spatial)])
-        dims = Dict{String, Any}[]
-        spacing_vals = Dict{String, Float64}()
-
-        for axis_name in sorted_axes
-            axis_spec = spatial[axis_name]
-            h  = Float64(axis_spec["grid_spacing"])
-            lo = Float64(get(axis_spec, "min", 0.0))
-            hi = Float64(get(axis_spec, "max", 1.0))
-            N  = round(Int, (hi - lo) / h)
-            push!(dims, Dict{String, Any}(
-                "name"     => axis_name,
-                "size"     => N,
-                "periodic" => axis_name in periodic_dims,
-                "spacing"  => "uniform",
-            ))
-            spacing_vals["d$(axis_name)"] = h
+        dims, spacing_vals = if family == "mpas"
+            _inject_grids_mpas(domain_spec, gdd_path)
+        else
+            _inject_grids_spatial(domain_spec)
         end
 
         esm_grids[domain_name] = Dict{String, Any}(
@@ -218,6 +195,84 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
             end
         end
     end
+end
+
+# Build dims + spacing_vals from spatial axis specs (cartesian/latlon/vertical/arakawa).
+function _inject_grids_spatial(domain_spec)
+    spatial = get(domain_spec, "spatial", Dict())
+    bcs     = get(domain_spec, "boundary_conditions", Any[])
+
+    periodic_dims = Set{String}()
+    for bc in bcs
+        get(bc, "type", "") == "periodic" || continue
+        for d in get(bc, "dimensions", Any[])
+            push!(periodic_dims, String(d))
+        end
+    end
+
+    sorted_axes = sort!(String[String(k) for k in keys(spatial)])
+    dims = Dict{String, Any}[]
+    spacing_vals = Dict{String, Float64}()
+
+    for axis_name in sorted_axes
+        axis_spec = spatial[axis_name]
+        h  = Float64(axis_spec["grid_spacing"])
+        lo = Float64(get(axis_spec, "min", 0.0))
+        hi = Float64(get(axis_spec, "max", 1.0))
+        N  = round(Int, (hi - lo) / h)
+        push!(dims, Dict{String, Any}(
+            "name"     => axis_name,
+            "size"     => N,
+            "periodic" => axis_name in periodic_dims,
+            "spacing"  => "uniform",
+        ))
+        spacing_vals["d$(axis_name)"] = h
+    end
+
+    return dims, spacing_vals
+end
+
+# Build dims for MPAS unstructured Voronoi grids.
+# GDD domain_spec must carry "n_cells" (integer). Optional "n_edges" and
+# "max_edges" are stored but not yet consumed by ESS discretize (pends
+# ESS/esm-bpr unstructured selector dispatch). "loader" is preserved for
+# the future NetCDF mesh-loading hook; no file I/O is performed here.
+function _inject_grids_mpas(domain_spec, gdd_path::AbstractString)
+    n_cells_raw = get(domain_spec, "n_cells", nothing)
+    n_cells_raw === nothing && throw(
+        ArgumentError(
+            "MPAS GDD domain_spec missing required field 'n_cells'. " *
+            "Add \"n_cells\": <integer> to the GDD's grids.<domain> block."
+        )
+    )
+    n_cells = Int(n_cells_raw)
+    n_cells > 0 || throw(
+        ArgumentError("MPAS GDD 'n_cells' must be a positive integer (got $n_cells)")
+    )
+
+    dims = [Dict{String, Any}(
+        "name"     => "n_cells",
+        "size"     => n_cells,
+        "periodic" => false,
+        "spacing"  => "unstructured",
+    )]
+
+    # n_edges is metadata; included in the grid block for reference but not
+    # consumed by the current ESD/ESS pipeline (pends ESS/esm-bpr).
+    n_edges_raw = get(domain_spec, "n_edges", nothing)
+    if n_edges_raw !== nothing
+        push!(dims, Dict{String, Any}(
+            "name"     => "n_edges",
+            "size"     => Int(n_edges_raw),
+            "periodic" => false,
+            "spacing"  => "unstructured",
+        ))
+    end
+
+    # No uniform spacing to inject; MPAS rules read geometry from connectivity
+    # tables (area_cell, dc_edge, dv_edge) not from scalar parameters.
+    spacing_vals = Dict{String, Float64}()
+    return dims, spacing_vals
 end
 
 function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractString)
@@ -247,6 +302,8 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             # Path-A/canonical: arakawa and other $-axis kinds (lower_stencil_to_canonical_replacement).
             # Path-B seam: cubed_sphere falls to canonical; lower_stencil_to_canonical_replacement
             #   throws for plural selectors, making the gap visible (ESS/esm-57f tracks the extension).
+            # Unstructured gate: reduction/indirect selectors (MPAS, DUO) require
+            #   ESS/esm-bpr (unstructured selector dispatch) which is not yet merged.
             if kind == "cartesian"
                 scheme, use_rule = lower_stencil_to_scheme(rname, spec)
                 discs[rname] = scheme
@@ -257,6 +314,12 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                     "name"        => rname,
                     "pattern"     => spec["applies_to"],
                     "replacement" => lowered["replacement"],
+                ))
+            elseif kind in ("reduction", "indirect")
+                throw(ArgumentError(
+                    "rule '$rname' uses unstructured selector kind '$kind' " *
+                    "(reduction/indirect selectors require ESS/esm-bpr — " *
+                    "unstructured selector dispatch — which is not yet merged into ESS main)"
                 ))
             else
                 repl = lower_stencil_to_canonical_replacement(spec)

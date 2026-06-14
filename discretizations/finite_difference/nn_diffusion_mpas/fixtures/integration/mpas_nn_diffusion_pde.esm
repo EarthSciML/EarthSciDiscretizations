@@ -1,0 +1,27 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "mpas_nn_diffusion_pde",
+    "description": "Heat equation du/dt = Laplacian(u, dim=cell) on an MPAS Voronoi mesh. State u is cell-centered; the Laplacian is lowered from nn_diffusion_mpas (nearest-neighbor weighted by dv_edge/dc_edge/area_cell). MMS initial conditions are injected at bind time via reader_fn coordinate access."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "u": {"type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0}
+      },
+      "equations": [
+        {
+          "lhs": {"op": "D", "args": ["u"], "wrt": "t"},
+          "rhs": {"op": "laplacian", "args": ["u"], "dim": "cell"}
+        }
+      ],
+      "initial_conditions": {
+        "type": "expression",
+        "comment": "MMS IC u(lon,lat)=sin(lon)*cos(lat) requires MPAS coordinate access. Injected by the GRIDS-F3 helper (run_mms_convergence_case) at bind time once esd-g0a merges; placeholder 'default: 0.0' above is overridden by the runner.",
+        "values": {}
+      },
+      "time": {"t0": 0.0, "t_final": 0.001}
+    }
+  }
+}
