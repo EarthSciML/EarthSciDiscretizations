@@ -109,3 +109,62 @@ end
         @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
     end
 end
+
+@testitem "build_ode_problem: expression IC sin(2π·x) loaded from .esm into prob.u0 (esd-wt7)" begin
+    using EarthSciDiscretizations: build_ode_problem
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
+                         "centered_2nd_deriv_uniform", "fixtures", "integration",
+                         "diffusion_1d_pde.esm")
+    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
+                         "cartesian_1d_periodic_n32.gdd.json")
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+
+    N  = 32
+    dx = 1.0 / N
+    for i in 1:N
+        expected = sin(2π * (i - 0.5) * dx)
+        @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1e-15
+    end
+end
+
+@testitem "build_ode_problem: expression IC sin(2π·x)·sin(2π·y) in 2D prob.u0 (esd-wt7)" begin
+    using EarthSciDiscretizations: build_ode_problem
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
+                         "laplacian_2nd_uniform_cartesian", "fixtures", "integration",
+                         "diffusion_2d_pde.esm")
+    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
+                         "cartesian_2d_periodic_n32.gdd.json")
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+
+    N  = 32
+    dx = 1.0 / N
+    for i in 1:N, j in 1:N
+        expected = sin(2π * (i - 0.5) * dx) * sin(2π * (j - 0.5) * dx)
+        @test prob.u0[var_map["u[$i,$j]"]] ≈ expected  rtol = 1e-15
+    end
+end
+
+@testitem "build_ode_problem: expression IC cos(2π·x) resolution-independent (esd-wt7)" begin
+    using EarthSciDiscretizations: build_ode_problem
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
+                         "upwind_1st", "fixtures", "integration", "advection_1d_pde.esm")
+
+    for (gdd_file, N) in [("adv_n16.gdd.json", 16), ("adv_n32.gdd.json", 32)]
+        gdd_path = joinpath(repo_root, "discretizations", "finite_difference",
+                            "upwind_1st", "fixtures", "integration", gdd_file)
+        prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+        dx = 1.0 / N
+        for i in 1:N
+            expected = cos(2π * (i - 0.5) * dx)
+            @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1e-15
+        end
+    end
+end

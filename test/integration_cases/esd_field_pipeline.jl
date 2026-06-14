@@ -41,11 +41,7 @@ function _diffusion_1d_analytic(name::AbstractString, manifest::AbstractDict,
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
     dx = 1.0 / N
-    u0 = copy(prob.u0)
-    for i in 1:N
-        u0[var_map["u[$i]"]] = sin(2π * (i - 0.5) * dx)
-    end
-    prob2 = SciMLBase.ODEProblem(prob.f, u0, (0.0, t_final), prob.p)
+    prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
     sol = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
 
     # Discrete centered-FD second-derivative eigenvalue for sin(2π x):
@@ -81,13 +77,7 @@ function _diffusion_2d_analytic(name::AbstractString, manifest::AbstractDict,
 
     dx = 1.0 / N
     dy = dx  # square grid
-    u0 = copy(prob.u0)
-    for i in 1:N, j in 1:N
-        x_i = (i - 0.5) * dx
-        y_j = (j - 0.5) * dy
-        u0[var_map["u[$i,$j]"]] = sin(2π * x_i) * sin(2π * y_j)
-    end
-    prob2 = SciMLBase.ODEProblem(prob.f, u0, (0.0, t_final), prob.p)
+    prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
     sol = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
 
     # Discrete 5-point Laplacian eigenvalue for sin(2πx)sin(2πy) on square grid:
@@ -132,11 +122,7 @@ function _advection_1d_convergence(name::AbstractString, manifest::AbstractDict,
 
         N  = length(prob.u0)
         dx = 1.0 / N
-        u0 = copy(prob.u0)
-        for i in 1:N
-            u0[var_map["u[$i]"]] = cos(2π * (i - 0.5) * dx)
-        end
-        prob2 = SciMLBase.ODEProblem(prob.f, u0, (0.0, t_final), prob.p)
+        prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
         sol = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
 
         # Exact: cos(2π(x - v·t)) — periodic translation of the IC
