@@ -60,6 +60,11 @@ include("rule_eval.jl")
 # Layer-B pipeline.
 include("stencil_lowering.jl")
 
+# Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
+# .esm file and an optional GDD, runs the canonical ESS pipeline, and
+# returns a SciMLBase.ODEProblem ready for the caller to solve.
+include("ode_problem.jl")
+
 # Exports: Grid types
 export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
 export AbstractCurvilinearGrid, AbstractStaggeredGrid,
@@ -149,6 +154,9 @@ export lower_stencil_to_replacement
 export lower_stencil_to_scheme
 # Exports: Stencil-form → canonical-$target-component replacement (dsc-vst2)
 export lower_stencil_to_canonical_replacement
+
+# Exports: ESM → ODEProblem constructor (esd-3ck)
+export build_ode_problem
 
 # Exports: Arakawa staggering runtime
 export ArakawaGrid, ArakawaStagger

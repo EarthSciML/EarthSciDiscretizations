@@ -1,0 +1,149 @@
+import JSON
+import EarthSciSerialization
+import SciMLBase
+
+"""
+    build_ode_problem(esm_path; grid_ref="") -> (ODEProblem, var_map)
+
+Load a PDE component `.esm` file, optionally merge a Grid Discretization
+Descriptor (GDD) from `grid_ref`, run the ESS canonical discretization
+pipeline, and return a ready-to-solve `SciMLBase.ODEProblem` together
+with the state-name → index `var_map::Dict{String,Int}`.
+
+The GDD provides the spatial grid (resolution, extent, boundary conditions)
+and the discretization rules to inject into the ESM. No solver is invoked
+inside this constructor.
+
+`grid_ref` may be an absolute path or a path relative to `esm_path`'s
+directory.
+"""
+function build_ode_problem(esm_path::AbstractString;
+                           grid_ref::AbstractString = "")
+    esm = _load_json_mutable(esm_path)
+
+    if !isempty(grid_ref)
+        gdd_path = isabspath(grid_ref) ? grid_ref :
+                   joinpath(dirname(abspath(esm_path)), grid_ref)
+        _merge_gdd!(esm, gdd_path)
+    end
+
+    disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
+    f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(disc)
+
+    prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
+    return prob, var_map
+end
+
+# ---------------------------------------------------------------------------
+# GDD merge helpers
+# ---------------------------------------------------------------------------
+
+function _merge_gdd!(esm::Dict{String, Any}, gdd_path::AbstractString)
+    gdd = _load_json_mutable(gdd_path)
+
+    gdd_grids = get(gdd, "grids", nothing)
+    gdd_grids !== nothing && _inject_grids!(esm, gdd_grids, gdd_path)
+
+    gdd_discs = get(gdd, "discretizations", nothing)
+    gdd_discs !== nothing && _inject_rules!(esm, gdd_discs, gdd_path)
+end
+
+function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractString)
+    esm_grids = get!(esm, "grids", Dict{String, Any}())
+
+    for (domain_key, domain_spec) in gdd_grids
+        domain_name = String(domain_key)
+        spatial = get(domain_spec, "spatial", Dict())
+        bcs     = get(domain_spec, "boundary_conditions", Any[])
+
+        periodic_dims = Set{String}()
+        for bc in bcs
+            get(bc, "type", "") == "periodic" || continue
+            for d in get(bc, "dimensions", Any[])
+                push!(periodic_dims, String(d))
+            end
+        end
+
+        sorted_axes = sort!(String[String(k) for k in keys(spatial)])
+        dims = Dict{String, Any}[]
+        spacing_vals = Dict{String, Float64}()
+
+        for axis_name in sorted_axes
+            axis_spec = spatial[axis_name]
+            h  = Float64(axis_spec["grid_spacing"])
+            lo = Float64(get(axis_spec, "min", 0.0))
+            hi = Float64(get(axis_spec, "max", 1.0))
+            N  = round(Int, (hi - lo) / h)
+            push!(dims, Dict{String, Any}(
+                "name"     => axis_name,
+                "size"     => N,
+                "periodic" => axis_name in periodic_dims,
+                "spacing"  => "uniform",
+            ))
+            spacing_vals["d$(axis_name)"] = h
+        end
+
+        esm_grids[domain_name] = Dict{String, Any}(
+            "family"     => "cartesian",
+            "dimensions" => dims,
+        )
+
+        for (_, mspec) in get(esm, "models", Dict())
+            get(mspec, "grid", "") == domain_name || continue
+            vars = get(mspec, "variables", Dict())
+            for (pname, hval) in spacing_vals
+                var_spec = get(vars, pname, nothing)
+                if var_spec !== nothing && get(var_spec, "type", "") == "parameter"
+                    var_spec["default"] = hval
+                end
+            end
+        end
+    end
+end
+
+function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractString)
+    rules = get!(esm, "rules", Any[])
+    discs = get!(esm, "discretizations", Dict{String, Any}())
+
+    for (rule_key, rule_ref) in gdd_discs
+        rname = String(rule_key)
+        ref   = get(rule_ref, "ref", nothing)
+
+        spec = if ref !== nothing
+            ref_path = joinpath(dirname(gdd_path), String(ref))
+            rule_doc = _load_json_mutable(ref_path)
+            rule_doc["discretizations"][rname]
+        else
+            rule_ref
+        end
+
+        stencil = get(spec, "stencil", nothing)
+        if stencil isa AbstractVector && !isempty(stencil)
+            first_entry = stencil[1]
+            sel   = get(first_entry, "selector", nothing)
+            kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
+            if kind == "cartesian"
+                scheme, use_rule = lower_stencil_to_scheme(rname, spec)
+                discs[rname] = scheme
+                push!(rules, use_rule)
+            else
+                repl = lower_stencil_to_canonical_replacement(spec)
+                push!(rules, Dict{String, Any}(
+                    "name"        => rname,
+                    "pattern"     => spec["applies_to"],
+                    "replacement" => repl,
+                ))
+            end
+        elseif haskey(spec, "replacement")
+            push!(rules, Dict{String, Any}(
+                "name"        => rname,
+                "pattern"     => spec["applies_to"],
+                "replacement" => spec["replacement"],
+            ))
+        end
+    end
+end
+
+function _load_json_mutable(path::AbstractString)::Dict{String, Any}
+    return JSON.parse(read(path, String))
+end
