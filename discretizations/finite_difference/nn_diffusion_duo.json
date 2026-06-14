@@ -1,0 +1,44 @@
+{
+  "discretizations": {
+    "nn_diffusion_duo": {
+      "applies_to": { "op": "laplacian", "args": ["$u"], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["cell_center"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "O(h^2) on a quasi-uniform triangular icosahedral mesh",
+      "stencil": [
+        {
+          "selector": {
+            "kind": "reduction",
+            "table": "cell_neighbors",
+            "count_expr": 3,
+            "k_bound": "k",
+            "combine": "+"
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              1.0,
+              { "op": "index", "args": ["area", "$target"] }
+            ]
+          }
+        },
+        {
+          "selector": {
+            "kind": "indirect",
+            "table": "cell_neighbors",
+            "index_expr": "$target"
+          },
+          "coeff": {
+            "op": "/",
+            "args": [
+              -3.0,
+              { "op": "index", "args": ["area", "$target"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

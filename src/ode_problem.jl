@@ -175,6 +175,8 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
 
         dims, spacing_vals = if family == "mpas"
             _inject_grids_mpas(domain_spec, gdd_path)
+        elseif family == "duo"
+            _inject_grids_duo(domain_spec, gdd_path)
         else
             _inject_grids_spatial(domain_spec)
         end
@@ -271,6 +273,37 @@ function _inject_grids_mpas(domain_spec, gdd_path::AbstractString)
 
     # No uniform spacing to inject; MPAS rules read geometry from connectivity
     # tables (area_cell, dc_edge, dv_edge) not from scalar parameters.
+    spacing_vals = Dict{String, Float64}()
+    return dims, spacing_vals
+end
+
+# Build dims for DUO icosahedral triangular grids.
+# GDD domain_spec must carry "n_cells" (integer = 20 * 4^level). The DUO grid
+# has constant valence 3 (all triangular cells), so no n_edges_on_cell array
+# is required. "loader" is preserved for the future build_duo_grid integration;
+# no grid construction is performed here (rules are gated behind ESS/esm-bpr).
+function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
+    n_cells_raw = get(domain_spec, "n_cells", nothing)
+    n_cells_raw === nothing && throw(
+        ArgumentError(
+            "DUO GDD domain_spec missing required field 'n_cells'. " *
+            "Add \"n_cells\": <integer> (= 20 * 4^level) to the GDD's grids.<domain> block."
+        )
+    )
+    n_cells = Int(n_cells_raw)
+    n_cells > 0 || throw(
+        ArgumentError("DUO GDD 'n_cells' must be a positive integer (got $n_cells)")
+    )
+
+    dims = [Dict{String, Any}(
+        "name"     => "n_cells",
+        "size"     => n_cells,
+        "periodic" => false,
+        "spacing"  => "unstructured",
+    )]
+
+    # No uniform spacing to inject; DUO rules read geometry from the cell
+    # area array (area) and cell_neighbors connectivity table.
     spacing_vals = Dict{String, Float64}()
     return dims, spacing_vals
 end

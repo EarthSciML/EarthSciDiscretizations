@@ -366,6 +366,39 @@ end
     @test occursin("monotonicity_constraint", content)
 end
 
+@testitem "nn_diffusion_duo scheme is discoverable and well-formed" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "nn_diffusion_duo", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"unstructured\"", content)
+    @test occursin("\"stencil\"", content)
+    # Operator class: scalar Laplacian acting at cell centers.
+    @test occursin("\"op\": \"laplacian\"", content)
+    @test occursin("\"emits_location\": \"cell_center\"", content)
+    # Two-row formulation closes ∇²u(c) = Σ_k (u(n_k) − u(c)) / A(c) — Row 1 is a
+    # constant-valence reduction (DUO triangular cells always have 3 neighbors);
+    # Row 2 is a self-targeting indirect row with coefficient −3/area[c].
+    @test occursin("\"kind\": \"reduction\"", content)
+    @test occursin("\"kind\": \"indirect\"", content)
+    @test occursin("\"table\": \"cell_neighbors\"", content)
+    @test occursin("\"k_bound\": \"k\"", content)
+    @test occursin("\"index_expr\": \"\$target\"", content)
+    # DUO has constant valence 3 — no arrayop needed for the self-term.
+    # Coefficient references: area (DuoGrid field name) and cell_neighbors.
+    @test occursin("\"area\"", content)
+end
+
 @testitem "nn_diffusion_mpas scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 
@@ -421,6 +454,7 @@ end
             "centered_2nd_uniform_vertical",
             "centered_2nd_uniform_latlon",
             "nn_diffusion_mpas",
+            "nn_diffusion_duo",
             "periodic_bc",
             "upwind_1st",
             "upwind_1st_nonuniform",
@@ -439,6 +473,7 @@ end
     @test "centered_2nd_uniform_vertical" in fd_names
     @test "centered_2nd_uniform_latlon" in fd_names
     @test "nn_diffusion_mpas" in fd_names
+    @test "nn_diffusion_duo" in fd_names
     @test "periodic_bc" in fd_names
     @test "upwind_1st" in fd_names
     @test "upwind_1st_nonuniform" in fd_names

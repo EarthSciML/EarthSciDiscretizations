@@ -265,6 +265,59 @@ end
     @test_throws ArgumentError _inject_grids!(esm, gdd_grids, "/dev/null")
 end
 
+@testitem "GDD grids dispatch: duo family emits n_cells dimension" begin
+    using EarthSciDiscretizations: _inject_grids!
+
+    esm = Dict{String,Any}("grids" => Dict{String,Any}())
+    gdd_grids = Dict{String,Any}(
+        "domain" => Dict{String,Any}(
+            "family"  => "duo",
+            "n_cells" => 320,
+            "loader"  => Dict{String,Any}("path" => "builtin://icosahedral/2", "reader" => "auto"),
+        ),
+    )
+    _inject_grids!(esm, gdd_grids, "/dev/null")
+
+    block = esm["grids"]["domain"]
+    @test block["family"] == "duo"
+    cell_dim = only(filter(d -> d["name"] == "n_cells", block["dimensions"]))
+    @test cell_dim["size"] == 320
+    @test cell_dim["periodic"] == false
+    @test cell_dim["spacing"] == "unstructured"
+end
+
+@testitem "GDD grids dispatch: duo family mesh ladder (levels 2/3/4)" begin
+    using EarthSciDiscretizations: _inject_grids!
+
+    for (level, expected_n) in ((2, 320), (3, 1280), (4, 5120))
+        esm = Dict{String,Any}("grids" => Dict{String,Any}())
+        gdd_grids = Dict{String,Any}(
+            "domain" => Dict{String,Any}(
+                "family"  => "duo",
+                "n_cells" => expected_n,
+                "loader"  => Dict{String,Any}("path" => "builtin://icosahedral/$level", "reader" => "auto"),
+            ),
+        )
+        _inject_grids!(esm, gdd_grids, "/dev/null")
+        block = esm["grids"]["domain"]
+        @test block["family"] == "duo"
+        cell_dim = only(filter(d -> d["name"] == "n_cells", block["dimensions"]))
+        @test cell_dim["size"] == expected_n
+    end
+end
+
+@testitem "GDD grids dispatch: duo missing n_cells raises" begin
+    using EarthSciDiscretizations: _inject_grids!
+
+    esm = Dict{String,Any}("grids" => Dict{String,Any}())
+    gdd_grids = Dict{String,Any}(
+        "domain" => Dict{String,Any}("family" => "duo"),
+    )
+    err = @test_throws ArgumentError _inject_grids!(esm, gdd_grids, "/dev/null")
+    @test occursin("DUO GDD", sprint(showerror, err.value))
+    @test occursin("n_cells", sprint(showerror, err.value))
+end
+
 @testitem "GDD rules dispatch: reduction selector throws ESS/esm-bpr gate error" begin
     using EarthSciDiscretizations: _inject_rules!
 
