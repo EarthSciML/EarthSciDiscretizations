@@ -717,6 +717,7 @@ end
         result = WalkESDTests.run_layer_c(upwind)
         @test result.outcome == WalkESDTests.LAYER_PASS
         @test occursin("gaussian_advection_cartesian_1d", result.reason)
+        @test occursin("advection_1d_convergence", result.reason)
         @test occursin("L∞", result.reason)
     finally
         if prior === nothing
@@ -747,6 +748,58 @@ end
         @test occursin("williamson1_cosine_bell", result.reason)
         @test occursin("williamson2_geostrophic_steady", result.reason)
         @test occursin("dcmip_1_1_3d_advection", result.reason)
+    finally
+        if prior === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior
+        end
+    end
+end
+
+@testitem "walker: layer C runs 1D diffusion analytic (discrete eigenvalue) via field pipeline (ESD_RUN_INTEGRATION=1)" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    rule = first(filter(r -> r.name == "centered_2nd_deriv_uniform", rules))
+
+    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    try
+        ENV["ESD_RUN_INTEGRATION"] = "1"
+        result = WalkESDTests.run_layer_c(rule)
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("diffusion_1d_analytic", result.reason)
+        @test occursin("L∞", result.reason)
+    finally
+        if prior === nothing
+            delete!(ENV, "ESD_RUN_INTEGRATION")
+        else
+            ENV["ESD_RUN_INTEGRATION"] = prior
+        end
+    end
+end
+
+@testitem "walker: layer C runs 2D diffusion analytic (discrete eigenvalue) via field pipeline (ESD_RUN_INTEGRATION=1)" begin
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    rule = first(filter(r -> r.name == "laplacian_2nd_uniform_cartesian", rules))
+
+    prior = get(ENV, "ESD_RUN_INTEGRATION", nothing)
+    try
+        ENV["ESD_RUN_INTEGRATION"] = "1"
+        result = WalkESDTests.run_layer_c(rule)
+        @test result.outcome == WalkESDTests.LAYER_PASS
+        @test occursin("diffusion_2d_analytic", result.reason)
+        @test occursin("L∞", result.reason)
     finally
         if prior === nothing
             delete!(ENV, "ESD_RUN_INTEGRATION")
