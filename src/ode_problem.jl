@@ -174,6 +174,17 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
     for (_, mspec) in get(esm, "models", Dict{String,Any}())
         ic_spec = get(mspec, "initial_conditions", nothing)
         ic_spec === nothing && continue
+
+        # Pick up plain numeric per-cell ICs injected by _inject_grids!
+        # (e.g. "dz[k]" entries added directly to the IC dict for non-uniform grids).
+        # These must reach build_evaluator so _discover_array_cells finds the array cells.
+        for (key, val) in ic_spec
+            skey = String(key)
+            match(r"^([^\[]+)\[[0-9,]+\]$", skey) === nothing && continue
+            val isa Real || continue
+            result[skey] = Float64(val)
+        end
+
         get(ic_spec, "type", "") == "expression" || continue
 
         grid_name = String(get(mspec, "grid", ""))
@@ -204,6 +215,24 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
             haskey(dim_spacing, dname) || (dim_spacing[dname] = 1.0 / N)
         end
 
+        # For non-uniform grids, reconstruct physical cell centres from the per-cell
+        # width ICs injected by _inject_grids! (e.g. "dz[k]" entries in ic_spec).
+        # When present, these override the uniform-(k-0.5)*h coordinate for that axis.
+        dim_centres = Dict{String, Vector{Float64}}()
+        for (dname, N) in dim_size
+            pname = "d$(dname)"  # e.g. "dz"
+            widths = Float64[]
+            for k in 1:N
+                val = get(ic_spec, "$(pname)[$k]", nothing)
+                val isa Real || (empty!(widths); break)
+                push!(widths, Float64(val))
+            end
+            if length(widths) == N
+                cumwidths = cumsum(widths)
+                dim_centres[dname] = [cumwidths[k] - widths[k] / 2.0 for k in 1:N]
+            end
+        end
+
         for (var_name, expr_json) in get(ic_spec, "values", Dict{String,Any}())
             vstr  = String(var_name)
             vspec = get(vars, vstr, nothing)
@@ -217,18 +246,24 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
             if length(shape_strs) == 1
                 d1 = shape_strs[1]
                 N1 = dim_size[d1]; h1 = dim_spacing[d1]
+                centres1 = get(dim_centres, d1, nothing)
                 for i in 1:N1
-                    bindings = Dict{String,Float64}(d1 => (i - 0.5) * h1)
+                    z1 = centres1 !== nothing ? centres1[i] : (i - 0.5) * h1
+                    bindings = Dict{String,Float64}(d1 => z1)
                     result["$(vstr)[$i]"] = _eval_expr(ic_expr, bindings)
                 end
             elseif length(shape_strs) == 2
                 d1 = shape_strs[1]; d2 = shape_strs[2]
                 N1 = dim_size[d1]; h1 = dim_spacing[d1]
                 N2 = dim_size[d2]; h2 = dim_spacing[d2]
+                centres1 = get(dim_centres, d1, nothing)
+                centres2 = get(dim_centres, d2, nothing)
                 for i in 1:N1, j in 1:N2
+                    z1 = centres1 !== nothing ? centres1[i] : (i - 0.5) * h1
+                    z2 = centres2 !== nothing ? centres2[j] : (j - 0.5) * h2
                     bindings = Dict{String,Float64}(
-                        d1 => (i - 0.5) * h1,
-                        d2 => (j - 0.5) * h2,
+                        d1 => z1,
+                        d2 => z2,
                     )
                     result["$(vstr)[$i,$j]"] = _eval_expr(ic_expr, bindings)
                 end
@@ -260,12 +295,14 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
         # Read grid family from GDD domain_spec; default "cartesian" for back-compat.
         family = String(get(domain_spec, "family", "cartesian"))
 
-        dims, spacing_vals = if family == "mpas"
-            _inject_grids_mpas(domain_spec, gdd_path)
+        if family == "mpas"
+            dims, spacing_vals = _inject_grids_mpas(domain_spec, gdd_path)
+            cell_widths_by_axis = Dict{String, Vector{Float64}}()
         elseif family == "duo"
-            _inject_grids_duo(domain_spec, gdd_path)
+            dims, spacing_vals = _inject_grids_duo(domain_spec, gdd_path)
+            cell_widths_by_axis = Dict{String, Vector{Float64}}()
         else
-            _inject_grids_spatial(domain_spec)
+            dims, spacing_vals, cell_widths_by_axis = _inject_grids_spatial(domain_spec)
         end
 
         esm_grids[domain_name] = Dict{String, Any}(
@@ -276,17 +313,46 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
         for (_, mspec) in get(esm, "models", Dict())
             get(mspec, "grid", "") == domain_name || continue
             vars = get(mspec, "variables", Dict())
+            ics  = get(mspec, "initial_conditions", nothing)
+
+            # Inject uniform spacing as parameter defaults.
             for (pname, hval) in spacing_vals
                 var_spec = get(vars, pname, nothing)
                 if var_spec !== nothing && get(var_spec, "type", "") == "parameter"
                     var_spec["default"] = hval
                 end
             end
+
+            # Inject per-cell widths as initial conditions for array state variables
+            # named d<axis> (e.g. dz for axis z) declared with shape [axis].
+            for (axis_name, widths) in cell_widths_by_axis
+                vname = "d$(axis_name)"
+                var_spec = get(vars, vname, nothing)
+                var_spec === nothing && continue
+                get(var_spec, "type", "") == "state" || continue
+                shape = get(var_spec, "shape", nothing)
+                shape isa AbstractVector && length(shape) == 1 &&
+                    String(shape[1]) == axis_name || continue
+                # Inject per-cell width ICs: vname[1]=w1, vname[2]=w2, ...
+                if ics === nothing
+                    mspec["initial_conditions"] = Dict{String, Any}()
+                    ics = mspec["initial_conditions"]
+                end
+                if !isa(ics, AbstractDict)
+                    ics = Dict{String, Any}()
+                    mspec["initial_conditions"] = ics
+                end
+                for (k, w) in enumerate(widths)
+                    ics["$(vname)[$k]"] = w
+                end
+            end
         end
     end
 end
 
-# Build dims + spacing_vals from spatial axis specs (cartesian/latlon/vertical/arakawa).
+# Build dims + spacing_vals + cell_widths_by_axis from spatial axis specs
+# (cartesian/latlon/vertical/arakawa). Non-uniform axes use "levels" (face positions);
+# uniform axes use "grid_spacing" + optional "min"/"max".
 function _inject_grids_spatial(domain_spec)
     spatial = get(domain_spec, "spatial", Dict())
     bcs     = get(domain_spec, "boundary_conditions", Any[])
@@ -302,23 +368,41 @@ function _inject_grids_spatial(domain_spec)
     sorted_axes = sort!(String[String(k) for k in keys(spatial)])
     dims = Dict{String, Any}[]
     spacing_vals = Dict{String, Float64}()
+    cell_widths_by_axis = Dict{String, Vector{Float64}}()
 
     for axis_name in sorted_axes
         axis_spec = spatial[axis_name]
-        h  = Float64(axis_spec["grid_spacing"])
-        lo = Float64(get(axis_spec, "min", 0.0))
-        hi = Float64(get(axis_spec, "max", 1.0))
-        N  = round(Int, (hi - lo) / h)
-        push!(dims, Dict{String, Any}(
-            "name"     => axis_name,
-            "size"     => N,
-            "periodic" => axis_name in periodic_dims,
-            "spacing"  => "uniform",
-        ))
-        spacing_vals["d$(axis_name)"] = h
+        if haskey(axis_spec, "levels")
+            # Non-uniform spacing: levels specifies face positions [z0, z1, ..., zN]
+            levels = Float64.(axis_spec["levels"])
+            N = length(levels) - 1
+            N >= 1 || error("_inject_grids_spatial: 'levels' for axis '$axis_name' must have ≥ 2 entries")
+            widths = [levels[k+1] - levels[k] for k in 1:N]
+            all(w > 0 for w in widths) || error("_inject_grids_spatial: 'levels' must be strictly increasing for axis '$axis_name'")
+            push!(dims, Dict{String, Any}(
+                "name"     => axis_name,
+                "size"     => N,
+                "periodic" => axis_name in periodic_dims,
+                "spacing"  => "nonuniform",
+            ))
+            cell_widths_by_axis[axis_name] = widths
+            spacing_vals["d$(axis_name)"] = (levels[end] - levels[1]) / N  # average spacing
+        else
+            h  = Float64(axis_spec["grid_spacing"])
+            lo = Float64(get(axis_spec, "min", 0.0))
+            hi = Float64(get(axis_spec, "max", 1.0))
+            N  = round(Int, (hi - lo) / h)
+            push!(dims, Dict{String, Any}(
+                "name"     => axis_name,
+                "size"     => N,
+                "periodic" => axis_name in periodic_dims,
+                "spacing"  => "uniform",
+            ))
+            spacing_vals["d$(axis_name)"] = h
+        end
     end
 
-    return dims, spacing_vals
+    return dims, spacing_vals, cell_widths_by_axis
 end
 
 # Build dims for MPAS unstructured Voronoi grids.

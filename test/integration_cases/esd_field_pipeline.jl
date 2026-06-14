@@ -40,7 +40,9 @@ end
 # ---------------------------------------------------------------------------
 
 # Read spatial axes from a GDD file (first domain found).
-# Returns a vector of NamedTuples: (name, lo, hi, h, N).
+# Returns a vector of NamedTuples: (name, lo, hi, h, N, cell_widths).
+# For uniform axes (grid_spacing key): cell_widths is nothing.
+# For non-uniform axes (levels key): cell_widths is a Float64 vector of per-cell widths.
 # Axes are sorted by name for deterministic ordering.
 function _read_gdd_axes(gdd_path::AbstractString)
     gdd = JSON.parse(read(gdd_path, String))
@@ -48,12 +50,23 @@ function _read_gdd_axes(gdd_path::AbstractString)
         spatial = get(domain_spec, "spatial", Dict{String,Any}())
         sorted_names = sort!([String(k) for k in keys(spatial)])
         return map(sorted_names) do axis_name
-            s  = spatial[axis_name]
-            lo = Float64(get(s, "min", 0.0))
-            hi = Float64(get(s, "max", 1.0))
-            h  = Float64(s["grid_spacing"])
-            N  = round(Int, (hi - lo) / h)
-            (name = axis_name, lo = lo, hi = hi, h = h, N = N)
+            s = spatial[axis_name]
+            if haskey(s, "levels")
+                levels = Float64.(s["levels"])
+                N = length(levels) - 1
+                widths = [levels[k+1] - levels[k] for k in 1:N]
+                lo = levels[1]; hi = levels[end]
+                h  = (hi - lo) / N
+                (name = axis_name, lo = lo, hi = hi, h = h, N = N,
+                 cell_widths = widths)
+            else
+                lo = Float64(get(s, "min", 0.0))
+                hi = Float64(get(s, "max", 1.0))
+                h  = Float64(s["grid_spacing"])
+                N  = round(Int, (hi - lo) / h)
+                (name = axis_name, lo = lo, hi = hi, h = h, N = N,
+                 cell_widths = nothing)
+            end
         end
     end
     return NamedTuple[]
@@ -98,6 +111,59 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
                     abs(u_vec[var_map["u[$i]"]] - cos(2π * (x - v * t)))
                 end
                 for i in 1:ax.N
+            )
+        end,
+
+    # 1-D vertical diffusion with zero Dirichlet BCs at top and bottom.
+    # IC: sin(π z).  Exact continuous solution: sin(π z) · exp(−π² t).
+    # Works for both uniform and non-uniform grids (reads cell centres from axes).
+    # Cell centres: for uniform grids, lo + (k-0.5)*h; for non-uniform,
+    # derived from cumulative sum of cell_widths.
+    "sin_pi_z_dirichlet" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+            ax = axes[1]
+            centres = if ax.cell_widths !== nothing
+                ws = ax.cell_widths
+                cumws = [sum(ws[1:k-1]) + ws[k] / 2.0 for k in 1:length(ws)]
+                cumws
+            else
+                [ax.lo + (k - 0.5) * ax.h for k in 1:ax.N]
+            end
+            factor = exp(-π^2 * t)
+            maximum(
+                abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
+                for k in 1:ax.N
+            )
+        end,
+
+    # 1-D vertical diffusion, interior cells only.
+    # Same PDE and analytic reference as sin_pi_z_dirichlet, but skips
+    # `boundary_skip` cells (default 3) at each end.  This isolates the
+    # O(h²) interior truncation error from the O(1/h) ghost-cell forcing
+    # error that zero-Dirichlet ghost cells introduce at k=1 and k=N.
+    # The ghost-cell contamination decays as O(t^k / h^{2k-1}) at cell k
+    # from the boundary; with boundary_skip=3 and t_final≤1e-5 it is
+    # negligible vs. the O(h²)·t interior truncation error for N≥16.
+    "sin_pi_z_dirichlet_interior" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+            ax = axes[1]
+            N  = ax.N
+            n_skip = Int(get(manifest, "boundary_skip", 3))
+            k_lo = n_skip + 1
+            k_hi = N - n_skip
+            k_hi >= k_lo ||
+                error("sin_pi_z_dirichlet_interior: no interior cells (N=$N, boundary_skip=$n_skip)")
+            centres = if ax.cell_widths !== nothing
+                ws = ax.cell_widths
+                cumws = cumsum(ws)
+                [cumws[k] - ws[k] / 2.0 for k in 1:N]
+            else
+                [ax.lo + (k - 0.5) * ax.h for k in 1:N]
+            end
+            factor = exp(-π^2 * t)
+            maximum(
+                abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
+                for k in k_lo:k_hi
             )
         end,
 )
