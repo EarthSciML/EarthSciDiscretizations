@@ -182,8 +182,18 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
             for (i, entry) in enumerate(stencil)]
     elseif family == "arakawa"
         axis_vars = _arakawa_collect_axis_vars(stencil)
-        Any[_lower_arakawa_entry_unpack(entry, operand_var, axis_vars, i)
-            for (i, entry) in enumerate(stencil)]
+        dollar_args = filter(
+            a -> a isa AbstractString && startswith(String(a), "\$"),
+            get(applies_to, "args", Any[]),
+        )
+        if length(dollar_args) > 1
+            stagger_op_map = _arakawa_stagger_operand_map(stencil, Vector{String}(dollar_args))
+            Any[_lower_arakawa_entry_unpack_staged(entry, stagger_op_map, axis_vars, i)
+                for (i, entry) in enumerate(stencil)]
+        else
+            Any[_lower_arakawa_entry_unpack(entry, operand_var, axis_vars, i)
+                for (i, entry) in enumerate(stencil)]
+        end
     elseif family == "latlon"
         axis_names = _latlon_collect_axis_names(stencil)
         Any[_lower_latlon_entry_unpack(entry, operand_var, axis_names, i)
@@ -444,13 +454,25 @@ function lower_stencil_to_canonical_replacement(rule::AbstractDict)::Dict{String
             kind = String(get(selector, "kind", ""))
             if kind == "arakawa"
                 stagger = String(get(selector, "stagger", ""))
-                stagger == "cell_center" || throw(
-                    ArgumentError(
-                        "lower_stencil_to_canonical_replacement: stencil entry $idx has " *
-                            "stagger '$stagger' — canonical-component form is only valid " *
-                            "for collocated (cell_center) stencils",
-                    ),
-                )
+                # Single-arg rules: non-cell_center stagger would index the wrong location.
+                # Multi-arg rules: each arg has its own stagger, lowered by _arakawa_stagger_operand_map;
+                # the replacement correctly references each pattern var at its own indices.
+                if stagger != "cell_center"
+                    applies_to_check = get(rule, "applies_to", nothing)
+                    n_dollar_args = applies_to_check isa AbstractDict ?
+                        count(
+                            a -> a isa AbstractString && startswith(String(a), "\$"),
+                            get(applies_to_check, "args", Any[]),
+                        ) : 0
+                    n_dollar_args > 1 || throw(
+                        ArgumentError(
+                            "lower_stencil_to_canonical_replacement: stencil entry $idx has " *
+                                "stagger '$stagger' — canonical-component form is only valid " *
+                                "for collocated (cell_center) stencils, or multi-arg rules " *
+                                "where each stagger maps to a distinct pattern variable",
+                        ),
+                    )
+                end
             end
             axis = get(selector, "axis", nothing)
             if axis isa AbstractString && startswith(String(axis), "\$")
@@ -657,6 +679,45 @@ end
 function _lower_arakawa_entry_unpack(entry, operand_var::String,
         axis_vars::Vector{String}, idx::Int)
     selector, coeff = _entry_selector_and_coeff(entry, idx)
+    return _lower_arakawa_entry(selector, coeff, operand_var, axis_vars, idx)
+end
+
+# Build a map from stagger name → operand pattern variable for multi-arg arakawa rules.
+# Unique staggers are collected from the stencil in sorted order and paired with
+# dollar_args in the same order: args[1] → smallest stagger name, args[2] → next, etc.
+function _arakawa_stagger_operand_map(stencil::AbstractVector,
+                                       dollar_args::Vector{String})::Dict{String, String}
+    seen = Set{String}()
+    for entry in stencil
+        sel = get(entry, "selector", nothing)
+        sel isa AbstractDict || continue
+        stagger = String(get(sel, "stagger", ""))
+        isempty(stagger) || push!(seen, stagger)
+    end
+    sorted_staggers = sort!(collect(seen))
+    length(sorted_staggers) <= length(dollar_args) || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: arakawa rule has $(length(sorted_staggers)) " *
+                "distinct staggers ($(join(sorted_staggers, ", "))) but only " *
+                "$(length(dollar_args)) \$-prefixed args; add one arg per stagger",
+        ),
+    )
+    return Dict{String, String}(
+        stagger => dollar_args[k] for (k, stagger) in enumerate(sorted_staggers))
+end
+
+function _lower_arakawa_entry_unpack_staged(entry,
+        stagger_op_map::Dict{String, String},
+        axis_vars::Vector{String}, idx::Int)
+    selector, coeff = _entry_selector_and_coeff(entry, idx)
+    stagger = String(get(selector, "stagger", ""))
+    operand_var = get(stagger_op_map, stagger, nothing)
+    operand_var !== nothing || throw(
+        ArgumentError(
+            "lower_stencil_to_replacement: arakawa entry $idx stagger '$stagger' " *
+                "has no corresponding arg in the stagger→operand map",
+        ),
+    )
     return _lower_arakawa_entry(selector, coeff, operand_var, axis_vars, idx)
 end
 

@@ -192,6 +192,23 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
             end
             err
         end,
+
+    # 2-D Arakawa C-grid divergence via vec_sincos_2d_periodic MMS.
+    # F(x,y) = (sin(2πx)cos(2πy), cos(2πx)sin(2πy))  →  ∇·F = 4π cos(2πx)cos(2πy).
+    # State variable `div` starts at 0 and accumulates RHS = ∇·F over time t.
+    # Exact solution: div(t)[i,j] = t · 4π cos(2πx_c) cos(2πy_c) at cell centre.
+    "vec_sincos_2d_periodic" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+            ax = axes[1]; ay = axes[2]
+            maximum(
+                let x = ax.lo + (i - 0.5) * ax.h,
+                    y = ay.lo + (j - 0.5) * ay.h,
+                    exact = t * 4π * cos(2π * x) * cos(2π * y)
+                    abs(u_vec[var_map["div[$i,$j]"]] - exact)
+                end
+                for i in 1:ax.N, j in 1:ay.N
+            )
+        end,
 )
 
 # ---------------------------------------------------------------------------

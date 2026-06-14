@@ -241,14 +241,21 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
             (shape === nothing || isempty(shape)) && continue
             shape_strs = String.(shape)
 
+            # Variable location determines the physical coordinate of each index.
+            # face_x: index i sits at x = (i-1)*h (left face of cell i).
+            # face_y: index j sits at y = (j-1)*h (bottom face of cell j).
+            # All other locations (cell_center, vertex, …): (i-0.5)*h.
+            location = String(get(vspec, "location", "cell_center"))
+
             ic_expr = EarthSciSerialization.parse_expression(expr_json)
 
             if length(shape_strs) == 1
                 d1 = shape_strs[1]
                 N1 = dim_size[d1]; h1 = dim_spacing[d1]
                 centres1 = get(dim_centres, d1, nothing)
+                c1 = location == "face_x" ? -1.0 : -0.5
                 for i in 1:N1
-                    z1 = centres1 !== nothing ? centres1[i] : (i - 0.5) * h1
+                    z1 = centres1 !== nothing ? centres1[i] : (i + c1) * h1
                     bindings = Dict{String,Float64}(d1 => z1)
                     result["$(vstr)[$i]"] = _eval_expr(ic_expr, bindings)
                 end
@@ -258,9 +265,11 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
                 N2 = dim_size[d2]; h2 = dim_spacing[d2]
                 centres1 = get(dim_centres, d1, nothing)
                 centres2 = get(dim_centres, d2, nothing)
+                c1 = location == "face_x" ? -1.0 : -0.5
+                c2 = location == "face_y" ? -1.0 : -0.5
                 for i in 1:N1, j in 1:N2
-                    z1 = centres1 !== nothing ? centres1[i] : (i - 0.5) * h1
-                    z2 = centres2 !== nothing ? centres2[j] : (j - 0.5) * h2
+                    z1 = centres1 !== nothing ? centres1[i] : (i + c1) * h1
+                    z2 = centres2 !== nothing ? centres2[j] : (j + c2) * h2
                     bindings = Dict{String,Float64}(
                         d1 => z1,
                         d2 => z2,
