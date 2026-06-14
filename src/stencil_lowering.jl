@@ -243,15 +243,25 @@ ESS `expand_scheme`. Mirroring the ESS cartesian foundation, only
 corresponding selector dispatch — cubed-sphere panel esm-57f,
 unstructured esm-bpr).
 
-Multi-output rules (catalog extension ahead of the RFC: `stencil` is an
-**object keyed by output name**, e.g. `ppm_reconstruction`'s
-`q_left_edge` / `q_right_edge`) lower **one output at a time**: pass
-`output=<name>` to select the entry list. Each output is an ordinary
-single-axis cartesian stencil from ESS's point of view, so the emitted
-scheme + `use:` rule drive the canonical pipeline unchanged; one ESM
-document carries one output's scheme. Document-level multi-output
-emission (a single rewrite producing every named output) awaits an RFC
-§7 extension and is not expressible here.
+Multi-output rules (catalog extension: `stencil` is an **object keyed
+by output name**, e.g. `ppm_reconstruction`'s `q_left_edge` /
+`q_right_edge`) lower **one output at a time**: pass `output=<name>` to
+select the entry list. Each output is an ordinary single-axis cartesian
+stencil from ESS's point of view, so the emitted scheme + `use:` rule
+drive the canonical pipeline unchanged; one ESM document carries one
+output's scheme. This is the path the Layer-B convergence runner uses.
+
+Document-level multi-output emission — a single ESM document carrying a
+`kind: "multi_output_stencil"` scheme that ESS expands to observed
+equations for every named output — is now expressible via the ESS
+`multi_output_stencil` extension (ess-7hb/ess-ebe). The Layer-A
+canonical fixture for `ppm_reconstruction` demonstrates this path: its
+`input.esm` carries `kind: "multi_output_stencil"` with `primary:
+"q_right_edge"`, and `discretize` expands it to observed arrayop
+equations for both `q_left_edge__q__x` and `q_right_edge__q__x`. This
+function (`lower_stencil_to_scheme`) continues to emit single-output
+schemes for Layer-B since the convergence runner iterates each output
+independently.
 
 Errors (`ArgumentError`): missing/empty `stencil`; malformed
 `applies_to` (no `\$`-operand or non-`\$` `dim`); `grid_family` other
