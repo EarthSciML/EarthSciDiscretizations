@@ -98,3 +98,23 @@ workspace), `scripts/setup_polecat_env.sh` Pkg.develops a local path —
 the explicit develop entry overrides the `[sources]` URL until you
 remove it. CI still runs this same script as a mandatory step
 (`.github/workflows/Tests.yml`), so polecats and CI share one setup path.
+
+### The `[sources]` invariant
+
+**The `[sources]` block must always be present in `Project.toml`.** Never
+remove it, and never commit `Project.toml` without it.
+
+`EarthSciSerialization` is not in the General registry. It resolves only
+via `[sources]`. Without this block, `Pkg.instantiate()` on a fresh clone
+fails with a "not found in any registry" error.
+
+**Why this keeps breaking:** `Pkg.add`, `Pkg.develop`, and `Pkg.update`
+silently rewrite `Project.toml` and drop `[sources]`. The scripts in
+this repo that call Pkg operations (`scripts/setup_polecat_env.sh`) now
+snapshot and restore `[sources]` automatically. However, any direct Pkg
+invocation outside that script is still at risk.
+
+**Rules:**
+- Always run `scripts/setup_polecat_env.sh` (not bare `Pkg.add` / `Pkg.develop`) to set up ESS locally.
+- Before committing `Project.toml`, verify `[sources]` is present: `grep '\[sources\]' Project.toml`.
+- `.github/workflows/SourcesCheck.yml` fails CI if `[sources]` is missing — do not bypass or delete this check.

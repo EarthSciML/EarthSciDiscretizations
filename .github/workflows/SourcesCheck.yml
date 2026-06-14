@@ -1,0 +1,47 @@
+name: "Project.toml sources integrity"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-'
+  push:
+    branches:
+      - main
+
+jobs:
+  check-sources:
+    name: "Verify [sources].EarthSciSerialization"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Check [sources].EarthSciSerialization entry in Project.toml"
+        run: |
+          if awk '
+            /^\[sources\]/ { in_sources=1; next }
+            /^\[/          { in_sources=0 }
+            in_sources && /EarthSciSerialization/ { found=1 }
+            END { exit !found }
+          ' Project.toml; then
+            echo "OK: [sources].EarthSciSerialization is present in Project.toml"
+          else
+            echo "ERROR: Project.toml is missing [sources].EarthSciSerialization"
+            echo ""
+            echo "EarthSciSerialization is not in the Julia General registry and"
+            echo "resolves only via the [sources] block in Project.toml. A missing"
+            echo "entry breaks fresh-clone Pkg.instantiate()."
+            echo ""
+            echo "Most likely cause: a Pkg operation (Pkg.add, Pkg.develop, Pkg.update)"
+            echo "rewrote Project.toml without preserving [sources]. The project's"
+            echo "scripts/setup_polecat_env.sh guards against this automatically;"
+            echo "other Pkg invocations must restore [sources] manually."
+            echo ""
+            echo "Required entry in Project.toml:"
+            echo ""
+            echo "[sources]"
+            echo 'EarthSciSerialization = {url = "https://github.com/EarthSciML/EarthSciSerialization", rev = "main", subdir = "packages/EarthSciSerialization.jl"}'
+            echo ""
+            echo "See AGENTS.md § Dependency resolution for the full invariant."
+            exit 1
+          fi
