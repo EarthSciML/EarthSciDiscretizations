@@ -288,16 +288,17 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "ppm_reconstruction"
-            # ppm_reconstruction (dsc-a7b2): Layer-A SKIPs via its
-            # applicable:false canonical stub (document-level multi-output
-            # emission pends an RFC §7 extension). Layer-B passes via the
-            # ArrayOp-native fv_cell_average_1d runner: each named stencil
-            # output (q_left_edge, q_right_edge) lowers to its own ESS
-            # scheme + use: rule, the IC is exact cell averages, and the
-            # CW84 edge interpolation measures O(h⁴) against the edge point
+            # ppm_reconstruction (dsc-a7b2): Layer-A passes via its canonical
+            # byte contract (promoted from applicable:false once the ESS
+            # multi_output_stencil document path landed; 3341-byte canonical
+            # doc is the regression net for the multi-output AST). Layer-B
+            # passes via the ArrayOp-native fv_cell_average_1d runner: each
+            # named stencil output (q_left_edge, q_right_edge) lowers to its
+            # own ESS scheme + use: rule, the IC is exact cell averages, and
+            # the CW84 edge interpolation measures O(h⁴) against edge point
             # values — clearing the fixture's expected_min_order of 2.8.
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "laplacian_2nd_uniform_cartesian"
