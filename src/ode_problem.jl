@@ -1,6 +1,16 @@
 import JSON
 import EarthSciSerialization
 import SciMLBase
+import ModelingToolkit
+
+# Grid families whose discretize path goes through ESS PDESystem (Path B).
+const _CURVILINEAR_FAMILIES = Set{String}(["latlon", "cubed_sphere"])
+
+# Computational axis pair for each curvilinear family (xi_axis, eta_axis).
+const _CURVILINEAR_AXES = Dict{String, Tuple{Symbol, Symbol}}(
+    "latlon"       => (:lon, :lat),
+    "cubed_sphere" => (:xi,  :eta),
+)
 
 """
     build_ode_problem(esm_path; grid_ref="") -> (ODEProblem, var_map)
@@ -10,9 +20,12 @@ Descriptor (GDD) from `grid_ref`, run the ESS canonical discretization
 pipeline, and return a ready-to-solve `SciMLBase.ODEProblem` together
 with the state-name → index `var_map::Dict{String,Int}`.
 
-The GDD provides the spatial grid (resolution, extent, boundary conditions)
-and the discretization rules to inject into the ESM. No solver is invoked
-inside this constructor.
+When the GDD specifies a curvilinear grid family (`latlon` or `cubed_sphere`),
+the function routes through the ESS PDESystem pipeline (Path B): the `.esm`
+is loaded via `EarthSciSerialization.load`, flattened to a `PDESystem`, and
+discretized by `EarthSciSerialization.discretize(sys, grid)`.  Otherwise the
+existing rule-engine pipeline (Path A) is used.  No solver is invoked inside
+this constructor.
 
 `grid_ref` may be an absolute path or a path relative to `esm_path`'s
 directory.
@@ -31,9 +44,14 @@ function build_ode_problem(esm_path::AbstractString;
     if !isempty(grid_ref)
         gdd_path = isabspath(grid_ref) ? grid_ref :
                    joinpath(dirname(abspath(esm_path)), grid_ref)
+        gdd = _load_json_mutable(gdd_path)
+        if _has_curvilinear_domain(gdd)
+            return _build_path_b(esm_path, gdd)
+        end
         _merge_gdd!(esm, gdd_path)
     end
 
+    # Path A: rule-engine discretize pipeline.
     expr_ics = _eval_expression_ics(esm)
 
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
@@ -42,6 +60,75 @@ function build_ode_problem(esm_path::AbstractString;
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
     return prob, var_map
+end
+
+# ---------------------------------------------------------------------------
+# Path B: PDESystem → ESS.discretize(sys, grid) curvilinear pipeline (esd-ncg)
+# ---------------------------------------------------------------------------
+
+function _has_curvilinear_domain(gdd::Dict{String,Any})::Bool
+    for (_, domain_spec) in get(gdd, "grids", Dict{String,Any}())
+        family = String(get(domain_spec, "family", "cartesian"))
+        family in _CURVILINEAR_FAMILIES && return true
+    end
+    return false
+end
+
+function _build_path_b(esm_path::AbstractString, gdd::Dict{String,Any})
+    esmfile = EarthSciSerialization.load(esm_path)
+    flat    = EarthSciSerialization.flatten(esmfile)
+    sys     = ModelingToolkit.PDESystem(flat)
+
+    # Locate the first curvilinear grid spec in the GDD.
+    family      = ""
+    domain_spec = Dict{String,Any}()
+    for (_, dspec) in get(gdd, "grids", Dict{String,Any}())
+        f = String(get(dspec, "family", "cartesian"))
+        if f in _CURVILINEAR_FAMILIES
+            family      = f
+            domain_spec = Dict{String,Any}(String(k) => v for (k, v) in dspec)
+            break
+        end
+    end
+
+    grid              = _construct_curvilinear_grid(family, domain_spec)
+    xi_axis, eta_axis = _CURVILINEAR_AXES[family]
+
+    prob = EarthSciSerialization.discretize(sys, grid;
+                                            xi_axis  = xi_axis,
+                                            eta_axis = eta_axis)
+
+    # Best-effort var_map: one entry per cell of each dependent variable.
+    N = EarthSciSerialization.n_cells(grid)
+    var_map = Dict{String,Int}()
+    for (dv_idx, dv) in enumerate(sys.dvs)
+        nm   = String(Symbolics.tosymbol(dv, escape=false))
+        base = split(nm, "(")[1]
+        for i in 1:N
+            var_map["$(base)[$i]"] = (dv_idx - 1) * N + i
+        end
+    end
+
+    return prob, var_map
+end
+
+function _construct_curvilinear_grid(family::String, domain_spec::Dict{String,Any})
+    if family == "latlon"
+        R       = Float64(get(domain_spec, "R", 1.0))
+        spatial = Dict{String,Any}(String(k) => v
+                                   for (k, v) in get(domain_spec, "spatial", Dict()))
+        lon_sp  = Dict{String,Any}(String(k) => v for (k, v) in spatial["lon"])
+        lat_sp  = Dict{String,Any}(String(k) => v for (k, v) in spatial["lat"])
+        nlon = round(Int, (Float64(get(lon_sp, "max",  π))    - Float64(get(lon_sp, "min", -π)))    / Float64(lon_sp["grid_spacing"]))
+        nlat = round(Int, (Float64(get(lat_sp, "max",  π/2))  - Float64(get(lat_sp, "min", -π/2))) / Float64(lat_sp["grid_spacing"]))
+        return _latlon(; nlon = nlon, nlat = nlat, R = R)
+    elseif family == "cubed_sphere"
+        Nc = Int(get(domain_spec, "Nc", 4))
+        R  = Float64(get(domain_spec, "R", 1.0))
+        return CubedSphereGrid(Nc; R = R)
+    else
+        error("_construct_curvilinear_grid: unsupported family '$family'")
+    end
 end
 
 # ---------------------------------------------------------------------------
