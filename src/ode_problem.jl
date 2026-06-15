@@ -39,7 +39,8 @@ field without any post-construction mutation by the caller.
 """
 function build_ode_problem(esm_path::AbstractString;
                            grid_ref::AbstractString = "",
-                           reader_fn = nothing)
+                           reader_fn = nothing,
+                           extra_ics::Dict{String,Float64} = Dict{String,Float64}())
     esm = _load_json_mutable(esm_path)
 
     loaded_grids = Dict{String,Any}()
@@ -56,6 +57,7 @@ function build_ode_problem(esm_path::AbstractString;
 
     # Path A: rule-engine discretize pipeline.
     expr_ics = _eval_expression_ics(esm)
+    merge!(expr_ics, extra_ics)
 
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
 
@@ -468,21 +470,32 @@ function _inject_grids_mpas(domain_spec, gdd_path::AbstractString;
         ))
     end
 
-    # Load MpasGrid when reader_fn is provided; otherwise skip (MPAS pre-bind
-    # is deferred until a reader_fn is supplied at build_ode_problem call time).
+    # Load MpasGrid: builtin Voronoi paths need no reader_fn; all others do.
     grid = nothing
     loader_spec = get(domain_spec, "loader", nothing)
-    if loader_spec !== nothing && reader_fn !== nothing
-        loader_path_abs = let
-            raw = String(get(loader_spec, "path", ""))
-            isabspath(raw) ? raw : joinpath(dirname(gdd_path), raw)
+    if loader_spec !== nothing
+        loader_path_raw = String(get(loader_spec, "path", ""))
+        loader_path_abs = startswith(loader_path_raw, "builtin://") ? loader_path_raw :
+            (isabspath(loader_path_raw) ? loader_path_raw :
+             joinpath(dirname(gdd_path), loader_path_raw))
+        R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
+        builtin_level = _parse_builtin_voronoi_level(loader_path_abs)
+        if builtin_level !== nothing
+            grid = build_mpas_grid(
+                loader = Dict("path"   => loader_path_abs,
+                              "reader" => "auto",
+                              "check"  => String(get(loader_spec, "check", "strict"))),
+                R = R_sphere,
+            )
+        elseif reader_fn !== nothing
+            grid = build_mpas_grid(
+                loader   = Dict("path"   => loader_path_abs,
+                                "reader" => String(get(loader_spec, "reader", "mpas_mesh")),
+                                "check"  => String(get(loader_spec, "check",  "strict"))),
+                reader_fn = reader_fn,
+                R = R_sphere,
+            )
         end
-        grid = build_mpas_grid(
-            loader   = Dict("path"   => loader_path_abs,
-                            "reader" => String(get(loader_spec, "reader", "mpas_mesh")),
-                            "check"  => String(get(loader_spec, "check",  "strict"))),
-            reader_fn = reader_fn,
-        )
     end
 
     spacing_vals = Dict{String, Float64}()
@@ -518,7 +531,10 @@ function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
     loader_spec = get(domain_spec, "loader", nothing)
     if loader_spec !== nothing
         loader_path = String(get(loader_spec, "path", ""))
-        isempty(loader_path) || (grid = build_duo_grid(loader = loader_spec))
+        if !isempty(loader_path)
+            R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
+            grid = build_duo_grid(loader = loader_spec, R = R_sphere)
+        end
     end
 
     spacing_vals = Dict{String, Float64}()
@@ -652,11 +668,58 @@ end
 # ctables maps name → Matrix{Int} or Vector{Int} (integer connectivity);
 # scalar_arrs maps name → Vector{Float64} (per-cell float geometry).
 function _extract_connectivity(grid::DuoGrid)
+    # Build MPAS Voronoi dual to obtain circumcenter-to-circumcenter (dv_edge)
+    # and primal-edge-length (dc_edge) geometry needed for the FVM weights.
+    mesh = _duo_voronoi_dual(grid.level; R = grid.R)
+
+    # Invert cells_on_edge: (DUO vertex pair) → MPAS edge index.
+    Ne = mesh.n_edges
+    edge_idx_duo = Dict{Tuple{Int,Int},Int}()
+    sizehint!(edge_idx_duo, Ne)
+    for e in 1:Ne
+        v1 = mesh.cells_on_edge[1, e]
+        v2 = mesh.cells_on_edge[2, e]
+        key = v1 < v2 ? (v1, v2) : (v2, v1)
+        edge_idx_duo[key] = e
+    end
+
+    # Build edges_on_face (3 × Nc, 0-based k): local edge k of DUO triangle c
+    # → MPAS edge index. Edge opposite vertex k+1 (1-based) of each triangle:
+    #   k=0 (opposite v1): edge (v2, v3)
+    #   k=1 (opposite v2): edge (v3, v1)
+    #   k=2 (opposite v3): edge (v1, v2)
+    Nc = size(grid.faces, 2)
+    edges_on_face = Matrix{Int}(undef, 3, Nc)
+    for c in 1:Nc
+        v1 = grid.faces[1, c]; v2 = grid.faces[2, c]; v3 = grid.faces[3, c]
+        edges_on_face[1, c] = edge_idx_duo[v2 < v3 ? (v2, v3) : (v3, v2)]
+        edges_on_face[2, c] = edge_idx_duo[v3 < v1 ? (v3, v1) : (v1, v3)]
+        edges_on_face[3, c] = edge_idx_duo[v1 < v2 ? (v1, v2) : (v2, v1)]
+    end
+
+    # area_eff[c] = (1/4) Σ_k dc_edge[k] * dv_edge[k] is the correct
+    # normalization area for the dc/dv FVM formula on triangular DUO cells.
+    # It equals the triangle area for equilateral cells and gives second-order
+    # accuracy on quasi-uniform meshes where grid.area (circumscribed-circle
+    # area) would not cancel the O(h) balance residual from distorted cells.
+    area_eff = Vector{Float64}(undef, Nc)
+    for c in 1:Nc
+        s = 0.0
+        for k in 1:3
+            e = edges_on_face[k, c]
+            s += mesh.dc_edge[e] * mesh.dv_edge[e]
+        end
+        area_eff[c] = 0.25 * s
+    end
+
     ctables = Dict{String,Any}(
         "cell_neighbors" => grid.cell_neighbors,  # 3 × n_cells, 1-based, 0-based k
+        "edges_on_face"  => edges_on_face,         # 3 × n_cells, MPAS edge idx, 0-based k
     )
     scalar_arrs = Dict{String,Vector{Float64}}(
-        "area" => Float64.(grid.area),
+        "area"    => area_eff,
+        "dv_edge" => mesh.dv_edge,
+        "dc_edge" => mesh.dc_edge,
     )
     return ctables, scalar_arrs
 end

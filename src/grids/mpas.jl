@@ -310,6 +310,245 @@ const _MPAS_SOURCE_SHA = "dsc-7j0"
 const _MPAS_READER_VERSION = "0.1.0"
 
 """
+Parse `builtin://icosahedral_voronoi/<level>` loader paths. Returns the
+subdivision level as an Int, or `nothing` if the path is not a builtin
+Voronoi spec.
+"""
+function _parse_builtin_voronoi_level(path::AbstractString)
+    prefix = "builtin://icosahedral_voronoi/"
+    startswith(path, prefix) || return nothing
+    tail = path[(length(prefix) + 1):end]
+    lvl = tryparse(Int, tail)
+    lvl === nothing && throw(ArgumentError(
+        "mpas: cannot parse voronoi level from loader path $path"))
+    lvl < 1 && throw(DomainError(lvl, "mpas: voronoi level must be ≥ 1"))
+    return lvl
+end
+
+"""
+    _duo_voronoi_dual(level; R=6.371e6) -> MpasMeshData
+
+Construct the Voronoi dual of the DUO icosahedral mesh at `level` on a
+sphere of radius `R`. MPAS cells are the DUO vertices; MPAS dual vertices
+are the DUO face centroids; edges are shared.
+
+DUO level r yields:
+  n_cells   = 10·4^r + 2  (DUO vertices → MPAS cell centres)
+  n_edges   = 30·4^r      (DUO edges → MPAS edges)
+  n_vertices = 20·4^r     (DUO faces → MPAS dual vertices)
+  max_edges  = 6           (12 pentagonal + rest hexagonal MPAS cells)
+"""
+function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
+    level >= 1 || throw(DomainError(level, "mpas: voronoi dual level must be ≥ 1"))
+    duo = build_duo_grid(; loader = (path = "builtin://icosahedral/$(level)",), R = R)
+
+    Nv = size(duo.vertices, 2)   # MPAS n_cells  (DUO vertices)
+    Nc = size(duo.faces, 2)      # MPAS n_vertices (DUO faces)
+    Ne = size(duo.edges, 2)      # MPAS n_edges
+
+    R_f = Float64(R)
+
+    # ---- 1. MPAS cell centres = DUO vertex positions ----
+    lon_cell = Vector{Float64}(undef, Nv)
+    lat_cell = Vector{Float64}(undef, Nv)
+    for v in 1:Nv
+        x = Float64(duo.vertices[1, v]) / R_f
+        y = Float64(duo.vertices[2, v]) / R_f
+        z = Float64(duo.vertices[3, v]) / R_f
+        lon_cell[v] = atan(y, x)
+        lat_cell[v] = asin(clamp(z, -1.0, 1.0))
+    end
+
+    # ---- 2. Lookup tables ----
+    edge_idx = Dict{Tuple{Int,Int}, Int}()          # sorted (v1,v2) → edge index
+    sizehint!(edge_idx, Ne)
+    for e in 1:Ne
+        v1, v2 = duo.edges[1, e], duo.edges[2, e]
+        edge_idx[v1 < v2 ? (v1, v2) : (v2, v1)] = e
+    end
+
+    # edge_faces: sorted (v1,v2) → [f1, f2] (the two DUO faces sharing each edge)
+    edge_faces = Dict{Tuple{Int,Int}, Vector{Int}}()
+    sizehint!(edge_faces, Ne)
+    face_vset = Vector{Set{Int}}(undef, Nc)
+    for f in 1:Nc
+        v1, v2, v3 = duo.faces[1, f], duo.faces[2, f], duo.faces[3, f]
+        face_vset[f] = Set{Int}((v1, v2, v3))
+        for (a, b) in ((v1, v2), (v2, v3), (v1, v3))
+            key = a < b ? (a, b) : (b, a)
+            push!(get!(edge_faces, key, Int[]), f)
+        end
+    end
+
+    # Circumcenters of DUO faces — used as MPAS Voronoi vertices.
+    # For a spherical triangle with CCW unit-vector vertices a,b,c the circumcenter
+    # direction is (a×b + b×c + c×a); normalised and scaled to radius R_f.
+    face_cc = Matrix{Float64}(undef, 3, Nc)
+    for f in 1:Nc
+        v1, v2, v3 = duo.faces[1, f], duo.faces[2, f], duo.faces[3, f]
+        a1x = Float64(duo.vertices[1, v1]) / R_f
+        a1y = Float64(duo.vertices[2, v1]) / R_f
+        a1z = Float64(duo.vertices[3, v1]) / R_f
+        a2x = Float64(duo.vertices[1, v2]) / R_f
+        a2y = Float64(duo.vertices[2, v2]) / R_f
+        a2z = Float64(duo.vertices[3, v2]) / R_f
+        a3x = Float64(duo.vertices[1, v3]) / R_f
+        a3y = Float64(duo.vertices[2, v3]) / R_f
+        a3z = Float64(duo.vertices[3, v3]) / R_f
+        ccx = (a1y*a2z - a1z*a2y) + (a2y*a3z - a2z*a3y) + (a3y*a1z - a3z*a1y)
+        ccy = (a1z*a2x - a1x*a2z) + (a2z*a3x - a2x*a3z) + (a3z*a1x - a3x*a1z)
+        ccz = (a1x*a2y - a1y*a2x) + (a2x*a3y - a2y*a3x) + (a3x*a1y - a3y*a1x)
+        # Ensure outward orientation (same side as centroid)
+        cx_cen = Float64(duo.cell_cart[1, f]) / R_f
+        cy_cen = Float64(duo.cell_cart[2, f]) / R_f
+        cz_cen = Float64(duo.cell_cart[3, f]) / R_f
+        if ccx*cx_cen + ccy*cy_cen + ccz*cz_cen < 0
+            ccx = -ccx; ccy = -ccy; ccz = -ccz
+        end
+        cn = sqrt(ccx^2 + ccy^2 + ccz^2)
+        face_cc[1, f] = ccx / cn
+        face_cc[2, f] = ccy / cn
+        face_cc[3, f] = ccz / cn
+    end
+
+    # ---- 3. Sort faces around each vertex angularly (CCW viewed from outside sphere) ----
+    sorted_vf = Vector{Vector{Int}}(undef, Nv)
+    for v in 1:Nv
+        faces_v = duo.vertex_faces[v]
+        kv = length(faces_v)
+        if kv <= 1
+            sorted_vf[v] = copy(faces_v)
+            continue
+        end
+        Pvx = Float64(duo.vertices[1, v]) / R_f
+        Pvy = Float64(duo.vertices[2, v]) / R_f
+        Pvz = Float64(duo.vertices[3, v]) / R_f
+        # Tangent-plane orthonormal basis at Pv
+        if abs(Pvz) < 0.9
+            d = Pvz                               # ref = ẑ; (ref·Pv) = Pvz
+            e1x, e1y, e1z = -d * Pvx, -d * Pvy, 1.0 - d * Pvz
+        else
+            d = Pvx                               # ref = x̂
+            e1x, e1y, e1z = 1.0 - d * Pvx, -d * Pvy, -d * Pvz
+        end
+        n1 = sqrt(e1x^2 + e1y^2 + e1z^2)
+        e1x /= n1; e1y /= n1; e1z /= n1
+        e2x = Pvy * e1z - Pvz * e1y              # e2 = Pv × e1 (unit, Pv ⊥ e1)
+        e2y = Pvz * e1x - Pvx * e1z
+        e2z = Pvx * e1y - Pvy * e1x
+
+        angles = Vector{Float64}(undef, kv)
+        for (i, f) in enumerate(faces_v)
+            qx = Float64(duo.cell_cart[1, f]) / R_f
+            qy = Float64(duo.cell_cart[2, f]) / R_f
+            qz = Float64(duo.cell_cart[3, f]) / R_f
+            dqPv = qx * Pvx + qy * Pvy + qz * Pvz
+            qpx = qx - dqPv * Pvx
+            qpy = qy - dqPv * Pvy
+            qpz = qz - dqPv * Pvz
+            angles[i] = atan(
+                qpx * e2x + qpy * e2y + qpz * e2z,
+                qpx * e1x + qpy * e1y + qpz * e1z,
+            )
+        end
+        sorted_vf[v] = faces_v[sortperm(angles)]
+    end
+
+    # ---- 4. Per-vertex topology and Voronoi cell area ----
+    n_edges_on_cell = Int[length(sorted_vf[v]) for v in 1:Nv]
+    max_edges_val   = maximum(n_edges_on_cell)
+
+    cells_on_cell = zeros(Int, max_edges_val, Nv)
+    edges_on_cell = zeros(Int, max_edges_val, Nv)
+    area_cell     = zeros(Float64, Nv)
+
+    for v in 1:Nv
+        sfaces = sorted_vf[v]
+        kv     = length(sfaces)
+        Pvx = Float64(duo.vertices[1, v]) / R_f
+        Pvy = Float64(duo.vertices[2, v]) / R_f
+        Pvz = Float64(duo.vertices[3, v]) / R_f
+
+        area_v = 0.0
+        for i in 1:kv
+            fi    = sfaces[i]
+            fnext = sfaces[(i % kv) + 1]
+            # Bridge vertex: unique vertex shared by fi and fnext that is NOT v
+            shared = intersect(face_vset[fi], face_vset[fnext])
+            delete!(shared, v)
+            length(shared) == 1 || error(
+                "_duo_voronoi_dual: vertex $v: expected 1 bridge between faces " *
+                "$fi/$fnext, got $(length(shared))")
+            w = first(shared)
+            cells_on_cell[i, v] = w
+            key_vw = v < w ? (v, w) : (w, v)
+            edges_on_cell[i, v] = edge_idx[key_vw]
+
+            bx = face_cc[1, fi]
+            by = face_cc[2, fi]
+            bz = face_cc[3, fi]
+            cx = face_cc[1, fnext]
+            cy = face_cc[2, fnext]
+            cz = face_cc[3, fnext]
+            area_v += _spherical_triangle_area(
+                (Pvx, Pvy, Pvz), (bx, by, bz), (cx, cy, cz))
+        end
+        area_cell[v] = R_f^2 * area_v
+    end
+
+    # ---- 5. Per-edge arrays ----
+    lon_edge      = Vector{Float64}(undef, Ne)
+    lat_edge      = Vector{Float64}(undef, Ne)
+    dc_edge       = Vector{Float64}(undef, Ne)
+    dv_edge       = Vector{Float64}(undef, Ne)
+    cells_on_edge = Matrix{Int}(undef, 2, Ne)
+
+    for e in 1:Ne
+        v1, v2 = duo.edges[1, e], duo.edges[2, e]
+        cells_on_edge[1, e] = v1
+        cells_on_edge[2, e] = v2
+        ax = Float64(duo.vertices[1, v1]) / R_f
+        ay = Float64(duo.vertices[2, v1]) / R_f
+        az = Float64(duo.vertices[3, v1]) / R_f
+        bx = Float64(duo.vertices[1, v2]) / R_f
+        by = Float64(duo.vertices[2, v2]) / R_f
+        bz = Float64(duo.vertices[3, v2]) / R_f
+        dc_edge[e] = R_f * acos(clamp(ax * bx + ay * by + az * bz, -1.0, 1.0))
+        key = v1 < v2 ? (v1, v2) : (v2, v1)
+        ef = edge_faces[key]
+        f1, f2 = ef[1], ef[2]
+        c1x = face_cc[1, f1]
+        c1y = face_cc[2, f1]
+        c1z = face_cc[3, f1]
+        c2x = face_cc[1, f2]
+        c2y = face_cc[2, f2]
+        c2z = face_cc[3, f2]
+        dv_edge[e] = R_f * acos(clamp(c1x * c2x + c1y * c2y + c1z * c2z, -1.0, 1.0))
+        mx = ax + bx; my = ay + by; mz = az + bz
+        mn = sqrt(mx^2 + my^2 + mz^2)
+        lon_edge[e] = atan(my / mn, mx / mn)
+        lat_edge[e] = asin(clamp(mz / mn, -1.0, 1.0))
+    end
+
+    return mpas_mesh_data(;
+        lon_cell        = lon_cell,
+        lat_cell        = lat_cell,
+        area_cell       = area_cell,
+        n_edges_on_cell = n_edges_on_cell,
+        cells_on_cell   = cells_on_cell,
+        edges_on_cell   = edges_on_cell,
+        lon_edge        = lon_edge,
+        lat_edge        = lat_edge,
+        cells_on_edge   = cells_on_edge,
+        dc_edge         = dc_edge,
+        dv_edge         = dv_edge,
+        max_edges       = max_edges_val,
+        n_vertices      = Nc,
+        R               = R_f,
+    )
+end
+
+"""
     build_mpas_grid(; mesh=nothing, loader=nothing, reader_fn=nothing,
                       R=6.371e6, dtype=Float64, ghosts=0) -> MpasGrid
 
@@ -319,7 +558,9 @@ Primary constructor for the MPAS family. One of `mesh` (an
 
 When loading from a path, `reader_fn(path::AbstractString) -> MpasMeshData`
 must also be supplied — NetCDF I/O is not bundled with this package per
-GRIDS_API.md §10.
+GRIDS_API.md §10, unless the path is `builtin://icosahedral_voronoi/<level>`,
+in which case the Voronoi dual of the DUO icosahedral mesh is constructed
+algorithmically without file I/O.
 
 `ghosts` must be 0 for loader-backed grids; the mesh file defines the full
 interior.
@@ -355,18 +596,24 @@ function build_mpas_grid(;
         end
     elseif loader !== nothing
         loader_record = _coerce_mpas_loader(loader)
-        reader_fn === nothing && throw(
-            ArgumentError(
-                "mpas: path-based loading requires reader_fn(path) -> " *
-                    "MpasMeshData. NetCDF I/O is not bundled per " *
-                    "GRIDS_API.md §10; pass reader_fn from the consumer."
+        builtin_level = _parse_builtin_voronoi_level(loader_record.path)
+        if builtin_level !== nothing
+            resolved_mesh = _duo_voronoi_dual(builtin_level; R = R)
+        elseif reader_fn !== nothing
+            produced = reader_fn(loader_record.path)
+            produced isa MpasMeshData || throw(
+                ArgumentError("mpas: reader_fn must return an MpasMeshData")
             )
-        )
-        produced = reader_fn(loader_record.path)
-        produced isa MpasMeshData || throw(
-            ArgumentError("mpas: reader_fn must return an MpasMeshData")
-        )
-        resolved_mesh = produced
+            resolved_mesh = produced
+        else
+            throw(
+                ArgumentError(
+                    "mpas: path-based loading requires reader_fn(path) -> " *
+                        "MpasMeshData. NetCDF I/O is not bundled per " *
+                        "GRIDS_API.md §10; pass reader_fn from the consumer."
+                )
+            )
+        end
     else
         throw(
             ArgumentError(

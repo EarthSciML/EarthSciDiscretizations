@@ -1,5 +1,6 @@
-using EarthSciDiscretizations: build_ode_problem
+using EarthSciDiscretizations: build_ode_problem, build_duo_grid, build_mpas_grid
 import SciMLBase
+import JSON
 using OrdinaryDiffEqDefault: solve
 
 """
@@ -212,6 +213,111 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
 )
 
 # ---------------------------------------------------------------------------
+# Unstructured-sphere MMS catalog: mms_kind → function
+#   (u_vec, var_map, lon_c, lat_c, R_val, t, manifest) -> L∞ error
+#
+# Unlike _MMS_CONV_CATALOG (which indexes via Cartesian axes), the
+# unstructured catalog receives per-cell lon/lat arrays extracted from the
+# loaded grid, plus R_val (sphere radius in metres) for the exact decay factor.
+# ---------------------------------------------------------------------------
+const _UNSTRUCTURED_MMS_CONV_CATALOG = Dict{String, Function}(
+    # Spherical harmonic Y₁₁ MMS: u(lon,lat) = sin(lon)*cos(lat).
+    # Exact Laplacian: Δu = -2*u/R² (unit-sphere eigenvalue -2, scaled by 1/R²).
+    # Exact solution at time t: u(lon,lat,t) = sin(lon)*cos(lat) * exp(-2*t/R²).
+    "sin_lon_cos_lat" =>
+        (u_vec, var_map, lon_c, lat_c, R_val, t, manifest) -> begin
+            Nc = length(lon_c)
+            decay = exp(-2.0 * t / R_val^2)
+            maximum(
+                let idx = get(var_map, "u[$c]", nothing)
+                    idx === nothing ? 0.0 :
+                    abs(u_vec[idx] - sin(lon_c[c]) * cos(lat_c[c]) * decay)
+                end
+                for c in 1:Nc
+            )
+        end,
+)
+
+function _run_unstructured_mms_convergence(name::AbstractString, manifest::AbstractDict,
+                                            base_dir::AbstractString)
+    esm_path  = abspath(joinpath(base_dir, String(manifest["esm"])))
+    grid_refs = String.(manifest["grid_refs"])
+    t_final   = Float64(manifest["t_final"])
+    min_order = Float64(manifest["convergence"]["min_order"])
+    mms_kind  = String(get(manifest, "mms_kind", ""))
+
+    length(grid_refs) < 2 &&
+        return (:fail, "$name: need ≥ 2 grid_refs for convergence check (got $(length(grid_refs)))")
+
+    linf_fn = get(_UNSTRUCTURED_MMS_CONV_CATALOG, mms_kind, nothing)
+    linf_fn === nothing &&
+        return (:fail, "$name: unknown unstructured mms_kind '$mms_kind'")
+
+    errors = Float64[]
+    for gdd_rel in grid_refs
+        gdd_path = isabspath(gdd_rel) ? gdd_rel : abspath(joinpath(base_dir, gdd_rel))
+
+        gdd = JSON.parse(read(gdd_path, String))
+        domain_spec = get(get(gdd, "grids", Dict{String,Any}()), "domain", Dict{String,Any}())
+        family = String(get(domain_spec, "family", ""))
+
+        local lon_c::Vector{Float64}
+        local lat_c::Vector{Float64}
+        local R_val::Float64
+        local Nc::Int
+
+        if family == "mpas"
+            loader_spec = get(domain_spec, "loader", nothing)
+            loader_path = String(get(loader_spec, "path", ""))
+            R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
+            grid = build_mpas_grid(
+                loader = Dict("path"   => loader_path,
+                              "reader" => String(get(loader_spec, "reader", "auto")),
+                              "check"  => String(get(loader_spec, "check", "strict"))),
+                R = R_sphere,
+            )
+            lon_c = grid.mesh.lon_cell
+            lat_c = grid.mesh.lat_cell
+            R_val = Float64(grid.R)
+            Nc    = length(lon_c)
+        elseif family == "duo"
+            loader_spec = get(domain_spec, "loader", nothing)
+            loader_path = String(get(loader_spec, "path", ""))
+            R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
+            grid = build_duo_grid(
+                loader = (path   = loader_path,
+                          reader = String(get(loader_spec, "reader", "auto"))),
+                R = R_sphere,
+            )
+            lon_c = grid.cc_lon
+            lat_c = grid.cc_lat
+            R_val = Float64(grid.R)
+            Nc    = length(lon_c)
+        else
+            return (:fail, "$name: unstructured runner does not support grid family '$family'")
+        end
+
+        extra_ics = Dict{String,Float64}("u[$c]" => sin(lon_c[c]) * cos(lat_c[c]) for c in 1:Nc)
+        prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
+        prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
+        sol   = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
+
+        push!(errors, linf_fn(sol.u[end], var_map, lon_c, lat_c, R_val, t_final, manifest))
+    end
+
+    orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
+    order  = minimum(orders)
+
+    if order >= min_order
+        return (:pass, "$name: min order = $(round(order; sigdigits = 3)) ≥ $min_order " *
+                "(orders=$(round.(orders; sigdigits=3)), L∞=$(round.(errors; sigdigits=3)))")
+    else
+        return (:fail, "$name: min order = $(round(order; sigdigits = 3)) < $min_order " *
+                "(orders=$(round.(orders; sigdigits=3)), L∞=$(round.(errors; sigdigits=3)))")
+    end
+end
+
+# ---------------------------------------------------------------------------
 # run_eigenvalue_case — grid-agnostic discrete-eigenvalue verifier
 #
 # Verifies that the ODE solver error is within tolerance when the IC is an
@@ -286,8 +392,25 @@ end
 # ---------------------------------------------------------------------------
 function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
                                    base_dir::AbstractString)
-    esm_path  = abspath(joinpath(base_dir, String(manifest["esm"])))
     grid_refs = String.(manifest["grid_refs"])
+
+    # Detect unstructured family by probing the first GDD. Unstructured grids
+    # have no spatial axes (n_cells-only), so dispatch to the dedicated runner.
+    if !isempty(grid_refs)
+        probe_path = let p = grid_refs[1]
+            isabspath(p) ? p : abspath(joinpath(base_dir, p))
+        end
+        if isfile(probe_path)
+            probe_gdd = JSON.parse(read(probe_path, String))
+            probe_domain = get(get(probe_gdd, "grids", Dict()), "domain", Dict())
+            probe_family = String(get(probe_domain, "family", ""))
+            if probe_family in ("mpas", "duo")
+                return _run_unstructured_mms_convergence(name, manifest, base_dir)
+            end
+        end
+    end
+
+    esm_path  = abspath(joinpath(base_dir, String(manifest["esm"])))
     t_final   = Float64(manifest["t_final"])
     min_order = Float64(manifest["convergence"]["min_order"])
     mms_kind  = String(get(manifest, "mms_kind", ""))

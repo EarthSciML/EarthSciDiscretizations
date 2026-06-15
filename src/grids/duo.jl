@@ -34,6 +34,8 @@ Fields:
 - `faces`: (3, Nc) vertex indices per triangular cell (1-based)
 - `lon`, `lat`: (Nc,) cell-center geographic coords (centroid of 3 vertex
   unit vectors, renormalized)
+- `cc_lon`, `cc_lat`: (Nc,) circumcenter geographic coords (spherical
+  circumcenter of the 3 triangle vertices)
 - `cell_cart`: (3, Nc) cell-center cartesian coords on the sphere
 - `area`: (Nc,) spherical-triangle area per cell (R² scaled)
 - `edges`: (2, Ne) sorted vertex-pair per edge
@@ -54,6 +56,8 @@ struct DuoGrid{T} <: AbstractUnstructuredGrid
     faces::Matrix{Int}
     lon::Vector{T}
     lat::Vector{T}
+    cc_lon::Vector{T}
+    cc_lat::Vector{T}
     cell_cart::Matrix{T}
     area::Vector{T}
     edges::Matrix{Int}
@@ -369,6 +373,26 @@ function build_duo_grid(;
         area[c] = T(a_unit * Float64(R2))
     end
 
+    # Circumcenter-based cell positions (used for FVM weights).
+    # For spherical triangle with unit vertices a,b,c: cc_dir = (a×b)+(b×c)+(c×a).
+    cc_lon = Vector{T}(undef, Nc)
+    cc_lat = Vector{T}(undef, Nc)
+    for c in 1:Nc
+        a_i = F[1, c]; b_i = F[2, c]; c_i = F[3, c]
+        ax = Float64(V[1, a_i]); ay = Float64(V[2, a_i]); az = Float64(V[3, a_i])
+        bx = Float64(V[1, b_i]); by = Float64(V[2, b_i]); bz = Float64(V[3, b_i])
+        cx = Float64(V[1, c_i]); cy = Float64(V[2, c_i]); cz = Float64(V[3, c_i])
+        ccx = (ay*bz - az*by) + (by*cz - bz*cy) + (cy*az - cz*ay)
+        ccy = (az*bx - ax*bz) + (bz*cx - bx*cz) + (cz*ax - cx*az)
+        ccz = (ax*by - ay*bx) + (bx*cy - by*cx) + (cx*ay - cy*ax)
+        # Centroid sanity check — flip if facing wrong way.
+        if ccx * Float64(cell_cart[1, c]) + ccy * Float64(cell_cart[2, c]) + ccz * Float64(cell_cart[3, c]) < 0
+            ccx = -ccx; ccy = -ccy; ccz = -ccz
+        end
+        n = sqrt(ccx^2 + ccy^2 + ccz^2)
+        cc_lon[c], cc_lat[c] = _cart_to_lonlat(ccx / n, ccy / n, ccz / n)
+    end
+
     # Scale vertex array to radius R for downstream consumers.
     V_scaled = Matrix{T}(undef, 3, Nv)
     @inbounds for i in 1:Nv
@@ -394,7 +418,7 @@ function build_duo_grid(;
     dtype_str = dtype === Float64 ? "float64" : "float32"
     return DuoGrid{T}(
         level, R_T, dtype_str, ghosts,
-        V_scaled, F, lon, lat, cell_cart, area,
+        V_scaled, F, lon, lat, cc_lon, cc_lat, cell_cart, area,
         edges, cell_neighbors, vf, provenance, ldr
     )
 end

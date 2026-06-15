@@ -3,7 +3,8 @@ module WalkESDTests
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
     lower_stencil_to_replacement, lower_stencil_to_scheme,
     lower_stencil_to_canonical_replacement,
-    CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval
+    CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval,
+    build_ode_problem, build_duo_grid, build_mpas_grid
 import EarthSciSerialization
 using JSON
 
@@ -666,6 +667,20 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = x -> sin(2π * x),
         derivative = x -> 4π^2 * (cos(2π * x)^2 - 2 * sin(2π * x) - sin(2π * x)^2),
     ),
+    # Unstructured-sphere manufactured solution for nn_diffusion_mpas / nn_diffusion_duo.
+    #
+    #   u(lon, lat) = sin(lon)·cos(lat)   (spherical harmonic Y₁₁, l=1)
+    #   ΔΩ u        = −2·sin(lon)·cos(lat) = −2·u   (unit-sphere Laplacian eigenvalue −l(l+1)=−2)
+    #
+    # The physical Laplacian on a sphere of radius R is ΔΩu / R². The runner
+    # divides by R² extracted from the grid, so this catalog entry stays R-independent.
+    # ic(lon, lat) → field value; derivative(lon, lat) → unit-sphere Laplacian
+    # (the runner applies 1/R² scaling). Used by nn_diffusion_{mpas,duo} convergence
+    # fixtures (mms_kind="sin_lon_cos_lat").
+    "sin_lon_cos_lat" => (
+        ic = (lon, lat) -> sin(lon) * cos(lat),
+        derivative = (lon, lat) -> -2.0 * sin(lon) * cos(lat),
+    ),
     # Cubed-sphere manufactured solution: φ(ξ,η) = cos(2ξ)·cos(2η) on all 6 panels.
     # The analytic covariant Laplacian ∇²φ = (1/J)[∂_ξ(Jg^{ξξ}∂_ξφ + Jg^{ξη}∂_ηφ)
     #                                              + ∂_η(Jg^{ξη}∂_ξφ + Jg^{ηη}∂_ηφ)]
@@ -797,6 +812,13 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # The ESS canonical pipeline extension (discretize → build_evaluator with
     # cubed_sphere selector dispatch) is tracked at ESS/ess-cubed-sphere-pipeline.
     "cubed_sphere_cross_metric",
+    # `unstructured_ode` (esd-cal) — ODE-pipeline runner for unstructured
+    # sphere rules (grid_family=unstructured: nn_diffusion_mpas, nn_diffusion_duo).
+    # Loads the MPAS Voronoi or DUO icosahedral mesh via builtin paths,
+    # injects per-cell MMS ICs, calls build_ode_problem, evaluates the RHS
+    # at t=0, and measures L∞ error vs the analytic Laplacian. Convergence
+    # order is computed across the builtin mesh ladder.
+    "unstructured_ode",
 ])
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
@@ -808,11 +830,13 @@ const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
     "2d_arakawa_periodic"    => "ESD/dsc-70zp",
     "2d_latlon_sphere"       => "ESD/dsc-mps8",
     "fv_cell_average_1d"     => "ESD/dsc-a7b2",
-    # dsc-y0jj (the stencil → replacement lowerer) landed; this key now only
-    # fires for selector families the lowerer rejects (indirect/reduction),
-    # which pend ESS unstructured dispatch.
-    "stencil_form_rule"           => "ESS/esm-bpr (unstructured selector dispatch)",
+    # dsc-y0jj (the stencil → replacement lowerer) landed; this key fires for
+    # stencil rules that lower_stencil_to_replacement rejects for non-unstructured
+    # families (not yet classified). Unstructured rules short-circuit to
+    # "unstructured_ode" before reaching the lowering gate.
+    "stencil_form_rule"           => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
     "cubed_sphere_cross_metric"   => "ESD/esd-ecq",
+    "unstructured_ode"            => "ESD/esd-cal",
     "unsupported"                 => "no follow-up bead — out of Layer-B scope",
 )
 
@@ -881,6 +905,13 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     end
     # Attach the kind's auxiliary-field bindings (empty for most kinds).
     mms = (; mms_base..., aux = get(_LAYER_B_MMS_AUX, mms_kind, Dict{String, Any}()))
+
+    # Unstructured ODE topology: reads grid_refs (GDD paths), not {n:} dicts.
+    # Delegate to a separate sweep function that builds the ODE problem directly.
+    if topology_key == "unstructured_ode"
+        return _run_layer_b_unstructured_ode_sweep(rule, mms, input_json,
+                                                    convergence_dir, expected_min_order)
+    end
 
     # Per-topology runner. Each family's implementation lands in a
     # follow-up bead under dsc-kswm. The dispatcher is the only place that
@@ -966,6 +997,14 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     end
     spec = get(get(rule_doc, "discretizations", Dict{String, Any}()), rule.name, nothing)
     spec isa AbstractDict || return "unsupported"
+
+    # Unstructured rules (grid_family=unstructured) use an ODE-pipeline runner
+    # that calls build_ode_problem directly and does NOT route through the stencil
+    # lowerer. Check grid_family BEFORE the lowering gate so these rules do not
+    # fall through to "stencil_form_rule".
+    if String(get(spec, "grid_family", "")) == "unstructured"
+        return "unstructured_ode"
+    end
 
     # `stencil`-form rules without a `replacement` AST are classified via
     # `lower_stencil_to_replacement`. If the lowering succeeds (all supported
@@ -1116,6 +1155,123 @@ function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFil
     error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
           "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
           "for this topology key.")
+end
+
+# ---------------------------------------------------------------------------
+# Unstructured ODE runner (esd-cal): nn_diffusion_mpas / nn_diffusion_duo
+# ---------------------------------------------------------------------------
+
+function _run_layer_b_unstructured_ode_sweep(rule::RuleFile, mms, input_json::AbstractDict,
+                                              convergence_dir::AbstractString,
+                                              expected_min_order::Float64)
+    esm_rel = get(input_json, "esm", nothing)
+    esm_rel === nothing &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm missing 'esm' field for unstructured_ode runner")
+    esm_path = joinpath(convergence_dir, String(esm_rel))
+    isfile(esm_path) ||
+        return LayerResult(LAYER_FAIL, "unstructured_ode runner: esm path not found: $esm_path")
+
+    grid_refs_raw = get(input_json, "grid_refs", Any[])
+    isempty(grid_refs_raw) &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm declares no grid_refs for unstructured_ode")
+    length(grid_refs_raw) < 2 &&
+        return LayerResult(LAYER_FAIL, "unstructured_ode runner needs ≥ 2 grid_refs for convergence order (got $(length(grid_refs_raw)))")
+
+    t_final = Float64(get(input_json, "t_final", 0.0))
+
+    errors = Float64[]
+    for gdd_rel in grid_refs_raw
+        gdd_path = let p = String(gdd_rel)
+            isabspath(p) ? p : joinpath(convergence_dir, p)
+        end
+        isfile(gdd_path) ||
+            return LayerResult(LAYER_FAIL, "unstructured_ode runner: grid_ref not found: $gdd_path")
+        err = try
+            _run_layer_b_unstructured_ode(mms, esm_path, gdd_path)
+        catch e
+            return LayerResult(LAYER_FAIL,
+                "unstructured ODE pipeline threw at grid=$(basename(gdd_path)): $(sprint(showerror, e))")
+        end
+        if !(err isa Real) || !isfinite(err)
+            return LayerResult(LAYER_FAIL,
+                "unstructured ODE runner at grid=$(basename(gdd_path)) returned non-finite: $(typeof(err))")
+        end
+        push!(errors, Float64(err))
+    end
+
+    any(iszero, errors) &&
+        return LayerResult(LAYER_FAIL, "zero error in unstructured convergence sweep (degenerate fixture): $errors")
+
+    orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
+    min_order = minimum(orders)
+    if min_order >= expected_min_order
+        return LayerResult(
+            LAYER_PASS,
+            "min order $(round(min_order; digits = 2)) >= expected $(expected_min_order) " *
+                "over $(length(grid_refs_raw)) grids (orders=$(round.(orders; digits = 2)))",
+        )
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "min order $(round(min_order; digits = 2)) below expected $(expected_min_order) " *
+                "(orders=$(round.(orders; digits = 2)), errors=$(round.(errors; sigdigits = 3)))",
+        )
+    end
+end
+
+function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::AbstractString)
+    gdd = JSON.parse(read(gdd_path, String))
+    domain_spec = get(get(gdd, "grids", Dict{String,Any}()), "domain", Dict{String,Any}())
+    family = String(get(domain_spec, "family", ""))
+
+    local lon_c::Vector{Float64}
+    local lat_c::Vector{Float64}
+    local R_val::Float64
+
+    if family == "mpas"
+        loader_spec = get(domain_spec, "loader", nothing)
+        loader_spec === nothing && error("MPAS GDD missing loader spec")
+        loader_path = String(get(loader_spec, "path", ""))
+        startswith(loader_path, "builtin://") || error(
+            "unstructured_ode Layer-B runner requires builtin:// MPAS path; got $loader_path")
+        grid = build_mpas_grid(
+            loader = Dict("path" => loader_path, "reader" => "auto",
+                          "check" => String(get(loader_spec, "check", "strict"))),
+        )
+        lon_c = grid.mesh.lon_cell
+        lat_c = grid.mesh.lat_cell
+        R_val = Float64(grid.R)
+    elseif family == "duo"
+        loader_spec = get(domain_spec, "loader", nothing)
+        loader_spec === nothing && error("DUO GDD missing loader spec")
+        loader_path = String(get(loader_spec, "path", ""))
+        grid = build_duo_grid(
+            loader = (path = loader_path, reader = String(get(loader_spec, "reader", "auto"))),
+        )
+        lon_c = grid.cc_lon
+        lat_c = grid.cc_lat
+        R_val = Float64(grid.R)
+    else
+        error("unstructured_ode Layer-B runner: unsupported grid family '$family'")
+    end
+
+    Nc = length(lon_c)
+    extra_ics = Dict{String,Float64}("u[$c]" => mms.ic(lon_c[c], lat_c[c]) for c in 1:Nc)
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
+
+    du = similar(prob.u0)
+    prob.f(du, prob.u0, prob.p, 0.0)
+
+    inv_R2 = 1.0 / R_val^2
+    err = 0.0
+    for c in 1:Nc
+        idx = get(var_map, "u[$c]", nothing)
+        idx === nothing && error("var_map missing key 'u[$c]'")
+        analytic = mms.derivative(lon_c[c], lat_c[c]) * inv_R2
+        err = max(err, abs(du[idx] - analytic))
+    end
+    return err
 end
 
 """

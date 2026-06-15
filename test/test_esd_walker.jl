@@ -135,7 +135,6 @@ using TestItems
             # binds uniform h only — per-cell dz[k] bindings pending dsc-yz0m.
             ("finite_difference", "centered_2nd_nonuniform_vertical"),
             ("finite_difference", "periodic_bc"),
-            ("finite_difference", "nn_diffusion_mpas"),
             ("finite_volume", "flux_limiter_minmod"),
             ("finite_volume", "flux_limiter_superbee"),
             ("finite_volume", "lax_friedrichs_flux"),
@@ -407,6 +406,24 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("fixture-declared not applicable", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "nn_diffusion_mpas"
+            # nn_diffusion_mpas (esd-cal): unstructured_ode runner on MPAS Voronoi
+            # mesh. No canonical/ fixture (Layer-A skips). Layer-B passes via the
+            # unstructured_ode runner: mms_kind="sin_lon_cos_lat", builtin Voronoi
+            # dual mesh ladder (x1.642 → x1.2562 → x1.10242), min_order=1.9.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "nn_diffusion_duo"
+            # nn_diffusion_duo (esd-cal): unstructured_ode runner on DUO icosahedral
+            # mesh. No canonical/ fixture (Layer-A skips). Layer-B passes via the
+            # unstructured_ode runner: mms_kind="sin_lon_cos_lat", builtin icosahedral
+            # mesh ladder (level 2 → level 3 → level 4), min_order=1.9.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif key in pending_canonical_layer_b
             # The remaining `applicable:true` convergence fixtures: Layer-A
             # is unconstrained here (centered_2nd_uniform's canonical fixture
@@ -473,7 +490,8 @@ using TestItems
     # nonlinear_laplacian_uniform ride the 1d runner via auxiliary-field
     # bindings; centered_2nd_deriv_uniform and mixed_deriv_2nd_uniform
     # land with the pending-set retirement; esd-ecq adds the
-    # cubed_sphere_cross_metric runner. Twelve rules now PASS:
+    # cubed_sphere_cross_metric runner; esd-cal adds the unstructured_ode
+    # runner for nn_diffusion_mpas and nn_diffusion_duo. Fourteen rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
@@ -481,8 +499,10 @@ using TestItems
     # (O(h⁴) CW84 edge interpolation), weno5_advection (O(h⁵) FD-WENO
     # advective divergence), centered_2nd_deriv_uniform (O(h²)),
     # mixed_deriv_2nd_uniform (O(h²) cross stencil),
-    # nonlinear_laplacian_uniform (O(h²) flux form), and
-    # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian).
+    # nonlinear_laplacian_uniform (O(h²) flux form),
+    # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian),
+    # nn_diffusion_mpas (O(h²) MPAS Voronoi sphere), and
+    # nn_diffusion_duo (O(h²) DUO icosahedral sphere).
     # All remaining rules with applicable:true convergence fixtures continue to
     # SKIP with `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
@@ -504,7 +524,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 12
+    @test layer_b_passes == 14
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
