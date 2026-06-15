@@ -14,9 +14,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from earthsci_toolkit.esm_types import ExprNode
-
 from earthsci_toolkit import evaluate
+from earthsci_toolkit.esm_types import ExprNode
 
 __all__ = ["eval_coeff"]
 

@@ -179,9 +179,9 @@ def _subdivide_icosahedron(level: int) -> tuple[np.ndarray, np.ndarray]:
     for _ in range(level):
         cache: dict[tuple[int, int], int] = {}
 
-        def midpoint(a: int, b: int) -> int:
+        def midpoint(a: int, b: int, _cache: dict = cache) -> int:
             key = (a, b) if a < b else (b, a)
-            idx = cache.get(key)
+            idx = _cache.get(key)
             if idx is not None:
                 return idx
             va = verts[a]
@@ -192,7 +192,7 @@ def _subdivide_icosahedron(level: int) -> tuple[np.ndarray, np.ndarray]:
             n = math.sqrt(mx * mx + my * my + mz * mz)
             verts.append((mx / n, my / n, mz / n))
             idx = len(verts) - 1
-            cache[key] = idx
+            _cache[key] = idx
             return idx
 
         new_faces: list[tuple[int, int, int]] = []

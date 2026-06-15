@@ -272,7 +272,7 @@ def main():
                     committed_lines = committed.splitlines()
                     generated_lines = generated.splitlines()
                     for i, (a, b) in enumerate(
-                        zip(committed_lines, generated_lines), 1
+                        zip(committed_lines, generated_lines, strict=False), 1
                     ):
                         if a != b:
                             print(f"  line {i}: committed={a!r}", file=sys.stderr)

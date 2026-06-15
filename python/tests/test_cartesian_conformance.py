@@ -110,7 +110,7 @@ def test_conformance_against_golden(fixture_name: str) -> None:
         assert len(nbr_list) == len(gnbrs), (
             f"{fixture_name}: neighbor count at qp[{k}]={idx}"
         )
-        for got, exp in zip(nbr_list, gnbrs):
+        for got, exp in zip(nbr_list, gnbrs, strict=True):
             assert got["axis"] == int(exp["axis"])
             assert got["side"] == int(exp["side"])
             assert got["index"] == [int(x) for x in exp["index"]]
