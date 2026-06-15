@@ -943,28 +943,57 @@ function _compute_indirect_coeff(outer_reduction, ctables::Dict{String,Any},
     return Dict{String,Any}("op" => reduce_op, "args" => Any[terms...])
 end
 
-# Replace bare "arrayop" MARKER nodes (op="arrayop" but no "reduce" field) in a
-# dict AST with `replacement`.  These markers arise because ESS's _parse_expr only
-# reads "op" and "args" from coeff expressions, stripping "reduce"/"expr"/"ranges"
-# from any nested reduction arrayop.  The replacement is the concrete computed value
-# for the indirect coefficient.
-function _replace_marker_arrayops(node, replacement)
+# True iff `node` contains an `index(operand_name, …)` anywhere.
+function _indexes_operand(node, operand_name::String)::Bool
+    node isa AbstractVector && return any(_indexes_operand(x, operand_name) for x in node)
+    node isa AbstractDict || return false
+    op = get(node, "op", nothing)
+    if op isa AbstractString && String(op) == "index"
+        args = get(node, "args", Any[])
+        !isempty(args) && args[1] isa AbstractString &&
+            String(args[1]) == operand_name && return true
+    end
+    for (_, v) in node
+        _indexes_operand(v, operand_name) && return true
+    end
+    return false
+end
+
+# Replace the indirect-entry (diagonal) coefficient sub-tree in a dict AST with
+# `replacement` (the concrete sum_k(coeff_k) computed by _compute_indirect_coeff).
+#
+# Historically this matched bare "arrayop" MARKER nodes (op="arrayop" with NO
+# "reduce" field): ESS's `_parse_expr` used to read only "op"/"args" from coeff
+# expressions, stripping "reduce"/"expr"/"ranges" from any nested reduction
+# arrayop, leaving a content-free marker. Once ESS `_parse_expr` parses arrayop
+# faithfully (esd-3d7 fix), the indirect entry survives as a FULL reduction
+# arrayop instead — but it is still distinguishable as the indirect/diagonal
+# coefficient because its body never indexes the operand variable (the operand
+# was abstracted out at authoring time, so the body is a pure coefficient over
+# the connectivity tables; its range bound also still references the symbolic
+# "$target"). We therefore also match a reduction arrayop whose body does not
+# index `operand_name`, so both the legacy-stripped and the faithfully-parsed
+# forms are replaced by the precomputed indirect coefficient.
+function _replace_marker_arrayops(node, replacement, operand_name::String="")
     node isa Number         && return node
     node isa AbstractString && return node
-    node isa AbstractVector && return Any[_replace_marker_arrayops(x, replacement) for x in node]
+    node isa AbstractVector && return Any[_replace_marker_arrayops(x, replacement, operand_name) for x in node]
     node isa AbstractDict || return node
     op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "arrayop" &&
-       get(node, "reduce", nothing) === nothing
-        return replacement
+    if op isa AbstractString && String(op) == "arrayop"
+        is_legacy_marker = get(node, "reduce", nothing) === nothing
+        is_faithful_indirect = !isempty(operand_name) &&
+            get(node, "reduce", nothing) !== nothing &&
+            !_indexes_operand(get(node, "expr", nothing), operand_name)
+        (is_legacy_marker || is_faithful_indirect) && return replacement
     end
     out = Dict{String,Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_replace_marker_arrayops(x, replacement) for x in v]
+            out[ks] = Any[_replace_marker_arrayops(x, replacement, operand_name) for x in v]
         elseif ks == "expr" && v !== nothing
-            out[ks] = _replace_marker_arrayops(v, replacement)
+            out[ks] = _replace_marker_arrayops(v, replacement, operand_name)
         else
             out[ks] = v
         end
@@ -1137,7 +1166,7 @@ function _prebind_unstructured!(disc::Dict{String,Any},
                 if outer_red !== nothing
                     indirect_coeff = _compute_indirect_coeff(outer_red, ctables, lhs_var)
                     if indirect_coeff !== nothing
-                        rhs_c = _replace_marker_arrayops(rhs_c, indirect_coeff)
+                        rhs_c = _replace_marker_arrayops(rhs_c, indirect_coeff, lhs_var)
                     end
                 end
                 rhs_expanded = _expand_reductions(rhs_c, ctables)
