@@ -124,33 +124,12 @@ end
     @test "x" in names && "y" in names
 end
 
-@testitem "GDD rules dispatch: cartesian stencil → lower_stencil_to_scheme (scheme + use-rule)" begin
-    using EarthSciDiscretizations: _inject_rules!
-
-    esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
-    cartesian_stencil = Dict{String,Any}(
-        "centered_2nd_uniform" => Dict{String,Any}(
-            "applies_to" => Dict{String,Any}(
-                "op" => "grad", "args" => ["\$u"], "dim" => "\$x",
-            ),
-            "grid_family" => "cartesian",
-            "combine"     => "+",
-            "stencil"     => Any[
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "cartesian", "axis" => "\$x", "offset" => -1), "coeff" => -0.5),
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "cartesian", "axis" => "\$x", "offset" =>  1), "coeff" =>  0.5),
-            ],
-        ),
-    )
-    _inject_rules!(esm, cartesian_stencil, "/dev/null")
-
-    # Cartesian stencil: goes through lower_stencil_to_scheme →
-    # a `discretizations` scheme block is emitted + a `use:` rule appended.
-    @test haskey(esm["discretizations"], "centered_2nd_uniform")
-    scheme = esm["discretizations"]["centered_2nd_uniform"]
-    @test scheme["grid_family"] == "cartesian"
-    @test length(esm["rules"]) == 1
-    @test esm["rules"][1]["use"] == "centered_2nd_uniform"
-end
+# esd-7h2: removed "GDD rules dispatch: cartesian stencil → lower_stencil_to_scheme (scheme + use-rule)"
+# The cartesian dispatch branch was retired: upwind_1st_nonuniform.json and
+# centered_2nd_nonuniform_cartesian.json were migrated to arrayop replacement form,
+# and the `if kind == "cartesian"` branch in _inject_rules! was removed.
+# All remaining FD catalog rules with cartesian selectors are already in replacement
+# or arrayop form and take the `elseif haskey(spec, "replacement")` path instead.
 
 @testitem "GDD rules dispatch: latlon stencil → lower_stencil_to_replacement (pattern+replacement rule)" begin
     using EarthSciDiscretizations: _inject_rules!

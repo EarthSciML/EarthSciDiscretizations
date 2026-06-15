@@ -119,7 +119,7 @@ Errors:
   malformed.
 - `ArgumentError` if entries declare conflicting selector kinds.
 - `ArgumentError` if any selector kind is not yet supported.
-- `ArgumentError` if a cartesian or vertical rule is missing
+- `ArgumentError` if a vertical rule is missing
   `applies_to.dim` or has an entry whose axis disagrees with it.
 - `ArgumentError` if an arakawa entry's `axis` is not a `\$`-prefixed
   pattern variable, or its `stagger` is not one of the four allowed
@@ -176,11 +176,7 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
 
     family = _stencil_family(stencil)
 
-    terms = if family == "cartesian"
-        axis_var = _stencil_axis_pattern_var(applies_to)
-        Any[_lower_cartesian_entry_unpack(entry, operand_var, axis_var, i)
-            for (i, entry) in enumerate(stencil)]
-    elseif family == "arakawa"
+    terms = if family == "arakawa"
         axis_vars = _arakawa_collect_axis_vars(stencil)
         dollar_args = filter(
             a -> a isa AbstractString && startswith(String(a), "\$"),
@@ -211,7 +207,7 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
             ArgumentError(
                 "lower_stencil_to_replacement: stencil selector kind " *
                     "'$family' is not yet supported (currently supported: " *
-                    "'cartesian', 'arakawa', 'latlon', 'cubed_sphere', 'vertical')",
+                    "'arakawa', 'latlon', 'cubed_sphere', 'vertical')",
             ),
         )
     end
@@ -698,11 +694,6 @@ function _entry_selector_and_coeff(entry, idx::Int)
     return selector, coeff
 end
 
-function _lower_cartesian_entry_unpack(entry, operand_var::String, axis_var::String, idx::Int)
-    selector, coeff = _entry_selector_and_coeff(entry, idx)
-    return _lower_cartesian_entry(selector, coeff, operand_var, axis_var, idx)
-end
-
 function _lower_arakawa_entry_unpack(entry, operand_var::String,
         axis_vars::Vector{String}, idx::Int)
     selector, coeff = _entry_selector_and_coeff(entry, idx)
@@ -746,52 +737,6 @@ function _lower_arakawa_entry_unpack_staged(entry,
         ),
     )
     return _lower_arakawa_entry(selector, coeff, operand_var, axis_vars, idx)
-end
-
-function _lower_cartesian_entry(
-        selector::AbstractDict,
-        coeff,
-        operand_var::String,
-        axis_var::String,
-        idx::Int,
-    )
-    sel_axis_raw = get(selector, "axis", nothing)
-    sel_axis_raw isa AbstractString || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: cartesian entry $idx 'selector.axis' " *
-                "must be a string",
-        ),
-    )
-    sel_axis = String(sel_axis_raw)
-    if sel_axis != axis_var
-        throw(
-            ArgumentError(
-                "lower_stencil_to_replacement: cartesian entry $idx 'selector.axis' " *
-                    "= '$sel_axis' disagrees with 'applies_to.dim' = '$axis_var'",
-            ),
-        )
-    end
-
-    offset_raw = get(selector, "offset", nothing)
-    (offset_raw isa Integer && !(offset_raw isa Bool)) || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: cartesian entry $idx 'selector.offset' " *
-                "must be an integer",
-        ),
-    )
-    offset = Int(offset_raw)
-
-    index_arg = if offset == 0
-        axis_var
-    else
-        Dict{String, Any}("op" => "+", "args" => Any[axis_var, offset])
-    end
-
-    index_node = Dict{String, Any}(
-        "op" => "index", "args" => Any[operand_var, index_arg],
-    )
-
-    return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
 end
 
 # -----------------------------------------------------------------------------

@@ -570,16 +570,11 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             end
             kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
             # Dispatch table: selector kind → lowering path.
-            # Path-A/scheme: cartesian (ESS native scheme expansion via lower_stencil_to_scheme).
             # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
             # Path-A/replacement: latlon, vertical (literal axis names; lower_stencil_to_replacement).
             # Path-A/replacement: cubed_sphere (plural selectors; lower_stencil_to_replacement keeps axis names).
             # Path-A/canonical: arakawa and other $-axis kinds (lower_stencil_to_canonical_replacement).
-            if kind == "cartesian"
-                scheme, use_rule = lower_stencil_to_scheme(rname, spec)
-                discs[rname] = scheme
-                push!(rules, use_rule)
-            elseif kind in ("latlon", "vertical")
+            if kind in ("latlon", "vertical")
                 lowered = lower_stencil_to_replacement(spec)
                 replacement = lowered["replacement"]
                 if kind == "latlon"

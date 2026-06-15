@@ -1,0 +1,134 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "centered_2nd_nonuniform_cartesian_canonical"
+  },
+  "grids": {
+    "g": {
+      "family": "cartesian",
+      "dimensions": [
+        {
+          "name": "x",
+          "size": 4,
+          "periodic": true,
+          "spacing": "uniform"
+        }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "g",
+      "variables": {
+        "u": {
+          "type": "state",
+          "default": 0.0,
+          "units": "1",
+          "shape": ["x"],
+          "location": "cell_center"
+        },
+        "dx": {
+          "type": "parameter",
+          "default": 0.25,
+          "units": "1",
+          "shape": ["x"]
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": { "op": "d2", "args": ["u"], "dim": "x" }
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "centered_2nd_nonuniform_cartesian",
+      "pattern": { "op": "d2", "args": ["$u"], "dim": "$x" },
+      "replacement": {
+        "op": "+",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  2,
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "index", "args": ["dx", "$x"] },
+                      {
+                        "op": "+",
+                        "args": [
+                          { "op": "index", "args": ["dx", "$x"] },
+                          { "op": "index", "args": ["dx", { "op": "+", "args": ["$x", 1] }] }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "index",
+                "args": ["$u", { "op": "+", "args": ["$x", -1] }]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  -2,
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "index", "args": ["dx", "$x"] },
+                      { "op": "index", "args": ["dx", { "op": "+", "args": ["$x", 1] }] }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "index",
+                "args": ["$u", "$x"]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  2,
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "index", "args": ["dx", { "op": "+", "args": ["$x", 1] }] },
+                      {
+                        "op": "+",
+                        "args": [
+                          { "op": "index", "args": ["dx", "$x"] },
+                          { "op": "index", "args": ["dx", { "op": "+", "args": ["$x", 1] }] }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "index",
+                "args": ["$u", { "op": "+", "args": ["$x", 1] }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

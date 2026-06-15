@@ -39,82 +39,13 @@ end
     @test expr !== nothing
 end
 
-@testitem "lower_stencil_to_replacement: lowers cartesian upwind_1st_nonuniform (esd-02z)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    using JSON
+# esd-7h2: removed "lower_stencil_to_replacement: lowers cartesian upwind_1st_nonuniform (esd-02z)"
+# upwind_1st_nonuniform.json was migrated to arrayop replacement form — it no longer has a
+# stencil array, so the stencil-lowering path is not exercised by this rule.
+# The rule is tested via Layer-A (canonical byte contract) and Layer-B (MMS SKIP, no mms_kind).
 
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st_nonuniform.json",
-    )
-    raw  = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st_nonuniform"])
-    @test !haskey(rule, "replacement")
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 2
-
-    # Entry 1: offset = -1, coeff = -1/index(dx,$x) -> term * index($u, $x+(-1))
-    e1 = repl["args"][1]
-    @test e1["op"] == "*"
-    coeff1 = e1["args"][1]
-    @test coeff1["op"] == "/"
-    # numerator is -1
-    @test Int(coeff1["args"][1]) == -1
-    # denominator is index("dx", "$x")
-    denom1 = coeff1["args"][2]
-    @test denom1["op"] == "index"
-    @test String(denom1["args"][1]) == "dx"
-    @test String(denom1["args"][2]) == "\$x"
-    # operand index
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    arg1 = idx1["args"][2]
-    @test arg1["op"] == "+"
-    @test String(arg1["args"][1]) == "\$x"
-    @test Int(arg1["args"][2]) == -1
-
-    # Entry 2: offset = 0, coeff = 1/index(dx,$x) -> term * index($u, $x)
-    e2 = repl["args"][2]
-    @test e2["op"] == "*"
-    coeff2 = e2["args"][1]
-    @test coeff2["op"] == "/"
-    @test Int(coeff2["args"][1]) == 1
-    denom2 = coeff2["args"][2]
-    @test denom2["op"] == "index"
-    @test String(denom2["args"][1]) == "dx"
-    @test String(denom2["args"][2]) == "\$x"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    @test String(idx2["args"][2]) == "\$x"
-end
-
-@testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st_nonuniform AST (esd-02z)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st_nonuniform.json",
-    )
-    raw  = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st_nonuniform"])
-    out  = lower_stencil_to_replacement(rule)
-
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-end
+# esd-7h2: removed "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st_nonuniform AST (esd-02z)"
+# Same migration as above — rule is now in replacement form, stencil path retired.
 
 @testitem "lower_stencil_to_replacement: errors on missing stencil and replacement" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
@@ -158,33 +89,21 @@ end
     @test occursin("not yet supported", err.msg)
 end
 
-@testitem "lower_stencil_to_replacement: errors on axis mismatch" begin
+# esd-7h2: removed "lower_stencil_to_replacement: errors on axis mismatch"
+# The axis-mismatch check was inside _lower_cartesian_entry (retired with the
+# cartesian branch). Vertical and latlon kinds validate their own axis fields
+# independently; no replacement test needed for the retired cartesian path.
+
+@testitem "lower_stencil_to_replacement: single entry produces bare term (vertical)" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
 
+    # Uses vertical stencil (cell_center stagger, offset 1) to verify the
+    # general "single entry → bare term" behaviour (no combine wrapper).
     rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
+        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
         "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "cartesian", "axis" => "\$y", "offset" => 1),
-            "coeff" => 1,
-        )],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("disagrees", err.msg)
-end
-
-@testitem "lower_stencil_to_replacement: single entry produces bare term" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 2),
+            "selector" => Dict("kind" => "vertical", "axis" => "\$k",
+                               "stagger" => "cell_center", "offset" => 1),
             "coeff" => 7,
         )],
     )
@@ -196,7 +115,7 @@ end
     idx = repl["args"][2]
     @test idx["op"] == "index"
     @test idx["args"][2]["op"] == "+"
-    @test idx["args"][2]["args"][2] == 2
+    @test idx["args"][2]["args"][2] == 1
 end
 
 @testitem "lower_stencil_to_replacement: lowers divergence_arakawa_c" begin
@@ -401,33 +320,12 @@ end
     @test occursin("mixes selector kinds", err.msg)
 end
 
-@testitem "lower_stencil_to_replacement: lowers lax_friedrichs_flux (cartesian)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_volume",
-        "lax_friedrichs_flux.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["lax_friedrichs_flux"])
-    @test !haskey(rule, "replacement")
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-    repl = out["replacement"]
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 2
-
-    # First operand of `applies_to.args = ["\$q", "\$c"]` is `\$q` —
-    # the stencil indexes q, not c.
-    e1 = repl["args"][1]
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$q"
-end
+# esd-7h2: removed "lower_stencil_to_replacement: lowers lax_friedrichs_flux (cartesian)"
+# lax_friedrichs_flux.json retains its cartesian stencil (EINSUM-8 scope) but
+# _lower_cartesian_entry is retired; the rule is FV and does not flow through
+# lower_stencil_to_replacement in any active code path. Tested via Layer-A skip
+# (applicable:false in convergence fixture) and the hand-pinned flux test in
+# test_lax_friedrichs_flux_rule.jl.
 
 # esd-3d7: removed "lower_stencil_to_replacement: lowers centered_2nd_deriv_uniform (cartesian)"
 # centered_2nd_deriv_uniform.json was migrated to arrayop replacement form — it no longer has a

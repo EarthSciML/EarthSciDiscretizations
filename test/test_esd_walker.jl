@@ -513,6 +513,22 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "upwind_1st_nonuniform"
+            # upwind_1st_nonuniform (esd-7h2): migrated to arrayop replacement form.
+            # Layer-A passes via inline pattern+replacement canonical byte contract.
+            # Layer-B SKIPs: convergence fixture has no mms_kind registered.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test !isempty(r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_2nd_nonuniform_cartesian"
+            # centered_2nd_nonuniform_cartesian (esd-7h2): migrated to arrayop replacement form.
+            # Layer-A passes via inline pattern+replacement canonical byte contract.
+            # Layer-B SKIPs: convergence fixture has no mms_kind registered.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test !isempty(r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)

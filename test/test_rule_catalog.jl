@@ -83,11 +83,11 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
-    @test occursin("\"stencil\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    # Same one-sided stencil shape as upwind_1st: offsets -1 and 0.
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
+    # Migrated to arrayop replacement form (esd-7h2): no longer stencil.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
     # Non-uniform variant: coefficients index dx per-cell via index("dx", "$x").
     @test occursin("\"op\": \"index\"", content)
     @test occursin("\"dx\"", content)
@@ -827,17 +827,13 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"d2\"", content)
-    # Stencil form with cartesian selectors: three offsets for non-uniform formula.
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
-    @test occursin("\"offset\": 1", content)
+    # Migrated to arrayop replacement form (esd-7h2): no longer stencil.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
     # Non-uniform: explicit index nodes for per-cell dx[i] and dx[i+1] coefficients.
     @test occursin("\"index\"", content)
     @test occursin("\"dx\"", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
 end
 
 @testitem "mixed_deriv_2nd_uniform scheme is discoverable and well-formed (esd-wdv)" begin
