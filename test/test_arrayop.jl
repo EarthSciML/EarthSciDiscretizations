@@ -15,8 +15,6 @@ end
     c_eta = zeros(6, Nc, Nc + 1)
 
     @test isarrayop(fv_laplacian(phi, grid))
-    @test isarrayop(flux_1d(phi, c_xi, grid, :xi))
-    @test isarrayop(flux_1d(phi, c_eta, grid, :eta))
     @test isarrayop(transport_2d(phi, c_xi, c_eta, grid))
 
     # ghost_fill_arrayop returns a ghost-extended array (not an ArrayOp)

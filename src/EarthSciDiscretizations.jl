@@ -125,7 +125,6 @@ export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 
 # Exports: FV operators
 export fv_laplacian
-export flux_1d
 export transport_2d
 
 # Exports: Numerical transport operators
