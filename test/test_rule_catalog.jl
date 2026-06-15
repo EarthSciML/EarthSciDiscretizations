@@ -58,11 +58,13 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
-    @test occursin("\"stencil\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    # 1st-order upwind uses a one-sided stencil: offsets -1 and 0.
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields retired. The replacement encodes (u[$x] - u[$x-1]) / dx.
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
 end
 
 @testitem "upwind_1st_nonuniform scheme is discoverable and well-formed (esd-02z)" begin
@@ -693,17 +695,13 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"d2\"", content)
-    # Stencil form with cartesian selectors: three offsets for [1,-2,1]/dx^2.
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
-    @test occursin("\"offset\": 1", content)
-    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
-    @test occursin("_generated_by", content)
-    @test occursin("fornberg_gen.py", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (u[i-1] + u[i+1] - 2*u[i]) / (dx*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
 end
 
 @testitem "laplacian_2nd_uniform_cartesian scheme is discoverable and well-formed (esd-8f8)" begin
@@ -896,24 +894,16 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    @test occursin("\"order\": 4", content)
-    # Stencil form with cartesian selectors: four offsets for Fornberg 5-point
-    # stencil [1,-8,8,-1]/(12*dx) — offset 0 omitted (zero coefficient).
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -2", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
-    @test occursin("\"offset\": 2", content)
-    # Fornberg weights: ±1 and ±8 over denominator 12*dx.
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (8*(u[i+1]-u[i-1]) - (u[i+2]-u[i-2])) / (12*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("12", content)
     @test occursin("\"dx\"", content)
-    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
-    @test occursin("_generated_by", content)
-    @test occursin("fornberg_gen.py", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
-    # AST-only: no call op.
     @test !occursin("\"op\": \"call\"", content)
 end
 
@@ -934,26 +924,16 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    @test occursin("\"order\": 6", content)
-    # Stencil form with cartesian selectors: six offsets for Fornberg 7-point
-    # stencil [-1,9,-45,45,-9,1]/(60*dx) — offset 0 omitted (zero coefficient).
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -3", content)
-    @test occursin("\"offset\": -2", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
-    @test occursin("\"offset\": 2", content)
-    @test occursin("\"offset\": 3", content)
-    # Fornberg weights: ±1, ±9, ±45 over denominator 60*dx.
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (45*(u[i+1]-u[i-1]) - 9*(u[i+2]-u[i-2]) + (u[i+3]-u[i-3])) / (60*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("60", content)
     @test occursin("\"dx\"", content)
-    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
-    @test occursin("_generated_by", content)
-    @test occursin("fornberg_gen.py", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
-    # AST-only: no call op.
     @test !occursin("\"op\": \"call\"", content)
 end
 
@@ -1197,27 +1177,16 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    @test occursin("\"order\": 8", content)
-    # Stencil form with cartesian selectors: eight offsets for Fornberg 9-point
-    # stencil [3,-32,168,-672,672,-168,32,-3]/(840*dx) — offset 0 omitted.
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -4", content)
-    @test occursin("\"offset\": -3", content)
-    @test occursin("\"offset\": -2", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
-    @test occursin("\"offset\": 2", content)
-    @test occursin("\"offset\": 3", content)
-    @test occursin("\"offset\": 4", content)
-    # Fornberg weights: ±3,±32,±168,±672 over denominator 840*dx.
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (672*(u[i+1]-u[i-1]) - 168*(u[i+2]-u[i-2]) + 32*(u[i+3]-u[i-3]) - 3*(u[i+4]-u[i-4])) / (840*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("840", content)
     @test occursin("\"dx\"", content)
-    # Generated-file header present.
-    @test occursin("_generated_by", content)
-    @test occursin("fornberg_gen.py", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
 
@@ -1238,18 +1207,16 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"d2\"", content)
-    # Stencil form: five offsets for Fornberg [-1,16,-30,16,-1]/(12*dx^2).
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -2", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
-    @test occursin("\"offset\": 1", content)
-    @test occursin("\"offset\": 2", content)
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (16*(u[i-1]+u[i+1]) - (u[i-2]+u[i+2]) - 30*u[i]) / (12*dx*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("12", content)
     @test occursin("\"dx\"", content)
-    @test occursin("_generated_by", content)
-    @test !occursin("\"replacement\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
 
@@ -1270,15 +1237,16 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"d2\"", content)
-    # Stencil form: seven offsets for Fornberg [2,-27,270,-490,270,-27,2]/(180*dx^2).
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -3", content)
-    @test occursin("\"offset\": 3", content)
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (270*(u[i-1]+u[i+1]) - 27*(u[i-2]+u[i+2]) + 2*(u[i-3]+u[i+3]) - 490*u[i]) / (180*dx*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("180", content)
     @test occursin("\"dx\"", content)
-    @test occursin("_generated_by", content)
-    @test !occursin("\"replacement\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
 
@@ -1299,14 +1267,15 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"d2\"", content)
-    # Stencil form: nine offsets for Fornberg [-9,128,-1008,8064,-14350,...]/5040*dx^2.
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"cartesian\"", content)
-    @test occursin("\"offset\": -4", content)
-    @test occursin("\"offset\": 4", content)
+    @test occursin("\"accuracy\"", content)
+    # esd-3d7: migrated to arrayop replacement form — stencil/selector/offset
+    # fields and fornberg_gen.py header retired.
+    # The replacement encodes (8064*(u[i-1]+u[i+1]) - 1008*(u[i-2]+u[i+2]) + 128*(u[i-3]+u[i+3]) - 9*(u[i-4]+u[i+4]) - 14350*u[i]) / (5040*dx*dx).
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"op\": \"index\"", content)
     @test occursin("5040", content)
     @test occursin("\"dx\"", content)
-    @test occursin("_generated_by", content)
-    @test !occursin("\"replacement\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end

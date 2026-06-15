@@ -14,51 +14,6 @@ using TestItems
     @test lower_stencil_to_replacement(out)["replacement"] == rule["replacement"]
 end
 
-@testitem "lower_stencil_to_replacement: lowers cartesian upwind_1st" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
-    # Strip the replacement field (added by esd-0ip for the Layer-B runner) so
-    # this test exercises the actual stencil-lowering path and verifies the AST shape.
-    stencil_only = Dict{String, Any}(k => v for (k, v) in rule if k != "replacement")
-    @test haskey(stencil_only, "stencil")
-    @test !haskey(stencil_only, "replacement")
-
-    out = lower_stencil_to_replacement(stencil_only)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 2
-
-    # Entry 1: offset = -1, coeff = -1/dx -> -1/dx * index($u, $x + (-1))
-    e1 = repl["args"][1]
-    @test e1["op"] == "*"
-    @test length(e1["args"]) == 2
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    arg1 = idx1["args"][2]
-    @test arg1["op"] == "+"
-    @test String(arg1["args"][1]) == "\$x"
-    @test Int(arg1["args"][2]) == -1
-
-    # Entry 2: offset = 0 -> index($u, $x) (no `+ 0` wrapper)
-    e2 = repl["args"][2]
-    @test e2["op"] == "*"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    @test String(idx2["args"][2]) == "\$x"
-end
 
 @testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st AST" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
@@ -474,69 +429,10 @@ end
     @test String(idx1["args"][1]) == "\$q"
 end
 
-@testitem "lower_stencil_to_replacement: lowers centered_2nd_deriv_uniform (cartesian)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "centered_2nd_deriv_uniform.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_deriv_uniform"])
-    @test !haskey(rule, "replacement")
-    @test rule["applies_to"]["op"] == "d2"
-    @test String(rule["applies_to"]["args"][1]) == "\$u"
-    @test String(rule["applies_to"]["dim"]) == "\$x"
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    # Three stencil entries → combine(term1, term2, term3)
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 3
-
-    # Entry 1: offset -1 → coeff * index($u, $x + (-1))
-    e1 = repl["args"][1]
-    @test e1["op"] == "*"
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    arg1 = idx1["args"][2]
-    @test arg1["op"] == "+"
-    @test String(arg1["args"][1]) == "\$x"
-    @test Int(arg1["args"][2]) == -1
-
-    # Entry 2: offset 0 → coeff * index($u, $x) — no `+ 0` wrapper
-    e2 = repl["args"][2]
-    @test e2["op"] == "*"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    @test String(idx2["args"][2]) == "\$x"
-
-    # Entry 3: offset +1 → coeff * index($u, $x + 1)
-    e3 = repl["args"][3]
-    @test e3["op"] == "*"
-    idx3 = e3["args"][2]
-    @test idx3["op"] == "index"
-    @test String(idx3["args"][1]) == "\$u"
-    arg3 = idx3["args"][2]
-    @test arg3["op"] == "+"
-    @test String(arg3["args"][1]) == "\$x"
-    @test Int(arg3["args"][2]) == 1
-
-    # ESS parse_expression accepts the lowered AST
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-
-    # Idempotence: lowering again returns the same replacement
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
+# esd-3d7: removed "lower_stencil_to_replacement: lowers centered_2nd_deriv_uniform (cartesian)"
+# centered_2nd_deriv_uniform.json was migrated to arrayop replacement form — it no longer has a
+# stencil array, so the stencil-lowering path is not exercised by this rule.
+# The rule is tested via Layer-A (canonical byte contract) and Layer-B (MMS convergence).
 
 @testitem "lower_stencil_to_replacement: lowers laplacian_2nd_uniform_cartesian (arakawa)" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
@@ -1036,61 +932,10 @@ end
     @test occursin("disagrees", err.msg)
 end
 
-@testitem "lower_stencil_to_scheme: lowers cartesian upwind_1st to ESS scheme parts" begin
-    using EarthSciDiscretizations: lower_stencil_to_scheme
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
-
-    scheme, use_rule = lower_stencil_to_scheme("upwind_1st", rule)
-
-    # Whitelisted structural subset only — the catalog's sibling
-    # `replacement` AST must not leak into the ESS scheme object.
-    @test Set(keys(scheme)) == Set(["applies_to", "grid_family", "combine", "stencil", "accuracy"])
-    @test scheme["grid_family"] == "cartesian"
-    @test scheme["combine"] == "+"
-    @test scheme["applies_to"] == rule["applies_to"]
-    @test length(scheme["stencil"]) == 2
-    sel1 = scheme["stencil"][1]["selector"]
-    @test sel1 == Dict{String, Any}("kind" => "cartesian", "axis" => "\$x", "offset" => -1)
-    @test scheme["stencil"][1]["coeff"] == rule["stencil"][1]["coeff"]
-
-    # The use: rule re-states applies_to as its pattern so pattern variables
-    # bind one-to-one to the scheme operands.
-    @test use_rule == Dict{String, Any}(
-        "name"    => "upwind_1st",
-        "pattern" => rule["applies_to"],
-        "use"     => "upwind_1st",
-    )
-end
-
-@testitem "lower_stencil_to_scheme: ESS parse_schemes + parse_rule accept the lowered parts" begin
-    using EarthSciDiscretizations: lower_stencil_to_scheme
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
-
-    scheme, use_rule = lower_stencil_to_scheme("upwind_1st", rule)
-    schemes = EarthSciSerialization.parse_schemes(Dict{String, Any}("upwind_1st" => scheme))
-    @test haskey(schemes, "upwind_1st")
-    parsed_rule = EarthSciSerialization.parse_rule(use_rule)
-    @test parsed_rule.replacement_scheme == "upwind_1st"
-end
+# esd-3d7: removed "lower_stencil_to_scheme: lowers cartesian upwind_1st to ESS scheme parts" and
+# "lower_stencil_to_scheme: ESS parse_schemes + parse_rule accept the lowered parts".
+# upwind_1st.json was migrated to arrayop replacement form — it no longer has a stencil array, so
+# lower_stencil_to_scheme throws ArgumentError on it. The rule is exercised via Layer-A and Layer-B.
 
 @testitem "lower_stencil_to_scheme: errors on non-cartesian grid_family and selector kind" begin
     using EarthSciDiscretizations: lower_stencil_to_scheme

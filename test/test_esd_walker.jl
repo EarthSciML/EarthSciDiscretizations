@@ -322,6 +322,65 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_4th_uniform"
+            # centered_4th_uniform: Layer-A passes via its canonical byte contract.
+            # Layer-B passes via the 1d_cartesian_periodic runner: fixture declares
+            # mms_kind="sin_2pi_x_periodic" on N=16,32,64,128; the 4th-order FD
+            # gradient measures O(h⁴).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_6th_uniform"
+            # centered_6th_uniform: Layer-A passes via its canonical byte contract.
+            # Layer-B passes via the 1d_cartesian_periodic runner: fixture declares
+            # mms_kind="sin_2pi_x_periodic" on N=32,64,128,256; the 6th-order FD
+            # gradient measures O(h⁶).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_8th_uniform"
+            # centered_8th_uniform: Layer-A passes via its canonical byte contract.
+            # Layer-B passes via the 1d_cartesian_periodic runner: fixture declares
+            # mms_kind="sin_2pi_x_periodic" on N=16,32,64,128; the 8th-order FD
+            # gradient measures O(h⁸). N=256 excluded (stencil coefficients amplify
+            # roundoff past the truncation crossover near N~160).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_4th_deriv_uniform"
+            # centered_4th_deriv_uniform: Layer-A passes via its canonical byte
+            # contract. Layer-B passes via the 1d_cartesian_periodic runner: fixture
+            # declares mms_kind="sin_2pi_x_second_derivative" on N=16,32,64,128; the
+            # 4th-order FD second derivative measures O(h⁴).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_6th_deriv_uniform"
+            # centered_6th_deriv_uniform: Layer-A passes via its canonical byte
+            # contract. Layer-B passes via the 1d_cartesian_periodic runner: fixture
+            # declares mms_kind="sin_2pi_x_second_derivative" on N=16,32,64,128; the
+            # 6th-order FD second derivative measures O(h⁶). N=256 excluded (stencil
+            # coefficients amplify roundoff past the truncation crossover near N~320,
+            # observed as order 3.5 on the N=128→256 step at N=32,64,128,256).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "centered_8th_deriv_uniform"
+            # centered_8th_deriv_uniform: Layer-A passes via its canonical byte
+            # contract. Layer-B passes via the 1d_cartesian_periodic runner: fixture
+            # declares mms_kind="sin_2pi_x_second_derivative" on N=16,32,64 (2
+            # convergence steps); the 8th-order FD second derivative measures O(h⁸).
+            # N>=128 excluded: large stencil coefficients (max 14350) amplify roundoff
+            # as eps/(h²*5040), dominating truncation past the crossover near N~76.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "nonlinear_laplacian_uniform"
             # nonlinear_laplacian_uniform (esd-1p7) ships a canonical/ fixture
             # so Layer-A passes via the ESS rule engine. Layer-B passes via the
@@ -491,7 +550,9 @@ using TestItems
     # bindings; centered_2nd_deriv_uniform and mixed_deriv_2nd_uniform
     # land with the pending-set retirement; esd-ecq adds the
     # cubed_sphere_cross_metric runner; esd-cal adds the unstructured_ode
-    # runner for nn_diffusion_mpas and nn_diffusion_duo. Fourteen rules now PASS:
+    # runner for nn_diffusion_mpas and nn_diffusion_duo; esd-3d7 activates the
+    # higher-order cartesian FD family (centered_4th/6th/8th_uniform and
+    # centered_4th/6th/8th_deriv_uniform). Twenty rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
@@ -501,8 +562,11 @@ using TestItems
     # mixed_deriv_2nd_uniform (O(h²) cross stencil),
     # nonlinear_laplacian_uniform (O(h²) flux form),
     # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian),
-    # nn_diffusion_mpas (O(h²) MPAS Voronoi sphere), and
-    # nn_diffusion_duo (O(h²) DUO icosahedral sphere).
+    # nn_diffusion_mpas (O(h²) MPAS Voronoi sphere),
+    # nn_diffusion_duo (O(h²) DUO icosahedral sphere),
+    # centered_4th_uniform (O(h⁴)), centered_6th_uniform (O(h⁶)),
+    # centered_8th_uniform (O(h⁸)), centered_4th_deriv_uniform (O(h⁴)),
+    # centered_6th_deriv_uniform (O(h⁶)), centered_8th_deriv_uniform (O(h⁸)).
     # All remaining rules with applicable:true convergence fixtures continue to
     # SKIP with `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
@@ -524,7 +588,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 14
+    @test layer_b_passes == 20
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
