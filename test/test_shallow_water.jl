@@ -1,6 +1,7 @@
 @testsnippet ShallowWaterSetup begin
     using Test
     using EarthSciDiscretizations
+    using EarthSciDiscretizations: _compute_ppm_fluxes!, _flux_to_tendency!
 end
 
 @testitem "Williamson test case: grid area" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
@@ -45,15 +46,15 @@ end
     grid = CubedSphereGrid(Nc; R = R)
 
     # Solid-body rotation velocity: u = u0 cos(lat), v = 0 (along equator)
-    u0 = 1.0
     vel_xi = zeros(6, Nc + 1, Nc)
-    vel_eta = zeros(6, Nc, Nc + 1)
 
     # PPM transport of a constant field should give zero tendency
     q_const = ones(6, Nc, Nc)
+    flux = zeros(6, Nc + 1, Nc)
     tend = zeros(6, Nc, Nc)
 
-    flux_1d_ppm!(tend, q_const, vel_xi, grid, :xi, 0.01)
+    _compute_ppm_fluxes!(flux, q_const, vel_xi, grid, :xi, 0.01)
+    _flux_to_tendency!(tend, flux, grid, :xi)
     @test maximum(abs.(tend)) < 1.0e-12
 end
 
@@ -70,10 +71,11 @@ end
 
     # Uniform velocity in xi direction
     vel_xi = fill(0.1, 6, Nc + 1, Nc)
-    vel_eta = zeros(6, Nc, Nc + 1)
 
+    flux = zeros(6, Nc + 1, Nc)
     tend = zeros(6, Nc, Nc)
-    flux_1d_ppm!(tend, q, vel_xi, grid, :xi, 0.01)
+    _compute_ppm_fluxes!(flux, q, vel_xi, grid, :xi, 0.01)
+    _flux_to_tendency!(tend, flux, grid, :xi)
 
     # Mass conservation: Σ tendency * area ≈ 0 on closed sphere
     # Panel boundary fluxes are matched for exact conservation
