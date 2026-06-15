@@ -77,30 +77,23 @@ connectivity table.
 ## Convergence
 
 Numeric coverage today lives in the canonical Julia test
-[<code>test/test_laplacian.jl</code>]({{< param repoURL >}}/blob/main/test/test_laplacian.jl):
+the walker's `cubed_sphere_cross_metric` Layer-B runner (esd-ecq):
 the manufactured solution `φ(ξ, η) = cos(2ξ)·cos(2η)` is evaluated against the
 analytic covariant Laplacian (with metric quantities sampled from the gnomonic
-metric) at `Nc ∈ {8, 16, 32}`. The error ratio across each 2× refinement
-satisfies `e_{k−1}/e_k > 2`, consistent with `O(h²)` asymptotic convergence —
-the test asserts that bound directly. The bit-equivalence canonical fixture at
-[<code>fixtures/canonical/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_difference/covariant_laplacian_cubed_sphere/fixtures/canonical)
-pins the c24 (`Nc = 24`) reference output to within `1e-12` relative
-tolerance against `fv_laplacian` from `src/operators/laplacian.jl`.
-
-<div class="callout callout-pending">
-<strong>Convergence plot pending fixture activation.</strong>
-The Layer-B walker harness needs the in-flight 2D dispatch + per-cell metric
-callables to evaluate this rule on a manufactured solution defined in
-<code>(ξ, η)</code> with the gnomonic Jacobian threaded through. Until that
-extension lands, the convergence fixture under
+metric) at `Nc ∈ {64, 128, 256}`. Coarser grids (Nc < 32) show pre-asymptotic
+convergence (~O(h^1.2)) due to the gnomonic metric's large variation near panel
+corners. The asymptotic O(h²) regime is reached at Nc ≥ 64 (order ≥ 1.9).
+The convergence fixture at
 [<code>fixtures/convergence/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_difference/covariant_laplacian_cubed_sphere/fixtures/convergence)
-declares <code>applicable: false</code> and the rendered convergence plot is
-suppressed. Numeric coverage continues to live at
-<code>test/test_laplacian.jl</code> as described above.
-</div>
+declares `mms_kind="cos2xi_cos2eta_cubed_sphere"` and asserts `expected_min_order: 1.8`.
+The imperative oracle `fv_laplacian` (`src/operators/laplacian.jl`) was retired
+in esd-ecq; the declarative rule is the sole implementation.
+
+The bit-equivalence canonical fixture at
+[<code>fixtures/canonical/</code>]({{< param repoURL >}}/blob/main/discretizations/finite_difference/covariant_laplacian_cubed_sphere/fixtures/canonical)
+remains `applicable: false` pending ESS cubed_sphere selector dispatch (tracked
+at ESS/ess-cubed-sphere-pipeline).
 
 ## Reference
 
 - Putman & Lin (2007), *JCP* 227(1):55–78 — gnomonic cubed-sphere covariant FV operators.
-- Imperative reference: `fv_laplacian` in
-  [<code>src/operators/laplacian.jl</code>]({{< param repoURL >}}/blob/main/src/operators/laplacian.jl).

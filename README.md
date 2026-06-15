@@ -25,13 +25,14 @@ This repository has three roles:
    ledger (`test/junit-esd.xml`). One catalog, four bindings, one
    canonical pipeline — conformance-tested.
 3. **Transitional reference operators.** Hand-coded finite-volume
-   operators on cubed-sphere grids (`fv_laplacian`, `transport_2d`,
-   `flux_1d`, PPM transport/reconstruction, ghost-cell handling) under
-   `src/operators/`. These are oracles retained while their math is
-   ported into catalog rules; they are progressively retired as the
-   corresponding rules land (see the retirement log in
-   `src/EarthSciDiscretizations.jl`). New math should land as rules, not
-   operators.
+   operators on cubed-sphere grids (`transport_2d`, `flux_1d`, PPM
+   transport/reconstruction, ghost-cell handling) under `src/operators/`.
+   These are oracles retained while their math is ported into catalog
+   rules; they are progressively retired as the corresponding rules land
+   (see the retirement log in `src/EarthSciDiscretizations.jl`).
+   `fv_laplacian` was retired in esd-ecq; its math now lives entirely in
+   `discretizations/finite_difference/covariant_laplacian_cubed_sphere.json`.
+   New math should land as rules, not operators.
 
 Per the single-pathway rule in [`AGENTS.md`](AGENTS.md), ESD is a
 discretization catalog over ESS, not a parallel runtime: no binding

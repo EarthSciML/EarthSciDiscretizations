@@ -68,9 +68,9 @@ using TestItems
     @test "weno5_advection" in names
     weno = first(filter(r -> r.name == "weno5_advection", results))
     @test weno.family == :finite_volume
-    # finite_difference/covariant_laplacian_cubed_sphere (dsc-ap9) — first 2D
-    # multi-axis selector rule; declares applicable:false on Layer B until ESS
-    # extends the harness for cubed_sphere metric bindings.
+    # finite_difference/covariant_laplacian_cubed_sphere (esd-ecq) — full covariant
+    # Laplacian on the gnomonic cubed sphere; Layer-B active via the
+    # cubed_sphere_cross_metric runner (direct per-cell metric-binding evaluation).
     @test "covariant_laplacian_cubed_sphere" in names
     lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
     @test lap.family == :finite_difference
@@ -135,7 +135,6 @@ using TestItems
             # binds uniform h only — per-cell dz[k] bindings pending dsc-yz0m.
             ("finite_difference", "centered_2nd_nonuniform_vertical"),
             ("finite_difference", "periodic_bc"),
-            ("finite_difference", "covariant_laplacian_cubed_sphere"),
             ("finite_difference", "nn_diffusion_mpas"),
             ("finite_volume", "flux_1d_ppm"),
             ("finite_volume", "flux_limiter_minmod"),
@@ -363,6 +362,18 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "covariant_laplacian_cubed_sphere"
+            # covariant_laplacian_cubed_sphere (esd-ecq) — canonical/ fixture declares
+            # applicable:false (Layer-A skips; ESS cubed_sphere selector dispatch
+            # pending). Layer-B now passes via the cubed_sphere_cross_metric runner:
+            # fixture declares mms_kind="cos2xi_cos2eta_cubed_sphere", topology key
+            # resolves to cubed_sphere_cross_metric, runner measures O(h²) for the
+            # full covariant Laplacian of cos(2ξ)cos(2η) on Nc ∈ {64,128,256}
+            # (coarser grids are pre-asymptotic due to gnomonic metric variation).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "divergence_arakawa_c"
             # divergence_arakawa_c (arakawa) ships a canonical/ fixture with
             # applicable:false (Layer-A skips). Layer-B now passes via the canonical
@@ -439,17 +450,19 @@ using TestItems
     # dsc-a7b2 the fv_cell_average_1d runner; weno5_advection and
     # nonlinear_laplacian_uniform ride the 1d runner via auxiliary-field
     # bindings; centered_2nd_deriv_uniform and mixed_deriv_2nd_uniform
-    # land with the pending-set retirement. Eleven rules now PASS:
+    # land with the pending-set retirement; esd-ecq adds the
+    # cubed_sphere_cross_metric runner. Twelve rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
     # laplacian_2nd_uniform_cartesian (O(h²) 5-point), ppm_reconstruction
     # (O(h⁴) CW84 edge interpolation), weno5_advection (O(h⁵) FD-WENO
     # advective divergence), centered_2nd_deriv_uniform (O(h²)),
-    # mixed_deriv_2nd_uniform (O(h²) cross stencil), and
-    # nonlinear_laplacian_uniform (O(h²) flux form). All remaining rules
-    # with applicable:true convergence fixtures continue to SKIP with
-    # `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
+    # mixed_deriv_2nd_uniform (O(h²) cross stencil),
+    # nonlinear_laplacian_uniform (O(h²) flux form), and
+    # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian).
+    # All remaining rules with applicable:true convergence fixtures continue to
+    # SKIP with `_LAYER_B_PIPELINE_PENDING` pending per-topology follow-up beads.
     layer_b_passes = sum(
         1 for r in results
             if r.layer_b.outcome == WalkESDTests.LAYER_PASS;
@@ -469,7 +482,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 11
+    @test layer_b_passes == 12
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

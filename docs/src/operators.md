@@ -99,30 +99,6 @@ invariants any FV operator must — they are still operators on arrays,
 just authored differently. The following examples evaluate the AST that
 the rules emit, confirming each invariant holds.
 
-### Laplacian of a constant
-
-The Laplacian of a constant field is zero everywhere. `fv_laplacian` is
-the de-facto numeric reference for the schema-gated covariant Laplacian
-on the cubed sphere (see
-`discretizations/finite_difference/covariant_laplacian_cubed_sphere.json`,
-which currently declares `applicable: false` pending ESS multi-axis
-selectors and metric-tensor bindings).
-
-```@example ops
-using EarthSciDiscretizations
-using EarthSciDiscretizations: evaluate_arrayop
-
-grid = CubedSphereGrid(8)
-Nc = grid.Nc
-
-phi_const = fill(42.0, 6, Nc, Nc)
-ao = fv_laplacian(phi_const, grid)
-lap = evaluate_arrayop(ao)
-println("Laplacian of constant field:")
-println("  Size: $(size(lap))")
-println("  Max absolute value: $(maximum(abs.(lap)))")
-```
-
 ### Transport of a constant field
 
 Advecting a constant field produces zero tendency regardless of the

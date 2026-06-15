@@ -442,6 +442,26 @@ function metric_dgij_dxk(g::CubedSphereGrid{T}) where {T}
     end
 end
 
+"""
+    metric_eval(g::CubedSphereGrid, name, p, i, j)
+
+Return the named metric-array value at panel `p`, cell-center column `i`, row `j`.
+Supports the names used in `covariant_laplacian_cubed_sphere.json` metric bindings:
+`"ginv_xi_xi"`, `"ginv_eta_eta"`, `"ginv_xi_eta"`, `"J"`,
+`"dJgxx_dxi"`, `"dJgyy_deta"`, `"dJgxe_dxi"`, `"dJgxe_deta"`.
+"""
+function metric_eval(g::CubedSphereGrid{T}, name::AbstractString, p::Integer, i::Integer, j::Integer) where {T}
+    name == "ginv_xi_xi"   && return T(g.ginv_ξξ[p, i, j])
+    name == "ginv_eta_eta" && return T(g.ginv_ηη[p, i, j])
+    name == "ginv_xi_eta"  && return T(g.ginv_ξη[p, i, j])
+    name == "J"            && return T(g.J[p, i, j])
+    name == "dJgxx_dxi"    && return T(g.dJgxx_dξ[p, i, j])
+    name == "dJgyy_deta"   && return T(g.dJgyy_dη[p, i, j])
+    name == "dJgxe_dxi"    && return T(g.dJgxe_dξ[p, i, j])
+    name == "dJgxe_deta"   && return T(g.dJgxe_dη[p, i, j])
+    throw(ArgumentError("cubed_sphere: metric_eval: unknown metric $(repr(name))"))
+end
+
 function coord_jacobian(g::CubedSphereGrid{T}, target::Symbol) where {T}
     target === :lon_lat ||
         throw(ArgumentError("cubed_sphere: coord_jacobian only supports target=:lon_lat; got :$target"))
