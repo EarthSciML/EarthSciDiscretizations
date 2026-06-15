@@ -758,9 +758,9 @@ end
     try
         ENV["ESD_RUN_INTEGRATION"] = "1"
         result = WalkESDTests.run_layer_c(ppm)
-        # Williamson 1 PASSes; Williamson 2 + DCMIP 1-1 are stubs that SKIP.
-        # Aggregate: 1 pass + 2 skip → LAYER_PASS with "1/3 cases pass, 2 skipped".
-        @test result.outcome == WalkESDTests.LAYER_PASS
+        # williamson1_cosine_bell retired to stub in esd-vx3 (cubed_sphere_advection runner removed).
+        # All 3 cases are stubs → LAYER_SKIP with "3/3 cases skipped".
+        @test result.outcome == WalkESDTests.LAYER_SKIP
         @test occursin("williamson1_cosine_bell", result.reason)
         @test occursin("williamson2_geostrophic_steady", result.reason)
         @test occursin("dcmip_1_1_3d_advection", result.reason)

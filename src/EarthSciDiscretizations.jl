@@ -29,14 +29,17 @@ include("grids/arakawa.jl")
 # Operator utilities
 include("operators/arrayop_utils.jl")
 
-# FV operators (schema-gated Bucket-B paths + PPM helpers).
+# FV operators.
 # Bucket-A ArrayOp builders that mirrored already-walker-validated JSON
 # rules — `fv_divergence`, `fv_gradient_xi/eta`, and the loop-form
 # `ppm_reconstruction!`/`ppm_reconstruction` — have been retired (dsc-o05).
+# transport_2d.jl (transport_2d, transport_2d_linrood!, transport_2d_ppm_arrayop,
+# _advective_tendency!) retired in esd-vx3; JSON rule lives in
+# discretizations/finite_volume/transport_2d.json and fv3_lin_rood_advection.json.
+# reconstruction.jl (ppm_reconstruction_arrayop, _ppm_limit_cw84, ppm_flux_integral)
+# retired in esd-vx3; rule lives in discretizations/finite_volume/ppm_reconstruction.json.
 include("operators/laplacian.jl")
-include("operators/reconstruction.jl")
 include("operators/flux_1d.jl")
-include("operators/transport_2d.jl")
 
 # FV3-specific operators
 # Wind-field operators (vorticity, kinetic energy, C↔D grid transformation +
@@ -126,16 +129,12 @@ export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 # Exports: FV operators
 export fv_laplacian
 export flux_1d
-export transport_2d
 
-# Exports: Numerical transport operators
-export transport_2d_linrood!
-
-# Exports: ArrayOp-based PPM transport operators
+# Exports: ArrayOp-based transport utilities
+# transport_2d, transport_2d_linrood!, transport_2d_ppm_arrayop retired (esd-vx3)
+# ppm_reconstruction_arrayop retired (esd-vx3); JSON rule: ppm_reconstruction.json
 export flux_to_tendency_arrayop, advective_tendency_arrayop
 export compute_courant_numbers, compute_courant_numbers_arrayop
-export transport_2d_ppm_arrayop
-export ppm_reconstruction_arrayop
 
 # Exports: FV3 super-grid
 export compute_super_grid, compute_super_grid!, compute_angle_at_point

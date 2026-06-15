@@ -1137,43 +1137,6 @@ end
     @test haskey(at, "dims")
 end
 
-@testitem "fv3_lin_rood_advection: sweep consumes declaration — fields map to transport_2d_linrood! (esd-f4i)" begin
-    using EarthSciDiscretizations
-    using JSON
-
-    # Confirm that the dimensional_split declaration's fields correspond exactly
-    # to what transport_2d_linrood! implements (ESD sweep loop owns execution).
-    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    rule_path = joinpath(
-        repo_root, "discretizations", "finite_volume", "fv3_lin_rood_advection.json"
-    )
-    outer = JSON.parsefile(rule_path)["discretizations"]["fv3_lin_rood_advection"]
-
-    # axes: the sweep iterates over xi then eta (cubed-sphere in-panel directions).
-    @test outer["axes"] == ["xi", "eta"]
-
-    # splitting: "strang" — Lin-Rood uses symmetric half-step advective
-    # correction + full flux step (transport_2d_linrood! step 1-3), achieving
-    # O(dt^2) accuracy like Strang splitting.
-    @test outer["splitting"] == "strang"
-
-    # inner_rule: the 1D operator applied per axis is PPM (flux_1d_ppm! in
-    # the sweep; fv3_lin_rood_ppm_1d in the declaration).
-    @test outer["inner_rule"] == "fv3_lin_rood_ppm_1d"
-
-    # Functional contract: constant field with zero velocity has zero tendency
-    # everywhere (transport_2d_linrood! exact null with no flow; matching the
-    # test in test_transport_2d.jl::Lin-Rood 2D transport of constant field).
-    Nc = 8
-    grid = CubedSphereGrid(Nc; R = 1.0)
-    q = fill(3.14, 6, Nc, Nc)
-    vel_xi  = fill(0.0, 6, Nc + 1, Nc)
-    vel_eta = fill(0.0, 6, Nc, Nc + 1)
-    dt = 0.01
-    tendency = zeros(6, Nc, Nc)
-    transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
-    @test all(abs.(tendency) .< 1.0e-12)
-end
 
 @testitem "centered_2nd_nonuniform_vertical scheme is discoverable and well-formed (esd-9qs)" begin
     using EarthSciDiscretizations: load_rules

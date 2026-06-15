@@ -173,14 +173,3 @@ end
     @test errors[3] < errors[2] * 1.1
 end
 
-# ============================================================
-# Task 5: PPM Courant number
-# ============================================================
-
-@testitem "PPM CFL warning fires for large Courant" setup = [FixesSetup] tags = [:fixes] begin
-    # ppm_flux_integral should warn when |Courant| > 1
-    ql = 1.0; qr = 2.0; qi = 1.5
-    @test_logs (:warn, r"CFL violation") EarthSciDiscretizations.ppm_flux_integral(ql, qr, qi, 1.5)
-    # Should still return a finite value
-    @test isfinite(EarthSciDiscretizations.ppm_flux_integral(ql, qr, qi, 1.5))
-end

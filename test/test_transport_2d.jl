@@ -4,81 +4,6 @@
     using EarthSciDiscretizations: evaluate_arrayop
 end
 
-@testitem "2D Lax-Friedrichs transport of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc)
-
-    q = fill(7.0, 6, Nc, Nc)
-    courant_xi = fill(0.0, 6, Nc, Nc)
-    courant_eta = fill(0.0, 6, Nc, Nc)
-
-    ao = transport_2d(q, courant_xi, courant_eta, grid)
-    tendency = evaluate_arrayop(ao)
-
-    @test size(tendency) == (6, Nc - 2, Nc - 2)
-    @test all(abs.(tendency) .< 1.0e-12)
-end
-
-@testitem "2D Lax-Friedrichs transport is linear in q" setup = [Transport2DSetup] tags = [:transport] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc)
-
-    q1 = randn(6, Nc, Nc)
-    q2 = randn(6, Nc, Nc)
-    courant_xi = fill(0.1, 6, Nc, Nc)
-    courant_eta = fill(0.1, 6, Nc, Nc)
-
-    ao1 = transport_2d(q1, courant_xi, courant_eta, grid)
-    ao2 = transport_2d(q2, courant_xi, courant_eta, grid)
-    ao_sum = transport_2d(q1 + q2, courant_xi, courant_eta, grid)
-
-    t1 = evaluate_arrayop(ao1)
-    t2 = evaluate_arrayop(ao2)
-    t_sum = evaluate_arrayop(ao_sum)
-
-    @test isapprox(t_sum, t1 + t2; rtol = 1.0e-10)
-end
-
-@testitem "Lin-Rood 2D transport of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    q = fill(5.0, 6, Nc, Nc)
-    vel_xi = fill(0.0, 6, Nc + 1, Nc)
-    vel_eta = fill(0.0, 6, Nc, Nc + 1)
-    dt = 0.01
-
-    tendency = zeros(6, Nc, Nc)
-    transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
-
-    @test all(abs.(tendency) .< 1.0e-14)
-end
-
-@testitem "Lin-Rood 2D transport conserves mass" setup = [Transport2DSetup] tags = [:transport] begin
-    Nc = 16
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    # Non-trivial smooth initial condition
-    q = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        q[p, i, j] = 1.0 + 0.5 * cos(2π * grid.ξ_centers[i] / (π / 2)) *
-            cos(2π * grid.η_centers[j] / (π / 2))
-    end
-
-    # Non-zero velocity in both directions
-    vel_xi = fill(0.5, 6, Nc + 1, Nc)
-    vel_eta = fill(0.3, 6, Nc, Nc + 1)
-    dt = 0.01
-
-    tendency = zeros(6, Nc, Nc)
-    transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid, dt)
-
-    # Total mass tendency should be zero (conservation on closed sphere)
-    # All boundary fluxes are matched, so this should hold to machine precision
-    total = sum(tendency[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    @test abs(total) < 1.0e-10
-end
-
 @testitem "flux_to_tendency_arrayop matches loop version" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
     Nc = 8
     grid = CubedSphereGrid(Nc; R = 1.0)
@@ -145,43 +70,6 @@ end
     @test isapprox(courant_ao_eta, courant_loop_eta; rtol = 1.0e-12)
 end
 
-@testitem "transport_2d_ppm_arrayop of constant field with zero velocity is zero" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    q = fill(5.0, 6, Nc, Nc)
-    vel_xi = fill(0.0, 6, Nc + 1, Nc)
-    vel_eta = fill(0.0, 6, Nc, Nc + 1)
-    dt = 0.01
-
-    q_ext = extend_with_ghosts(q, grid)
-    courant_xi = compute_courant_numbers(vel_xi, dt, grid, :xi)
-    courant_eta = compute_courant_numbers(vel_eta, dt, grid, :eta)
-
-    ao = transport_2d_ppm_arrayop(q_ext, courant_xi, courant_eta, vel_xi, vel_eta, grid)
-    tendency = evaluate_arrayop(ao)
-
-    @test size(tendency) == (6, Nc, Nc)
-    @test all(abs.(tendency) .< 1.0e-10)
-end
-
-@testitem "ppm_reconstruction_arrayop produces ArrayOp types" setup = [Transport2DSetup] tags = [:transport, :arrayop] begin
-    using SymbolicUtils: isarrayop
-
-    Nc = 8
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    q = randn(6, Nc, Nc)
-    q_ext = extend_with_ghosts(q, grid)
-
-    ql_ao, qr_ao = ppm_reconstruction_arrayop(q_ext, grid, :xi)
-    @test isarrayop(ql_ao)
-    @test isarrayop(qr_ao)
-
-    ql_ao_eta, qr_ao_eta = ppm_reconstruction_arrayop(q_ext, grid, :eta)
-    @test isarrayop(ql_ao_eta)
-    @test isarrayop(qr_ao_eta)
-end
 
 @testitem "ghost_fill_arrayop returns extended array" setup = [Transport2DSetup] tags = [:transport] begin
     Nc = 8
