@@ -337,3 +337,44 @@ end
     @test du[var_map["u[2]"]] ≈ -2.0  atol = 1e-12
     @test du[var_map["u[3]"]] ≈  1.0  atol = 1e-12
 end
+
+# ---------------------------------------------------------------------------
+# esd-b6u: PIDE integral term via Euler/midpoint quadrature
+# ---------------------------------------------------------------------------
+
+@testitem "build_ode_problem: PIDE integral term: du/dt = -integral(u) (esd-b6u)" begin
+    using EarthSciDiscretizations: build_ode_problem
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path  = joinpath(repo_root, "test", "fixtures", "pide_integral_1d.esm")
+    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
+                         "cartesian_1d_periodic_n16.gdd.json")
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+
+    N  = 16
+    dx = 1.0 / N
+
+    # IC from ESM expression: u(x,0) = 1.0 for all cells.
+    u0 = copy(prob.u0)
+    for i in 1:N
+        @test u0[var_map["u[$i]"]] ≈ 1.0 rtol = 1e-15
+    end
+
+    # Uniform IC: integral(u) = dx*N*1.0 = 1.0, so du/dt = -1.0 for every cell.
+    du = similar(u0)
+    prob.f(du, u0, prob.p, 0.0)
+    for i in 1:N
+        @test du[var_map["u[$i]"]] ≈ -1.0 rtol = 1e-10
+    end
+
+    # Linear IC: u[i] = x_i = (i-0.5)*dx (cell centres).
+    # Midpoint rule is exact for linear functions: integral(u) = 0.5 exactly.
+    for i in 1:N
+        u0[var_map["u[$i]"]] = (i - 0.5) * dx
+    end
+    prob.f(du, u0, prob.p, 0.0)
+    for i in 1:N
+        @test du[var_map["u[$i]"]] ≈ -0.5 rtol = 1e-10
+    end
+end
