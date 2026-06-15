@@ -731,8 +731,11 @@ end
     @test occursin("\"offset\": -1", content)
     @test occursin("\"offset\": 0", content)
     @test occursin("\"offset\": 1", content)
-    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
-    @test !occursin("\"replacement\"", content)
+    # Inline arrayop replacement added in EINSUM-4 (esd-770); stencil is kept for
+    # Layer-B and Layer-D runners.
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
 end
 
 @testitem "nonlinear_laplacian_uniform scheme is discoverable and well-formed (esd-1p7)" begin

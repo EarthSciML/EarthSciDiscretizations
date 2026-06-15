@@ -441,3 +441,48 @@ end
         @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
     end
 end
+
+# ---------------------------------------------------------------------------
+# esd-770 (EINSUM-4): divergence_arakawa_c via arrayop replacement
+# ---------------------------------------------------------------------------
+
+@testitem "build_ode_problem: divergence_arakawa_c f! runs via arrayop replacement (esd-770)" begin
+    using EarthSciDiscretizations: build_ode_problem
+    import SciMLBase
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_volume", "divergence_arakawa_c",
+        "fixtures", "integration", "divergence_arakawa_c_pde.esm",
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd", "arakawa_2d_periodic_n16.gdd.json",
+    )
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+    @test prob isa SciMLBase.ODEProblem
+
+    # MMS ICs: F=(sin(2πx)cos(2πy), cos(2πx)sin(2πy)) sampled at face positions.
+    # face_x[$i,$j] is at x=(i-1)*dx, y=(j-0.5)*dy; face_y[$i,$j] at x=(i-0.5)*dx, y=(j-1)*dy.
+    N = 16
+    dx = 1.0 / N
+    dy = 1.0 / N
+    u0 = copy(prob.u0)
+    for j in 1:N, i in 1:N
+        u0[var_map["Fu[$i,$j]"]] = sin(2π * (i - 1) * dx) * cos(2π * (j - 0.5) * dy)
+        u0[var_map["Fv[$i,$j]"]] = cos(2π * (i - 0.5) * dx) * sin(2π * (j - 1) * dy)
+    end
+
+    du = similar(u0)
+    # Must not throw E_TREEWALK_UNBOUND_VARIABLE / E_TREEWALK_UNBOUND_LOOP_VAR.
+    prob.f(du, u0, prob.p, 0.0)
+
+    # Conservation: periodic domain → sum of discrete divergences telescopes to 0.
+    div_sum = sum(du[var_map["div[$i,$j]"]] for j in 1:N for i in 1:N)
+    @test abs(div_sum) < 1e-10
+
+    # Spot-check cell (1,1): div = (Fu[2,1]-Fu[1,1])/dx + (Fv[1,2]-Fv[1,1])/dy.
+    expected_div_1_1 = (u0[var_map["Fu[2,1]"]] - u0[var_map["Fu[1,1]"]]) / dx +
+                       (u0[var_map["Fv[1,2]"]] - u0[var_map["Fv[1,1]"]]) / dy
+    @test du[var_map["div[1,1]"]] ≈ expected_div_1_1  rtol = 1e-12
+end

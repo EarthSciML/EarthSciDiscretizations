@@ -38,10 +38,13 @@ Public surface:
   `pattern` + `replacement` document rules.
 
 Selector kinds currently supported by `lower_stencil_to_replacement`:
-`cartesian`, `arakawa`, `latlon`, `cubed_sphere`, `vertical`. Other
-families (`indirect`, `reduction`) raise `ArgumentError` until their
-lowering rows are added; each new kind composes here as a separate
-dispatch branch.
+`latlon`, `cubed_sphere`, `vertical`. The `cartesian` family lowers via
+`lower_stencil_to_scheme` (ESS scheme-expansion path). The `arakawa` family
+was retired in EINSUM-4 (esd-770): all arakawa catalog rules now carry an
+explicit `replacement` arrayop AST, so stencil lowering is never reached for
+them. Families (`indirect`, `reduction`) raise `ArgumentError` until their
+lowering rows are added; each new kind composes here as a separate dispatch
+branch.
 """
 
 """
@@ -67,20 +70,6 @@ The shape of `axis_args_i` depends on the stencil family:
   `applies_to.dim` (must itself be a `\$`-prefixed pattern variable);
   each entry's `selector.axis` must equal `axis_pat`. Lowered form is
   `index(operand, axis_pat + offset_i)`.
-
-- **arakawa** (`kind="arakawa"`): multi-axis. The set of unique
-  `selector.axis` pattern variables across the stencil defines the
-  positional dimension order in the lowered `index` (sorted
-  lexicographically — e.g. `\$x` before `\$y`). Each entry contributes
-  `index(operand, \$a + off_a, \$b + off_b, …)` where the entry's `axis`
-  slot carries `\$axis + offset` and other slots carry the bare axis
-  pattern variable. The selector's `stagger` (`cell_center`, `face_x`,
-  `face_y`, `vertex`) is NOT encoded in the lowered AST — it stays
-  recoverable via the rule dict's preserved `stencil` field, which the
-  binding-side runner uses (per SELECTOR_KINDS.md decision #16) to pick
-  the matching component array on a C-grid (`face_x` ↔ x-component,
-  `face_y` ↔ y-component). `applies_to.dim` is NOT required for arakawa
-  rules — axis pattern variables are intrinsic to the stencil entries.
 
 - **latlon** (`kind="latlon"`): multi-axis with literal geographic axis
   names (e.g. `"lon"`, `"lat"`). Unlike arakawa, the axis field is a
@@ -121,9 +110,6 @@ Errors:
 - `ArgumentError` if any selector kind is not yet supported.
 - `ArgumentError` if a vertical rule is missing
   `applies_to.dim` or has an entry whose axis disagrees with it.
-- `ArgumentError` if an arakawa entry's `axis` is not a `\$`-prefixed
-  pattern variable, or its `stagger` is not one of the four allowed
-  symbols.
 - `ArgumentError` if a latlon entry's `axis` is a `\$`-prefixed variable
   (must be a literal geographic axis name).
 - `ArgumentError` if a cubed_sphere entry is missing its `selectors` array
@@ -176,21 +162,7 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
 
     family = _stencil_family(stencil)
 
-    terms = if family == "arakawa"
-        axis_vars = _arakawa_collect_axis_vars(stencil)
-        dollar_args = filter(
-            a -> a isa AbstractString && startswith(String(a), "\$"),
-            get(applies_to, "args", Any[]),
-        )
-        if length(dollar_args) > 1
-            stagger_op_map = _arakawa_stagger_operand_map(stencil, Vector{String}(dollar_args))
-            Any[_lower_arakawa_entry_unpack_staged(entry, stagger_op_map, axis_vars, i)
-                for (i, entry) in enumerate(stencil)]
-        else
-            Any[_lower_arakawa_entry_unpack(entry, operand_var, axis_vars, i)
-                for (i, entry) in enumerate(stencil)]
-        end
-    elseif family == "latlon"
+    terms = if family == "latlon"
         axis_names = _latlon_collect_axis_names(stencil)
         Any[_lower_latlon_entry_unpack(entry, operand_var, axis_names, i)
             for (i, entry) in enumerate(stencil)]
@@ -207,7 +179,8 @@ function lower_stencil_to_replacement(rule::AbstractDict)::Dict{String, Any}
             ArgumentError(
                 "lower_stencil_to_replacement: stencil selector kind " *
                     "'$family' is not yet supported (currently supported: " *
-                    "'arakawa', 'latlon', 'cubed_sphere', 'vertical')",
+                    "'latlon', 'cubed_sphere', 'vertical'; 'arakawa' rules carry " *
+                    "an explicit replacement AST since EINSUM-4 esd-770)",
             ),
         )
     end
@@ -478,8 +451,8 @@ function lower_stencil_to_canonical_replacement(rule::AbstractDict)::Dict{String
             if kind == "arakawa"
                 stagger = String(get(selector, "stagger", ""))
                 # Single-arg rules: non-cell_center stagger would index the wrong location.
-                # Multi-arg rules: each arg has its own stagger, lowered by _arakawa_stagger_operand_map;
-                # the replacement correctly references each pattern var at its own indices.
+                # Multi-arg rules: each arg has its own stagger; the replacement
+                # correctly references each pattern var at its own indices.
                 if stagger != "cell_center"
                     applies_to_check = get(rule, "applies_to", nothing)
                     n_dollar_args = applies_to_check isa AbstractDict ?
@@ -692,169 +665,6 @@ function _entry_selector_and_coeff(entry, idx::Int)
         ),
     )
     return selector, coeff
-end
-
-function _lower_arakawa_entry_unpack(entry, operand_var::String,
-        axis_vars::Vector{String}, idx::Int)
-    selector, coeff = _entry_selector_and_coeff(entry, idx)
-    return _lower_arakawa_entry(selector, coeff, operand_var, axis_vars, idx)
-end
-
-# Build a map from stagger name → operand pattern variable for multi-arg arakawa rules.
-# Unique staggers are collected from the stencil in sorted order and paired with
-# dollar_args in the same order: args[1] → smallest stagger name, args[2] → next, etc.
-function _arakawa_stagger_operand_map(stencil::AbstractVector,
-                                       dollar_args::Vector{String})::Dict{String, String}
-    seen = Set{String}()
-    for entry in stencil
-        sel = get(entry, "selector", nothing)
-        sel isa AbstractDict || continue
-        stagger = String(get(sel, "stagger", ""))
-        isempty(stagger) || push!(seen, stagger)
-    end
-    sorted_staggers = sort!(collect(seen))
-    length(sorted_staggers) <= length(dollar_args) || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa rule has $(length(sorted_staggers)) " *
-                "distinct staggers ($(join(sorted_staggers, ", "))) but only " *
-                "$(length(dollar_args)) \$-prefixed args; add one arg per stagger",
-        ),
-    )
-    return Dict{String, String}(
-        stagger => dollar_args[k] for (k, stagger) in enumerate(sorted_staggers))
-end
-
-function _lower_arakawa_entry_unpack_staged(entry,
-        stagger_op_map::Dict{String, String},
-        axis_vars::Vector{String}, idx::Int)
-    selector, coeff = _entry_selector_and_coeff(entry, idx)
-    stagger = String(get(selector, "stagger", ""))
-    operand_var = get(stagger_op_map, stagger, nothing)
-    operand_var !== nothing || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx stagger '$stagger' " *
-                "has no corresponding arg in the stagger→operand map",
-        ),
-    )
-    return _lower_arakawa_entry(selector, coeff, operand_var, axis_vars, idx)
-end
-
-# -----------------------------------------------------------------------------
-# Arakawa lowering
-# -----------------------------------------------------------------------------
-
-const _ARAKAWA_STAGGERS = ("cell_center", "face_x", "face_y", "vertex")
-
-"""
-    _arakawa_collect_axis_vars(stencil) -> Vector{String}
-
-Walk every entry's `selector.axis` and return the sorted set of unique
-`\$`-prefixed axis pattern variables. The sort order pins the positional
-dimension order of the lowered `index` op (so e.g. `[\$x, \$y]` means
-`index(operand, \$x_arg, \$y_arg)`).
-
-Each entry's `axis` MUST be a `\$`-prefixed pattern variable; literal axis
-names (e.g. `"lon"` / `"lat"` / `"xi"`) belong to other selector families
-and are rejected by the per-entry validator.
-"""
-function _arakawa_collect_axis_vars(stencil::AbstractVector)::Vector{String}
-    seen = Set{String}()
-    for (i, entry) in enumerate(stencil)
-        selector, _ = _entry_selector_and_coeff(entry, i)
-        axis_raw = get(selector, "axis", nothing)
-        axis_raw isa AbstractString || throw(
-            ArgumentError(
-                "lower_stencil_to_replacement: arakawa entry $i 'selector.axis' " *
-                    "must be a string",
-            ),
-        )
-        axis = String(axis_raw)
-        startswith(axis, "\$") || throw(
-            ArgumentError(
-                "lower_stencil_to_replacement: arakawa entry $i 'selector.axis' " *
-                    "must be a '\$'-prefixed pattern variable (got '$axis')",
-            ),
-        )
-        push!(seen, axis)
-    end
-    return sort!(collect(seen))
-end
-
-function _lower_arakawa_entry(
-        selector::AbstractDict,
-        coeff,
-        operand_var::String,
-        axis_vars::Vector{String},
-        idx::Int,
-    )
-    sel_axis_raw = get(selector, "axis", nothing)
-    sel_axis_raw isa AbstractString || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.axis' " *
-                "must be a string",
-        ),
-    )
-    sel_axis = String(sel_axis_raw)
-    startswith(sel_axis, "\$") || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.axis' " *
-                "must be a '\$'-prefixed pattern variable (got '$sel_axis')",
-        ),
-    )
-
-    stagger_raw = get(selector, "stagger", nothing)
-    stagger_raw isa AbstractString || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.stagger' " *
-                "must be a string",
-        ),
-    )
-    stagger = String(stagger_raw)
-    stagger in _ARAKAWA_STAGGERS || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.stagger' " *
-                "= '$stagger' is not one of $(_ARAKAWA_STAGGERS)",
-        ),
-    )
-
-    offset_raw = get(selector, "offset", nothing)
-    (offset_raw isa Integer && !(offset_raw isa Bool)) || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.offset' " *
-                "must be an integer",
-        ),
-    )
-    offset = Int(offset_raw)
-
-    # Build the per-axis index slot list. The entry's `axis` slot carries
-    # `$axis + offset` (or just `$axis` if offset == 0); all other slots
-    # carry the bare axis pattern variable. Stagger info is intentionally
-    # NOT in the AST — the binding-side runner recovers it from the rule
-    # dict's preserved `stencil` field per SELECTOR_KINDS.md decision #16.
-    index_args = Any[operand_var]
-    sel_axis_in_axis_vars = false
-    for ax in axis_vars
-        if ax == sel_axis
-            sel_axis_in_axis_vars = true
-            push!(
-                index_args,
-                offset == 0 ? ax :
-                    Dict{String, Any}("op" => "+", "args" => Any[ax, offset]),
-            )
-        else
-            push!(index_args, ax)
-        end
-    end
-    sel_axis_in_axis_vars || throw(
-        ArgumentError(
-            "lower_stencil_to_replacement: arakawa entry $idx 'selector.axis' " *
-                "= '$sel_axis' is not in the stencil's collected axis set " *
-                "$(axis_vars) (this should not happen)",
-        ),
-    )
-
-    index_node = Dict{String, Any}("op" => "index", "args" => index_args)
-    return Dict{String, Any}("op" => "*", "args" => Any[coeff, index_node])
 end
 
 # -----------------------------------------------------------------------------

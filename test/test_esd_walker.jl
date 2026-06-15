@@ -195,7 +195,7 @@ using TestItems
             # pattern matching on the bc OpExpr (layer-A SKIP) and carries
             # no convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "robin_bc"),
-            # staggered_1st_uniform (esd-slh): arakawa stencil-form rule;
+            # staggered_1st_uniform (esd-slh): arrayop replacement form (EINSUM-4);
             # ships canonical/input.esm applicable:false pending ESS
             # stencil-schema dispatch; no convergence fixture.
             ("finite_difference", "staggered_1st_uniform"),
