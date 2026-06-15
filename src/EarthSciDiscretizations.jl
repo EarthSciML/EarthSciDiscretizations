@@ -128,10 +128,10 @@ export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 export transport_2d
 
 # Exports: Numerical transport operators
-export flux_1d_ppm!, transport_2d_linrood!
+export transport_2d_linrood!
 
 # Exports: ArrayOp-based PPM transport operators
-export flux_1d_ppm_arrayop, flux_to_tendency_arrayop, advective_tendency_arrayop
+export flux_to_tendency_arrayop, advective_tendency_arrayop
 export compute_courant_numbers, compute_courant_numbers_arrayop
 export transport_2d_ppm_arrayop
 export ppm_reconstruction_arrayop

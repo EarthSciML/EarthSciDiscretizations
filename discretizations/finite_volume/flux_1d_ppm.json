@@ -24,6 +24,7 @@
       ],
       "stencil_support": {
         "comment": "Six cell-averaged values are consumed at each interface. Indexed relative to the *right cell* of the face (offset 0); the face F_{i+1/2} is the right edge of cell i (offset 0) and the left edge of cell i+1 (offset 1).",
+        "ghost_width": 3,
         "offsets": [-3, -2, -1, 0, 1, 2],
         "selectors": [
           { "selector": { "kind": "cartesian", "axis": "$x", "offset": -3 }, "role": "qm3 — left tail for the left-cell q_left edge value" },
@@ -247,20 +248,35 @@
           ]
         }
       },
+      "reads": [
+        {
+          "comment": "Per-face Courant `$c` at the Cartesian cell-interface (u-face stagger). Analogous to the `reads` binding in `lax_friedrichs_flux_cubed_sphere_xi`; the Cartesian version omits the `stagger` and `kind` fields pending a unified face-stagger selector vocabulary (dsc-35x). ESS currently treats `$c` as a scalar binding at sweep time; the per-face array contract declared here is a forward declaration that will be consumed once ESS gains the face-stagger selector kind.",
+          "name": "$c",
+          "selector": { "kind": "cartesian", "stagger": "face", "axis": "$x", "offset": 0 }
+        },
+        {
+          "comment": "Per-face velocity `$v` at the Cartesian cell-interface (u-face stagger). Same schema gap as `$c` above — forward declaration for the per-face binding contract.",
+          "name": "$v",
+          "selector": { "kind": "cartesian", "stagger": "face", "axis": "$x", "offset": 0 }
+        }
+      ],
       "composition_hint": "Caller computes the face-staggered Courant `c_{i+1/2} = u_{i+1/2}·dt/dx` (uniform Cartesian) or via the cubed-sphere panel-boundary-aware accessor (`_get_courant_xi/_get_courant_eta` in src/operators/flux_1d.jl) and the face velocity `v_{i+1/2}`; this rule then yields the per-face PPM flux. The cell-centred tendency follows from the FV divergence `T_i = -(F_{i+1/2}·dx_{i+1/2} - F_{i-1/2}·dx_{i-1/2}) / A_i` (or composes with `divergence_arakawa_c` on a C-grid). Sibling rule to `lax_friedrichs_flux` — same `op=flux` shape, same per-face `$c`/`$v` binding contract, but high-order PPM upwind in place of first-order LF.",
       "schema_gaps": {
-        "comment": "Three ESS schema extensions are required before this rule is fully materializable from JSON alone. Until they land, the runtime path is src/operators/flux_1d.jl (`flux_1d_ppm!` for the loop form; `flux_1d_ppm_arrayop` for the symbolic form). The rule file is authored declaratively (matching the `vertical_remap` precedent for nonlinear PPM rules and `weno5_advection`'s closed-AST nonlinear-weights pattern) so the math, references, and AST fragments are reproducible.",
+        "comment": "Three ESS schema extensions required before this rule is fully materializable from JSON alone via the §7 verify_mms_convergence harness. All three features are now declared in the rule schema (ghost_width in stencil_support; reads block for $c/$v face-stagger; boundary_policy note below); ESS implementation is pending. The canonical Layer-A fixture (discretizations/finite_volume/flux_1d_ppm/fixtures/canonical/) is applicable:true and exercises discretize via inline pattern+replacement, bypassing these gaps for the byte-contract check.",
         "face_staggered_courant_binding": {
           "tracker": "shared with discretizations/finite_volume/lax_friedrichs_flux.json (dsc-35x follow-ups); same gap as the latlon `cos_lat` per dsc-7jc, scoped here as the PPM-specific instance of dsc-cuj's stagger-aware binding follow-up.",
-          "summary": "The face-Courant `$c` and face-velocity `$v` are per-face bindings (analogous to the slope-ratio `$r` in flux_limiter_minmod), not stencil-offset selectors. ESS's verify_mms_convergence today binds only scalar per-axis spacing symbols at sweep time; until per-face bindings land, walker fixtures must declare applicable=false."
+          "status": "declared — `reads` block above declares $c and $v at cartesian face stagger; ESS face-stagger selector dispatch is pending (dsc-35x).",
+          "summary": "The face-Courant `$c` and face-velocity `$v` are per-face bindings (analogous to the slope-ratio `$r` in flux_limiter_minmod), not stencil-offset selectors. ESS's verify_mms_convergence today binds only scalar per-axis spacing symbols at sweep time; until per-face bindings land, convergence fixtures must declare applicable=false."
         },
         "ghost_extended_input_contract": {
           "tracker": "discretizations/SELECTOR_KINDS.md (face-stagger / time-varying bindings follow-ups off dsc-35x).",
-          "summary": "The 6-point cartesian stencil consumes cell-averaged values at offsets {-3, -2, -1, 0, 1, 2} relative to the right cell of the interface. At domain (or panel) boundaries the {-3, -2} and {+2} offsets reach outside the physical domain; the imperative path resolves this by passing a ghost-extended q_ext (Ng = 3 ghost cells per side). ESS's stencil contract today does not declare how a rule consumes ghost cells — pending a `boundary_policy` / `ghost_width` rule-level field this contract has to live in prose."
+          "status": "declared — `ghost_width: 3` added to stencil_support; ESS boundary_policy / ghost consumption contract is pending.",
+          "summary": "The 6-point cartesian stencil consumes cell-averaged values at offsets {-3, -2, -1, 0, 1, 2} relative to the right cell of the interface. At domain (or panel) boundaries the {-3, -2} and {+2} offsets reach outside the physical domain; the imperative path resolves this by passing a ghost-extended q_ext (Ng = 3 ghost cells per side). ESS's stencil contract today does not declare how a rule consumes ghost cells — the `ghost_width: 3` field here forward-declares this contract; a `boundary_policy` rule-level field consuming it is pending."
         },
         "panel_boundary_distance_handling": {
           "tracker": "shared with discretizations/finite_volume/lax_friedrichs_flux.json (dsc-35x boundary_policy follow-up).",
-          "summary": "On the cubed-sphere wrapper (`flux_1d_ppm!` / `flux_1d_ppm_arrayop`) the per-face Courant uses `grid.dist_xi_bnd` / `grid.dist_eta_bnd` at panel-boundary interfaces and `grid.dist_xi` / `grid.dist_eta` interior. The Cartesian core encoded here uses a single `$c` per face and ignores the panel split; the cubed-sphere wrapper builds a single distance array via `_build_interface_distances` and then applies this rule per face. Encoding the panel split in-rule needs the `boundary_policy` schema feature."
+          "status": "pending — boundary_policy schema feature not yet defined in ESS.",
+          "summary": "On the cubed-sphere wrapper the per-face Courant uses `grid.dist_xi_bnd` / `grid.dist_eta_bnd` at panel-boundary interfaces and `grid.dist_xi` / `grid.dist_eta` interior. The Cartesian core encoded here uses a single `$c` per face and ignores the panel split; the cubed-sphere wrapper builds a single distance array via `_build_interface_distances` and then applies this rule per face. Encoding the panel split in-rule needs the `boundary_policy` schema feature (dsc-35x)."
         }
       },
       "limitations": [

@@ -119,14 +119,15 @@ using TestItems
     # is no imperative implementation in any binding. The convergence fixture
     # ships applicable:false with a phase-hook deferral reason so the walker
     # SKIPs Layer-B with "fixture-declared not applicable".
-    # flux_1d_ppm + lax_friedrichs_flux_cubed_sphere_{eta,xi} sit here because
-    # their convergence fixtures ship `applicable:false` (face-staggered Courant
-    # binding contract / cubed_sphere ESS dispatch pending). The eta + flux_1d_ppm
-    # canonical fixtures also declare `applicable:false`, so Layer-A SKIPs via
-    # the `_fixture_applicable_skip` honoring. The xi canonical fixture is
-    # `applicable:true` (esd-lmm: cubed_sphere dispatch landed in _inject_rules!
-    # + pattern+replacement rule form in input.esm), so it is handled by an
+    # flux_1d_ppm canonical fixture is activated (applicable:true); Layer-A passes
+    # via the inline pattern+replacement ESM document and is handled by the
     # explicit elseif below (Layer-A PASS, Layer-B SKIP).
+    # lax_friedrichs_flux_cubed_sphere_xi canonical fixture is applicable:true
+    # (esd-lmm: cubed_sphere dispatch landed in _inject_rules! + pattern+replacement
+    # rule form in input.esm), handled by explicit elseif below (Layer-A PASS,
+    # Layer-B SKIP). lax_friedrichs_flux_cubed_sphere_eta convergence fixture
+    # ships `applicable:false` (cubed_sphere ESS dispatch pending), so Layer-A
+    # SKIPs via the `_fixture_applicable_skip` honoring.
     not_applicable_layer_b = Set(
         [
             # centered_2nd_nonuniform_vertical: the 1d_vertical_column runner
@@ -135,7 +136,6 @@ using TestItems
             ("finite_difference", "centered_2nd_nonuniform_vertical"),
             ("finite_difference", "periodic_bc"),
             ("finite_difference", "nn_diffusion_mpas"),
-            ("finite_volume", "flux_1d_ppm"),
             ("finite_volume", "flux_limiter_minmod"),
             ("finite_volume", "flux_limiter_superbee"),
             ("finite_volume", "lax_friedrichs_flux"),
@@ -383,6 +383,19 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "flux_1d_ppm"
+            # flux_1d_ppm: Layer-A passes via its canonical byte contract —
+            # the PPM replacement AST (CW84 limiter + Courant-fraction integral,
+            # fully expanded) is provided inline in canonical/input.esm as a
+            # pattern+replacement rule; ESS discretize applies the substitution
+            # and the walker byte-compares to the pinned expected.esm. Layer-B
+            # SKIPs because the convergence fixture ships applicable:false (face-
+            # staggered Courant binding + ghost_width contract pending in ESS;
+            # see flux_1d_ppm.json schema_gaps).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "lax_friedrichs_flux_cubed_sphere_xi"
             # lax_friedrichs_flux_cubed_sphere_xi: Layer-A passes via its
             # canonical byte contract (esd-lmm: cubed_sphere dispatch landed in

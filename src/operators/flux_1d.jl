@@ -172,46 +172,6 @@ function _flux_to_tendency!(tendency, flux, grid::CubedSphereGrid, dim::Symbol)
 end
 
 """
-    flux_1d_ppm!(tendency, q, vel, grid, dim, dt)
-
-PPM-based 1D flux-form transport. Computes the tendency for `q` transported
-by velocity `vel` in dimension `dim` (:xi or :eta).
-
-Uses PPM reconstruction with the Colella-Woodward (1984) limiter for
-high-order, monotone transport. The flux through each interface is computed
-by integrating the parabolic profile over the swept volume.
-
-At panel boundaries, fluxes are matched between adjacent panels to ensure
-exact conservation: for same-direction connections, the flux is averaged
-between both panels' independently computed values.
-
-Arguments:
-- `tendency`: output array (6, Nc, Nc), modified in-place
-- `q`: scalar field (6, Nc, Nc)
-- `vel`: velocity field at cell edges (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
-- `grid`: CubedSphereGrid
-- `dim`: :xi or :eta
-- `dt`: time step
-
-!!! note "Conservation at panel boundaries"
-    Same-direction boundary fluxes (ξ-to-ξ, η-to-η) are matched within this
-    function. For rotated boundary connections (ξ-to-η or η-to-ξ), use
-    `_compute_ppm_fluxes!` to get the raw flux arrays, then call
-    `_match_rotated_boundary_fluxes!` before converting to tendencies.
-"""
-function flux_1d_ppm!(tendency, q, vel, grid::CubedSphereGrid, dim::Symbol, dt)
-    Nc = grid.Nc
-    if dim == :xi
-        flux = zeros(6, Nc + 1, Nc)
-    else
-        flux = zeros(6, Nc, Nc + 1)
-    end
-    _compute_ppm_fluxes!(flux, q, vel, grid, dim, dt)
-    _flux_to_tendency!(tendency, flux, grid, dim)
-    return tendency
-end
-
-"""
     _match_boundary_fluxes_xi!(flux, grid)
 
 Match ξ-direction fluxes at panel boundaries for same-direction connections.
@@ -599,48 +559,6 @@ function _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j_face, o)
 
     flux_val = ifelse(c >= 0, int_left, int_right)
     return v * flux_val
-end
-
-"""
-    flux_1d_ppm_arrayop(q_ext, courant, vel, grid, dim)
-
-ArrayOp for PPM-based 1D flux-form transport tendency [6, Nc, Nc].
-
-Combines PPM reconstruction, CW84 limiting (via `ifelse`), upwind flux selection,
-and FV divergence into a single ArrayOp expression. Operates on a ghost-extended
-scalar field `q_ext` with precomputed Courant numbers and velocities at interfaces.
-
-Arguments:
-- `q_ext`: ghost-extended scalar field (6, Nc+2Ng, Nc+2Ng)
-- `courant`: Courant numbers at interfaces (6, Nc+1, Nc) for :xi or (6, Nc, Nc+1) for :eta
-- `vel`: velocity at interfaces, same size as courant
-- `grid`: CubedSphereGrid
-- `dim`: :xi or :eta
-"""
-function flux_1d_ppm_arrayop(q_ext, courant, vel, grid::CubedSphereGrid, dim::Symbol)
-    Nc = grid.Nc; Ng = grid.Ng; o = Ng
-    idx = get_idx_vars(3); p, i, j = idx[1], idx[2], idx[3]
-
-    q_c = const_wrap(q_ext)
-    c_c = const_wrap(unwrap(courant))
-    v_c = const_wrap(unwrap(vel))
-    A_c = const_wrap(grid.area)
-
-    if dim == :xi
-        dx_c = const_wrap(grid.dx)
-        # East face = interface i+1, West face = interface i
-        F_east = _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i + 1, j, o)
-        F_west = _build_ppm_face_expr_xi(q_c, c_c, v_c, p, i, j, o)
-        expr = -(F_east * wrap(dx_c[p, i + 1, j]) - F_west * wrap(dx_c[p, i, j])) / wrap(A_c[p, i, j])
-    else
-        dy_c = const_wrap(grid.dy)
-        # North face = interface j+1, South face = interface j
-        F_north = _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j + 1, o)
-        F_south = _build_ppm_face_expr_eta(q_c, c_c, v_c, p, i, j, o)
-        expr = -(F_north * wrap(dy_c[p, i, j + 1]) - F_south * wrap(dy_c[p, i, j])) / wrap(A_c[p, i, j])
-    end
-
-    return make_arrayop(idx, unwrap(expr), Dict(p => 1:1:6, i => 1:1:Nc, j => 1:1:Nc))
 end
 
 """

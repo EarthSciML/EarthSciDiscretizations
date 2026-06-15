@@ -53,39 +53,3 @@ end
     @test isapprox(t_sum, t1 + t2; rtol = 1.0e-10)
 end
 
-@testitem "PPM 1D flux of constant field with zero velocity is zero" setup = [Transport1DSetup] tags = [:transport] begin
-    Nc = 8
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    q = fill(3.0, 6, Nc, Nc)
-    vel_xi = fill(0.0, 6, Nc + 1, Nc)
-    dt = 0.01
-
-    tendency = zeros(6, Nc, Nc)
-    flux_1d_ppm!(tendency, q, vel_xi, grid, :xi, dt)
-
-    @test all(abs.(tendency) .< 1.0e-14)
-end
-
-@testitem "PPM 1D flux conservation" setup = [Transport1DSetup] tags = [:transport] begin
-    Nc = 16
-    grid = CubedSphereGrid(Nc; R = 1.0)
-
-    # Smooth field
-    q = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        q[p, i, j] = 1.0 + 0.5 * cos(2π * grid.ξ_centers[i] / (π / 2))
-    end
-    vel_xi = fill(0.5, 6, Nc + 1, Nc)
-    dt = 0.01
-
-    tendency = zeros(6, Nc, Nc)
-    flux_1d_ppm!(tendency, q, vel_xi, grid, :xi, dt)
-
-    # Total tendency weighted by area should be approximately zero
-    # (conservation on a closed sphere — fluxes cancel at matched panel boundaries)
-    total = sum(tendency[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    # Cross-direction panel connections (ξ on one panel → η on neighbor) mean
-    # single-direction flux matching cannot achieve machine-precision conservation.
-    @test abs(total) < 1.0
-end

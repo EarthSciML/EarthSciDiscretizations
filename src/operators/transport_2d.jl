@@ -108,13 +108,17 @@ function transport_2d_linrood!(tendency, q, vel_xi, vel_eta, grid::CubedSphereGr
 
     # Step 1: Half-step intermediate in η-direction using ADVECTIVE form
     # q^θ = q^n + (1/2)·g[v*, dt, q^n]
-    flux_1d_ppm!(tend_eta, q, vel_eta, grid, :eta, dt)
+    raw_flux_eta_half = zeros(6, Nc, Nc + 1)
+    _compute_ppm_fluxes!(raw_flux_eta_half, q, vel_eta, grid, :eta, dt)
+    _flux_to_tendency!(tend_eta, raw_flux_eta_half, grid, :eta)
     _advective_tendency!(tend_adv, tend_eta, q, vel_eta, grid, :eta)
     @. q_theta = q + 0.5 * dt * tend_adv
 
     # Step 2: Half-step intermediate in ξ-direction using ADVECTIVE form
     # q^λ = q^n + (1/2)·f[u*, dt, q^n]
-    flux_1d_ppm!(tend_xi, q, vel_xi, grid, :xi, dt)
+    raw_flux_xi_half = zeros(6, Nc + 1, Nc)
+    _compute_ppm_fluxes!(raw_flux_xi_half, q, vel_xi, grid, :xi, dt)
+    _flux_to_tendency!(tend_xi, raw_flux_xi_half, grid, :xi)
     _advective_tendency!(tend_adv, tend_xi, q, vel_xi, grid, :xi)
     @. q_lambda = q + 0.5 * dt * tend_adv
 
