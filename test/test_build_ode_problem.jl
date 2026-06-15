@@ -378,3 +378,66 @@ end
         @test du[var_map["u[$i]"]] ≈ -0.5 rtol = 1e-10
     end
 end
+
+# ---------------------------------------------------------------------------
+# esd-7h2: nonuniform cartesian rule exercised through build_ode_problem
+# ---------------------------------------------------------------------------
+
+@testitem "build_ode_problem: nonuniform cartesian upwind_1st_nonuniform f! matches stencil (esd-7h2)" begin
+    using EarthSciDiscretizations: build_ode_problem
+    import SciMLBase
+    import JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path  = joinpath(repo_root, "test", "fixtures", "upwind_nonuniform.esm")
+    rule_path = joinpath(repo_root, "discretizations", "finite_difference",
+                         "upwind_1st_nonuniform.json")
+
+    # 4-cell nonuniform x-axis with widths [0.1, 0.2, 0.3, 0.4].
+    # Periodic BC. GDD inlines the rule spec via absolute ref path.
+    gdd = Dict(
+        "esm"  => "0.5.0",
+        "kind" => "grid_discretization_descriptor",
+        "metadata" => Dict("title" => "nonuniform cartesian 1D N=4 (esd-7h2 test)"),
+        "grids" => Dict(
+            "domain" => Dict(
+                "family" => "cartesian",
+                "spatial" => Dict(
+                    "x" => Dict("levels" => [0.0, 0.1, 0.3, 0.6, 1.0]),
+                ),
+                "boundary_conditions" => [
+                    Dict("type" => "periodic", "dimensions" => ["x"]),
+                ],
+            ),
+        ),
+        "discretizations" => Dict(
+            "upwind_1st_nonuniform" => Dict("ref" => rule_path),
+        ),
+    )
+    gdd_path = tempname() * ".gdd.json"
+    write(gdd_path, JSON.json(gdd))
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+
+    @test prob isa SciMLBase.ODEProblem
+
+    N = 4
+    dx_widths = [0.1, 0.2, 0.3, 0.4]
+
+    u0 = copy(prob.u0)
+    for i in 1:N
+        u0[var_map["u[$i]"]] = sin(2π * i / N)
+    end
+
+    du = similar(u0)
+    prob.f(du, u0, prob.p, 0.0)
+
+    # upwind_1st_nonuniform: du[i]/dt = (-1/dx[i]) * u[i-1] + (1/dx[i]) * u[i]
+    # with periodic wrap (i-1=0 → i-1=N).
+    for i in 1:N
+        im1 = mod1(i - 1, N)
+        expected = (-1.0 / dx_widths[i]) * u0[var_map["u[$im1]"]] +
+                   ( 1.0 / dx_widths[i]) * u0[var_map["u[$i]"]]
+        @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
+    end
+end
