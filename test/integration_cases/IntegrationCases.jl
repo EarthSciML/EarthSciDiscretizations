@@ -38,8 +38,6 @@ function run_case(case_spec, base_dir::AbstractString)
         return (:skip, "$name: $reason")
     elseif kind == "cartesian_full_pipeline"
         return run_cartesian_full_pipeline(name, manifest)
-    elseif kind == "cubed_sphere_advection"
-        return run_cubed_sphere_advection(name, manifest)
     elseif kind == "cubed_sphere_path_b_rotation"
         return run_cubed_sphere_path_b_rotation(name, manifest, base_dir)
     elseif kind == "esd_field_pipeline"

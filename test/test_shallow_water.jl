@@ -1,7 +1,6 @@
 @testsnippet ShallowWaterSetup begin
     using Test
     using EarthSciDiscretizations
-    using EarthSciDiscretizations: _compute_ppm_fluxes!, _flux_to_tendency!
 end
 
 @testitem "Williamson test case: grid area" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
@@ -38,49 +37,4 @@ end
     # Mass conservation check: total mass = ∫ h dA
     total_mass = sum(h[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
     @test total_mass > 0
-end
-
-@testitem "Williamson case 1: solid body rotation transport" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
-    R = 1.0  # unit sphere for simplicity
-    Nc = 16
-    grid = CubedSphereGrid(Nc; R = R)
-
-    # Solid-body rotation velocity: u = u0 cos(lat), v = 0 (along equator)
-    vel_xi = zeros(6, Nc + 1, Nc)
-
-    # PPM transport of a constant field should give zero tendency
-    q_const = ones(6, Nc, Nc)
-    flux = zeros(6, Nc + 1, Nc)
-    tend = zeros(6, Nc, Nc)
-
-    _compute_ppm_fluxes!(flux, q_const, vel_xi, grid, :xi, 0.01)
-    _flux_to_tendency!(tend, flux, grid, :xi)
-    @test maximum(abs.(tend)) < 1.0e-12
-end
-
-@testitem "Williamson: mass conservation under PPM transport" setup = [ShallowWaterSetup] tags = [:shallow_water] begin
-    R = 1.0
-    Nc = 16
-    grid = CubedSphereGrid(Nc; R = R)
-
-    # Create a smooth field and non-trivial velocity
-    q = zeros(6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        q[p, i, j] = 1.0 + 0.5 * cos(grid.lat[p, i, j])
-    end
-
-    # Uniform velocity in xi direction
-    vel_xi = fill(0.1, 6, Nc + 1, Nc)
-
-    flux = zeros(6, Nc + 1, Nc)
-    tend = zeros(6, Nc, Nc)
-    _compute_ppm_fluxes!(flux, q, vel_xi, grid, :xi, 0.01)
-    _flux_to_tendency!(tend, flux, grid, :xi)
-
-    # Mass conservation: Σ tendency * area ≈ 0 on closed sphere
-    # Panel boundary fluxes are matched for exact conservation
-    mass_change = sum(tend[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    total_mass = sum(q[p, i, j] * grid.area[p, i, j] for p in 1:6, i in 1:Nc, j in 1:Nc)
-    # Cross-direction panel connections limit single-direction conservation
-    @test abs(mass_change / total_mass) < 1.0e-2
 end
