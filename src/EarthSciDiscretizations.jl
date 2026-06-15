@@ -125,7 +125,6 @@ export ghost_fill_indices, ghost_fill_arrayop
 export const_wrap, get_idx_vars, make_arrayop, evaluate_arrayop
 
 # Exports: FV operators
-export flux_1d
 export transport_2d
 
 # Exports: Numerical transport operators

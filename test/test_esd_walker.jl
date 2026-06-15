@@ -123,11 +123,10 @@ using TestItems
     # their convergence fixtures ship `applicable:false` (face-staggered Courant
     # binding contract / cubed_sphere ESS dispatch pending). The eta + flux_1d_ppm
     # canonical fixtures also declare `applicable:false`, so Layer-A SKIPs via
-    # the `_fixture_applicable_skip` honoring; the xi canonical fixture is
-    # `applicable:true` and currently FAILs Layer-A because ESS's `discretize`
-    # has not yet gained cubed_sphere selector dispatch — Layer-A is therefore
-    # left unconstrained for these rules and the n_fail tally below absorbs the
-    # FAIL dynamically.
+    # the `_fixture_applicable_skip` honoring. The xi canonical fixture is
+    # `applicable:true` (esd-lmm: cubed_sphere dispatch landed in _inject_rules!
+    # + pattern+replacement rule form in input.esm), so it is handled by an
+    # explicit elseif below (Layer-A PASS, Layer-B SKIP).
     not_applicable_layer_b = Set(
         [
             # centered_2nd_nonuniform_vertical: the 1d_vertical_column runner
@@ -141,7 +140,6 @@ using TestItems
             ("finite_volume", "flux_limiter_superbee"),
             ("finite_volume", "lax_friedrichs_flux"),
             ("finite_volume", "lax_friedrichs_flux_cubed_sphere_eta"),
-            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_xi"),
             ("finite_volume", "transport_2d"),
             ("finite_volume", "ppm_edge_cubed_sphere"),
             ("finite_volume", "vertical_remap"),
@@ -385,6 +383,17 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "lax_friedrichs_flux_cubed_sphere_xi"
+            # lax_friedrichs_flux_cubed_sphere_xi: Layer-A passes via its
+            # canonical byte contract (esd-lmm: cubed_sphere dispatch landed in
+            # _inject_rules! and the input.esm carries the rule in
+            # pattern+replacement form). Layer-B skips because the convergence
+            # fixture declares applicable:false (face-staggered Courant binding
+            # contract and cubed_sphere ESS dispatch pending).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif key in pending_canonical_layer_b
             # The remaining `applicable:true` convergence fixtures: Layer-A
             # is unconstrained here (centered_2nd_uniform's canonical fixture

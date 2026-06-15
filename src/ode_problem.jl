@@ -545,14 +545,20 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
         if stencil isa AbstractVector && !isempty(stencil)
             first_entry = stencil[1]
             sel   = get(first_entry, "selector", nothing)
+            # cubed_sphere entries use plural "selectors" (array); fall back to first selector.
+            if sel === nothing
+                sels = get(first_entry, "selectors", nothing)
+                if sels isa AbstractVector && !isempty(sels) && sels[1] isa AbstractDict
+                    sel = sels[1]
+                end
+            end
             kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
             # Dispatch table: selector kind → lowering path.
             # Path-A/scheme: cartesian (ESS native scheme expansion via lower_stencil_to_scheme).
             # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
             # Path-A/replacement: latlon, vertical (literal axis names; lower_stencil_to_replacement).
+            # Path-A/replacement: cubed_sphere (plural selectors; lower_stencil_to_replacement keeps axis names).
             # Path-A/canonical: arakawa and other $-axis kinds (lower_stencil_to_canonical_replacement).
-            # Path-B seam: cubed_sphere falls to canonical; lower_stencil_to_canonical_replacement
-            #   throws for plural selectors, making the gap visible (ESS/esm-57f tracks the extension).
             if kind == "cartesian"
                 scheme, use_rule = lower_stencil_to_scheme(rname, spec)
                 discs[rname] = scheme
@@ -592,6 +598,13 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                 scheme, use_rule = lower_stencil_to_scheme(rname, spec)
                 discs[rname] = scheme
                 push!(rules, use_rule)
+            elseif kind == "cubed_sphere"
+                lowered = lower_stencil_to_replacement(spec)
+                push!(rules, Dict{String, Any}(
+                    "name"        => rname,
+                    "pattern"     => spec["applies_to"],
+                    "replacement" => lowered["replacement"],
+                ))
             else
                 repl = lower_stencil_to_canonical_replacement(spec)
                 push!(rules, Dict{String, Any}(
