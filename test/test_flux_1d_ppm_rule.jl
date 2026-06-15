@@ -7,20 +7,11 @@ using TestItems
 #   - 4th-order PPM edge interpolation (CW84 eq. 1.6) on a 6-cell stencil
 #     {-3, -2, -1, 0, 1, 2} relative to the right cell of the interface;
 #   - Colella-Woodward (1984) §4 monotonicity limiter applied per upwind cell
-#     (closed-form ifelse AST matching `_ppm_limit_cw84_sym`);
+#     (closed-form ifelse AST);
 #   - Courant-fraction flux integral over the swept volume of the upwind cell;
 #   - upwind selection encoded by ifelse on sign of the per-face Courant `$c`.
 #
 # Layer A   — rule discovery + JSON byte-diff round-trip + spot-check schema.
-# Layer A'  — hand-pinned single-face flux on a smooth sinusoidal profile,
-#             positive- and negative-Courant cases, with the JSON-rule AST
-#             evaluated in closed form. The same numbers are produced by
-#             `_ppm_limit_cw84_sym` + the closed-form Courant integral in
-#             src/operators/flux_1d.jl, so the inline values pin the
-#             rule-AST-vs-imperative-reference equivalence.
-#             The values are reproduced bit-for-bit from
-#             discretizations/finite_volume/flux_1d_ppm/fixtures/canonical/expected.esm.
-#
 # Layer B (MMS convergence) is `applicable: false` — face-stagger output,
 # per-face bindings, and the ghost-extended input contract sit outside the §7
 # verify_mms_convergence harness today (see flux_1d_ppm.json `schema_gaps`).
