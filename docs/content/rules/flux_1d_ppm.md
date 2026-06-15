@@ -69,8 +69,9 @@ At a high level:
    offending edge inward when the parabola's interior extremum sits past
    the opposite edge. Encoded as a closed-form `ifelse` AST identical to
    the [`vertical_remap`]({{< ref "/rules/vertical_remap" >}}) `limiter`
-   block and bit-for-bit equivalent to
-   [`_ppm_limit_cw84_sym`]({{< param repoURL >}}/blob/main/src/operators/reconstruction.jl).
+   block and bit-for-bit equivalent to the former
+   `_ppm_limit_cw84_sym` (retired from `src/operators/reconstruction.jl`
+   in the operator-porting campaign).
 
 3. **Courant-fraction flux integral** — closed-form parabolic
    antiderivative evaluated over the swept volume of the upwind cell.
@@ -95,10 +96,10 @@ The full machine-readable AST lives in
 The face-staggered `$c` and `$v` follow the same per-face binding contract
 as [`lax_friedrichs_flux`]({{< ref "/rules/lax_friedrichs_flux" >}}) — the
 analog of the slope-ratio `$r` in the limiter rules. The 6-point stencil
-reaches three cells past the right cell of the interface; the imperative
-reference in
-[`src/operators/flux_1d.jl`]({{< param repoURL >}}/blob/main/src/operators/flux_1d.jl)
-resolves this with a ghost-extended `q_ext`. ESS does not yet declare how
+reaches three cells past the right cell of the interface; the former imperative
+reference `flux_1d_ppm_arrayop` (retired from
+`src/operators/flux_1d.jl` in the operator-porting campaign)
+resolved this with a ghost-extended `q_ext`. ESS does not yet declare how
 a rule consumes ghost cells — see the rule's `schema_gaps` block.
 
 ## Composition
@@ -124,7 +125,8 @@ Numeric coverage today lives in the canonical Julia tests
 and
 [`test/test_transport_2d.jl`]({{< param repoURL >}}/blob/main/test/test_transport_2d.jl)
 (constant-field, linearity, conservation, and cubed-sphere advection
-checks for `flux_1d_ppm!` and `flux_1d_ppm_arrayop`), and the
+checks for the former `flux_1d_ppm!` and `flux_1d_ppm_arrayop` operators,
+now retired), and the
 DCMIP-style cubed-sphere advection integration case in
 [`test/integration_cases/cubed_sphere_advection.jl`]({{< param repoURL >}}/blob/main/test/integration_cases/cubed_sphere_advection.jl).
 
@@ -151,10 +153,10 @@ plot is suppressed.
 
 ## Reference
 
-- Imperative reference: `flux_1d_ppm!` and `flux_1d_ppm_arrayop` in
-  [`src/operators/flux_1d.jl`]({{< param repoURL >}}/blob/main/src/operators/flux_1d.jl);
-  symbolic-tracing-safe limiter `_ppm_limit_cw84_sym` in
-  [`src/operators/reconstruction.jl`]({{< param repoURL >}}/blob/main/src/operators/reconstruction.jl).
+- Former imperative reference: `flux_1d_ppm!` and `flux_1d_ppm_arrayop` in
+  `src/operators/flux_1d.jl`; symbolic-tracing-safe limiter `_ppm_limit_cw84_sym` in
+  `src/operators/reconstruction.jl`. Both files were retired in the operator-porting
+  campaign (commit dce15e6).
 - Theory: Colella & Woodward (1984), JCP 54(1):174-201, eqs. (1.5)-(1.10)
   for the parabolic reconstruction and the (1.7)-(1.10) monotonicity
   limiter; the §4 Courant-fraction flux integral is the standard PPM

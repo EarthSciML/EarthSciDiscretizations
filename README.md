@@ -24,11 +24,11 @@ This repository has three roles:
    (`test/walk_esd_tests.jl`), and its machine-readable per-rule skip
    ledger (`test/junit-esd.xml`). One catalog, four bindings, one
    canonical pipeline — conformance-tested.
-3. **Transitional reference operators.** Hand-coded finite-volume
-   operators on cubed-sphere grids (`transport_2d`, `flux_1d`, PPM
-   transport/reconstruction, ghost-cell handling) under `src/operators/`.
-   These are oracles retained while their math is ported into catalog
-   rules; they are progressively retired as the corresponding rules land
+3. **Retired reference operators.** Hand-coded finite-volume operators on
+   cubed-sphere grids (`transport_2d`, `flux_1d`, PPM
+   transport/reconstruction, ghost-cell handling) formerly lived under
+   `src/operators/` as oracles while their math was ported into catalog
+   rules. All have now been retired; `src/operators/` no longer exists
    (see the retirement log in `src/EarthSciDiscretizations.jl`).
    `fv_laplacian` was retired in esd-ecq; its math now lives entirely in
    `discretizations/finite_difference/covariant_laplacian_cubed_sphere.json`.

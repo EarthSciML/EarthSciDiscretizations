@@ -60,8 +60,8 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   the central cell by the cubed_sphere accessor — the same
   accessor-resolves-staggered-bindings convention as
   [`covariant_laplacian_cubed_sphere`](../finite_difference/covariant_laplacian_cubed_sphere.json).
-  Mirrors the imperative `transport_2d` ArrayOp in
-  `src/operators/transport_2d.jl`. Layer-A canonical fixture under
+  Mirrored the former imperative `transport_2d` ArrayOp (retired from
+  `src/operators/transport_2d.jl` in the operator-porting campaign). Layer-A canonical fixture under
   `transport_2d/fixtures/canonical/` documents the bit-equivalence
   contract against `transport_2d(q, courant_xi, courant_eta,
   CubedSphereGrid(24))` to within `1e-12`. Layer-B convergence declares
@@ -157,12 +157,10 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   `lax_friedrichs_flux`, plus a `ghost_width` rule-level field for the
   3-cell ghost reach). Inline regression in
   `test/test_flux_1d_ppm_rule.jl` exercises the same pinned values
-  against the closed-form AST. Imperative path
+  against the closed-form AST. The former imperative path
   (`flux_1d_ppm!`, `flux_1d_ppm_arrayop` in
-  `src/operators/flux_1d.jl`) remains the live implementation —
-  callers in `src/operators/transport_2d.jl` and tests are unmigrated;
-  same precedent as `vertical_remap.json` (deletion deferred until the
-  schema gaps land).
+  `src/operators/flux_1d.jl`) was retired in the operator-porting
+  campaign (commit dce15e6); the JSON rule is now the specification.
 - [`lax_friedrichs_flux.json`](lax_friedrichs_flux.json) — Lax &
   Friedrichs (1954) numerical flux for linear advection. Two-point
   cartesian flux stencil at the face: F_{i+1/2} = max(c,0)·q_i +
@@ -170,8 +168,9 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   per-face binding (analogous to `$r` in the limiter rules) and upwind
   selection encoded directly in the AST via the `abs` op — no caller-side
   branching on sign(c). Reduces to first-order upwinding; dissipative by
-  construction and retained as a debugging / oracle scheme. The cubed-
-  sphere wrapper in `src/operators/flux_1d.jl` matches the in-panel core
+  construction and retained as a debugging / oracle scheme. The former
+  cubed-sphere wrapper in `src/operators/flux_1d.jl` (retired in the
+  operator-porting campaign) matched the in-panel core
   encoded here verbatim; cross-panel ghost extension and panel-boundary
   distance handling await schema follow-ups (boundary_policy +
   time-varying / face-stagger bindings, tracked off dsc-35x). Layer-A
@@ -197,8 +196,8 @@ e.g. `ppm_reconstruction.json`, `muscl_minmod.json`.
   coefficient — only selector kind / stagger differs. Cross-panel
   ghost extension and panel-boundary distance handling for the
   Courant precomputation live in the cubed_sphere grid accessor
-  (`src/grids/panel_connectivity.jl` + `_get_courant_xi/eta` in
-  `src/operators/flux_1d.jl`); selectors carry no `panel` field per
+  (`src/grids/panel_connectivity.jl` + `_get_courant_xi/eta` in the
+  former `src/operators/flux_1d.jl` (retired)); selectors carry no `panel` field per
   SELECTOR_KINDS.md decision #13. Layer-A canonical fixture pins
   per-face flux equivalence on c4 against the imperative `flux_1d`
   reference within `1e-12`; Layer-B convergence is `applicable: false`

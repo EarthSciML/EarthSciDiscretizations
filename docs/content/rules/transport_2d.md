@@ -37,9 +37,9 @@ $$F_{\text{face}} \;=\; \frac{c}{2}\,(q_L + q_R) \;-\; \frac{|c|}{2}\,(q_R - q_L
 
 With `α = |c|` the LF flux reduces to first-order donor-cell upwind, so
 this rule is equivalent to first-order upwind on every interface but is
-named `transport_2d` to match the imperative `transport_2d` ArrayOp
-retained in [`src/operators/transport_2d.jl`]({{< param repoURL >}}/blob/main/src/operators/transport_2d.jl)
-for symbolic / debugging use alongside the higher-order Lin-Rood and
+named `transport_2d` to match the former imperative `transport_2d` ArrayOp
+(retired from `src/operators/transport_2d.jl` in the operator-porting campaign)
+that was used for symbolic / debugging use alongside the higher-order Lin-Rood and
 unsplit-PPM transport paths.
 
 ## Discrete operator
@@ -107,8 +107,9 @@ plot is suppressed.
 
 ## Reference
 
-- Imperative reference: `transport_2d` in
-  [`src/operators/transport_2d.jl`]({{< param repoURL >}}/blob/main/src/operators/transport_2d.jl).
+- Former imperative reference: `transport_2d` in
+  `src/operators/transport_2d.jl` (retired in the operator-porting campaign;
+  commit dce15e6). The JSON rule is now the specification.
 - Higher-order siblings on the same grid: Lin-Rood (`transport_2d_linrood!`)
   and unsplit-PPM (`transport_2d_ppm_arrayop`) — both pending separate
   beads (catalog rows `fv3_lin_rood_advection` and

@@ -79,10 +79,10 @@ and
   [`fv3_sinsg_flux_xi`]({{< param repoURL >}}/blob/main/discretizations/finite_volume/fv3_sinsg_flux_xi.json)
   for its face velocity. Panel-boundary distance handling
   (`grid.dist_xi_bnd` / `grid.dist_eta_bnd` at the seam, vs `grid.dist_xi`
-  / `grid.dist_eta` in the interior) is encapsulated in the imperative
+  / `grid.dist_eta` in the interior) was encapsulated in the former imperative
   Courant precomputation `_get_courant_xi` / `_get_courant_eta` /
   `compute_courant_numbers_arrayop` in
-  [`src/operators/flux_1d.jl`]({{< param repoURL >}}/blob/main/src/operators/flux_1d.jl);
+  `src/operators/flux_1d.jl` (retired in the operator-porting campaign);
   by the time the rule sees `$c` it is a single face-staggered array
   with boundary distances already factored in.
 
@@ -92,12 +92,12 @@ off this bead (dsc-0fd) — see the rule's `schema_notes`.
 
 ## Composition
 
-Caller workflow (mirrors `transport_2d_linrood!` / `flux_1d` in the
-imperative reference):
+Caller workflow (following the pattern of the former `transport_2d_linrood!` / `flux_1d`
+retired from `src/operators/flux_1d.jl` in the operator-porting campaign):
 
 1. Precompute face-staggered Courants
    `c[p, i, j] = u_face[p, i, j] · dt / dist[p, i, j]` via
-   `compute_courant_numbers_arrayop` ([`src/operators/flux_1d.jl`]({{< param repoURL >}}/blob/main/src/operators/flux_1d.jl)).
+   the former `compute_courant_numbers_arrayop` (retired from `src/operators/flux_1d.jl`).
 2. Apply this rule at every ξ-face on every panel to produce
    `F_xi[p, i, j]` at `u_edge` stagger; apply the η sibling for
    `F_eta[p, i, j]` at `v_edge`.
@@ -113,8 +113,9 @@ imperative reference):
 
 $$ T_{p,i,j} \;=\; -\frac{F^\xi_{p,i+1,j}\,dx_{p,i+1,j} - F^\xi_{p,i,j}\,dx_{p,i,j}}{\mathrm{area}_{p,i,j}} \;-\; \frac{F^\eta_{p,i,j+1}\,dy_{p,i,j+1} - F^\eta_{p,i,j}\,dy_{p,i,j}}{\mathrm{area}_{p,i,j}}. $$
 
-The result is the same first-order dissipative LF transport as
-`transport_2d_linrood!` (at first order) and `flux_1d`. The rule is
+The result is the same first-order dissipative LF transport as the
+former `transport_2d_linrood!` (at first order) and `flux_1d` operators
+(retired in the operator-porting campaign). The rule is
 retained as a debugging / oracle scheme — production transport on the
 cubed sphere should use the higher-order PPM-based flux (tracked at
 dsc-r1i and blocked on the same schema infrastructure).
@@ -160,11 +161,11 @@ pin the algebraic identity that both axis siblings inherit.
 
 - Lax, P. D. & Friedrichs, K. O. (1954). "Systems of conservation laws."
   *Comm. Pure Appl. Math.* 7(1), 159–193 — original LF numerical flux.
-- Imperative reference:
-  [`flux_1d`]({{< param repoURL >}}/blob/main/src/operators/flux_1d.jl)
-  ArrayOp on `CubedSphereGrid` (combines LF face flux + FV divergence
-  into a single tendency). The cubed-sphere wrapper additionally
-  routes through `_get_courant_xi` / `_get_courant_eta` for boundary-aware
+- Former imperative reference:
+  `flux_1d` ArrayOp on `CubedSphereGrid` (retired from
+  `src/operators/flux_1d.jl` in the operator-porting campaign; commit dce15e6).
+  Combined LF face flux + FV divergence into a single tendency; additionally
+  routed through `_get_courant_xi` / `_get_courant_eta` for boundary-aware
   Courant precomputation and `_match_boundary_fluxes_{xi,eta}!` /
   `_match_rotated_boundary_fluxes!` for conservation across panel seams.
 - Sibling rules:
