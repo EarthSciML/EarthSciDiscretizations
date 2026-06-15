@@ -318,7 +318,7 @@ end
     @test occursin("n_cells", sprint(showerror, err.value))
 end
 
-@testitem "GDD rules dispatch: reduction selector throws ESS/esm-bpr gate error" begin
+@testitem "GDD rules dispatch: reduction selector lowers to ESS scheme (ess-t0z)" begin
     using EarthSciDiscretizations: _inject_rules!
 
     esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
@@ -326,12 +326,18 @@ end
         "nn_diffusion_mpas" => Dict{String,Any}(
             "applies_to"  => Dict{String,Any}("op" => "laplacian", "args" => ["\$u"], "dim" => "cell"),
             "grid_family" => "unstructured",
+            "emits_location" => "cell_center",
             "combine"     => "+",
             "stencil"     => Any[
                 Dict{String,Any}("selector" => Dict{String,Any}("kind" => "reduction", "table" => "cells_on_cell", "count_expr" => 6, "k_bound" => "k", "combine" => "+"), "coeff" => 1.0),
             ],
         ),
     )
-    err = @test_throws ArgumentError _inject_rules!(esm, unstructured_stencil, "/dev/null")
-    @test occursin("ESS/esm-bpr", sprint(showerror, err.value))
+    _inject_rules!(esm, unstructured_stencil, "/dev/null")
+    @test haskey(esm["discretizations"], "nn_diffusion_mpas")
+    scheme = esm["discretizations"]["nn_diffusion_mpas"]
+    @test scheme["grid_family"] == "unstructured"
+    @test scheme["stencil"][1]["selector"]["kind"] == "reduction"
+    @test length(esm["rules"]) == 1
+    @test esm["rules"][1]["use"] == "nn_diffusion_mpas"
 end

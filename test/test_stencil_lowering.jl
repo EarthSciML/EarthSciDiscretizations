@@ -1107,7 +1107,7 @@ end
     vertical = copy(base); vertical["grid_family"] = "vertical"
     err = try lower_stencil_to_scheme("r", vertical); nothing catch e; e end
     @test err isa ArgumentError
-    @test occursin("cartesian-only", err.msg)
+    @test occursin("not lowerable", err.msg)
 
     bad_kind = copy(base)
     bad_kind["stencil"] = Any[Dict(
@@ -1135,6 +1135,111 @@ end
     err = try lower_stencil_to_scheme("r", axis_mismatch); nothing catch e; e end
     @test err isa ArgumentError
     @test occursin("disagrees", err.msg)
+end
+
+@testitem "lower_stencil_to_scheme: lowers unstructured nn_diffusion_mpas to ESS scheme parts" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "nn_diffusion_mpas.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["nn_diffusion_mpas"])
+
+    scheme, use_rule = lower_stencil_to_scheme("nn_diffusion_mpas", rule)
+
+    @test scheme["grid_family"] == "unstructured"
+    @test scheme["combine"] == "+"
+    @test scheme["applies_to"] == rule["applies_to"]
+    @test length(scheme["stencil"]) == 2
+
+    sel1 = scheme["stencil"][1]["selector"]
+    @test sel1["kind"] == "reduction"
+    @test sel1["table"] == "cells_on_cell"
+    @test sel1["k_bound"] == "k"
+    @test sel1["combine"] == "+"
+
+    sel2 = scheme["stencil"][2]["selector"]
+    @test sel2["kind"] == "indirect"
+    @test sel2["table"] == "cells_on_cell"
+    @test sel2["index_expr"] == "\$target"
+
+    @test use_rule == Dict{String, Any}(
+        "name"    => "nn_diffusion_mpas",
+        "pattern" => rule["applies_to"],
+        "use"     => "nn_diffusion_mpas",
+    )
+
+    # ESS parse_scheme must accept the emitted scheme without error.
+    schemes = EarthSciSerialization.parse_schemes(Dict("nn_diffusion_mpas" => scheme))
+    @test haskey(schemes, "nn_diffusion_mpas")
+    sch = schemes["nn_diffusion_mpas"]
+    @test sch.grid_family == "unstructured"
+    @test length(sch.stencil) == 2
+end
+
+@testitem "lower_stencil_to_scheme: unstructured discretize() produces arrayop equations" begin
+    using EarthSciDiscretizations: lower_stencil_to_scheme
+    import EarthSciSerialization
+    using JSON
+
+    path = joinpath(
+        dirname(dirname(@__FILE__)),
+        "discretizations",
+        "finite_difference",
+        "nn_diffusion_mpas.json",
+    )
+    raw = JSON.parsefile(path)
+    rule = Dict{String, Any}(raw["discretizations"]["nn_diffusion_mpas"])
+    scheme, use_rule = lower_stencil_to_scheme("nn_diffusion_mpas", rule)
+
+    esm = Dict{String, Any}(
+        "esm"   => "0.5.0",
+        "grids" => Dict{String, Any}(
+            "domain" => Dict{String, Any}(
+                "family"     => "unstructured",
+                "dimensions" => Any[Dict{String, Any}("name" => "n_cells", "size" => 5)],
+            ),
+        ),
+        "models" => Dict{String, Any}(
+            "diffusion" => Dict{String, Any}(
+                "grid" => "domain",
+                "variables" => Dict{String, Any}(
+                    "u" => Dict{String, Any}(
+                        "type"     => "state",
+                        "default"  => 0.0,
+                        "units"    => "1",
+                        "shape"    => Any["n_cells"],
+                        "location" => "cell_center",
+                    ),
+                ),
+                "equations" => Any[
+                    Dict{String, Any}(
+                        "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
+                        "rhs" => Dict{String, Any}("op" => "laplacian", "args" => Any["u"], "dim" => "cell"),
+                    ),
+                ],
+            ),
+        ),
+        "discretizations" => Dict{String, Any}("nn_diffusion_mpas" => scheme),
+        "rules" => Any[use_rule],
+    )
+
+    out = EarthSciSerialization.discretize(esm; strict_unrewritten = true)
+    eqs = out["models"]["diffusion"]["equations"]
+    @test !isempty(eqs)
+    rhs = eqs[1]["rhs"]
+    @test rhs isa AbstractDict
+    # The laplacian was rewritten (rule applied); RHS is the expanded combine of
+    # reduction + indirect terms — not the bare "laplacian" op any more.
+    @test rhs["op"] != "laplacian"
+    # At least one arrayop node appears in the expanded RHS.
+    @test occursin("arrayop", JSON.json(rhs))
 end
 
 @testitem "lower_stencil_to_canonical_replacement: multi-axis laplacian → i/j components" begin

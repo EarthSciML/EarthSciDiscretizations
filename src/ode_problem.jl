@@ -511,12 +511,11 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
             # Dispatch table: selector kind → lowering path.
             # Path-A/scheme: cartesian (ESS native scheme expansion via lower_stencil_to_scheme).
+            # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
             # Path-A/replacement: latlon, vertical (literal axis names; lower_stencil_to_replacement).
             # Path-A/canonical: arakawa and other $-axis kinds (lower_stencil_to_canonical_replacement).
             # Path-B seam: cubed_sphere falls to canonical; lower_stencil_to_canonical_replacement
             #   throws for plural selectors, making the gap visible (ESS/esm-57f tracks the extension).
-            # Unstructured gate: reduction/indirect selectors (MPAS, DUO) require
-            #   ESS/esm-bpr (unstructured selector dispatch) which is not yet merged.
             if kind == "cartesian"
                 scheme, use_rule = lower_stencil_to_scheme(rname, spec)
                 discs[rname] = scheme
@@ -553,11 +552,9 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                     "replacement" => replacement,
                 ))
             elseif kind in ("reduction", "indirect")
-                throw(ArgumentError(
-                    "rule '$rname' uses unstructured selector kind '$kind' " *
-                    "(reduction/indirect selectors require ESS/esm-bpr — " *
-                    "unstructured selector dispatch — which is not yet merged into ESS main)"
-                ))
+                scheme, use_rule = lower_stencil_to_scheme(rname, spec)
+                discs[rname] = scheme
+                push!(rules, use_rule)
             else
                 repl = lower_stencil_to_canonical_replacement(spec)
                 push!(rules, Dict{String, Any}(

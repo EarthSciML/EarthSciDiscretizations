@@ -246,12 +246,19 @@ foundation esm-j1u):
 
 This is a pure structural transform — no math is computed, no selector
 is materialized; expansion to `coeff * index(...)` terms happens inside
-ESS `expand_scheme`. Mirroring the ESS cartesian foundation, only
-`grid_family == "cartesian"` rules whose selectors are all
-`kind == "cartesian"` are lowerable; anything else raises
-`ArgumentError` (the per-family extension lands when ESS grows the
-corresponding selector dispatch — cubed-sphere panel esm-57f,
-unstructured esm-bpr).
+ESS `expand_scheme`. Supported `grid_family` values:
+
+- **`"cartesian"`** — selectors must all be `kind == "cartesian"`;
+  validates `axis` against `applies_to.dim` and `offset` as integer.
+- **`"unstructured"`** — selectors must all be `kind == "reduction"` or
+  `kind == "indirect"`; selector fields are passed through verbatim
+  (`table`, `count_expr`, `k_bound`, `combine`, `index_expr`) for ESS
+  `parse_scheme` to validate (ess-t0z). `applies_to.dim` need not be a
+  `\$`-prefixed pattern variable.
+
+Other `grid_family` values (e.g. `"latlon"`, `"vertical"`) raise
+`ArgumentError`; those go through `lower_stencil_to_replacement` or
+`lower_stencil_to_canonical_replacement` instead.
 
 Multi-output rules (catalog extension: `stencil` is an **object keyed
 by output name**, e.g. `ppm_reconstruction`'s `q_left_edge` /
@@ -274,10 +281,11 @@ schemes for Layer-B since the convergence runner iterates each output
 independently.
 
 Errors (`ArgumentError`): missing/empty `stencil`; malformed
-`applies_to` (no `\$`-operand or non-`\$` `dim`); `grid_family` other
-than `"cartesian"`; any selector with `kind != "cartesian"`, a
-non-integer `offset`, or an `axis` disagreeing with `applies_to.dim`;
-unsupported `combine`.
+`applies_to` (no `\$`-operand); `grid_family` not in `"cartesian"` or
+`"unstructured"`; for cartesian: non-`\$` `dim`, selector `kind !=
+"cartesian"`, non-integer `offset`, or `axis` disagreeing with
+`applies_to.dim`; for unstructured: selector `kind` not in
+`"reduction"` / `"indirect"`; unsupported `combine`.
 """
 function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
                                  output::Union{Nothing, AbstractString} = nothing)
@@ -295,16 +303,17 @@ function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
         ),
     )
     _stencil_operand_pattern_var(applies_to)  # validates the $-operand exists
-    axis_var = _stencil_axis_pattern_var(applies_to)
 
     grid_family = String(get(rule, "grid_family", ""))
-    grid_family == "cartesian" || throw(
+    grid_family in ("cartesian", "unstructured") || throw(
         ArgumentError(
             "lower_stencil_to_scheme: grid_family '$grid_family' is not lowerable " *
-                "to an ESS scheme (ESS scheme expansion is cartesian-only; " *
-                "cubed-sphere tracked at ESS/esm-57f, unstructured at ESS/esm-bpr)",
+                "to an ESS scheme (supported: 'cartesian', 'unstructured'; other families " *
+                "go through lower_stencil_to_replacement or lower_stencil_to_canonical_replacement)",
         ),
     )
+
+    axis_var = grid_family == "cartesian" ? _stencil_axis_pattern_var(applies_to) : ""
 
     stencil_field = rule["stencil"]
     stencil = if stencil_field isa AbstractDict
@@ -354,48 +363,66 @@ function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
         selector isa AbstractDict || throw(
             ArgumentError("lower_stencil_to_scheme: stencil entry $i has no 'selector' object"),
         )
-        kind = String(get(selector, "kind", ""))
-        kind == "cartesian" || throw(
-            ArgumentError(
-                "lower_stencil_to_scheme: stencil entry $i has selector kind '$kind' " *
-                    "(ESS scheme expansion accepts 'cartesian' only)",
-            ),
-        )
-        axis = get(selector, "axis", nothing)
-        axis == axis_var || throw(
-            ArgumentError(
-                "lower_stencil_to_scheme: stencil entry $i selector axis '$axis' " *
-                    "disagrees with applies_to.dim '$axis_var'",
-            ),
-        )
-        offset = get(selector, "offset", nothing)
-        offset isa Integer || throw(
-            ArgumentError(
-                "lower_stencil_to_scheme: stencil entry $i selector offset must be " *
-                    "an integer (got $(repr(offset)))",
-            ),
-        )
         haskey(entry, "coeff") || throw(
             ArgumentError("lower_stencil_to_scheme: stencil entry $i has no 'coeff'"),
         )
-        push!(lowered_stencil, Dict{String, Any}(
-            "selector" => Dict{String, Any}(
-                "kind"   => "cartesian",
-                "axis"   => String(axis),
-                "offset" => Int(offset),
-            ),
-            "coeff" => entry["coeff"],
-        ))
+        kind = String(get(selector, "kind", ""))
+        if grid_family == "cartesian"
+            kind == "cartesian" || throw(
+                ArgumentError(
+                    "lower_stencil_to_scheme: stencil entry $i has selector kind '$kind' " *
+                        "(ESS scheme expansion accepts 'cartesian' only for cartesian grid family)",
+                ),
+            )
+            axis = get(selector, "axis", nothing)
+            axis == axis_var || throw(
+                ArgumentError(
+                    "lower_stencil_to_scheme: stencil entry $i selector axis '$axis' " *
+                        "disagrees with applies_to.dim '$axis_var'",
+                ),
+            )
+            offset = get(selector, "offset", nothing)
+            offset isa Integer || throw(
+                ArgumentError(
+                    "lower_stencil_to_scheme: stencil entry $i selector offset must be " *
+                        "an integer (got $(repr(offset)))",
+                ),
+            )
+            push!(lowered_stencil, Dict{String, Any}(
+                "selector" => Dict{String, Any}(
+                    "kind"   => "cartesian",
+                    "axis"   => String(axis),
+                    "offset" => Int(offset),
+                ),
+                "coeff" => entry["coeff"],
+            ))
+        else  # grid_family == "unstructured"
+            kind in ("reduction", "indirect") || throw(
+                ArgumentError(
+                    "lower_stencil_to_scheme: stencil entry $i has selector kind '$kind' " *
+                        "(unstructured grid_family accepts 'reduction' and 'indirect' only)",
+                ),
+            )
+            push!(lowered_stencil, Dict{String, Any}(
+                "selector" => Dict{String, Any}(String(k) => v for (k, v) in selector),
+                "coeff"    => entry["coeff"],
+            ))
+        end
     end
 
     scheme = Dict{String, Any}(
         "applies_to"  => applies_to,
-        "grid_family" => "cartesian",
+        "grid_family" => grid_family,
         "combine"     => combine_op,
         "stencil"     => lowered_stencil,
     )
     for passthrough in ("accuracy", "order")
         haskey(rule, passthrough) && (scheme[passthrough] = rule[passthrough])
+    end
+    if grid_family == "unstructured"
+        for passthrough in ("requires_locations", "emits_location")
+            haskey(rule, passthrough) && (scheme[passthrough] = rule[passthrough])
+        end
     end
 
     use_rule = Dict{String, Any}(
