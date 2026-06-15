@@ -429,3 +429,130 @@ def test_fv3_sinsg_flux_well_formed(catalog, rname, axis, stagger, dl):
     assert f'"{dl}"' in content
     assert '"dt"' in content
     assert '"op": "abs"' in content
+
+
+# ---------------------------------------------------------------------------
+# Fornberg-generated uniform FD rules (esd-ec4)
+# ---------------------------------------------------------------------------
+
+def test_centered_4th_uniform_generated_header(catalog):
+    """centered_4th_uniform carries the fornberg_gen.py generated-file header."""
+    rule = catalog["centered_4th_uniform"]
+    content = _read(rule)
+    assert "_generated_by" in content
+    assert "fornberg_gen.py" in content
+
+
+def test_centered_6th_uniform_generated_header(catalog):
+    """centered_6th_uniform carries the fornberg_gen.py generated-file header."""
+    rule = catalog["centered_6th_uniform"]
+    content = _read(rule)
+    assert "_generated_by" in content
+    assert "fornberg_gen.py" in content
+
+
+def test_centered_2nd_deriv_uniform_generated_header(catalog):
+    """centered_2nd_deriv_uniform carries the fornberg_gen.py generated-file header."""
+    rule = catalog["centered_2nd_deriv_uniform"]
+    content = _read(rule)
+    assert "_generated_by" in content
+    assert "fornberg_gen.py" in content
+
+
+def test_centered_8th_uniform_well_formed(catalog):
+    """centered_8th_uniform: O(h^8) grad stencil, 8 non-zero offsets."""
+    rule = catalog["centered_8th_uniform"]
+    assert rule.family == "finite_difference"
+    assert rule.path.is_file()
+
+    content = _read(rule)
+    assert '"applies_to"' in content
+    assert '"grid_family"' in content
+    assert '"cartesian"' in content
+    assert '"op": "grad"' in content
+    assert '"order": 8' in content
+    assert '"stencil"' in content
+    assert '"kind": "cartesian"' in content
+    # Eight non-zero offsets (−4 to −1 and +1 to +4); center weight is zero.
+    for off in [-4, -3, -2, -1, 1, 2, 3, 4]:
+        assert f'"offset": {off}' in content
+    # Denominator 840*dx for the Fornberg [3,-32,168,-672,...] weights.
+    assert "840" in content
+    assert '"dx"' in content
+    assert "_generated_by" in content
+    assert "fornberg_gen.py" in content
+    assert '"stencil"' in content
+    assert '"replacement"' not in content
+
+
+def test_centered_4th_deriv_uniform_well_formed(catalog):
+    """centered_4th_deriv_uniform: O(h^4) d2 stencil, 5 offsets."""
+    rule = catalog["centered_4th_deriv_uniform"]
+    assert rule.family == "finite_difference"
+    assert rule.path.is_file()
+
+    content = _read(rule)
+    assert '"applies_to"' in content
+    assert '"op": "d2"' in content
+    assert '"cartesian"' in content
+    assert '"stencil"' in content
+    for off in [-2, -1, 0, 1, 2]:
+        assert f'"offset": {off}' in content
+    assert "12" in content
+    assert '"dx"' in content
+    assert "_generated_by" in content
+    assert '"replacement"' not in content
+
+
+def test_centered_6th_deriv_uniform_well_formed(catalog):
+    """centered_6th_deriv_uniform: O(h^6) d2 stencil, 7 offsets."""
+    rule = catalog["centered_6th_deriv_uniform"]
+    assert rule.family == "finite_difference"
+    assert rule.path.is_file()
+
+    content = _read(rule)
+    assert '"applies_to"' in content
+    assert '"op": "d2"' in content
+    assert '"cartesian"' in content
+    assert '"stencil"' in content
+    for off in [-3, -2, -1, 0, 1, 2, 3]:
+        assert f'"offset": {off}' in content
+    assert "180" in content
+    assert '"dx"' in content
+    assert "_generated_by" in content
+    assert '"replacement"' not in content
+
+
+def test_centered_8th_deriv_uniform_well_formed(catalog):
+    """centered_8th_deriv_uniform: O(h^8) d2 stencil, 9 offsets."""
+    rule = catalog["centered_8th_deriv_uniform"]
+    assert rule.family == "finite_difference"
+    assert rule.path.is_file()
+
+    content = _read(rule)
+    assert '"applies_to"' in content
+    assert '"op": "d2"' in content
+    assert '"cartesian"' in content
+    assert '"stencil"' in content
+    for off in [-4, -3, -2, -1, 0, 1, 2, 3, 4]:
+        assert f'"offset": {off}' in content
+    assert "5040" in content
+    assert '"dx"' in content
+    assert "_generated_by" in content
+    assert '"replacement"' not in content
+
+
+def test_catalog_exposes_fornberg_generated_rules(catalog):
+    """All Fornberg-generated FD rules are in the finite_difference family."""
+    generated_rules = (
+        "centered_4th_uniform",
+        "centered_6th_uniform",
+        "centered_8th_uniform",
+        "centered_2nd_deriv_uniform",
+        "centered_4th_deriv_uniform",
+        "centered_6th_deriv_uniform",
+        "centered_8th_deriv_uniform",
+    )
+    for name in generated_rules:
+        assert name in catalog, f"missing generated rule {name!r}"
+        assert catalog[name].family == "finite_difference"

@@ -699,6 +699,9 @@ end
     @test occursin("\"offset\": -1", content)
     @test occursin("\"offset\": 0", content)
     @test occursin("\"offset\": 1", content)
+    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
+    @test occursin("_generated_by", content)
+    @test occursin("fornberg_gen.py", content)
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
 end
@@ -905,6 +908,9 @@ end
     # Fornberg weights: ±1 and ±8 over denominator 12*dx.
     @test occursin("12", content)
     @test occursin("\"dx\"", content)
+    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
+    @test occursin("_generated_by", content)
+    @test occursin("fornberg_gen.py", content)
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
     # AST-only: no call op.
@@ -942,6 +948,9 @@ end
     # Fornberg weights: ±1, ±9, ±45 over denominator 60*dx.
     @test occursin("60", content)
     @test occursin("\"dx\"", content)
+    # Generated-file header (esd-ec4): rule is produced by fornberg_gen.py.
+    @test occursin("_generated_by", content)
+    @test occursin("fornberg_gen.py", content)
     # No inline replacement — the stencil is lowered by stencil_lowering.jl.
     @test !occursin("\"replacement\"", content)
     # AST-only: no call op.
@@ -1168,5 +1177,136 @@ end
     @test !occursin("\"args\": [-1, \"dz\"]", content)
     @test !occursin("\"args\": [1, \"dz\"]", content)
     # No call op.
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "centered_8th_uniform scheme is discoverable and well-formed (esd-ec4)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_8th_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"order\": 8", content)
+    # Stencil form with cartesian selectors: eight offsets for Fornberg 9-point
+    # stencil [3,-32,168,-672,672,-168,32,-3]/(840*dx) — offset 0 omitted.
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -4", content)
+    @test occursin("\"offset\": -3", content)
+    @test occursin("\"offset\": -2", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 1", content)
+    @test occursin("\"offset\": 2", content)
+    @test occursin("\"offset\": 3", content)
+    @test occursin("\"offset\": 4", content)
+    # Fornberg weights: ±3,±32,±168,±672 over denominator 840*dx.
+    @test occursin("840", content)
+    @test occursin("\"dx\"", content)
+    # Generated-file header present.
+    @test occursin("_generated_by", content)
+    @test occursin("fornberg_gen.py", content)
+    # No inline replacement — the stencil is lowered by stencil_lowering.jl.
+    @test !occursin("\"replacement\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "centered_4th_deriv_uniform scheme is discoverable and well-formed (esd-ec4)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_4th_deriv_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"d2\"", content)
+    # Stencil form: five offsets for Fornberg [-1,16,-30,16,-1]/(12*dx^2).
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -2", content)
+    @test occursin("\"offset\": -1", content)
+    @test occursin("\"offset\": 0", content)
+    @test occursin("\"offset\": 1", content)
+    @test occursin("\"offset\": 2", content)
+    @test occursin("12", content)
+    @test occursin("\"dx\"", content)
+    @test occursin("_generated_by", content)
+    @test !occursin("\"replacement\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "centered_6th_deriv_uniform scheme is discoverable and well-formed (esd-ec4)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_6th_deriv_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"d2\"", content)
+    # Stencil form: seven offsets for Fornberg [2,-27,270,-490,270,-27,2]/(180*dx^2).
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -3", content)
+    @test occursin("\"offset\": 3", content)
+    @test occursin("180", content)
+    @test occursin("\"dx\"", content)
+    @test occursin("_generated_by", content)
+    @test !occursin("\"replacement\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "centered_8th_deriv_uniform scheme is discoverable and well-formed (esd-ec4)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "centered_8th_deriv_uniform", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_difference
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"op\": \"d2\"", content)
+    # Stencil form: nine offsets for Fornberg [-9,128,-1008,8064,-14350,...]/5040*dx^2.
+    @test occursin("\"stencil\"", content)
+    @test occursin("\"kind\": \"cartesian\"", content)
+    @test occursin("\"offset\": -4", content)
+    @test occursin("\"offset\": 4", content)
+    @test occursin("5040", content)
+    @test occursin("\"dx\"", content)
+    @test occursin("_generated_by", content)
+    @test !occursin("\"replacement\"", content)
     @test !occursin("\"op\": \"call\"", content)
 end
