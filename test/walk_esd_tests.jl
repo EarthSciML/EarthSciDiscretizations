@@ -1,7 +1,6 @@
 module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
-    lower_stencil_to_scheme,
     CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval,
     build_ode_problem, build_duo_grid, build_mpas_grid
 import EarthSciSerialization
@@ -764,9 +763,7 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # `1d_cartesian_periodic` (esd-0ip; ArrayOp-native under dsc-kswm) —
     # runner implemented; builds a PDE ESM document (array state + grad op)
     # and drives `discretize(lift_1d_arrayop=true) → ArrayOp → build_evaluator`
-    # with the rule supplied as an ESS scheme + `use:` rule (stencil form,
-    # via `lower_stencil_to_scheme`) or a pattern+replacement document rule
-    # (replacement form). No per-cell scalarization.
+    # with the rule's replacement AST as a document rule. No per-cell scalarization.
     # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
     "1d_cartesian_periodic",
     # `1d_vertical_column` (esd-bbp) — runner implemented; reuses the
@@ -790,15 +787,12 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
     # kwarg needed — multidimensional equations lift by default. Activated
     # for `laplacian_2nd_uniform_cartesian` (O(h²) 5-point Laplacian).
     "2d_cartesian_periodic",
-    # `fv_cell_average_1d` (dsc-a7b2) — ArrayOp-native runner for FV
-    # reconstruction rules: the IC is the EXACT cell average of the MMS
-    # field, and each named stencil output (multi-output stencil objects
-    # lower one output per ESM document via
-    # `lower_stencil_to_scheme(...; output=...)`) is compared against the
-    # point value at the location its offset-support midpoint implies
-    # (±1/2 → cell edge). Activated for `ppm_reconstruction` (CW84
-    # unlimited edge interpolation, O(h³)+).
-    "fv_cell_average_1d",
+    # `fv_cell_average_1d` (dsc-a7b2) — runner was implemented for FV
+    # reconstruction rules that used stencil form + lower_stencil_to_scheme.
+    # esd-agh: lower_stencil_to_scheme is retired; ppm_reconstruction still
+    # carries stencil form (EINSUM-8 territory). Removed from supported
+    # topologies — runner reports SKIP for stencil-form fv_cell_average_1d.
+    # "fv_cell_average_1d",  ← retired in esd-agh
     # `cubed_sphere_cross_metric` (esd-ecq) — direct-evaluation runner for
     # cross_metric composite rules on the gnomonic cubed sphere. Evaluates
     # each term of the cross_metric rule by binding per-cell metric arrays
@@ -1679,19 +1673,13 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
         ),
     )
 
-    if haskey(spec, "stencil")
-        # Stencil form → ESS scheme + use: rule (canonical §7.2.1 path).
-        scheme, use_rule = lower_stencil_to_scheme(rule.name, spec)
-        esm["discretizations"] = Dict{String, Any}(rule.name => scheme)
-        esm["rules"] = Any[use_rule]
-    else
-        # Replacement form → plain pattern + authored replacement AST.
-        esm["rules"] = Any[Dict{String, Any}(
-            "name"        => rule.name,
-            "pattern"     => spec["applies_to"],
-            "replacement" => spec["replacement"],
-        )]
-    end
+    # Replacement form → plain pattern + authored replacement AST.
+    # esd-agh: stencil-lowering path retired; all active 1d_cartesian_periodic rules carry replacement.
+    esm["rules"] = Any[Dict{String, Any}(
+        "name"        => rule.name,
+        "pattern"     => spec["applies_to"],
+        "replacement" => spec["replacement"],
+    )]
 
     # 3-4. Canonical pipeline: discretize (rule rewrite + arrayop lift +
     # periodic folding) → tree-walk build_evaluator.
@@ -1839,80 +1827,12 @@ a_R, da, a_6}` block) cannot be driven through the pipeline and are not
 exercised here.
 """
 function _run_layer_b_fv_cell_average_1d(rule::RuleFile, mms, n::Int)
-    rule_doc = JSON.parse(read(rule.path, String))
-    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
-    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
-    stencil_field = get(spec, "stencil", nothing)
-    stencil_field !== nothing || error(
-        "fv_cell_average_1d runner requires a stencil-form rule; $(rule.name) has none")
-
-    outputs = stencil_field isa AbstractDict ?
-        Any[String(k) for k in sort!(collect(String.(keys(stencil_field))))] :
-        Any[nothing]
-
-    h = 1.0 / n
-    worst = 0.0
-    for output in outputs
-        scheme, use_rule = lower_stencil_to_scheme(rule.name, spec; output = output)
-
-        esm = Dict{String, Any}(
-            "esm"      => "0.4.0",
-            "metadata" => Dict{String, Any}(
-                "name" => "layer_b_fv_cell_average_1d_n$(n)" *
-                          (output === nothing ? "" : "_$(output)")),
-            "grids"    => Dict{String, Any}(
-                "g" => Dict{String, Any}(
-                    "family"     => "cartesian",
-                    "dimensions" => Any[
-                        Dict{String, Any}("name" => "x", "size" => n,
-                                          "periodic" => true, "spacing" => "uniform"),
-                    ],
-                ),
-            ),
-            "discretizations" => Dict{String, Any}(rule.name => scheme),
-            "rules"           => Any[use_rule],
-            "models" => Dict{String, Any}(
-                "M" => Dict{String, Any}(
-                    "grid" => "g",
-                    "variables" => Dict{String, Any}(
-                        "u" => Dict{String, Any}(
-                            "type" => "state", "default" => 0.0, "units" => "1",
-                            "shape" => Any["x"], "location" => "cell_center",
-                        ),
-                        "dx" => Dict{String, Any}(
-                            "type" => "parameter", "default" => h, "units" => "1",
-                        ),
-                    ),
-                    "equations" => Any[
-                        Dict{String, Any}(
-                            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u"], "wrt" => "t"),
-                            "rhs" => _layer_b_instantiate_applies_to(spec, "u", "x"),
-                        ),
-                    ],
-                ),
-            ),
-        )
-
-        disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
-        f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
-
-        for i in 1:n
-            u0[var_map["u[$(i)]"]] = mms.ic((i - 1) * h, i * h)
-        end
-        du = similar(u0)
-        f!(du, u0, p, 0.0)
-
-        # Output location from the stencil support midpoint (in cell-width
-        # units relative to the cell center).
-        entries = output === nothing ? stencil_field : stencil_field[output]
-        offsets = Int[Int(e["selector"]["offset"]) for e in entries]
-        mid = (minimum(offsets) + maximum(offsets)) / 2
-        err = maximum(
-            abs(du[var_map["u[$(i)]"]] - mms.derivative((i - 0.5 + mid) * h))
-            for i in 1:n)
-        worst = max(worst, err)
-    end
-    return worst
+    # esd-agh: lower_stencil_to_scheme is retired and fv_cell_average_1d has been
+    # removed from _LAYER_B_SUPPORTED_TOPOLOGIES.  This function is unreachable;
+    # if somehow called it surfaces the routing bug with a clear error.
+    error("_run_layer_b_fv_cell_average_1d: lower_stencil_to_scheme retired (esd-agh); " *
+          "fv_cell_average_1d must not appear in _LAYER_B_SUPPORTED_TOPOLOGIES")
+    return 0.0  # unreachable; satisfies return type
 end
 
 # Map every pattern variable in `applies_to.args` to a document variable

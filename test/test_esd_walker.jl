@@ -288,15 +288,15 @@ using TestItems
             # byte contract (promoted from applicable:false once the ESS
             # multi_output_stencil document path landed; 3341-byte canonical
             # doc is the regression net for the multi-output AST). Layer-B
-            # passes via the ArrayOp-native fv_cell_average_1d runner: each
-            # named stencil output (q_left_edge, q_right_edge) lowers to its
-            # own ESS scheme + use: rule, the IC is exact cell averages, and
-            # the CW84 edge interpolation measures O(h⁴) against edge point
-            # values — clearing the fixture's expected_min_order of 2.8.
+            # esd-agh: lower_stencil_to_scheme retired; fv_cell_average_1d runner
+            # removed from _LAYER_B_SUPPORTED_TOPOLOGIES. ppm_reconstruction still
+            # carries stencil form (EINSUM-8 territory) so Layer-B SKIPs with the
+            # canonical-pipeline-pending reason until ppm_reconstruction is migrated
+            # to authored replacement form.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("min order", r.layer_b.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "laplacian_2nd_uniform_cartesian"
             # laplacian_2nd_uniform_cartesian: Layer-A passes via its
             # canonical byte contract — the first to pin the 2D arrayop lift
@@ -560,21 +560,21 @@ using TestItems
     total = length(results) * 5
     # Layer B: esd-0ip lands the 1d_cartesian_periodic runner; esd-bbp extends
     # it to 1d_vertical_column, 2d_latlon_sphere, and 2d_arakawa_periodic;
-    # dsc-vst2 adds the ArrayOp-native 2d_cartesian_periodic runner and
-    # dsc-a7b2 the fv_cell_average_1d runner; weno5_advection and
-    # nonlinear_laplacian_uniform ride the 1d runner via auxiliary-field
+    # dsc-vst2 adds the ArrayOp-native 2d_cartesian_periodic runner; weno5_advection
+    # and nonlinear_laplacian_uniform ride the 1d runner via auxiliary-field
     # bindings; centered_2nd_deriv_uniform and mixed_deriv_2nd_uniform
     # land with the pending-set retirement; esd-ecq adds the
     # cubed_sphere_cross_metric runner; esd-cal adds the unstructured_ode
     # runner for nn_diffusion_mpas and nn_diffusion_duo; esd-3d7 activates the
     # higher-order cartesian FD family (centered_4th/6th/8th_uniform and
-    # centered_4th/6th/8th_deriv_uniform). Twenty rules now PASS:
+    # centered_4th/6th/8th_deriv_uniform); esd-agh retires lower_stencil_to_scheme
+    # and removes the fv_cell_average_1d runner from supported topologies
+    # (ppm_reconstruction reverts to SKIP pending EINSUM-8). Nineteen rules now PASS:
     # centered_2nd_uniform (O(h²)), upwind_1st (O(h)),
     # centered_2nd_uniform_vertical (O(h²)), centered_2nd_uniform_latlon (O(h²)
     # on lat axis), divergence_arakawa_c (O(h²) div test),
-    # laplacian_2nd_uniform_cartesian (O(h²) 5-point), ppm_reconstruction
-    # (O(h⁴) CW84 edge interpolation), weno5_advection (O(h⁵) FD-WENO
-    # advective divergence), centered_2nd_deriv_uniform (O(h²)),
+    # laplacian_2nd_uniform_cartesian (O(h²) 5-point), weno5_advection (O(h⁵)
+    # FD-WENO advective divergence), centered_2nd_deriv_uniform (O(h²)),
     # mixed_deriv_2nd_uniform (O(h²) cross stencil),
     # nonlinear_laplacian_uniform (O(h²) flux form),
     # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian),
@@ -604,7 +604,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 20
+    @test layer_b_passes == 19
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

@@ -42,12 +42,6 @@ include("rules.jl")
 # AST coefficient evaluator (thin passthrough to EarthSciSerialization)
 include("rule_eval.jl")
 
-# Stencil-form → ESS replacement-form lowerer (dsc-y0jj). Pure AST→AST
-# transform; performs no evaluation. Required so stencil-only catalog
-# rules (e.g. upwind_1st) can drive `discretize` through the canonical
-# Layer-B pipeline.
-include("stencil_lowering.jl")
-
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -118,10 +112,6 @@ export project_initial_condition
 # Exports: Rule catalog
 export RuleFile, load_rules
 export eval_coeff
-
-# Exports: Stencil-form → ESS §7 scheme + use:-rule lowerer (dsc-kswm)
-# lower_stencil_to_replacement retired in esd-t4h; only lower_stencil_to_scheme remains.
-export lower_stencil_to_scheme
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
