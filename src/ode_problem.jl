@@ -561,7 +561,6 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
         if stencil isa AbstractVector && !isempty(stencil)
             first_entry = stencil[1]
             sel   = get(first_entry, "selector", nothing)
-            # cubed_sphere entries use plural "selectors" (array); fall back to first selector.
             if sel === nothing
                 sels = get(first_entry, "selectors", nothing)
                 if sels isa AbstractVector && !isempty(sels) && sels[1] isa AbstractDict
@@ -569,59 +568,28 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                 end
             end
             kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
-            # Dispatch table: selector kind → lowering path.
             # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
-            # Path-A/replacement: latlon, vertical (literal axis names; lower_stencil_to_replacement).
-            # Path-A/replacement: cubed_sphere (plural selectors; lower_stencil_to_replacement keeps axis names).
-            # Arakawa rules carry an authored canonical replacement (esd-eg5); no stencil path.
-            if kind in ("latlon", "vertical")
-                lowered = lower_stencil_to_replacement(spec)
-                replacement = lowered["replacement"]
-                if kind == "latlon"
-                    # Translate literal geographic axis names ("lat", "lon", …) in
-                    # the replacement to canonical arrayop loop-variable names
-                    # ("i", "j", …) so that build_evaluator's {i→val, j→val}
-                    # substitution can resolve all index expressions.  The latlon
-                    # lowerer already sorts axis names alphabetically, giving a
-                    # stable position→canonical mapping.
-                    axis_names_set = Set{String}()
-                    for entry in stencil
-                        entry isa AbstractDict || continue
-                        sel_e = get(entry, "selector", nothing)
-                        sel_e isa AbstractDict || continue
-                        ax = get(sel_e, "axis", nothing)
-                        ax isa AbstractString && !startswith(String(ax), "\$") &&
-                            push!(axis_names_set, String(ax))
-                    end
-                    sorted_axes = sort!(collect(axis_names_set))
-                    _CANONICAL = ("i", "j", "k", "l", "m")
-                    axis_map = Dict{String,String}(
-                        ax => _CANONICAL[d] for (d, ax) in enumerate(sorted_axes)
-                    )
-                    replacement = _subst_axis_names(replacement, axis_map)
-                end
-                push!(rules, Dict{String, Any}(
-                    "name"        => rname,
-                    "pattern"     => spec["applies_to"],
-                    "replacement" => replacement,
-                ))
-            elseif kind in ("reduction", "indirect")
+            # Latlon, vertical, cubed_sphere, arakawa rules carry authored replacement ASTs
+            # (esd-eg5, esd-t4h); the elseif haskey(spec, "replacement") branch handles them.
+            if kind in ("reduction", "indirect")
                 scheme, use_rule = lower_stencil_to_scheme(rname, spec)
                 discs[rname] = scheme
                 push!(rules, use_rule)
-            elseif kind == "cubed_sphere"
-                lowered = lower_stencil_to_replacement(spec)
-                push!(rules, Dict{String, Any}(
-                    "name"        => rname,
-                    "pattern"     => spec["applies_to"],
-                    "replacement" => lowered["replacement"],
-                ))
             end
         elseif haskey(spec, "replacement")
+            replacement = spec["replacement"]
+            # Authored latlon replacements use geographic axis names ("lat", "lon").
+            # Translate to canonical arrayop loop-variable names ("i", "j") so that
+            # build_evaluator's {i→val, j→val} substitution resolves all index expressions.
+            # Axes sort alphabetically: "lat" → "i", "lon" → "j" (esd-t4h).
+            if String(get(spec, "grid_family", "")) == "latlon"
+                replacement = _subst_axis_names(replacement,
+                    Dict{String, String}("lat" => "i", "lon" => "j"))
+            end
             push!(rules, Dict{String, Any}(
                 "name"        => rname,
                 "pattern"     => spec["applies_to"],
-                "replacement" => spec["replacement"],
+                "replacement" => replacement,
             ))
         end
     end

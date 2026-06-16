@@ -131,64 +131,100 @@ end
 # All remaining FD catalog rules with cartesian selectors are already in replacement
 # or arrayop form and take the `elseif haskey(spec, "replacement")` path instead.
 
-@testitem "GDD rules dispatch: latlon stencil → lower_stencil_to_replacement (pattern+replacement rule)" begin
+# esd-t4h: removed "GDD rules dispatch: latlon stencil → lower_stencil_to_replacement (pattern+replacement rule)".
+# The latlon stencil dispatch branch was retired in esd-t4h: centered_2nd_uniform_latlon.json now
+# carries an authored replacement AST (no stencil), and the stencil dispatch for kind="latlon" was
+# removed from _inject_rules!. The latlon authored-replacement path is tested below.
+
+@testitem "GDD rules dispatch: latlon authored replacement → axis substitution (lat→i, lon→j)" begin
     using EarthSciDiscretizations: _inject_rules!
 
     esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
-    latlon_stencil = Dict{String,Any}(
+    latlon_replacement = Dict{String,Any}(
         "latlon_grad" => Dict{String,Any}(
-            "applies_to" => Dict{String,Any}(
-                "op" => "grad", "args" => ["\$u"], "dim" => "\$k",
-            ),
+            "applies_to"  => Dict{String,Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
             "grid_family" => "latlon",
-            "combine"     => "+",
-            "stencil"     => Any[
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "latlon", "axis" => "lon", "offset" => -1), "coeff" => -0.5),
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "latlon", "axis" => "lon", "offset" =>  1), "coeff" =>  0.5),
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "latlon", "axis" => "lat", "offset" => -1), "coeff" => -0.5),
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "latlon", "axis" => "lat", "offset" =>  1), "coeff" =>  0.5),
-            ],
+            "replacement" => Dict{String,Any}(
+                "op"   => "+",
+                "args" => Any[
+                    Dict{String,Any}("op" => "*", "args" => Any[-0.5,
+                        Dict{String,Any}("op" => "index", "args" => Any["\$u", "lat",
+                            Dict{String,Any}("op" => "+", "args" => Any["lon", -1])])]),
+                    Dict{String,Any}("op" => "*", "args" => Any[ 0.5,
+                        Dict{String,Any}("op" => "index", "args" => Any["\$u", "lat",
+                            Dict{String,Any}("op" => "+", "args" => Any["lon",  1])])]),
+                ],
+            ),
         ),
     )
-    _inject_rules!(esm, latlon_stencil, "/dev/null")
+    _inject_rules!(esm, latlon_replacement, "/dev/null")
 
-    # Latlon stencil: goes through lower_stencil_to_replacement →
-    # no scheme block emitted; a plain pattern+replacement rule appended.
+    # Authored replacement: no scheme block; a pattern+replacement rule appended.
     @test !haskey(esm["discretizations"], "latlon_grad")
     @test length(esm["rules"]) == 1
     rule = esm["rules"][1]
     @test rule["name"] == "latlon_grad"
     @test haskey(rule, "replacement")
-    @test !haskey(rule, "use")   # must be replacement-form, not scheme-use-form
+    @test !haskey(rule, "use")
+
+    # Geographic axis names ("lat", "lon") must be translated to canonical
+    # loop-variable names ("i", "j") so build_evaluator resolves index expressions.
+    repl = rule["replacement"]
+    idx1 = repl["args"][1]["args"][2]  # first term's index node
+    @test String(idx1["args"][2]) == "i"   # lat → i
+    lon_arg = idx1["args"][3]
+    @test lon_arg["op"] == "+"
+    @test String(lon_arg["args"][1]) == "j"   # lon → j
 end
 
-@testitem "GDD rules dispatch: vertical stencil → lower_stencil_to_replacement (pattern+replacement rule)" begin
+# esd-t4h: removed "GDD rules dispatch: vertical stencil → lower_stencil_to_replacement (pattern+replacement rule)".
+# The vertical stencil dispatch branch was retired in esd-t4h: centered_2nd_uniform_vertical.json now
+# carries an authored replacement AST (no stencil), and the stencil dispatch for kind="vertical" was
+# removed from _inject_rules!. The vertical authored-replacement path is tested below.
+
+@testitem "GDD rules dispatch: vertical authored replacement → replacement rule, no axis subst" begin
     using EarthSciDiscretizations: _inject_rules!
 
     esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
-    vertical_stencil = Dict{String,Any}(
+    vertical_replacement = Dict{String,Any}(
         "vertical_grad" => Dict{String,Any}(
-            "applies_to" => Dict{String,Any}(
-                "op" => "grad", "args" => ["\$u"], "dim" => "\$k",
-            ),
+            "applies_to"  => Dict{String,Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
             "grid_family" => "vertical",
-            "combine"     => "+",
-            "stencil"     => Any[
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "vertical", "axis" => "\$k", "stagger" => "face_bottom", "offset" => 0), "coeff" => -1.0),
-                Dict{String,Any}("selector" => Dict{String,Any}("kind" => "vertical", "axis" => "\$k", "stagger" => "face_top",    "offset" => 0), "coeff" =>  1.0),
-            ],
+            "replacement" => Dict{String,Any}(
+                "op"   => "/",
+                "args" => Any[
+                    Dict{String,Any}("op" => "+", "args" => Any[
+                        Dict{String,Any}("op" => "index", "args" => Any["\$u", Dict{String,Any}("op" => "+", "args" => Any["\$k", 1])]),
+                        Dict{String,Any}("op" => "-", "args" => Any[
+                            Dict{String,Any}("op" => "index", "args" => Any["\$u", Dict{String,Any}("op" => "-", "args" => Any["\$k", 1])]),
+                        ]),
+                    ]),
+                    Dict{String,Any}("op" => "*", "args" => Any[2, "h"]),
+                ],
+            ),
         ),
     )
-    _inject_rules!(esm, vertical_stencil, "/dev/null")
+    _inject_rules!(esm, vertical_replacement, "/dev/null")
 
-    # Vertical stencil: goes through lower_stencil_to_replacement →
-    # no scheme block emitted; a plain pattern+replacement rule appended.
+    # Authored replacement: no scheme block; a pattern+replacement rule appended.
     @test !haskey(esm["discretizations"], "vertical_grad")
     @test length(esm["rules"]) == 1
     rule = esm["rules"][1]
     @test rule["name"] == "vertical_grad"
     @test haskey(rule, "replacement")
     @test !haskey(rule, "use")
+
+    # Vertical replacement uses pattern variables ($k); no axis substitution applied.
+    repl = rule["replacement"]
+    @test repl["op"] == "/"
+    num = repl["args"][1]
+    @test num["op"] == "+"
+    idx_plus = num["args"][1]
+    @test idx_plus["op"] == "index"
+    kplus = idx_plus["args"][2]
+    @test kplus["op"] == "+"
+    @test String(kplus["args"][1]) == "\$k"
+    @test Int(kplus["args"][2]) == 1
 end
 
 @testitem "GDD grids dispatch: mpas family emits n_cells dimension" begin

@@ -248,17 +248,13 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"vertical\"", content)
-    @test occursin("\"stencil\"", content)
+    # esd-t4h: migrated from stencil form to authored arrayop replacement.
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    # Vertical centered FD uses per-family selector kind and axis k.
-    @test occursin("\"kind\": \"vertical\"", content)
-    @test occursin("\"axis\": \"\$k\"", content)
-    # Face-staggered MMS dispatch (esm-bhv) — selectors carry the per-face
-    # stagger plus an integer offset; the two-point centered stencil reads
-    # the cell's own bottom and top faces (offset 0).
-    @test occursin("\"stagger\": \"face_bottom\"", content)
-    @test occursin("\"stagger\": \"face_top\"", content)
-    @test occursin("\"offset\": 0", content)
+    # Replacement uses the pattern variable from applies_to.dim and scalar spacing h.
+    @test occursin("\"\$k\"", content)
+    @test occursin("\"h\"", content)
 end
 
 @testitem "centered_2nd_uniform_latlon scheme is discoverable and well-formed" begin
@@ -277,18 +273,15 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"latlon\"", content)
-    @test occursin("\"stencil\"", content)
+    # esd-t4h: migrated from stencil form to authored arrayop replacement.
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    # Latlon centered FD uses literal axis values "lon" / "lat" (per
-    # SELECTOR_KINDS.md decision #10) so different stencil entries can carry
-    # different metrics. Both axes have offsets -1 and 1.
-    @test occursin("\"kind\": \"latlon\"", content)
-    @test occursin("\"axis\": \"lon\"", content)
-    @test occursin("\"axis\": \"lat\"", content)
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 1", content)
+    # Replacement indexes $u along "lat" and "lon" axes with ±1 offsets.
+    @test occursin("\"lon\"", content)
+    @test occursin("\"lat\"", content)
     # Coefficient symbols: angular spacings dlon/dlat, sphere radius R, and
-    # the latitude metric cos_lat (lon-axis only) per decisions #11 and #12.
+    # the latitude metric cos_lat (lon-axis only).
     @test occursin("\"dlon\"", content)
     @test occursin("\"dlat\"", content)
     @test occursin("\"R\"", content)
@@ -1139,15 +1132,13 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"vertical\"", content)
     @test occursin("\"op\": \"grad\"", content)
-    @test occursin("\"stencil\"", content)
+    # esd-t4h: migrated from stencil form to authored arrayop replacement.
+    @test !occursin("\"stencil\"", content)
+    @test occursin("\"replacement\"", content)
     # Per-cell dz[k] binding via index op — the S2 per-cell binding contract (SELECTOR_KINDS #3).
     @test occursin("\"op\": \"index\"", content)
     @test occursin("\"dz\"", content)
     @test occursin("\"\$k\"", content)
-    # Face-staggered selectors: face_bottom and face_top at offset 0.
-    @test occursin("\"face_bottom\"", content)
-    @test occursin("\"face_top\"", content)
-    @test occursin("\"offset\": 0", content)
     # No flat scalar spacing — must always be indexed.
     @test !occursin("\"args\": [-1, \"dz\"]", content)
     @test !occursin("\"args\": [1, \"dz\"]", content)

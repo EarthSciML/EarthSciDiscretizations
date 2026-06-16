@@ -444,82 +444,10 @@ end
 # Latlon family tests
 # =============================================================================
 
-@testitem "lower_stencil_to_replacement: lowers centered_2nd_uniform_latlon (latlon)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "centered_2nd_uniform_latlon.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform_latlon"])
-    @test !haskey(rule, "replacement")
-    @test rule["grid_family"] == "latlon"
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    # 4 stencil entries (2 for lon, 2 for lat) → combine(4 terms)
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 4
-
-    # All terms: coeff * index($u, lat_arg, lon_arg) — axes sorted: lat < lon
-    for (i, term) in enumerate(repl["args"])
-        @test term["op"] == "*"
-        idx = term["args"][2]
-        @test idx["op"] == "index"
-        @test length(idx["args"]) == 3  # operand + lat_arg + lon_arg
-        @test String(idx["args"][1]) == "\$u"
-    end
-
-    # Entry 1: axis=lon, offset=-1 → index($u, "lat", "lon" + (-1))
-    e1 = repl["args"][1]
-    idx1 = e1["args"][2]
-    @test String(idx1["args"][2]) == "lat"   # lat bare (not the shifted axis)
-    a1_lon = idx1["args"][3]
-    @test a1_lon["op"] == "+"
-    @test String(a1_lon["args"][1]) == "lon"
-    @test Int(a1_lon["args"][2]) == -1
-
-    # Entry 2: axis=lon, offset=+1 → index($u, "lat", "lon" + 1)
-    e2 = repl["args"][2]
-    idx2 = e2["args"][2]
-    @test String(idx2["args"][2]) == "lat"
-    a2_lon = idx2["args"][3]
-    @test a2_lon["op"] == "+"
-    @test String(a2_lon["args"][1]) == "lon"
-    @test Int(a2_lon["args"][2]) == 1
-
-    # Entry 3: axis=lat, offset=-1 → index($u, "lat" + (-1), "lon")
-    e3 = repl["args"][3]
-    idx3 = e3["args"][2]
-    a3_lat = idx3["args"][2]
-    @test a3_lat["op"] == "+"
-    @test String(a3_lat["args"][1]) == "lat"
-    @test Int(a3_lat["args"][2]) == -1
-    @test String(idx3["args"][3]) == "lon"   # lon bare
-
-    # Entry 4: axis=lat, offset=+1 → index($u, "lat" + 1, "lon")
-    e4 = repl["args"][4]
-    idx4 = e4["args"][2]
-    a4_lat = idx4["args"][2]
-    @test a4_lat["op"] == "+"
-    @test String(a4_lat["args"][1]) == "lat"
-    @test Int(a4_lat["args"][2]) == 1
-    @test String(idx4["args"][3]) == "lon"
-
-    # ESS parse_expression accepts the lowered AST
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
+# esd-t4h: removed "lower_stencil_to_replacement: lowers centered_2nd_uniform_latlon (latlon)".
+# centered_2nd_uniform_latlon now carries an authored replacement AST (no stencil field);
+# lower_stencil_to_replacement is idempotent when replacement is present — the catalog
+# contract is exercised by the Layer-A byte contract and Layer-B latlon-sphere runner instead.
 
 @testitem "lower_stencil_to_replacement: latlon errors on \$-prefixed axis" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement
@@ -654,53 +582,10 @@ end
 # Vertical family tests
 # =============================================================================
 
-@testitem "lower_stencil_to_replacement: lowers centered_2nd_uniform_vertical (vertical)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "centered_2nd_uniform_vertical.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform_vertical"])
-    @test !haskey(rule, "replacement")
-    @test rule["grid_family"] == "vertical"
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    # 2 stencil entries → combine(2 terms)
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 2
-
-    # Both entries: coeff * index($u, $k) — offset=0, no `+ 0` wrapper
-    # Stagger (face_bottom / face_top) is NOT in the AST
-    e1 = repl["args"][1]
-    @test e1["op"] == "*"
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    @test String(idx1["args"][2]) == "\$k"   # offset=0 → bare axis var
-
-    e2 = repl["args"][2]
-    @test e2["op"] == "*"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    @test String(idx2["args"][2]) == "\$k"   # offset=0 → bare axis var
-
-    # ESS parse_expression accepts the lowered AST
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
+# esd-t4h: removed "lower_stencil_to_replacement: lowers centered_2nd_uniform_vertical (vertical)".
+# centered_2nd_uniform_vertical now carries an authored replacement AST (no stencil field);
+# lower_stencil_to_replacement is idempotent when replacement is present — the catalog
+# contract is exercised by the Layer-A byte contract and Layer-B 1d-vertical-column runner instead.
 
 @testitem "lower_stencil_to_replacement: vertical errors on bad stagger" begin
     using EarthSciDiscretizations: lower_stencil_to_replacement

@@ -32,13 +32,14 @@ Public surface:
   is the canonical-pipeline path; currently cartesian-only, mirroring
   the ESS scheme-expansion foundation (esm-j1u).
 Selector kinds currently supported by `lower_stencil_to_replacement`:
-`latlon`, `cubed_sphere`, `vertical`. The `cartesian` family lowers via
-`lower_stencil_to_scheme` (ESS scheme-expansion path). The `arakawa` family
-was retired in EINSUM-4 (esd-770): all arakawa catalog rules now carry an
-explicit `replacement` arrayop AST, so stencil lowering is never reached for
-them. Families (`indirect`, `reduction`) raise `ArgumentError` until their
-lowering rows are added; each new kind composes here as a separate dispatch
-branch.
+`cubed_sphere`. The `latlon` and `vertical` catalog rules were migrated to
+authored `replacement` ASTs in esd-t4h and no longer reach the stencil
+lowering path. The `arakawa` family was retired in EINSUM-4 (esd-770):
+all arakawa catalog rules now carry an explicit `replacement` arrayop AST.
+The `cartesian` family lowers via `lower_stencil_to_scheme` (ESS scheme-
+expansion path). Families (`indirect`, `reduction`) raise `ArgumentError`
+until their lowering rows are added; each new kind composes here as a
+separate dispatch branch.
 """
 
 """
