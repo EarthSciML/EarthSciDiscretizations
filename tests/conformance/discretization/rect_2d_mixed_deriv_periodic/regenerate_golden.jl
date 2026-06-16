@@ -5,8 +5,7 @@ Regenerate golden mixed-derivative output arrays for rect_2d_mixed_deriv_periodi
 Canonical pipeline: load rule JSON → evaluate replacement AST at each cell
 via the ESD/ESS passthrough.
 
-The rule `mixed_deriv_2nd_uniform` uses a direct `replacement` (no stencil),
-so `lower_stencil_to_replacement` is a no-op (idempotent). The replacement
+The rule `mixed_deriv_2nd_uniform` carries an authored `replacement` field.  The replacement
 expression is the 4-point stencil:
   (u[i+1,j+1] - u[i+1,j-1] - u[i-1,j+1] + u[i-1,j-1]) / (4*dx*dy)
 
@@ -30,7 +29,7 @@ let env_dir = mktempdir()
     Pkg.add("JSON"; io = devnull)
 end
 
-using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+using EarthSciDiscretizations: eval_coeff
 using JSON
 
 const HERE    = @__DIR__
@@ -101,8 +100,7 @@ rule_path = joinpath(ROOT, "discretizations", "finite_difference",
                      "mixed_deriv_2nd_uniform.json")
 raw_rule  = JSON.parsefile(rule_path)
 rule_body = raw_rule["discretizations"]["mixed_deriv_2nd_uniform"]
-rule_lowered = lower_stencil_to_replacement(rule_body)
-repl_raw  = rule_lowered["replacement"]
+repl_raw  = rule_body["replacement"]
 replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
               repl_raw["expr"] : repl_raw
 

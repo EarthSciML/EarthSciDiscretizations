@@ -5,8 +5,8 @@ conformance harness.
 
 Drives the canonical ESD pipeline:
   1. Load upwind_1st_nonuniform rule from discretizations/
-  2. Lower stencil form to replacement via lower_stencil_to_replacement
-  3. Evaluate per-cell using the lowered AST with per-cell dx[i] bindings
+  2. Read replacement field directly (rule carries authored replacement; esd-t4h)
+  3. Evaluate per-cell using the replacement AST with per-cell dx[i] bindings
 
 Per AGENTS.md single-pathway rule: this script does NOT implement the upwind
 stencil itself — it exercises the pipeline that any correct binding must match.
@@ -16,7 +16,6 @@ Run from the repo root:
 =#
 
 using JSON
-using EarthSciDiscretizations: lower_stencil_to_replacement
 
 # --------------------------------------------------------------------------
 # Per-cell evaluator for non-uniform rules (handles index("dx", "$x"))
@@ -63,8 +62,7 @@ function apply_rule_nonuniform(rule_path::String, rule_name::String,
                                u::Vector{Float64}, dx_arr::Vector{Float64})
     raw  = JSON.parsefile(rule_path)
     body = raw["discretizations"][rule_name]
-    lw   = lower_stencil_to_replacement(body)
-    repl = lw["replacement"]
+    repl = body["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
            repl["expr"] : repl
     N = length(u)

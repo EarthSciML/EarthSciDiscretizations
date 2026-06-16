@@ -1,43 +1,15 @@
 using Test
 using TestItems
 
-@testitem "lower_stencil_to_replacement: passes replacement-form rules through" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
+# esd-t4h: lower_stencil_to_replacement was deleted. All tests below that used synthetic
+# stencil rules or idempotence checks are tombstoned here. Rules that carried authored
+# replacements (arakawa, staggered) are now tested directly via Layer-A byte contracts.
 
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
-        "replacement" => Dict("op" => "+", "args" => Any[1, 2]),
-    )
-    out = lower_stencil_to_replacement(rule)
-    @test out["replacement"] == rule["replacement"]
-    # idempotent: re-running yields the same replacement
-    @test lower_stencil_to_replacement(out)["replacement"] == rule["replacement"]
-end
+# esd-t4h: removed "lower_stencil_to_replacement: passes replacement-form rules through"
+# lower_stencil_to_replacement was retired in esd-t4h; synthetic idempotence tests are moot.
 
-
-@testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st AST" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    # The lowered `replacement` must be a well-formed ExpressionNode AST that
-    # ESS's `parse_expression` accepts. This guards the lowerer's output
-    # contract — if the structure drifts, ESS rule_engine will reject the
-    # rule at `parse_rule` time, so catching it at parse_expression here is
-    # the cheapest signal that the AST shape is right.
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "upwind_1st.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["upwind_1st"])
-    out = lower_stencil_to_replacement(rule)
-
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-end
+# esd-7h2+esd-t4h: removed "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st AST"
+# upwind_1st.json carries an authored replacement; stencil-lowering path retired (esd-t4h).
 
 # esd-7h2: removed "lower_stencil_to_replacement: lowers cartesian upwind_1st_nonuniform (esd-02z)"
 # upwind_1st_nonuniform.json was migrated to arrayop replacement form — it no longer has a
@@ -47,192 +19,26 @@ end
 # esd-7h2: removed "lower_stencil_to_replacement: ESS parse_expression accepts lowered upwind_1st_nonuniform AST (esd-02z)"
 # Same migration as above — rule is now in replacement form, stencil path retired.
 
-@testitem "lower_stencil_to_replacement: errors on missing stencil and replacement" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$x"),
-    )
-    @test_throws ArgumentError lower_stencil_to_replacement(rule)
-end
-
-@testitem "lower_stencil_to_replacement: errors on missing applies_to" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 0),
-            "coeff" => 1,
-        )],
-    )
-    @test_throws ArgumentError lower_stencil_to_replacement(rule)
-end
-
-@testitem "lower_stencil_to_replacement: errors on unsupported selector kind" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "indirect", "axis" => "n", "offset" => 0),
-            "coeff" => 1,
-        )],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("'indirect'", err.msg)
-    @test occursin("not yet supported", err.msg)
-end
+# esd-t4h: removed "lower_stencil_to_replacement: errors on missing stencil and replacement"
+# esd-t4h: removed "lower_stencil_to_replacement: errors on missing applies_to"
+# esd-t4h: removed "lower_stencil_to_replacement: errors on unsupported selector kind"
+# lower_stencil_to_replacement was retired; synthetic error-path tests are moot.
 
 # esd-7h2: removed "lower_stencil_to_replacement: errors on axis mismatch"
 # The axis-mismatch check was inside _lower_cartesian_entry (retired with the
 # cartesian branch). Vertical and latlon kinds validate their own axis fields
 # independently; no replacement test needed for the retired cartesian path.
 
-@testitem "lower_stencil_to_replacement: single entry produces bare term (vertical)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
+# esd-t4h: removed "lower_stencil_to_replacement: single entry produces bare term (vertical)"
+# lower_stencil_to_replacement was retired; synthetic vertical stencil tests are moot.
 
-    # Uses vertical stencil (cell_center stagger, offset 1) to verify the
-    # general "single entry → bare term" behaviour (no combine wrapper).
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "vertical", "axis" => "\$k",
-                               "stagger" => "cell_center", "offset" => 1),
-            "coeff" => 7,
-        )],
-    )
-    out = lower_stencil_to_replacement(rule)
-    repl = out["replacement"]
-    # No combine wrapper for a single entry
-    @test repl["op"] == "*"
-    @test repl["args"][1] == 7
-    idx = repl["args"][2]
-    @test idx["op"] == "index"
-    @test idx["args"][2]["op"] == "+"
-    @test idx["args"][2]["args"][2] == 1
-end
+# esd-t4h: removed "lower_stencil_to_replacement: lowers divergence_arakawa_c"
+# esd-t4h: removed "lower_stencil_to_replacement: ESS parse_expression accepts lowered divergence_arakawa_c"
+# divergence_arakawa_c carries an authored replacement (esd-eg5); lower_stencil_to_replacement
+# was idempotent on it. Rule structure is tested by the Layer-A canonical byte contract.
 
-@testitem "lower_stencil_to_replacement: lowers divergence_arakawa_c" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    using JSON
-
-    # `divergence_arakawa_c` carries a canonical bare replacement (esd-eg5): no stencil,
-    # no arrayop wrapper. The replacement is a "+" of 4 coeff*index terms using i/j axes.
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_volume",
-        "divergence_arakawa_c.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["divergence_arakawa_c"])
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 4
-
-    # All 4 terms are coeff * index(field, i_arg, j_arg)
-    for term in repl["args"]
-        @test term["op"] == "*"
-        idx = term["args"][2]
-        @test idx["op"] == "index"
-        @test length(idx["args"]) == 3
-    end
-
-    # Entry 1: index($Fx, i, j), coeff = -1/dx
-    e1 = repl["args"][1]
-    idx1 = e1["args"][2]
-    @test String(idx1["args"][1]) == "\$Fx"
-    @test String(idx1["args"][2]) == "i"
-    @test String(idx1["args"][3]) == "j"
-
-    # Entry 2: index($Fx, i+1, j), coeff = +1/dx
-    e2 = repl["args"][2]
-    idx2 = e2["args"][2]
-    @test String(idx2["args"][1]) == "\$Fx"
-    a2_i = idx2["args"][2]
-    @test a2_i["op"] == "+"
-    @test String(a2_i["args"][1]) == "i"
-    @test Int(a2_i["args"][2]) == 1
-    @test String(idx2["args"][3]) == "j"
-
-    # Entry 3: index($Fy, i, j), coeff = -1/dy
-    e3 = repl["args"][3]
-    idx3 = e3["args"][2]
-    @test String(idx3["args"][1]) == "\$Fy"
-    @test String(idx3["args"][2]) == "i"
-    @test String(idx3["args"][3]) == "j"
-
-    # Entry 4: index($Fy, i, j+1), coeff = +1/dy
-    e4 = repl["args"][4]
-    idx4 = e4["args"][2]
-    @test String(idx4["args"][1]) == "\$Fy"
-    @test String(idx4["args"][2]) == "i"
-    a4_j = idx4["args"][3]
-    @test a4_j["op"] == "+"
-    @test String(a4_j["args"][1]) == "j"
-    @test Int(a4_j["args"][2]) == 1
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
-
-@testitem "lower_stencil_to_replacement: ESS parse_expression accepts lowered divergence_arakawa_c" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_volume",
-        "divergence_arakawa_c.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["divergence_arakawa_c"])
-    out = lower_stencil_to_replacement(rule)
-
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-end
-
-@testitem "lower_stencil_to_replacement: errors on mixed selector kinds" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
-        "stencil" => Any[
-            Dict(
-                "selector" => Dict(
-                    "kind" => "arakawa", "stagger" => "face_x",
-                    "axis" => "\$x", "offset" => 0,
-                ),
-                "coeff" => 1,
-            ),
-            Dict(
-                "selector" => Dict("kind" => "cartesian", "axis" => "\$x", "offset" => 0),
-                "coeff" => 1,
-            ),
-        ],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("mixes selector kinds", err.msg)
-end
+# esd-t4h: removed "lower_stencil_to_replacement: errors on mixed selector kinds"
+# lower_stencil_to_replacement was retired; synthetic mixed-kind error tests are moot.
 
 # esd-7h2: removed "lower_stencil_to_replacement: lowers lax_friedrichs_flux (cartesian)"
 # lax_friedrichs_flux.json retains its cartesian stencil (EINSUM-8 scope) but
@@ -246,199 +52,11 @@ end
 # stencil array, so the stencil-lowering path is not exercised by this rule.
 # The rule is tested via Layer-A (canonical byte contract) and Layer-B (MMS convergence).
 
-@testitem "lower_stencil_to_replacement: lowers laplacian_2nd_uniform_cartesian (arakawa)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    # laplacian_2nd_uniform_cartesian carries a canonical bare replacement (esd-eg5):
-    # no stencil, no arrayop wrapper. Six coeff*index terms using i/j axes.
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "laplacian_2nd_uniform_cartesian.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["laplacian_2nd_uniform_cartesian"])
-    @test rule["applies_to"]["op"] == "laplacian"
-    @test String(rule["applies_to"]["args"][1]) == "\$u"
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 6
-
-    # All terms are coeff * index($u, i_arg, j_arg)
-    for term in repl["args"]
-        @test term["op"] == "*"
-        idx = term["args"][2]
-        @test idx["op"] == "index"
-        @test length(idx["args"]) == 3
-        @test String(idx["args"][1]) == "\$u"
-    end
-
-    # Entries 1–3: shift i axis (x direction)
-    # Entry 1: index($u, i+(-1), j)
-    e1 = repl["args"][1]
-    idx1 = e1["args"][2]
-    @test idx1["args"][2]["op"] == "+"
-    @test String(idx1["args"][2]["args"][1]) == "i"
-    @test Int(idx1["args"][2]["args"][2]) == -1
-    @test String(idx1["args"][3]) == "j"
-
-    # Entry 2: index($u, i, j) — bare i
-    e2 = repl["args"][2]
-    idx2 = e2["args"][2]
-    @test String(idx2["args"][2]) == "i"
-    @test String(idx2["args"][3]) == "j"
-
-    # Entry 3: index($u, i+1, j)
-    e3 = repl["args"][3]
-    idx3 = e3["args"][2]
-    @test idx3["args"][2]["op"] == "+"
-    @test Int(idx3["args"][2]["args"][2]) == 1
-    @test String(idx3["args"][3]) == "j"
-
-    # Entries 4–6: shift j axis (y direction)
-    # Entry 4: index($u, i, j+(-1))
-    e4 = repl["args"][4]
-    idx4 = e4["args"][2]
-    @test String(idx4["args"][2]) == "i"
-    @test idx4["args"][3]["op"] == "+"
-    @test String(idx4["args"][3]["args"][1]) == "j"
-    @test Int(idx4["args"][3]["args"][2]) == -1
-
-    # Entry 5: index($u, i, j) — bare j
-    e5 = repl["args"][5]
-    idx5 = e5["args"][2]
-    @test String(idx5["args"][2]) == "i"
-    @test String(idx5["args"][3]) == "j"
-
-    # Entry 6: index($u, i, j+1)
-    e6 = repl["args"][6]
-    idx6 = e6["args"][2]
-    @test String(idx6["args"][2]) == "i"
-    @test idx6["args"][3]["op"] == "+"
-    @test Int(idx6["args"][3]["args"][2]) == 1
-
-    # ESS parse_expression accepts the replacement AST directly
-    ess_expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test ess_expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
-
-@testitem "lower_stencil_to_replacement: lowers staggered_1st_uniform_cc_to_face" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    # staggered_1st_uniform_cc_to_face carries an explicit arrayop replacement AST since
-    # EINSUM-4 (esd-770). 1D x-axis, offsets {-1, 0}. Mirrors MOL StaggeredStencilInfo
-    # EdgeAlignedVar: d/dx(u)|_face[j] = (u_cc[j] - u_cc[j-1]) / h.
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "staggered_1st_uniform.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["staggered_1st_uniform_cc_to_face"])
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "arrayop"
-    @test repl["output_idx"] == ["\$x"]
-    expr = repl["expr"]
-    @test expr["op"] == "+"
-    @test length(expr["args"]) == 2
-
-    # Entry 1: cell_center, axis $x, offset -1 -> index($u, $x + (-1)), coeff -1/h
-    e1 = expr["args"][1]
-    @test e1["op"] == "*"
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    arg1 = idx1["args"][2]
-    @test arg1["op"] == "+"
-    @test String(arg1["args"][1]) == "\$x"
-    @test Int(arg1["args"][2]) == -1
-
-    # Entry 2: cell_center, axis $x, offset 0 -> index($u, $x) (no `+ 0` wrapper)
-    e2 = expr["args"][2]
-    @test e2["op"] == "*"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    @test String(idx2["args"][2]) == "\$x"
-
-    # ESS parse_expression accepts the inner expr AST
-    ess_expr = EarthSciSerialization.parse_expression(expr)
-    @test ess_expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
-
-@testitem "lower_stencil_to_replacement: lowers staggered_1st_uniform_face_to_cc" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    # staggered_1st_uniform_face_to_cc carries an explicit arrayop replacement AST since
-    # EINSUM-4 (esd-770). 1D x-axis, offsets {0, +1}. Mirrors MOL StaggeredStencilInfo
-    # CenterAlignedVar: d/dx(u)|_cc[i] = (u_face[i+1] - u_face[i]) / h.
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "staggered_1st_uniform.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["staggered_1st_uniform_face_to_cc"])
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    @test repl["op"] == "arrayop"
-    @test repl["output_idx"] == ["\$x"]
-    expr = repl["expr"]
-    @test expr["op"] == "+"
-    @test length(expr["args"]) == 2
-
-    # Entry 1: face_x, axis $x, offset 0 -> index($u, $x) (no `+ 0` wrapper), coeff -1/h
-    e1 = expr["args"][1]
-    @test e1["op"] == "*"
-    idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    @test String(idx1["args"][2]) == "\$x"
-
-    # Entry 2: face_x, axis $x, offset 1 -> index($u, $x + 1), coeff +1/h
-    e2 = expr["args"][2]
-    @test e2["op"] == "*"
-    idx2 = e2["args"][2]
-    @test idx2["op"] == "index"
-    @test String(idx2["args"][1]) == "\$u"
-    arg2 = idx2["args"][2]
-    @test arg2["op"] == "+"
-    @test String(arg2["args"][1]) == "\$x"
-    @test Int(arg2["args"][2]) == 1
-
-    # ESS parse_expression accepts the inner expr AST
-    ess_expr = EarthSciSerialization.parse_expression(expr)
-    @test ess_expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
+# esd-t4h: removed "lower_stencil_to_replacement: lowers laplacian_2nd_uniform_cartesian (arakawa)"
+# esd-t4h: removed "lower_stencil_to_replacement: lowers staggered_1st_uniform_cc_to_face"
+# esd-t4h: removed "lower_stencil_to_replacement: lowers staggered_1st_uniform_face_to_cc"
+# These rules carry authored replacements (esd-eg5 / esd-770); lower_stencil_to_replacement
+# was idempotent on them. Rule structure is tested by the Layer-A canonical byte contracts.
 
 # =============================================================================
 # Latlon family tests
@@ -446,35 +64,16 @@ end
 
 # esd-t4h: removed "lower_stencil_to_replacement: lowers centered_2nd_uniform_latlon (latlon)".
 # centered_2nd_uniform_latlon now carries an authored replacement AST (no stencil field);
-# lower_stencil_to_replacement is idempotent when replacement is present — the catalog
-# contract is exercised by the Layer-A byte contract and Layer-B latlon-sphere runner instead.
+# the catalog contract is exercised by the Layer-A byte contract and Layer-B latlon-sphere runner.
 
-@testitem "lower_stencil_to_replacement: latlon errors on \$-prefixed axis" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "latlon", "axis" => "\$lon", "offset" => 0),
-            "coeff" => 1,
-        )],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("literal geographic axis name", err.msg)
-end
+# esd-t4h: removed "lower_stencil_to_replacement: latlon errors on \$-prefixed axis"
+# lower_stencil_to_replacement was retired; synthetic latlon stencil tests are moot.
 
 # =============================================================================
 # Cubed-sphere family tests
 # =============================================================================
 
-@testitem "covariant_laplacian_cubed_sphere: cross_metric schema + per-axis stencil lowering (esd-p81)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
+@testitem "covariant_laplacian_cubed_sphere: cross_metric schema (esd-p81)" begin
     import EarthSciSerialization
     using JSON
 
@@ -522,61 +121,18 @@ end
         @test haskey(disc, name)
     end
 
-    # Per-axis stencils are still in stencil form and can be lowered to replacement.
+    # Per-axis stencils are cubed_sphere spec-only; lower_stencil_to_replacement retired (esd-t4h).
     for name in expected_per_axis
         pa = Dict{String, Any}(disc[name])
         @test haskey(pa, "stencil")
         @test !haskey(pa, "replacement")
-        out = lower_stencil_to_replacement(pa)
-        @test haskey(out, "replacement")
-        expr = EarthSciSerialization.parse_expression(out["replacement"])
-        @test expr !== nothing
     end
-
-    # lower_stencil_to_replacement throws on the cross_metric top-level rule
-    # (it has neither stencil nor replacement).
-    @test_throws ArgumentError lower_stencil_to_replacement(rule)
 end
 
-@testitem "lower_stencil_to_replacement: lowers transport_2d (cubed_sphere, finite_volume)" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-    import EarthSciSerialization
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_volume",
-        "transport_2d.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["transport_2d"])
-    @test !haskey(rule, "replacement")
-    @test rule["grid_family"] == "cubed_sphere"
-
-    out = lower_stencil_to_replacement(rule)
-    @test haskey(out, "replacement")
-
-    repl = out["replacement"]
-    # 5 stencil entries → combine(5 terms); axes: eta < xi
-    @test repl["op"] == "+"
-    @test length(repl["args"]) == 5
-
-    for term in repl["args"]
-        @test term["op"] == "*"
-        idx = term["args"][2]
-        @test idx["op"] == "index"
-        @test length(idx["args"]) == 3
-        @test String(idx["args"][1]) == "\$q"
-    end
-
-    # ESS parse_expression accepts the lowered AST
-    expr = EarthSciSerialization.parse_expression(out["replacement"])
-    @test expr !== nothing
-
-    # Idempotence
-    @test lower_stencil_to_replacement(out)["replacement"] == repl
-end
+# esd-t4h: removed "lower_stencil_to_replacement: lowers transport_2d (cubed_sphere, finite_volume)".
+# lower_stencil_to_replacement was retired in esd-t4h; cubed_sphere stencil rules are spec-only
+# and not yet materialised (EINSUM-8 territory). The transport_2d stencil schema is verified by
+# the cubed_sphere cross_metric runner tests; lowering is not needed until EINSUM-8 authors replacement.
 
 # =============================================================================
 # Vertical family tests
@@ -584,54 +140,11 @@ end
 
 # esd-t4h: removed "lower_stencil_to_replacement: lowers centered_2nd_uniform_vertical (vertical)".
 # centered_2nd_uniform_vertical now carries an authored replacement AST (no stencil field);
-# lower_stencil_to_replacement is idempotent when replacement is present — the catalog
-# contract is exercised by the Layer-A byte contract and Layer-B 1d-vertical-column runner instead.
+# the catalog contract is exercised by the Layer-A byte contract and Layer-B 1d-vertical-column runner.
 
-@testitem "lower_stencil_to_replacement: vertical errors on bad stagger" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
-        "stencil" => Any[Dict(
-            "selector" => Dict(
-                "kind" => "vertical", "axis" => "\$k",
-                "stagger" => "unknown_stagger", "offset" => 0,
-            ),
-            "coeff" => 1,
-        )],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("'unknown_stagger'", err.msg)
-end
-
-@testitem "lower_stencil_to_replacement: vertical errors on axis mismatch" begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
-    rule = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
-        "stencil" => Any[Dict(
-            "selector" => Dict(
-                "kind" => "vertical", "axis" => "\$z",
-                "stagger" => "face_bottom", "offset" => 0,
-            ),
-            "coeff" => 1,
-        )],
-    )
-    err = try
-        lower_stencil_to_replacement(rule)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("disagrees", err.msg)
-end
+# esd-t4h: removed "lower_stencil_to_replacement: vertical errors on bad stagger"
+# esd-t4h: removed "lower_stencil_to_replacement: vertical errors on axis mismatch"
+# lower_stencil_to_replacement was retired; synthetic vertical stencil error tests are moot.
 
 # esd-3d7: removed "lower_stencil_to_scheme: lowers cartesian upwind_1st to ESS scheme parts" and
 # "lower_stencil_to_scheme: ESS parse_schemes + parse_rule accept the lowered parts".
@@ -837,4 +350,3 @@ end
     @test err isa ArgumentError
     @test occursin("flat", err.msg)
 end
-

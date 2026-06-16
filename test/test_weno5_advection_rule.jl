@@ -349,14 +349,12 @@ end
 @testitem "weno5_grad rule: stencil-level numeric convergence (smooth periodic)" begin
     using JSON
     using EarthSciDiscretizations
-    using EarthSciDiscretizations: lower_stencil_to_replacement
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
     rule_path = joinpath(repo_root, "discretizations", "finite_difference", "weno5_grad.json")
     raw  = JSON.parsefile(rule_path)
     body = raw["discretizations"]["weno5_grad"]
-    lw   = lower_stencil_to_replacement(body)
-    repl = lw["replacement"]
+    repl = body["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
            repl["expr"] : repl
 
@@ -419,8 +417,6 @@ end
 @testitem "weno5_grad conformance: golden matches MOL #531 _weno_template" begin
     using JSON
     using EarthSciDiscretizations
-    using EarthSciDiscretizations: lower_stencil_to_replacement
-
     HARNESS  = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
                         "rect_1d_advection_weno5_periodic")
     FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
@@ -431,8 +427,7 @@ end
     rule_path = joinpath(REPO_ROOT, FIXTURES["rule_path"])
     raw  = JSON.parsefile(rule_path)
     body = raw["discretizations"][FIXTURES["rule"]]
-    lw   = lower_stencil_to_replacement(body)
-    repl = lw["replacement"]
+    repl = body["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
            repl["expr"] : repl
 

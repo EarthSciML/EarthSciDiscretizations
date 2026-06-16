@@ -2,9 +2,9 @@
 #=
 Regenerate golden Laplacian-output arrays for rect_2d_diffusion_5point_periodic.
 
-Canonical pipeline: load rule JSON → lower_stencil_to_replacement (arakawa stencil
-with 6 entries over $x and $y axes) → evaluate the replacement AST at each cell
-via the ESD/ESS passthrough.
+Canonical pipeline: load rule JSON → read `replacement` field directly
+(rule carries authored replacement; esd-t4h) → evaluate the replacement AST
+at each cell via the ESD/ESS passthrough.
 
 Scalar sub-expressions (coefficient terms without `index` ops) are evaluated
 through `EarthSciDiscretizations.eval_coeff`, a thin passthrough to
@@ -27,7 +27,7 @@ let env_dir = mktempdir()
     Pkg.add("JSON"; io = devnull)
 end
 
-using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+using EarthSciDiscretizations: eval_coeff
 using JSON
 
 const HERE    = @__DIR__
@@ -154,8 +154,7 @@ function main()
     raw_rule  = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw  = rule_lowered["replacement"]
+    repl_raw  = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                   repl_raw["expr"] : repl_raw
 

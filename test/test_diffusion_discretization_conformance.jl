@@ -1,6 +1,6 @@
 @testsnippet DiffusionDiscretizationConformanceSetup begin
     using Test
-    using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using EarthSciDiscretizations: eval_coeff
     using JSON
 end
 
@@ -11,7 +11,7 @@ end
 # ---------------------------------------------------------------------------
 
 @testsnippet Diffusion2DConformanceHelpers begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using EarthSciDiscretizations: eval_coeff
     using JSON
 
     function _has_index_2d(node)::Bool
@@ -98,7 +98,7 @@ end
 # ---------------------------------------------------------------------------
 
 @testsnippet Diffusion1DConformanceHelpers begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using EarthSciDiscretizations: eval_coeff
     using JSON
 
     function _has_index_1d(node)::Bool
@@ -241,8 +241,7 @@ end
     raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw  = rule_lowered["replacement"]
+    repl_raw  = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                   repl_raw["expr"] : repl_raw
 
@@ -304,8 +303,7 @@ end
     raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw  = rule_lowered["replacement"]
+    repl_raw  = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                   repl_raw["expr"] : repl_raw
 
@@ -406,8 +404,7 @@ end
     raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw  = rule_lowered["replacement"]
+    repl_raw  = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                   repl_raw["expr"] : repl_raw
 
@@ -458,8 +455,7 @@ end
     REPO_ROOT = abspath(joinpath(@__DIR__, ".."))
     rule_body = JSON.parsefile(joinpath(REPO_ROOT, "discretizations", "finite_difference",
                                "mixed_deriv_2nd_uniform.json"))["discretizations"]["mixed_deriv_2nd_uniform"]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw  = rule_lowered["replacement"]
+    repl_raw  = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                   repl_raw["expr"] : repl_raw
 

@@ -2,8 +2,8 @@
 #=
 Regenerate golden grad-output arrays for rect_1d_advection_upwind_periodic.
 
-Canonical pipeline: load rule JSON → lower_stencil_to_replacement (upwind_1st
-ships in stencil form; this step produces the `replacement` field) → evaluate
+Canonical pipeline: load rule JSON → read `replacement` field directly
+(upwind_1st carries an authored replacement; esd-t4h) → evaluate
 the replacement AST at each cell via the ESD/ESS passthrough.
 
 Scalar sub-expressions (coefficient terms without `index` ops) are evaluated
@@ -27,7 +27,7 @@ let env_dir = mktempdir()
     Pkg.add("JSON"; io = devnull)
 end
 
-using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+using EarthSciDiscretizations: eval_coeff
 using JSON
 
 const HERE    = @__DIR__
@@ -136,12 +136,8 @@ function main()
     raw_rule  = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    # upwind_1st is stencil-form; lower_stencil_to_replacement inserts `replacement`.
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw     = rule_lowered["replacement"]
-    # upwind_1st is stencil-form so lower_stencil_to_replacement inserts a
-    # plain arithmetic replacement (no arrayop wrapper). The arrayop guard is
-    # included for robustness should the rule format evolve.
+    repl_raw     = rule_body["replacement"]
+    # The arrayop guard is included for robustness should the rule format evolve.
     replacement  = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
                    repl_raw["expr"] : repl_raw
 

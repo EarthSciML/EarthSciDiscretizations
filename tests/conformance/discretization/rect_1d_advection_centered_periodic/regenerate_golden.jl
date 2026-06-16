@@ -2,8 +2,7 @@
 #=
 Regenerate golden grad-output arrays for rect_1d_advection_centered_periodic.
 
-Canonical pipeline: load rule JSON → lower_stencil_to_replacement (idempotent
-for centered_2nd_uniform, which already carries a `replacement` field) → evaluate
+Canonical pipeline: load rule JSON → read `replacement` field directly → evaluate
 the replacement AST at each cell via the ESD/ESS passthrough.
 
 Scalar sub-expressions (coefficient terms without `index` ops) are evaluated
@@ -27,7 +26,7 @@ let env_dir = mktempdir()
     Pkg.add("JSON"; io = devnull)
 end
 
-using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+using EarthSciDiscretizations: eval_coeff
 using JSON
 
 const HERE    = @__DIR__
@@ -40,7 +39,7 @@ const MOL531_SHA = "35cc9143dc553ac7d3619738bd77b250c1ed162f"
 # ---------------------------------------------------------------------------
 # Recursive replacement-AST evaluator.
 #
-# Traverses the replacement Dict produced by `lower_stencil_to_replacement`.
+# Traverses the replacement Dict from the rule's `replacement` field.
 # Pure-scalar sub-trees (no `index` ops) delegate to `eval_coeff` which routes
 # through EarthSciSerialization.evaluate_expr — the canonical ESS scalar path.
 # Mixed or `index` nodes are recursed; array lookups use 1-based periodic wrap.
@@ -144,8 +143,7 @@ function main()
     raw_rule = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    rule_lowered = lower_stencil_to_replacement(rule_body)
-    repl_raw = rule_lowered["replacement"]
+    repl_raw = rule_body["replacement"]
     # centered_2nd_uniform ships its replacement wrapped in {op:"arrayop",...};
     # the arithmetic expression lives in repl_raw["expr"].
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?

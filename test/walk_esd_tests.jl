@@ -1,7 +1,7 @@
 module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
-    lower_stencil_to_replacement, lower_stencil_to_scheme,
+    lower_stencil_to_scheme,
     CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval,
     build_ode_problem, build_duo_grid, build_mpas_grid
 import EarthSciSerialization
@@ -1005,29 +1005,21 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
         return "unstructured_ode"
     end
 
-    # `stencil`-form rules without a `replacement` AST are classified via
-    # `lower_stencil_to_replacement`. If the lowering succeeds (all supported
-    # selector families: cartesian, arakawa, latlon, cubed_sphere, vertical),
-    # we proceed to the topology classifier — the runner will call the lowerer
-    # at evaluation time. If the lowering throws (unsupported family), we fall
-    # back to `stencil_form_rule` so the walker surfaces a SKIP with the
-    # tracking bead. Rules that already carry a `replacement` field pass
-    # through unchanged (lowering is idempotent). Multi-output stencil
-    # OBJECTS (keyed by output name, e.g. ppm_reconstruction) are drivable
-    # one output at a time by the fv_cell_average_1d runner when the
-    # fixture declares cell-average sampling; otherwise they remain
-    # `stencil_form_rule` (document-level multi-output emission pends an
-    # RFC §7 extension).
+    # `stencil`-form rules without a `replacement` AST: after esd-t4h all
+    # live latlon/vertical rules carry authored `replacement` fields.  The only
+    # remaining stencil-without-replacement rules are cubed_sphere spec-only
+    # rules (not yet materialised; EINSUM-8 territory).  Multi-output stencil
+    # OBJECTS (keyed by output name, e.g. ppm_reconstruction) are drivable one
+    # output at a time by the fv_cell_average_1d runner when the fixture
+    # declares cell-average sampling; otherwise they remain `stencil_form_rule`.
     if haskey(spec, "stencil") && !haskey(spec, "replacement")
         if spec["stencil"] isa AbstractDict
             sampling_early = String(get(input_json, "sampling", "cell_center"))
             sampling_early == "cell_average" || return "stencil_form_rule"
         else
-            try
-                lower_stencil_to_replacement(spec)
-            catch _
-                return "stencil_form_rule"
-            end
+            # esd-t4h: lower_stencil_to_replacement retired; only cubed_sphere
+            # spec-only stencil rules remain here — skip them for now.
+            return "stencil_form_rule"
         end
     end
 
@@ -1408,12 +1400,11 @@ above cannot succeed today. Once dsc-y0jj's lifter lands:
   in `test_esd_walker.jl` (the 1-line follow-up the witness called).
 """
 function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
-    # 1. Load and lower the rule spec to replacement form.
+    # 1. Load the rule spec (latlon rules carry authored replacement; esd-t4h).
     rule_doc = JSON.parse(read(rule.path, String))
     spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
     spec isa AbstractDict || error("rule spec missing for $(rule.name)")
-    lowered = lower_stencil_to_replacement(spec)
-    repl = lowered["replacement"]
+    repl = spec["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
            repl["expr"] : repl
 
@@ -2058,11 +2049,9 @@ ArrayOp-native port like `_run_layer_b_1d_cartesian_periodic`'s awaits ESS
 scheme support for the vertical grid family (the scheme `grid_family` enum
 is cartesian/cubed_sphere/unstructured today).
 
-Loads the replacement AST from the rule's canonical Layer-A fixture rather than
-calling `lower_stencil_to_replacement` — the stencil-lowered form for vertical
-rules uses face-staggered offsets (both zero) that evaluate to zero for
-cell-center inputs, while the canonical fixture carries the correct cell-center
-centered-difference form: `(u[\$x+1] - u[\$x-1]) / (2*h)`.
+Loads the replacement AST from the rule's canonical Layer-A fixture.  Vertical
+rules now carry authored `replacement` ASTs (esd-t4h), but the canonical fixture
+is the authoritative cell-center form: `(u[\$x+1] - u[\$x-1]) / (2*h)`.
 """
 function _run_layer_b_1d_vertical_column(rule::RuleFile, mms, n::Int)
     # Load the cell-center centered-difference replacement from the canonical fixture.

@@ -1,6 +1,6 @@
 @testsnippet AdvectionDiscretizationConformanceSetup begin
     using Test
-    using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using EarthSciDiscretizations: eval_coeff
     using JSON
 end
 
@@ -14,7 +14,7 @@ end
 # ---------------------------------------------------------------------------
 
 @testsnippet AdvectionConformanceHelpers begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement, eval_coeff
+    using EarthSciDiscretizations: eval_coeff
     using JSON
 
     function _has_index(node)::Bool
@@ -68,8 +68,7 @@ end
                                      u::Vector{Float64}, dx::Float64)
         raw  = JSON.parsefile(rule_path)
         body = raw["discretizations"][rule_name]
-        lw   = lower_stencil_to_replacement(body)
-        repl = lw["replacement"]
+        repl = body["replacement"]
         expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
                repl["expr"] : repl
         N    = length(u)
@@ -87,7 +86,6 @@ end
 end
 
 @testsnippet NonuniformAdvectionHelpers begin
-    using EarthSciDiscretizations: lower_stencil_to_replacement
     using JSON
 
     # Per-cell evaluator for rules with index("dx", "$x") coefficients.
@@ -132,8 +130,7 @@ end
                                                 u::Vector{Float64}, dx_arr::Vector{Float64})
         raw  = JSON.parsefile(rule_path)
         body = raw["discretizations"][rule_name]
-        lw   = lower_stencil_to_replacement(body)
-        repl = lw["replacement"]
+        repl = body["replacement"]
         expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
                repl["expr"] : repl
         N = length(u)

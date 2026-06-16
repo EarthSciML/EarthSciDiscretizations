@@ -119,9 +119,8 @@ export project_initial_condition
 export RuleFile, load_rules
 export eval_coeff
 
-# Exports: Stencil-form → replacement-form lowerer (dsc-y0jj)
-export lower_stencil_to_replacement
 # Exports: Stencil-form → ESS §7 scheme + use:-rule lowerer (dsc-kswm)
+# lower_stencil_to_replacement retired in esd-t4h; only lower_stencil_to_scheme remains.
 export lower_stencil_to_scheme
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
