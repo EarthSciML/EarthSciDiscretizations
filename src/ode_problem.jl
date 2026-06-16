@@ -56,16 +56,20 @@ function build_ode_problem(esm_path::AbstractString;
     end
 
     # Path A: rule-engine discretize pipeline.
-    expr_ics = _eval_expression_ics(esm)
-    merge!(expr_ics, extra_ics)
+    # _prepare_expression_ics! mutates esm: converts type:expression ICs to
+    # initialization_equations for the ESS IC-arrayop engine, and returns the
+    # numeric per-cell ICs (e.g. dz[k]) and coord const_arrays separately.
+    numeric_ics, coord_arrays = _prepare_expression_ics!(esm)
+    merge!(numeric_ics, extra_ics)
 
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
 
     # Pre-bind unstructured connectivity into equations (esd-aij Route A).
-    isempty(loaded_grids) || _prebind_unstructured!(disc, loaded_grids, expr_ics)
+    isempty(loaded_grids) || _prebind_unstructured!(disc, loaded_grids, numeric_ics)
 
     f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(disc;
-                                    initial_conditions = expr_ics)
+                                    initial_conditions = numeric_ics,
+                                    const_arrays = coord_arrays)
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
     return prob, var_map
@@ -144,54 +148,26 @@ end
 # Expression IC helpers
 # ---------------------------------------------------------------------------
 
-# Evaluate an EarthSciSerialization Expr at given variable→Float64 bindings.
-# Supports: NumExpr, IntExpr, VarExpr, OpExpr (sin, cos, exp, +, -, *, /, ^).
-function _eval_expr(expr::EarthSciSerialization.NumExpr, bindings::Dict{String,Float64})
-    return expr.value
-end
-function _eval_expr(expr::EarthSciSerialization.IntExpr, bindings::Dict{String,Float64})
-    return Float64(expr.value)
-end
-function _eval_expr(expr::EarthSciSerialization.VarExpr, bindings::Dict{String,Float64})
-    v = get(bindings, expr.name, nothing)
-    v !== nothing && return v
-    error("Unbound variable '$(expr.name)' in expression IC (bound: $(sort!(collect(keys(bindings)))))")
-end
-function _eval_expr(expr::EarthSciSerialization.OpExpr, bindings::Dict{String,Float64})
-    op   = expr.op
-    args = [_eval_expr(a, bindings) for a in expr.args]
-    if     op == "+"   return length(args) == 1 ? args[1] : sum(args)
-    elseif op == "*"   return prod(args)
-    elseif op == "-"   return length(args) == 1 ? -args[1] : args[1] - args[2]
-    elseif op == "/"   return args[1] / args[2]
-    elseif op == "^"   return args[1]^args[2]
-    elseif op == "sin" return sin(args[1])
-    elseif op == "cos" return cos(args[1])
-    elseif op == "exp" return exp(args[1])
-    else
-        error("Unsupported operator '$(op)' in expression IC")
-    end
-end
-
-# Read expression ICs from all models in a merged ESM dict and evaluate each
-# variable's IC at every grid cell using physical cell-centre coordinates.
-# Returns a Dict{String,Float64} keyed by "varname[i]" / "varname[i,j]".
-function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
-    result = Dict{String,Float64}()
-    grids  = get(esm, "grids", Dict{String,Any}())
+# Mutates esm: converts InitialConditions type:expression to initialization_equations
+# for the ESS IC-arrayop engine (ess-tt6). Returns:
+#   numeric_ics   — Dict{String,Float64} of per-cell numeric ICs (e.g. "dz[k]")
+#   coord_arrays  — Dict{String,Vector{Float64}} of "coord_<dim>" cell-centre arrays
+#                   passed to build_evaluator as const_arrays.
+function _prepare_expression_ics!(esm::Dict{String,Any})
+    numeric_ics  = Dict{String,Float64}()
+    coord_arrays = Dict{String,Vector{Float64}}()
+    grids = get(esm, "grids", Dict{String,Any}())
 
     for (_, mspec) in get(esm, "models", Dict{String,Any}())
         ic_spec = get(mspec, "initial_conditions", nothing)
         ic_spec === nothing && continue
 
-        # Pick up plain numeric per-cell ICs injected by _inject_grids!
-        # (e.g. "dz[k]" entries added directly to the IC dict for non-uniform grids).
-        # These must reach build_evaluator so _discover_array_cells finds the array cells.
+        # Collect numeric per-cell ICs injected by _inject_grids! (e.g. "dz[k]").
         for (key, val) in ic_spec
             skey = String(key)
             match(r"^([^\[]+)\[[0-9,]+\]$", skey) === nothing && continue
             val isa Real || continue
-            result[skey] = Float64(val)
+            numeric_ics[skey] = Float64(val)
         end
 
         get(ic_spec, "type", "") == "expression" || continue
@@ -200,13 +176,11 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
         grid = get(grids, grid_name, nothing)
         grid === nothing && continue
 
-        # Dimension sizes from the merged grid.
         dim_size = Dict{String,Int}()
         for d in get(grid, "dimensions", Any[])
             dim_size[String(d["name"])] = Int(d["size"])
         end
 
-        # Spacing from "d<dimname>" parameters (set by _inject_grids! from GDD).
         vars = get(mspec, "variables", Dict{String,Any}())
         dim_spacing = Dict{String,Float64}()
         for (pname, vspec) in vars
@@ -219,17 +193,15 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
                 haskey(dim_size, dname) && (dim_spacing[dname] = Float64(dflt))
             end
         end
-        # Fallback: infer spacing from 1/N for any dimension without a "d<dim>" param.
         for (dname, N) in dim_size
             haskey(dim_spacing, dname) || (dim_spacing[dname] = 1.0 / N)
         end
 
-        # For non-uniform grids, reconstruct physical cell centres from the per-cell
-        # width ICs injected by _inject_grids! (e.g. "dz[k]" entries in ic_spec).
-        # When present, these override the uniform-(k-0.5)*h coordinate for that axis.
-        dim_centres = Dict{String, Vector{Float64}}()
+        # Build coord_<dim> const_arrays (cell centres; nonuniform uses per-cell widths).
         for (dname, N) in dim_size
-            pname = "d$(dname)"  # e.g. "dz"
+            coord_name = "coord_$dname"
+            haskey(coord_arrays, coord_name) && continue
+            pname = "d$(dname)"
             widths = Float64[]
             for k in 1:N
                 val = get(ic_spec, "$(pname)[$k]", nothing)
@@ -238,57 +210,27 @@ function _eval_expression_ics(esm::Dict{String,Any})::Dict{String,Float64}
             end
             if length(widths) == N
                 cumwidths = cumsum(widths)
-                dim_centres[dname] = [cumwidths[k] - widths[k] / 2.0 for k in 1:N]
+                coord_arrays[coord_name] = [cumwidths[k] - widths[k] / 2.0 for k in 1:N]
+            else
+                h = dim_spacing[dname]
+                coord_arrays[coord_name] = [(i - 0.5) * h for i in 1:N]
             end
         end
 
+        # Move expression ICs to initialization_equations for ESS IC-arrayop engine.
+        init_eqs = get!(mspec, "initialization_equations", Any[])
+        if !(init_eqs isa AbstractVector)
+            init_eqs = Any[]
+            mspec["initialization_equations"] = init_eqs
+        end
         for (var_name, expr_json) in get(ic_spec, "values", Dict{String,Any}())
-            vstr  = String(var_name)
-            vspec = get(vars, vstr, nothing)
-            vspec === nothing && continue
-            shape = get(vspec, "shape", nothing)
-            (shape === nothing || isempty(shape)) && continue
-            shape_strs = String.(shape)
-
-            # Variable location determines the physical coordinate of each index.
-            # face_x: index i sits at x = (i-1)*h (left face of cell i).
-            # face_y: index j sits at y = (j-1)*h (bottom face of cell j).
-            # All other locations (cell_center, vertex, …): (i-0.5)*h.
-            location = String(get(vspec, "location", "cell_center"))
-
-            ic_expr = EarthSciSerialization.parse_expression(expr_json)
-
-            if length(shape_strs) == 1
-                d1 = shape_strs[1]
-                N1 = dim_size[d1]; h1 = dim_spacing[d1]
-                centres1 = get(dim_centres, d1, nothing)
-                c1 = location == "face_x" ? -1.0 : -0.5
-                for i in 1:N1
-                    z1 = centres1 !== nothing ? centres1[i] : (i + c1) * h1
-                    bindings = Dict{String,Float64}(d1 => z1)
-                    result["$(vstr)[$i]"] = _eval_expr(ic_expr, bindings)
-                end
-            elseif length(shape_strs) == 2
-                d1 = shape_strs[1]; d2 = shape_strs[2]
-                N1 = dim_size[d1]; h1 = dim_spacing[d1]
-                N2 = dim_size[d2]; h2 = dim_spacing[d2]
-                centres1 = get(dim_centres, d1, nothing)
-                centres2 = get(dim_centres, d2, nothing)
-                c1 = location == "face_x" ? -1.0 : -0.5
-                c2 = location == "face_y" ? -1.0 : -0.5
-                for i in 1:N1, j in 1:N2
-                    z1 = centres1 !== nothing ? centres1[i] : (i + c1) * h1
-                    z2 = centres2 !== nothing ? centres2[j] : (j + c2) * h2
-                    bindings = Dict{String,Float64}(
-                        d1 => z1,
-                        d2 => z2,
-                    )
-                    result["$(vstr)[$i,$j]"] = _eval_expr(ic_expr, bindings)
-                end
-            end
+            push!(init_eqs, Dict{String,Any}("lhs" => String(var_name), "rhs" => expr_json))
         end
+        delete!(ic_spec, "type")
+        delete!(ic_spec, "values")
     end
-    result
+
+    return numeric_ics, coord_arrays
 end
 
 # ---------------------------------------------------------------------------
