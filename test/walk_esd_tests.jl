@@ -2,7 +2,6 @@ module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
     lower_stencil_to_replacement, lower_stencil_to_scheme,
-    lower_stencil_to_canonical_replacement,
     CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval,
     build_ode_problem, build_duo_grid, build_mpas_grid
 import EarthSciSerialization
@@ -1547,142 +1546,50 @@ end
 """
     _run_layer_b_2d_arakawa_periodic(rule, mms, n) -> Float64
 
-Layer-B canonical-pipeline runner for `grid_family=arakawa` rules
-(scaffolded by ESD/dsc-70zp). Drives one resolution of the 2D periodic
-divergence convergence sweep through the canonical pipeline:
+Layer-B canonical-pipeline runner for `grid_family=arakawa` rules (esd-eg5).
+Drives one resolution of the 2D periodic divergence convergence sweep through
+the canonical `build_ode_problem` pipeline:
 
-1. Build a parametric `.esm` document that wires `rule` against a 2D
-   periodic Cartesian model (`family=arakawa`, stagger=C) with grid
-   sized `n × n` over `[0, 1]²`.
-2. Run `EarthSciSerialization.discretize` to apply the rule and emit
-   the canonical-form ArrayOp AST. The C-grid metadata (face-x and
-   face-y face positions) comes from the ESS arakawa grid; the runner
-   does not synthesize face coordinates locally.
-3. Build an evaluator with `EarthSciSerialization.build_evaluator`
-   (the documented official ESS Julia tree-walk runner per
-   ESS/AGENTS.md §"Multiple official runners per binding are OK").
-4. Sample `mms.ic(x, y) = (F_x, F_y)` at face_x edges (i = 0..n-1) and
-   face_y edges (j = 0..n-1) respectively to populate `u0` per
-   `var_map`.
-5. Compute `du = f!(u0, p, 0)` to obtain the discrete divergence at
-   cell centers.
-6. Return the L_inf error against `mms.derivative(x, y)` evaluated at
-   cell centers `((i + 0.5)/n, (j + 0.5)/n)`. Both axes wrap
-   periodically per the C-grid convention; no boundary cells excluded
-   (the grid is fully periodic).
+1. Locate the rule's integration ESM fixture (`fixtures/integration/<name>_pde.esm`)
+   and the pre-built GDD (`discretizations/gdd/arakawa_2d_periodic_n<n>.gdd.json`).
+2. Call `build_ode_problem(esm_path; grid_ref=gdd_path)` to construct an
+   `ODEProblem` and `var_map` via the standard ESD injection path.
+3. Override `u0` with the MMS vector field sampled at face positions:
+   `Fu[i,j]` at `x=(i-1)*dx, y=(j-0.5)*dy` (face_x western face of cell i);
+   `Fv[i,j]` at `x=(i-0.5)*dx, y=(j-1)*dy` (face_y southern face of cell j).
+4. Evaluate `prob.f(du, u0, p, 0)` once to get discrete divergences.
+5. Return the L_inf error against `mms.derivative(x, y)` at cell centers.
 
-The expected order is O(h²) — the `expected_min_order=1.9` declared
-by `divergence_arakawa_c/fixtures/convergence/expected.esm` leaves a
-0.1 margin for pre-asymptotic drift over the n=16→32→64→128 sweep.
-
-# Activation status (ESD/dsc-70zp partial-land per witness Path C)
-
-This runner is **scaffolded**; `_LAYER_B_SUPPORTED_TOPOLOGIES` already
-contains `"2d_arakawa_periodic"` (forward-compat), but the dispatcher's
-`stencil_form_rule` gate routes `divergence_arakawa_c` to a SKIP before
-this body executes. The activation prerequisite is ESD/dsc-y0jj
-(stencil → replacement lift). `divergence_arakawa_c` ships only a
-`stencil` spec (4-row Arakawa-C: face_x ±1·1/dx, face_y ±1·1/dy, see
-`discretizations/finite_volume/divergence_arakawa_c.json`) and ESS
-`parse_rule` rejects stencil-only rules with `E_RULE_REPLACEMENT_MISSING`
-(`rule_engine.jl:695-699`), so step (2) above cannot succeed today.
-Once dsc-y0jj's lifter lands:
-
-- the `_layer_b_topology_key` stencil-form gate retires (or routes
-  lifted rules through),
-- this `error(...)` body is replaced by the implementation sketched
-  above, and
-- `divergence_arakawa_c` gains its first Layer-B PASS (the
-  `layer_b_passes` assertion in `test_esd_walker.jl` is bumped in the
-  same follow-up).
+The expected order is O(h²) — `expected_min_order=1.9` in the convergence
+fixture leaves a 0.1 margin over the n=16→32→64→128 sweep.
 """
 function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
-    # 1. Load the stencil from the rule JSON. The arakawa divergence stencil
-    #    has face_x and face_y entries; we need the stagger field to recover
-    #    which component of the MMS vector field (F_x or F_y) to sample.
-    rule_doc = JSON.parse(read(rule.path, String))
-    spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
-    spec isa AbstractDict || error("rule spec missing for $(rule.name)")
-    stencil = get(spec, "stencil", nothing)
-    stencil isa AbstractVector || error("rule $(rule.name) has no stencil array")
+    disc_dir  = dirname(dirname(rule.path))  # .../discretizations
+    esm_path  = joinpath(dirname(rule.path), rule.name, "fixtures", "integration",
+                         "$(rule.name)_pde.esm")
+    gdd_path  = joinpath(disc_dir, "gdd", "arakawa_2d_periodic_n$(n).gdd.json")
+
+    isfile(esm_path) || error("arakawa runner: integration ESM not found: $esm_path")
+    isfile(gdd_path) || error("arakawa runner: GDD not found: $gdd_path")
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
     dx = 1.0 / n
     dy = 1.0 / n
-
-    # 2. Build a per-cell scalar ESM model. Each cell (i,j) gets one state
-    #    variable div_i_j. The RHS is built from the stencil's coeff ASTs
-    #    multiplied by the MMS face values (literal numbers pre-sampled from
-    #    mms.ic). Parameters: dx, dy (referenced by the coeff ASTs).
-    variables = Dict{String, Any}()
-    variables["dx"] = Dict{String, Any}("type" => "parameter", "default" => dx, "units" => "1")
-    variables["dy"] = Dict{String, Any}("type" => "parameter", "default" => dy, "units" => "1")
+    u0 = copy(prob.u0)
     for j in 1:n, i in 1:n
-        variables["div_$(i)_$(j)"] = Dict{String, Any}(
-            "type" => "state", "default" => 0.0, "units" => "1",
-        )
+        u0[var_map["Fu[$i,$j]"]] = mms.ic((i - 1) * dx, (j - 0.5) * dy)[1]
+        u0[var_map["Fv[$i,$j]"]] = mms.ic((i - 0.5) * dx, (j - 1) * dy)[2]
     end
-
-    # 3. Build equations.
-    equations = Any[]
-    for j in 1:n, i in 1:n
-        cx = (i - 0.5) * dx
-        cy = (j - 0.5) * dy
-
-        terms = Any[]
-        for entry in stencil
-            sel     = entry["selector"]
-            stagger = String(sel["stagger"])
-            offset  = Int(sel["offset"])
-            coeff   = entry["coeff"]  # AST (references dx or dy — kept as param)
-
-            # Sample the appropriate MMS component at the face position.
-            # face_x: vertical face at x = (i-1+offset)/n, y_center = cy. Periodic.
-            # face_y: horizontal face at x_center = cx, y = (j-1+offset)/n. Periodic.
-            face_val = if stagger == "face_x"
-                fx_x = mod((i - 1 + offset) * dx, 1.0)
-                mms.ic(fx_x, cy)[1]
-            elseif stagger == "face_y"
-                fy_y = mod((j - 1 + offset) * dy, 1.0)
-                mms.ic(cx, fy_y)[2]
-            else
-                error("unexpected stagger '$(stagger)' in arakawa stencil for $(rule.name)")
-            end
-
-            # term = coeff_AST * literal_face_value. The coeff AST (e.g. {/,[-1,"dx"]})
-            # is evaluated by ESS's tree-walk at f! call time via build_evaluator.
-            push!(terms, Dict{String, Any}("op" => "*", "args" => Any[coeff, face_val]))
-        end
-
-        rhs = length(terms) == 1 ? terms[1] :
-              Dict{String, Any}("op" => "+", "args" => terms)
-        push!(equations, Dict{String, Any}(
-            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["div_$(i)_$(j)"], "wrt" => "t"),
-            "rhs" => rhs,
-        ))
-    end
-
-    esm = Dict{String, Any}(
-        "esm"      => "0.2.0",
-        "metadata" => Dict{String, Any}("name" => "layer_b_arakawa_n$(n)"),
-        "models"   => Dict{String, Any}(
-            "M" => Dict{String, Any}("variables" => variables, "equations" => equations),
-        ),
-    )
-
-    # 4-5. Canonical pipeline.
-    disc = EarthSciSerialization.discretize(esm)
-    f!, u0, p, _tspan, var_map = EarthSciSerialization.build_evaluator(disc)
 
     du = similar(u0)
-    f!(du, u0, p, 0.0)
+    prob.f(du, u0, prob.p, 0.0)
 
-    # 6. L_inf error vs analytic divergence at cell centers. Both axes are
-    #    periodic — no boundary rows excluded.
     err = 0.0
     for j in 1:n, i in 1:n
         cx = (i - 0.5) * dx
         cy = (j - 0.5) * dy
-        e  = abs(du[var_map["div_$(i)_$(j)"]] - mms.derivative(cx, cy))
+        e  = abs(du[var_map["div[$i,$j]"]] - mms.derivative(cx, cy))
         err = max(err, e)
     end
     return err
@@ -1704,11 +1611,9 @@ the array variable, and ESS does the rest.
    (e.g. `grad(u, dim="i")`). The rule rides one of two document forms:
    - stencil form → `lower_stencil_to_scheme` emits the
      `discretizations.<name>` scheme + `use:` rule (ESS RFC §7.2.1); or
-   - replacement form → the `applies_to` pattern + the replacement AST
-     lowered to canonical `\$target` component form
-     (`lower_stencil_to_canonical_replacement`: `\$x → i`) as a plain
-     document rule. Canonical component names are position-based, so the
-     document's dimension names stay free on both paths.
+   - replacement form → the `applies_to` pattern + the authored
+     replacement AST as a plain document rule. ESS pattern-matches the
+     `dim` bindings in `applies_to` and expands the arrayop accordingly.
 3. `EarthSciSerialization.discretize(esm; lift_1d_arrayop=true)` rewrites
    the PDE op via the rule engine / scheme expansion, lifts the equation
    to arrayop form with ranges from the grid, and folds periodic boundary
@@ -1789,12 +1694,11 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
         esm["discretizations"] = Dict{String, Any}(rule.name => scheme)
         esm["rules"] = Any[use_rule]
     else
-        # Replacement form → plain pattern + replacement document rule with
-        # axis pattern variables lowered to canonical $target components.
+        # Replacement form → plain pattern + authored replacement AST.
         esm["rules"] = Any[Dict{String, Any}(
             "name"        => rule.name,
             "pattern"     => spec["applies_to"],
-            "replacement" => lower_stencil_to_canonical_replacement(spec),
+            "replacement" => spec["replacement"],
         )]
     end
 
@@ -1831,12 +1735,11 @@ n×n periodic grid:
    size `n`), array state `u` with `shape: ["x", "y"]`, parameters
    `dx = dy = 1/n`, and the equation `D(u, wrt=t) = <applies_to on u>`
    (e.g. `laplacian(u)`).
-2. Supply the rule as a pattern + replacement document rule, lowering the
-   catalog stencil via `lower_stencil_to_canonical_replacement`: a
-   dim-less pattern like `laplacian(\$u)` binds no axis variables, so the
-   replacement references `\$target`'s components by their canonical
-   names `i`/`j` (RFC §7.1 reserved keywords), which is position-based —
-   the document's dimension names stay free.
+2. Supply the rule as a pattern + replacement document rule using the
+   authored canonical replacement (bare `+` expr with `i`/`j` RFC §7.1
+   reserved keywords). The dim-less pattern like `laplacian(\$u)` binds
+   no axis variables; canonical component names are resolved positionally
+   by the arrayop lift regardless of the document's dimension names.
 3. `discretize` rewrites the PDE op, lifts to arrayop (multidimensional
    variables lift by default — no `lift_1d_arrayop` needed), and folds
    periodic boundary accesses; `build_evaluator` expands the arrayop
@@ -1849,7 +1752,7 @@ function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     spec = get(get(rule_doc, "discretizations", Dict()), rule.name, nothing)
     spec isa AbstractDict || error("rule spec missing for $(rule.name)")
 
-    expr = lower_stencil_to_canonical_replacement(spec)
+    expr = spec["replacement"]
 
     h = 1.0 / n
     cell(c) = (c - 0.5) * h
@@ -2044,11 +1947,10 @@ end
 # variable — including those on NESTED operators, e.g.
 # grad(grad($u, dim=$y), dim=$x) — maps to a document dimension name.
 # Dim pattern variables map positionally by sorted name onto `dim_names`
-# (the same order `lower_stencil_to_canonical_replacement` assigns
-# canonical components: sorted $x → dim 1 → i, $y → dim 2 → j), so the
-# equation's dims, the document's grid, and the lowered replacement's
-# components stay aligned. Purely structural — mirrors how ESS pattern
-# matching will re-bind the same variables during `discretize`.
+# (sorted $x → dim 1, $y → dim 2), so the equation's dims, the document's
+# grid, and the authored replacement's canonical components stay aligned.
+# Purely structural — mirrors how ESS pattern matching re-binds the same
+# variables during `discretize`.
 function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
                                          dim_names::Vector{String})
     applies_to = get(spec, "applies_to", nothing)
@@ -2436,6 +2338,54 @@ function run_conservation_check(rule::RuleFile, conservation_dir::AbstractString
     end
 end
 
+# Resolve a canonical index argument (bare "i"/"j" or {"op":"+","args":["i"/"j",off]}).
+function _resolve_repl_axis(arg, ci::Int, cj::Int)::Int
+    if arg isa AbstractString
+        s = String(arg)
+        s == "i" && return ci
+        s == "j" && return cj
+        error("unknown bare axis variable '$s' in canonical replacement")
+    end
+    arg isa AbstractDict || error("unexpected index arg type $(typeof(arg))")
+    op = String(arg["op"])
+    base_name = String(arg["args"][1])
+    off = Int(arg["args"][2])
+    base = (base_name == "i") ? ci : (base_name == "j" ? cj : error("unknown axis var '$base_name'"))
+    op == "+" && return base + off
+    op == "-" && return base - off
+    error("unsupported index offset op '$op'")
+end
+
+# Evaluate a canonical bare replacement AST at cell (ci, cj) with periodic wrap.
+function _eval_repl_2d(node, fields::Dict{String, Matrix{Float64}}, bindings::Dict{String, Float64}, ci::Int, cj::Int, nx::Int, ny::Int)::Float64
+    node isa Number && return Float64(node)
+    if node isa AbstractString
+        s = String(node)
+        s == "i" && return Float64(ci)
+        s == "j" && return Float64(cj)
+        haskey(bindings, s) && return bindings[s]
+        error("unresolved variable '$s' in canonical replacement")
+    end
+    node isa AbstractDict || error("unexpected node type $(typeof(node))")
+    op   = String(node["op"])
+    args = node["args"]
+    if op == "index"
+        length(args) == 3 || error("index expects 3 args, got $(length(args))")
+        fname = String(args[1])
+        mat   = get(fields, fname, nothing)
+        mat === nothing && error("unknown field '$fname' in canonical replacement")
+        ii = _resolve_repl_axis(args[2], ci, cj)
+        jj = _resolve_repl_axis(args[3], ci, cj)
+        return mat[mod(ii - 1, nx) + 1, mod(jj - 1, ny) + 1]
+    end
+    ev(a) = _eval_repl_2d(a, fields, bindings, ci, cj, nx, ny)
+    op == "+" && return sum(ev(a) for a in args)
+    op == "*" && return prod(ev(a) for a in args)
+    op == "/" && return ev(args[1]) / ev(args[2])
+    op == "-" && return length(args) == 1 ? -ev(args[1]) : ev(args[1]) - ev(args[2])
+    error("unsupported op '$op' in canonical replacement")
+end
+
 # Synthesize a periodic flux field from a deterministic pseudo-random seed.
 # A linear congruential generator is used so the fixture is bit-reproducible
 # across Julia versions without depending on a stdlib RNG implementation.
@@ -2459,15 +2409,11 @@ function _run_conservation_divergence_2d_periodic(rule::RuleFile, fixture::Abstr
         return LayerResult(LAYER_FAIL, "failed to parse rule $(relpath_from_repo(rule.path)): $(sprint(showerror, err))")
     end
     spec = get(get(rule_json, "discretizations", Dict()), rule.name, nothing)
-    if !(spec isa AbstractDict) || !haskey(spec, "stencil")
+    if !(spec isa AbstractDict)
         return LayerResult(
             LAYER_FAIL,
-            "rule $(rule.name) has no `stencil` under discretizations.$(rule.name)",
+            "rule $(rule.name) has no spec under discretizations.$(rule.name)",
         )
-    end
-    stencil = spec["stencil"]
-    if !(stencil isa AbstractVector) || isempty(stencil)
-        return LayerResult(LAYER_FAIL, "rule $(rule.name) has empty stencil")
     end
 
     grid = get(fixture, "grid", nothing)
@@ -2485,35 +2431,50 @@ function _run_conservation_divergence_2d_periodic(rule::RuleFile, fixture::Abstr
     Fy = reshape(_seeded_flux_field(seed + 1, nx * ny), nx, ny)
     bindings = Dict{String, Float64}("dx" => dx, "dy" => dy)
 
-    # Evaluate the rule's stencil at every cell; sum the per-cell divergence.
-    # Periodic wrap is applied on both axes (modulo nx / ny). The stencil
-    # entries are interpreted via their `selector.stagger` / `selector.axis`
-    # so we don't hard-code the rule's algebraic shape.
     div_sum = 0.0
-    for j in 1:ny, i in 1:nx
-        cell_div = 0.0
-        for entry in stencil
-            sel = entry["selector"]
-            kind = String(get(sel, "kind", ""))
-            kind == "arakawa" ||
-                return LayerResult(LAYER_FAIL, "selector kind $(repr(kind)) not supported by layer-D 2D periodic runner")
-            stagger = String(get(sel, "stagger", ""))
-            axis = String(get(sel, "axis", ""))
-            offset = Int(get(sel, "offset", 0))
-            coeff = eval_coeff(entry["coeff"], bindings)
-            value = if stagger == "face_x" && axis == "\$x"
-                Fx[mod(i - 1 + offset, nx) + 1, j]
-            elseif stagger == "face_y" && axis == "\$y"
-                Fy[i, mod(j - 1 + offset, ny) + 1]
-            else
-                return LayerResult(
-                    LAYER_FAIL,
-                    "unsupported (stagger=$(stagger), axis=$(axis)) for layer-D 2D periodic runner",
-                )
-            end
-            cell_div += coeff * value
+    if haskey(spec, "stencil")
+        stencil = spec["stencil"]
+        if !(stencil isa AbstractVector) || isempty(stencil)
+            return LayerResult(LAYER_FAIL, "rule $(rule.name) has empty stencil")
         end
-        div_sum += cell_div
+        # Evaluate stencil entries at every cell; periodic wrap on both axes.
+        for j in 1:ny, i in 1:nx
+            cell_div = 0.0
+            for entry in stencil
+                sel = entry["selector"]
+                kind = String(get(sel, "kind", ""))
+                kind == "arakawa" ||
+                    return LayerResult(LAYER_FAIL, "selector kind $(repr(kind)) not supported by layer-D 2D periodic runner")
+                stagger = String(get(sel, "stagger", ""))
+                axis = String(get(sel, "axis", ""))
+                offset = Int(get(sel, "offset", 0))
+                coeff = eval_coeff(entry["coeff"], bindings)
+                value = if stagger == "face_x" && axis == "\$x"
+                    Fx[mod(i - 1 + offset, nx) + 1, j]
+                elseif stagger == "face_y" && axis == "\$y"
+                    Fy[i, mod(j - 1 + offset, ny) + 1]
+                else
+                    return LayerResult(
+                        LAYER_FAIL,
+                        "unsupported (stagger=$(stagger), axis=$(axis)) for layer-D 2D periodic runner",
+                    )
+                end
+                cell_div += coeff * value
+            end
+            div_sum += cell_div
+        end
+    elseif haskey(spec, "replacement")
+        # Canonical bare replacement (esd-eg5): evaluate AST at each cell.
+        repl   = spec["replacement"]
+        fields = Dict{String, Matrix{Float64}}("\$Fx" => Fx, "\$Fy" => Fy)
+        for j in 1:ny, i in 1:nx
+            div_sum += _eval_repl_2d(repl, fields, bindings, i, j, nx, ny)
+        end
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "rule $(rule.name) has no `stencil` or `replacement` under discretizations.$(rule.name)",
+        )
     end
 
     tol = Float64(get(fixture, "tolerance", 1.0e-12))

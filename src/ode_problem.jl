@@ -573,7 +573,7 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
             # Path-A/replacement: latlon, vertical (literal axis names; lower_stencil_to_replacement).
             # Path-A/replacement: cubed_sphere (plural selectors; lower_stencil_to_replacement keeps axis names).
-            # Path-A/canonical: arakawa and other $-axis kinds (lower_stencil_to_canonical_replacement).
+            # Arakawa rules carry an authored canonical replacement (esd-eg5); no stencil path.
             if kind in ("latlon", "vertical")
                 lowered = lower_stencil_to_replacement(spec)
                 replacement = lowered["replacement"]
@@ -615,13 +615,6 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
                     "name"        => rname,
                     "pattern"     => spec["applies_to"],
                     "replacement" => lowered["replacement"],
-                ))
-            else
-                repl = lower_stencil_to_canonical_replacement(spec)
-                push!(rules, Dict{String, Any}(
-                    "name"        => rname,
-                    "pattern"     => spec["applies_to"],
-                    "replacement" => repl,
                 ))
             end
         elseif haskey(spec, "replacement")

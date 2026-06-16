@@ -721,21 +721,17 @@ end
     @test occursin("\"grid_family\"", content)
     @test occursin("\"cartesian\"", content)
     @test occursin("\"op\": \"laplacian\"", content)
-    # Stencil form with arakawa selectors: six entries covering $x and $y axes.
-    @test occursin("\"stencil\"", content)
-    @test occursin("\"kind\": \"arakawa\"", content)
-    @test occursin("\"\$x\"", content)
-    @test occursin("\"\$y\"", content)
-    @test occursin("\"stagger\": \"cell_center\"", content)
-    # All three offsets per axis.
-    @test occursin("\"offset\": -1", content)
-    @test occursin("\"offset\": 0", content)
-    @test occursin("\"offset\": 1", content)
-    # Inline arrayop replacement added in EINSUM-4 (esd-770); stencil is kept for
-    # Layer-B and Layer-D runners.
+    # Canonical bare replacement (esd-eg5): stencil/arrayop retired.
+    # Six terms: u[i±1,j]/dx^2 and u[i,j±1]/dy^2 with canonical i/j indices.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"arrayop\"", content)
+    @test !occursin("\"output_idx\"", content)
     @test occursin("\"replacement\"", content)
-    @test occursin("\"arrayop\"", content)
-    @test occursin("\"output_idx\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"i\"", content)
+    @test occursin("\"j\"", content)
+    @test occursin("\"dx\"", content)
+    @test occursin("\"dy\"", content)
 end
 
 @testitem "nonlinear_laplacian_uniform scheme is discoverable and well-formed (esd-1p7)" begin

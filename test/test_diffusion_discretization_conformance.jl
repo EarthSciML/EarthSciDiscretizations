@@ -24,8 +24,8 @@ end
     function _resolve_axis_idx_2d(ie, xi::Int, yi::Int)::Int
         if ie isa AbstractString
             s = String(ie)
-            s == "\$x" && return xi
-            s == "\$y" && return yi
+            (s == "\$x" || s == "i") && return xi
+            (s == "\$y" || s == "j") && return yi
             error("unknown axis variable '$s'")
         end
         ie isa AbstractDict || error("unexpected type $(typeof(ie))")
@@ -33,7 +33,7 @@ end
         op2 = String(ie["op"])
         lhs = String(ia[1])
         off = Int(ia[2])
-        base = lhs == "\$x" ? xi : (lhs == "\$y" ? yi : error("unknown lhs '$lhs'"))
+        base = (lhs in ("\$x", "i")) ? xi : ((lhs in ("\$y", "j")) ? yi : error("unknown lhs '$lhs'"))
         op2 == "+" && return base + off
         op2 == "-" && return base - off
         error("unsupported offset op '$op2'")
@@ -49,8 +49,8 @@ end
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
-            s == "\$x" && return Float64(xi)
-            s == "\$y" && return Float64(yi)
+            (s == "\$x" || s == "i") && return Float64(xi)
+            (s == "\$y" || s == "j") && return Float64(yi)
             haskey(bindings, s) && return bindings[s]
             error("unresolved variable '$s'")
         end

@@ -31,12 +31,6 @@ Public surface:
   `discretize` (scheme expansion → ArrayOp lift → tree-walk eval). This
   is the canonical-pipeline path; currently cartesian-only, mirroring
   the ESS scheme-expansion foundation (esm-j1u).
-- [`lower_stencil_to_canonical_replacement`](@ref) — replacement
-  expression with axis pattern variables substituted by canonical
-  `\$target` component names (`i`, `j`, …; RFC §7.1). The form multi-axis
-  (dim-less pattern) rules need to ride ESS `discretize` as plain
-  `pattern` + `replacement` document rules.
-
 Selector kinds currently supported by `lower_stencil_to_replacement`:
 `latlon`, `cubed_sphere`, `vertical`. The `cartesian` family lowers via
 `lower_stencil_to_scheme` (ESS scheme-expansion path). The `arakawa` family
@@ -226,8 +220,7 @@ ESS `expand_scheme`. Supported `grid_family` values:
   `\$`-prefixed pattern variable.
 
 Other `grid_family` values (e.g. `"latlon"`, `"vertical"`) raise
-`ArgumentError`; those go through `lower_stencil_to_replacement` or
-`lower_stencil_to_canonical_replacement` instead.
+`ArgumentError`; those go through `lower_stencil_to_replacement` instead.
 
 Multi-output rules (catalog extension: `stencil` is an **object keyed
 by output name**, e.g. `ppm_reconstruction`'s `q_left_edge` /
@@ -278,7 +271,7 @@ function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
         ArgumentError(
             "lower_stencil_to_scheme: grid_family '$grid_family' is not lowerable " *
                 "to an ESS scheme (supported: 'cartesian', 'unstructured'; other families " *
-                "go through lower_stencil_to_replacement or lower_stencil_to_canonical_replacement)",
+                "go through lower_stencil_to_replacement)",
         ),
     )
 
@@ -401,149 +394,6 @@ function lower_stencil_to_scheme(name::AbstractString, rule::AbstractDict;
     )
 
     return scheme, use_rule
-end
-
-"""
-    lower_stencil_to_canonical_replacement(rule::AbstractDict) -> Dict{String,Any}
-
-Lower a stencil-form catalog rule to a replacement-expression AST whose
-axis references use ESS's canonical `\$target` component names (`i`, `j`,
-`k`, `l`, `m` — RFC §7.1 reserved keywords, position-based), instead of
-the rule's axis pattern variables.
-
-This is the form a multi-axis rule needs to ride ESS `discretize` as a
-plain `pattern` + `replacement` document rule: a dim-less pattern like
-`laplacian(\$u)` binds no axis variables, so the replacement cannot
-reference `\$x`/`\$y` — but canonical component names are resolved
-positionally by the arrayop lift regardless of the document's dimension
-names (mirroring ESS's own 2D e2e rule authoring).
-
-Pipeline: `lower_stencil_to_replacement` (idempotent) → strip the
-`arrayop` wrapper if present → substitute each axis pattern variable
-with its canonical component name. The substitution order is the
-lowerer's documented positional dimension order (sorted unique axis
-pattern variables — e.g. `\$x → i`, `\$y → j`). Returns the bare
-replacement **expression** (no arrayop wrapper).
-
-Restrictions (`ArgumentError`):
-
-- Only collocated stencils: any `arakawa` selector with a `stagger`
-  other than `"cell_center"` is rejected — canonical cell-component
-  indexing into a face/corner-staggered array would silently read the
-  wrong physical location.
-- Only `\$`-pattern-variable axes (`cartesian`/`arakawa` kinds). Rules
-  with literal axis names (`latlon`) or plural `selectors`
-  (`cubed_sphere`) keep their existing lowering paths.
-- At most 5 distinct axes (the canonical component alphabet).
-"""
-function lower_stencil_to_canonical_replacement(rule::AbstractDict)::Dict{String, Any}
-    canonical_components = ("i", "j", "k", "l", "m")
-
-    axis_vars = String[]
-    stencil = get(rule, "stencil", nothing)
-    if stencil isa AbstractVector
-        seen = Set{String}()
-        for (idx, entry) in enumerate(stencil)
-            entry isa AbstractDict || continue
-            selector = get(entry, "selector", nothing)
-            selector isa AbstractDict || continue
-            kind = String(get(selector, "kind", ""))
-            if kind == "arakawa"
-                stagger = String(get(selector, "stagger", ""))
-                # Single-arg rules: non-cell_center stagger would index the wrong location.
-                # Multi-arg rules: each arg has its own stagger; the replacement
-                # correctly references each pattern var at its own indices.
-                if stagger != "cell_center"
-                    applies_to_check = get(rule, "applies_to", nothing)
-                    n_dollar_args = applies_to_check isa AbstractDict ?
-                        count(
-                            a -> a isa AbstractString && startswith(String(a), "\$"),
-                            get(applies_to_check, "args", Any[]),
-                        ) : 0
-                    n_dollar_args > 1 || throw(
-                        ArgumentError(
-                            "lower_stencil_to_canonical_replacement: stencil entry $idx has " *
-                                "stagger '$stagger' — canonical-component form is only valid " *
-                                "for collocated (cell_center) stencils, or multi-arg rules " *
-                                "where each stagger maps to a distinct pattern variable",
-                        ),
-                    )
-                end
-            end
-            axis = get(selector, "axis", nothing)
-            if axis isa AbstractString && startswith(String(axis), "\$")
-                a = String(axis)
-                a in seen || (push!(axis_vars, a); push!(seen, a))
-            elseif axis !== nothing
-                throw(
-                    ArgumentError(
-                        "lower_stencil_to_canonical_replacement: stencil entry $idx axis " *
-                            "$(repr(axis)) is not a '\$'-prefixed pattern variable",
-                    ),
-                )
-            end
-        end
-    else
-        # Replacement-form rule: axis variables are the `dim` pattern
-        # variables of `applies_to`, collected RECURSIVELY — nested-operator
-        # patterns like grad(grad($u, dim=$y), dim=$x) bind one axis per
-        # nesting level.
-        applies_to = get(rule, "applies_to", nothing)
-        if applies_to isa AbstractDict
-            _collect_dim_pattern_vars!(axis_vars, applies_to)
-        end
-    end
-    sort!(axis_vars)
-    length(axis_vars) <= length(canonical_components) || throw(
-        ArgumentError(
-            "lower_stencil_to_canonical_replacement: $(length(axis_vars)) distinct axes " *
-                "exceed the canonical component alphabet (i, j, k, l, m)",
-        ),
-    )
-    subst = Dict{String, String}(
-        v => canonical_components[k] for (k, v) in enumerate(axis_vars))
-
-    lowered = lower_stencil_to_replacement(rule)
-    repl = lowered["replacement"]
-    expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-           repl["expr"] : repl
-
-    return _substitute_axis_vars(expr, subst)
-end
-
-# Collect `$`-prefixed `dim` pattern variables from an applies_to tree,
-# recursing through nested operator args (first occurrence order; caller
-# sorts). Non-`$` (literal) dims are not axis variables.
-function _collect_dim_pattern_vars!(acc::Vector{String}, node)
-    node isa AbstractDict || return acc
-    dim = get(node, "dim", nothing)
-    if dim isa AbstractString && startswith(String(dim), "\$")
-        d = String(dim)
-        d in acc || push!(acc, d)
-    end
-    for a in get(node, "args", Any[])
-        _collect_dim_pattern_vars!(acc, a)
-    end
-    return acc
-end
-
-# Replace axis pattern-variable string leaves with their canonical component
-# names; every other node passes through structurally unchanged.
-function _substitute_axis_vars(expr, subst::Dict{String, String})
-    if expr isa AbstractString
-        return get(subst, String(expr), String(expr))
-    end
-    expr isa AbstractDict || return expr
-    out = Dict{String, Any}()
-    for (k, v) in expr
-        key = String(k)
-        if key == "args" && v isa AbstractVector
-            out[key] = Any[_substitute_axis_vars(a, subst) for a in v]
-        else
-            out[key] = v
-        end
-    end
-    return out
 end
 
 # -----------------------------------------------------------------------------

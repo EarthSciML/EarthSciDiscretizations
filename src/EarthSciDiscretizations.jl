@@ -123,8 +123,6 @@ export eval_coeff
 export lower_stencil_to_replacement
 # Exports: Stencil-form → ESS §7 scheme + use:-rule lowerer (dsc-kswm)
 export lower_stencil_to_scheme
-# Exports: Stencil-form → canonical-$target-component replacement (dsc-vst2)
-export lower_stencil_to_canonical_replacement
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem

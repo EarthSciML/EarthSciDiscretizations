@@ -122,10 +122,8 @@ end
     using EarthSciDiscretizations: lower_stencil_to_replacement
     using JSON
 
-    # `divergence_arakawa_c` carries an explicit arrayop replacement AST since EINSUM-4
-    # (esd-770). `lower_stencil_to_replacement` returns it unchanged (early-exit path).
-    # The arrayop wrapper has output_idx=[$x,$y] and 4 args in the inner "+" expr:
-    # face_x entries reference $Fx, face_y entries reference $Fy.
+    # `divergence_arakawa_c` carries a canonical bare replacement (esd-eg5): no stencil,
+    # no arrayop wrapper. The replacement is a "+" of 4 coeff*index terms using i/j axes.
     path = joinpath(
         dirname(dirname(@__FILE__)),
         "discretizations",
@@ -139,51 +137,50 @@ end
     @test haskey(out, "replacement")
 
     repl = out["replacement"]
-    @test repl["op"] == "arrayop"
-    @test repl["output_idx"] == ["\$x", "\$y"]
-    expr = repl["expr"]
-    @test expr["op"] == "+"
-    @test length(expr["args"]) == 4
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 4
 
-    # Entry 1: face_x, axis $x, offset 0 -> index($Fx, $x, $y), coeff -1/dx
-    e1 = expr["args"][1]
-    @test e1["op"] == "*"
+    # All 4 terms are coeff * index(field, i_arg, j_arg)
+    for term in repl["args"]
+        @test term["op"] == "*"
+        idx = term["args"][2]
+        @test idx["op"] == "index"
+        @test length(idx["args"]) == 3
+    end
+
+    # Entry 1: index($Fx, i, j), coeff = -1/dx
+    e1 = repl["args"][1]
     idx1 = e1["args"][2]
-    @test idx1["op"] == "index"
-    @test length(idx1["args"]) == 3
     @test String(idx1["args"][1]) == "\$Fx"
-    @test String(idx1["args"][2]) == "\$x"   # offset == 0 -> bare axis
-    @test String(idx1["args"][3]) == "\$y"
+    @test String(idx1["args"][2]) == "i"
+    @test String(idx1["args"][3]) == "j"
 
-    # Entry 2: face_x, axis $x, offset 1 -> index($Fx, $x + 1, $y)
-    e2 = expr["args"][2]
+    # Entry 2: index($Fx, i+1, j), coeff = +1/dx
+    e2 = repl["args"][2]
     idx2 = e2["args"][2]
-    @test length(idx2["args"]) == 3
     @test String(idx2["args"][1]) == "\$Fx"
-    a2_x = idx2["args"][2]
-    @test a2_x["op"] == "+"
-    @test String(a2_x["args"][1]) == "\$x"
-    @test Int(a2_x["args"][2]) == 1
-    @test String(idx2["args"][3]) == "\$y"
+    a2_i = idx2["args"][2]
+    @test a2_i["op"] == "+"
+    @test String(a2_i["args"][1]) == "i"
+    @test Int(a2_i["args"][2]) == 1
+    @test String(idx2["args"][3]) == "j"
 
-    # Entry 3: face_y, axis $y, offset 0 -> index($Fy, $x, $y)
-    e3 = expr["args"][3]
+    # Entry 3: index($Fy, i, j), coeff = -1/dy
+    e3 = repl["args"][3]
     idx3 = e3["args"][2]
-    @test length(idx3["args"]) == 3
     @test String(idx3["args"][1]) == "\$Fy"
-    @test String(idx3["args"][2]) == "\$x"
-    @test String(idx3["args"][3]) == "\$y"
+    @test String(idx3["args"][2]) == "i"
+    @test String(idx3["args"][3]) == "j"
 
-    # Entry 4: face_y, axis $y, offset 1 -> index($Fy, $x, $y + 1)
-    e4 = expr["args"][4]
+    # Entry 4: index($Fy, i, j+1), coeff = +1/dy
+    e4 = repl["args"][4]
     idx4 = e4["args"][2]
-    @test length(idx4["args"]) == 3
     @test String(idx4["args"][1]) == "\$Fy"
-    @test String(idx4["args"][2]) == "\$x"
-    a4_y = idx4["args"][3]
-    @test a4_y["op"] == "+"
-    @test String(a4_y["args"][1]) == "\$y"
-    @test Int(a4_y["args"][2]) == 1
+    @test String(idx4["args"][2]) == "i"
+    a4_j = idx4["args"][3]
+    @test a4_j["op"] == "+"
+    @test String(a4_j["args"][1]) == "j"
+    @test Int(a4_j["args"][2]) == 1
 
     # Idempotence
     @test lower_stencil_to_replacement(out)["replacement"] == repl
@@ -204,7 +201,7 @@ end
     rule = Dict{String, Any}(raw["discretizations"]["divergence_arakawa_c"])
     out = lower_stencil_to_replacement(rule)
 
-    expr = EarthSciSerialization.parse_expression(out["replacement"]["expr"])
+    expr = EarthSciSerialization.parse_expression(out["replacement"])
     @test expr !== nothing
 end
 
@@ -254,8 +251,8 @@ end
     import EarthSciSerialization
     using JSON
 
-    # laplacian_2nd_uniform_cartesian carries an explicit arrayop replacement AST since
-    # EINSUM-4 (esd-770). `lower_stencil_to_replacement` returns it unchanged.
+    # laplacian_2nd_uniform_cartesian carries a canonical bare replacement (esd-eg5):
+    # no stencil, no arrayop wrapper. Six coeff*index terms using i/j axes.
     path = joinpath(
         dirname(dirname(@__FILE__)),
         "discretizations",
@@ -271,68 +268,64 @@ end
     @test haskey(out, "replacement")
 
     repl = out["replacement"]
-    @test repl["op"] == "arrayop"
-    @test repl["output_idx"] == ["\$x", "\$y"]
-    expr = repl["expr"]
-    # 6 stencil entries (3 for $x, 3 for $y) → combine(6 terms)
-    @test expr["op"] == "+"
-    @test length(expr["args"]) == 6
+    @test repl["op"] == "+"
+    @test length(repl["args"]) == 6
 
-    # All terms are coeff * index($u, $x_arg, $y_arg)
-    for (i, term) in enumerate(expr["args"])
+    # All terms are coeff * index($u, i_arg, j_arg)
+    for term in repl["args"]
         @test term["op"] == "*"
         idx = term["args"][2]
         @test idx["op"] == "index"
-        @test length(idx["args"]) == 3   # operand + two axis args ($x, $y)
+        @test length(idx["args"]) == 3
         @test String(idx["args"][1]) == "\$u"
     end
 
-    # Entries 1–3 shift $x: each index has $x+offset or bare $x in slot 2, bare $y in slot 3
-    # Entry 1: axis=$x offset=-1 → index($u, $x+(-1), $y)
-    e1 = expr["args"][1]
+    # Entries 1–3: shift i axis (x direction)
+    # Entry 1: index($u, i+(-1), j)
+    e1 = repl["args"][1]
     idx1 = e1["args"][2]
-    @test idx1["args"][2]["op"] == "+"       # $x + (-1)
-    @test String(idx1["args"][2]["args"][1]) == "\$x"
+    @test idx1["args"][2]["op"] == "+"
+    @test String(idx1["args"][2]["args"][1]) == "i"
     @test Int(idx1["args"][2]["args"][2]) == -1
-    @test String(idx1["args"][3]) == "\$y"   # $y bare
+    @test String(idx1["args"][3]) == "j"
 
-    # Entry 2: axis=$x offset=0 → index($u, $x, $y) — no `+ 0` wrapper
-    e2 = expr["args"][2]
+    # Entry 2: index($u, i, j) — bare i
+    e2 = repl["args"][2]
     idx2 = e2["args"][2]
-    @test String(idx2["args"][2]) == "\$x"
-    @test String(idx2["args"][3]) == "\$y"
+    @test String(idx2["args"][2]) == "i"
+    @test String(idx2["args"][3]) == "j"
 
-    # Entry 3: axis=$x offset=+1 → index($u, $x+1, $y)
-    e3 = expr["args"][3]
+    # Entry 3: index($u, i+1, j)
+    e3 = repl["args"][3]
     idx3 = e3["args"][2]
     @test idx3["args"][2]["op"] == "+"
     @test Int(idx3["args"][2]["args"][2]) == 1
-    @test String(idx3["args"][3]) == "\$y"
+    @test String(idx3["args"][3]) == "j"
 
-    # Entries 4–6 shift $y: each index has bare $x in slot 2, $y+offset or bare $y in slot 3
-    # Entry 4: axis=$y offset=-1 → index($u, $x, $y+(-1))
-    e4 = expr["args"][4]
+    # Entries 4–6: shift j axis (y direction)
+    # Entry 4: index($u, i, j+(-1))
+    e4 = repl["args"][4]
     idx4 = e4["args"][2]
-    @test String(idx4["args"][2]) == "\$x"   # $x bare
-    @test idx4["args"][3]["op"] == "+"        # $y + (-1)
-    @test String(idx4["args"][3]["args"][1]) == "\$y"
+    @test String(idx4["args"][2]) == "i"
+    @test idx4["args"][3]["op"] == "+"
+    @test String(idx4["args"][3]["args"][1]) == "j"
     @test Int(idx4["args"][3]["args"][2]) == -1
 
-    # Entry 5: axis=$y offset=0 → index($u, $x, $y) — no `+ 0` wrapper
-    e5 = expr["args"][5]
+    # Entry 5: index($u, i, j) — bare j
+    e5 = repl["args"][5]
     idx5 = e5["args"][2]
-    @test String(idx5["args"][2]) == "\$x"
-    @test String(idx5["args"][3]) == "\$y"
+    @test String(idx5["args"][2]) == "i"
+    @test String(idx5["args"][3]) == "j"
 
-    # Entry 6: axis=$y offset=+1 → index($u, $x, $y+1)
-    e6 = expr["args"][6]
+    # Entry 6: index($u, i, j+1)
+    e6 = repl["args"][6]
     idx6 = e6["args"][2]
-    @test String(idx6["args"][2]) == "\$x"
+    @test String(idx6["args"][2]) == "i"
     @test idx6["args"][3]["op"] == "+"
     @test Int(idx6["args"][3]["args"][2]) == 1
 
-    # ESS parse_expression accepts the inner expr AST
-    ess_expr = EarthSciSerialization.parse_expression(out["replacement"]["expr"])
+    # ESS parse_expression accepts the replacement AST directly
+    ess_expr = EarthSciSerialization.parse_expression(out["replacement"])
     @test ess_expr !== nothing
 
     # Idempotence
@@ -910,90 +903,6 @@ end
     @test occursin("arrayop", JSON.json(rhs))
 end
 
-@testitem "lower_stencil_to_canonical_replacement: multi-axis laplacian → i/j components" begin
-    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "laplacian_2nd_uniform_cartesian.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["laplacian_2nd_uniform_cartesian"])
-
-    expr = lower_stencil_to_canonical_replacement(rule)
-    @test expr["op"] == "+"
-    @test length(expr["args"]) == 6
-
-    # No axis pattern variables survive; the operand pattern variable does.
-    s = JSON.json(expr)
-    @test !occursin("\$x", s)
-    @test !occursin("\$y", s)
-    @test occursin("\$u", s)
-
-    # Entry 1: $x-axis offset -1 with $y untouched → index($u, i - 1, j)
-    # (sorted axis order: $x → i, $y → j; arakawa lowering keeps the
-    # entry's own axis offset and the bare component elsewhere).
-    idx1 = expr["args"][1]["args"][2]
-    @test idx1["op"] == "index"
-    @test String(idx1["args"][1]) == "\$u"
-    @test idx1["args"][2]["op"] == "+"
-    @test String(idx1["args"][2]["args"][1]) == "i"
-    @test Int(idx1["args"][2]["args"][2]) == -1
-    @test String(idx1["args"][3]) == "j"
-end
-
-@testitem "lower_stencil_to_canonical_replacement: replacement-form rule → dim var becomes i" begin
-    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "centered_2nd_uniform.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["centered_2nd_uniform"])
-
-    expr = lower_stencil_to_canonical_replacement(rule)
-    s = JSON.json(expr)
-    # The arrayop wrapper is stripped and $x is substituted with i.
-    @test expr["op"] != "arrayop"
-    @test !occursin("\$x", s)
-    @test occursin("\$u", s)
-    @test occursin("\"i\"", s)
-end
-
-@testitem "lower_stencil_to_canonical_replacement: rejects staggered and literal-axis stencils" begin
-    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
-
-    staggered = Dict{String, Any}(
-        "applies_to" => Dict("op" => "div", "args" => ["\$F"]),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "arakawa", "axis" => "\$x", "offset" => 0,
-                               "stagger" => "face_x"),
-            "coeff" => 1,
-        )],
-    )
-    err = try lower_stencil_to_canonical_replacement(staggered); nothing catch e; e end
-    @test err isa ArgumentError
-    @test occursin("cell_center", err.msg)
-
-    literal_axis = Dict{String, Any}(
-        "applies_to" => Dict("op" => "grad", "args" => ["\$u"], "dim" => "lat"),
-        "stencil" => Any[Dict(
-            "selector" => Dict("kind" => "latlon", "axis" => "lat", "offset" => 1),
-            "coeff" => 1,
-        )],
-    )
-    err = try lower_stencil_to_canonical_replacement(literal_axis); nothing catch e; e end
-    @test err isa ArgumentError
-    @test occursin("pattern variable", err.msg)
-end
-
 @testitem "lower_stencil_to_scheme: multi-output stencil object lowers per output" begin
     using EarthSciDiscretizations: lower_stencil_to_scheme
     using JSON
@@ -1044,26 +953,3 @@ end
     @test occursin("flat", err.msg)
 end
 
-@testitem "lower_stencil_to_canonical_replacement: nested-dim pattern maps every axis" begin
-    using EarthSciDiscretizations: lower_stencil_to_canonical_replacement
-    using JSON
-
-    path = joinpath(
-        dirname(dirname(@__FILE__)),
-        "discretizations",
-        "finite_difference",
-        "mixed_deriv_2nd_uniform.json",
-    )
-    raw = JSON.parsefile(path)
-    rule = Dict{String, Any}(raw["discretizations"]["mixed_deriv_2nd_uniform"])
-
-    # The pattern is grad(grad($u, dim=$y), dim=$x): both nested dim pattern
-    # variables must map to canonical components (sorted: $x → i, $y → j).
-    expr = lower_stencil_to_canonical_replacement(rule)
-    s = JSON.json(expr)
-    @test !occursin("\$x", s)
-    @test !occursin("\$y", s)
-    @test occursin("\$u", s)
-    @test occursin("\"i\"", s)
-    @test occursin("\"j\"", s)
-end
