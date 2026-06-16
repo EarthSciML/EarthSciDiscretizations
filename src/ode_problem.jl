@@ -557,26 +557,7 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             rule_ref
         end
 
-        stencil = get(spec, "stencil", nothing)
-        if stencil isa AbstractVector && !isempty(stencil)
-            first_entry = stencil[1]
-            sel   = get(first_entry, "selector", nothing)
-            if sel === nothing
-                sels = get(first_entry, "selectors", nothing)
-                if sels isa AbstractVector && !isempty(sels) && sels[1] isa AbstractDict
-                    sel = sels[1]
-                end
-            end
-            kind  = sel !== nothing ? String(get(sel, "kind", "")) : ""
-            # Path-A/scheme: reduction/indirect (ESS unstructured expansion via lower_stencil_to_scheme; ess-t0z).
-            # Latlon, vertical, cubed_sphere, arakawa rules carry authored replacement ASTs
-            # (esd-eg5, esd-t4h); the elseif haskey(spec, "replacement") branch handles them.
-            if kind in ("reduction", "indirect")
-                scheme, use_rule = lower_stencil_to_scheme(rname, spec)
-                discs[rname] = scheme
-                push!(rules, use_rule)
-            end
-        elseif haskey(spec, "replacement")
+        if haskey(spec, "replacement")
             replacement = spec["replacement"]
             # Authored latlon replacements use geographic axis names ("lat", "lon").
             # Translate to canonical arrayop loop-variable names ("i", "j") so that

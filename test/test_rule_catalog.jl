@@ -379,21 +379,21 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"unstructured\"", content)
-    @test occursin("\"stencil\"", content)
+    # esd-agh: rule migrated from stencil form to authored reduce-arrayop replacement.
+    @test occursin("\"replacement\"", content)
+    @test !occursin("\"stencil\"", content)
     # Operator class: scalar Laplacian acting at cell centers.
     @test occursin("\"op\": \"laplacian\"", content)
     @test occursin("\"emits_location\": \"cell_center\"", content)
-    # Two-row formulation closes ∇²u(c) = Σ_k (u(n_k) − u(c)) / A(c) — Row 1 is a
-    # constant-valence reduction (DUO triangular cells always have 3 neighbors);
-    # Row 2 is a self-targeting indirect row with coefficient −3/area[c].
-    @test occursin("\"kind\": \"reduction\"", content)
-    @test occursin("\"kind\": \"indirect\"", content)
-    @test occursin("\"table\": \"cell_neighbors\"", content)
-    @test occursin("\"k_bound\": \"k\"", content)
-    @test occursin("\"index_expr\": \"\$target\"", content)
-    # DUO has constant valence 3 — no arrayop needed for the self-term.
-    # Coefficient references: area (DuoGrid field name) and cell_neighbors.
+    # Replacement: reduce-arrayop with constant k∈[0,2] (DUO always has 3 neighbors).
+    @test occursin("\"reduce\": \"+\"", content)
+    @test occursin("\"ranges\"", content)
+    # Coefficient/connectivity symbols: dc_edge, dv_edge, area, edges_on_face, cell_neighbors.
+    @test occursin("\"dc_edge\"", content)
+    @test occursin("\"dv_edge\"", content)
     @test occursin("\"area\"", content)
+    @test occursin("\"cell_neighbors\"", content)
+    @test occursin("\"edges_on_face\"", content)
 end
 
 @testitem "nn_diffusion_mpas scheme is discoverable and well-formed" begin
@@ -412,27 +412,23 @@ end
     @test occursin("\"applies_to\"", content)
     @test occursin("\"grid_family\"", content)
     @test occursin("\"unstructured\"", content)
-    @test occursin("\"stencil\"", content)
+    # esd-agh: rule migrated from stencil form to authored reduce-arrayop replacement.
+    @test occursin("\"replacement\"", content)
+    @test !occursin("\"stencil\"", content)
     # Operator class: scalar Laplacian acting at cell centers.
     @test occursin("\"op\": \"laplacian\"", content)
     @test occursin("\"emits_location\": \"cell_center\"", content)
-    # Two-row formulation closes ∇²u(c) = Σ_k w_k (u(n_k) − u(c)) — Row 1 is a
-    # variable-valence neighbor reduction (decision #6/#7 in SELECTOR_KINDS.md);
-    # Row 2 is a self-targeting indirect row whose coeff is the diagonal-weight
-    # arrayop sum −Σ_k w_k (decision #6 / RFC §7.2 indirect materialization).
-    @test occursin("\"kind\": \"reduction\"", content)
-    @test occursin("\"kind\": \"indirect\"", content)
-    @test occursin("\"table\": \"cells_on_cell\"", content)
-    @test occursin("\"k_bound\": \"k\"", content)
-    @test occursin("\"index_expr\": \"\$target\"", content)
+    # Replacement: reduce-arrayop with variable range k∈[0, n_edges_on_cell[i]-1].
+    @test occursin("\"reduce\": \"+\"", content)
+    @test occursin("\"ranges\"", content)
     @test occursin("\"arrayop\"", content)
-    # Coefficient symbols come from the dsc-7j0 MPAS accessor runtime
-    # (SELECTOR_KINDS.md decision #9, snake_case): area_cell, dc_edge, dv_edge,
-    # edges_on_cell, n_edges_on_cell.
+    # Coefficient symbols (MPAS snake_case): area_cell, dc_edge, dv_edge,
+    # edges_on_cell, cells_on_cell, n_edges_on_cell.
     @test occursin("\"dv_edge\"", content)
     @test occursin("\"dc_edge\"", content)
     @test occursin("\"area_cell\"", content)
     @test occursin("\"edges_on_cell\"", content)
+    @test occursin("\"cells_on_cell\"", content)
     @test occursin("\"n_edges_on_cell\"", content)
 end
 

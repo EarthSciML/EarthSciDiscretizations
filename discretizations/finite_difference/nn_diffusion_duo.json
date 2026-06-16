@@ -7,71 +7,42 @@
       "emits_location": "cell_center",
       "combine": "+",
       "accuracy": "O(h^2) on a quasi-uniform triangular icosahedral mesh",
-      "stencil": [
-        {
-          "selector": {
-            "kind": "reduction",
-            "table": "cell_neighbors",
-            "count_expr": 3,
-            "k_bound": "k",
-            "combine": "+"
-          },
-          "coeff": {
-            "op": "/",
-            "args": [
-              { "op": "index", "args": [
-                  "dc_edge",
-                  { "op": "index", "args": ["edges_on_face", "$target", "k"] }
-              ]},
-              { "op": "*", "args": [
-                  { "op": "index", "args": [
-                      "dv_edge",
-                      { "op": "index", "args": ["edges_on_face", "$target", "k"] }
-                  ]},
-                  { "op": "index", "args": ["area", "$target"] }
-              ]}
-            ]
-          }
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "k": [0, 2]
         },
-        {
-          "selector": {
-            "kind": "indirect",
-            "table": "cell_neighbors",
-            "index_expr": "$target"
-          },
-          "coeff": {
-            "op": "*",
-            "args": [
-              -1,
-              {
-                "op": "arrayop",
-                "output_idx": [],
-                "expr": {
-                  "op": "/",
-                  "args": [
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": [
+                    "dc_edge",
+                    { "op": "index", "args": ["edges_on_face", "i", "k"] }
+                ]},
+                { "op": "*", "args": [
                     { "op": "index", "args": [
-                        "dc_edge",
-                        { "op": "index", "args": ["edges_on_face", "$target", "k"] }
+                        "dv_edge",
+                        { "op": "index", "args": ["edges_on_face", "i", "k"] }
                     ]},
-                    { "op": "*", "args": [
-                        { "op": "index", "args": [
-                            "dv_edge",
-                            { "op": "index", "args": ["edges_on_face", "$target", "k"] }
-                        ]},
-                        { "op": "index", "args": ["area", "$target"] }
-                    ]}
-                  ]
-                },
-                "ranges": {
-                  "k": [0, 2]
-                },
-                "reduce": "+",
-                "args": ["dc_edge", "dv_edge", "area", "edges_on_face"]
-              }
-            ]
-          }
-        }
-      ]
+                    { "op": "index", "args": ["area", "i"] }
+                ]}
+              ]
+            },
+            { "op": "-", "args": [
+                { "op": "index", "args": [
+                    "$u",
+                    { "op": "index", "args": ["cell_neighbors", "i", "k"] }
+                ]},
+                { "op": "index", "args": ["$u", "i"] }
+            ]}
+          ]
+        },
+        "args": ["dc_edge", "dv_edge", "area", "edges_on_face", "cell_neighbors"]
+      }
     }
   }
 }
