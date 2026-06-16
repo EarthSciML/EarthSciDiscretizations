@@ -77,7 +77,7 @@ def _walk_rules() -> list[dict[str, Any]]:
             for name, body in blocks.items():
                 grid_family = _normalize_family(body.get("grid_family", ""))
                 if not grid_family:
-                    # Boundary-condition rules (e.g. periodic_wrap_x) live in
+                    # Boundary-condition rules (e.g. periodic_wrap) live in
                     # the "rules" block without a declared grid_family. They
                     # are not part of rule × grid dispatch, so omit them from
                     # the matrix.

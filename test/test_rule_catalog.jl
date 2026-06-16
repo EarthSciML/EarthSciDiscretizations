@@ -133,13 +133,13 @@ end
 
     content = read(rule.path, String)
     # Dirichlet BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
-    # `kind:"dirichlet"` and `side:"xmin"` (spec-compliant annotations; ESS
-    # kind/side pattern matching is pending), `replacement` giving the ghost-cell
-    # value 2*u_bc - u[0], and `produces` declaring the ghost_var per §9.4.
+    # `kind:"dirichlet"` and `side:"$side"` (generalized from xmin — esd-klj),
+    # `replacement` giving the ghost-cell value 2*u_bc - u[0], and `produces`
+    # declaring the ghost_var per §9.4. No $h needed: ghost is spacing-independent.
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
     @test occursin("\"kind\": \"dirichlet\"", content)
-    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"side\": \"\$side\"", content)
     @test occursin("\"op\": \"bc\"", content)
     # Ghost-cell formula: u_ghost = 2*u_bc - u[0].
     @test occursin("\"op\": \"-\"", content)
@@ -150,7 +150,7 @@ end
     @test occursin("\"ghost_var\"", content)
     # Ghost variable named per §9.4 scheme__logical__side convention.
     @test occursin("dirichlet_bc__", content)
-    @test occursin("__xmin", content)
+    @test occursin("__\$side", content)
 end
 
 @testitem "neumann_bc rule is discoverable and well-formed" begin
@@ -167,29 +167,29 @@ end
 
     content = read(rule.path, String)
     # Neumann BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
-    # `kind:"neumann"` and `side:"xmin"` (spec-compliant annotations; ESS
-    # kind/side pattern matching is pending), `replacement` giving the ghost-cell
-    # value u[0] + dx*value (where value is du/dn at xmin, the outward normal
-    # derivative), and `produces` declaring the ghost_var per §9.4.
+    # `kind:"neumann"` and `side:"$side"` (generalized from xmin — esd-klj),
+    # `replacement` giving the ghost-cell value u[0] + $h*value (where value is
+    # du/dn, the outward normal derivative, and $h is the grid spacing for the
+    # side's axis, bound via ESS bind_side_spacing), and `produces` per §9.4.
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
     @test occursin("\"kind\": \"neumann\"", content)
-    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"side\": \"\$side\"", content)
     @test occursin("\"op\": \"bc\"", content)
-    # Ghost-cell formula: u_ghost = u[0] + dx*value.
+    # Ghost-cell formula: u_ghost = u[0] + $h*value.
     @test occursin("\"op\": \"+\"", content)
     @test occursin("\"op\": \"*\"", content)
     @test occursin("\"op\": \"index\"", content)
-    @test occursin("\"dx\"", content)
+    @test occursin("\"\$h\"", content)
     # §9.4 ghost_var produces declaration.
     @test occursin("\"produces\"", content)
     @test occursin("\"ghost_var\"", content)
     # Ghost variable named per §9.4 scheme__logical__side convention.
     @test occursin("neumann_bc__", content)
-    @test occursin("__xmin", content)
+    @test occursin("__\$side", content)
 end
 
-@testitem "robin_bc rule is discoverable and well-formed (esd-m9v)" begin
+@testitem "robin_bc rule is discoverable and well-formed (esd-m9v, generalized esd-klj)" begin
     using EarthSciDiscretizations: load_rules
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -203,33 +203,35 @@ end
 
     content = read(rule.path, String)
     # Robin BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
-    # `kind:"robin"` and `side:"xmin"`, `robin_alpha/beta/gamma` coefficients
-    # for αu + β∂u/∂n = γ, `replacement` giving the ghost-cell value
-    # u_ghost = (2·dx·γ + (2·β - α·dx)·u[0]) / (α·dx + 2·β),
-    # and `produces` declaring the ghost_var per §9.4.
+    # `kind:"robin"` and `side:"$side"` (generalized from xmin — esd-klj),
+    # `robin_alpha/beta/gamma` coefficients for αu + β∂u/∂n = γ,
+    # `replacement` giving the ghost-cell value
+    # u_ghost = (2·$h·γ + (2·β - α·$h)·u[0]) / (α·$h + 2·β),
+    # where $h is the grid spacing for the side's axis (bound via ESS
+    # bind_side_spacing), and `produces` declaring the ghost_var per §9.4.
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
     @test occursin("\"kind\": \"robin\"", content)
-    @test occursin("\"side\": \"xmin\"", content)
+    @test occursin("\"side\": \"\$side\"", content)
     @test occursin("\"op\": \"bc\"", content)
     # Coefficients: robin_alpha (α), robin_beta (β), robin_gamma (γ).
     @test occursin("\"robin_alpha\"", content)
     @test occursin("\"robin_beta\"", content)
     @test occursin("\"robin_gamma\"", content)
     # Ghost-cell formula uses division, addition, subtraction, multiplication,
-    # index into u[0], and the grid spacing dx.
+    # index into u[0], and the side-axis spacing $h.
     @test occursin("\"op\": \"/\"", content)
     @test occursin("\"op\": \"+\"", content)
     @test occursin("\"op\": \"-\"", content)
     @test occursin("\"op\": \"*\"", content)
     @test occursin("\"op\": \"index\"", content)
-    @test occursin("\"dx\"", content)
+    @test occursin("\"\$h\"", content)
     # §9.4 ghost_var produces declaration.
     @test occursin("\"produces\"", content)
     @test occursin("\"ghost_var\"", content)
     # Ghost variable named per §9.4 scheme__logical__side convention.
     @test occursin("robin_bc__", content)
-    @test occursin("__xmin", content)
+    @test occursin("__\$side", content)
 end
 
 @testitem "centered_2nd_uniform_vertical scheme is discoverable and well-formed" begin
@@ -459,6 +461,7 @@ end
             "mixed_deriv_2nd_nonuniform",
             "nonlinear_laplacian_nonuniform",
             "spherical_laplacian_nonuniform",
+            "expression_ic",
         )
         @test seeded in names
     end
@@ -1264,4 +1267,31 @@ end
     @test occursin("5040", content)
     @test occursin("\"dx\"", content)
     @test !occursin("\"op\": \"call\"", content)
+end
+
+@testitem "expression_ic rule is discoverable and well-formed (esd-klj)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "expression_ic", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :ic
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # expression_ic is a rewrite rule that transforms an `ic` synthetic node
+    # into an arrayop over the grid (esd-klj). The engine substitutes spatial-dim
+    # symbols with cell-centre coordinates (x→coord_x($i), etc.). ghost_width:0
+    # declares that IC evaluation consumes no ghost cells.
+    @test occursin("\"pattern\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"op\": \"ic\"", content)
+    @test occursin("\"op\": \"arrayop\"", content)
+    @test occursin("\"output_idx\"", content)
+    @test occursin("\"\$expr\"", content)
+    @test occursin("\"ghost_width\"", content)
+    @test occursin("0", content)
 end

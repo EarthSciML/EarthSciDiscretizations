@@ -1,29 +1,29 @@
 {
   "rules": {
-    "neumann_bc_xmin": {
-      "description": "Neumann ghost-cell prescription at xmin for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). The `value` is the outward normal derivative du/dn at xmin; since the outward normal at xmin points in the -x direction, du/dn = -du/dx. Using a centered-difference approximation across the boundary face: (u[0] - u_ghost) / dx = -value, giving u_ghost = u[0] + dx * value. Pattern matches the synthetic `bc` node (§9.2); `kind` and `side` fields are spec-compliant annotations — ESS pattern matching on these fields is pending. `produces` declares the ghost variable per §9.4 (not yet processed by the current rule engine; documented for forward compatibility). Analytic check: (u[0] - u_ghost) / dx = (u[0] - (u[0] + dx*value)) / dx = -value = du/dn at xmin.",
+    "neumann_bc": {
+      "description": "Neumann ghost-cell prescription for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). The `value` is the outward normal derivative du/dn at the boundary; using a centered-difference approximation across the boundary face: (u[0] - u_ghost) / h = -value, giving u_ghost = u[0] + h * value. Pattern matches the synthetic `bc` node (§9.2) with `$side` bound to the boundary side (xmin, xmax, ymin, ymax, …) and `$h` bound to the grid spacing for that side's axis (e.g. dx for xmin/xmax, dy for ymin/ymax) via ESS bind_side_spacing guard; ESS kind/side pattern matching and bind_side_spacing wire this when available. `produces` declares the ghost variable per §9.4. Analytic check: (u[0] - u_ghost) / h = (u[0] - (u[0] + h*value)) / h = -value = du/dn.",
       "pattern": {
         "op": "bc",
         "kind": "neumann",
-        "side": "xmin",
+        "side": "$side",
         "args": ["$u", "$value"]
       },
       "replacement": {
         "op": "+",
         "args": [
           { "op": "index", "args": ["$u", 0] },
-          { "op": "*", "args": ["dx", "$value"] }
+          { "op": "*", "args": ["$h", "$value"] }
         ]
       },
       "produces": [
         {
           "kind": "ghost_var",
-          "name": "neumann_bc__$u__xmin",
+          "name": "neumann_bc__$u__$side",
           "emit": {
             "op": "+",
             "args": [
               { "op": "index", "args": ["$u", 0] },
-              { "op": "*", "args": ["dx", "$value"] }
+              { "op": "*", "args": ["$h", "$value"] }
             ]
           }
         }

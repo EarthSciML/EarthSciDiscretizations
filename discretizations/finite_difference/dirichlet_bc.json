@@ -1,11 +1,11 @@
 {
   "rules": {
-    "dirichlet_bc_xmin": {
-      "description": "Dirichlet ghost-cell prescription at xmin for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). The ghost cell u[-1] is set so that the linear interpolation to the xmin boundary face gives the prescribed value: u_ghost = 2*u_bc - u[0]. Pattern matches the synthetic `bc` node (§9.2); `kind` and `side` fields are spec-compliant annotations — ESS pattern matching on these fields is pending. `produces` declares the ghost variable per §9.4 (not yet processed by the current rule engine; documented for forward compatibility). Analytic check: (u_ghost + u[0]) / 2 = (2*u_bc - u[0] + u[0]) / 2 = u_bc.",
+    "dirichlet_bc": {
+      "description": "Dirichlet ghost-cell prescription for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). The ghost cell u[-1] is set so that the linear interpolation to the boundary face gives the prescribed value: u_ghost = 2*u_bc - u[0]. Pattern matches the synthetic `bc` node (§9.2) with `$side` bound to the boundary side (xmin, xmax, ymin, ymax, …); ESS kind/side pattern matching wires this when available. `produces` declares the ghost variable per §9.4 (not yet processed by the current rule engine; documented for forward compatibility). Analytic check: (u_ghost + u[0]) / 2 = (2*u_bc - u[0] + u[0]) / 2 = u_bc. Note: no spacing ($h) is needed — the ghost value depends only on u[0] and the prescribed boundary value.",
       "pattern": {
         "op": "bc",
         "kind": "dirichlet",
-        "side": "xmin",
+        "side": "$side",
         "args": ["$u", "$value"]
       },
       "replacement": {
@@ -18,7 +18,7 @@
       "produces": [
         {
           "kind": "ghost_var",
-          "name": "dirichlet_bc__$u__xmin",
+          "name": "dirichlet_bc__$u__$side",
           "emit": {
             "op": "-",
             "args": [
