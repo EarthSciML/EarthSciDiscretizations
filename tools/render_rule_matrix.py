@@ -34,12 +34,12 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Column order — matches dsc-599 acceptance and ALL_GRID_FAMILIES in
-# tools/render_doc_plots.py.
+# tools/render_doc_plots.py. ``cubed_sphere`` was removed when the
+# cubed-sphere grid was retired (no rule declares it any more).
 GRID_FAMILIES: tuple[str, ...] = (
     "cartesian",
     "latlon",
     "vertical",
-    "cubed_sphere",
     "mpas",
     "arakawa",
     "duo",

@@ -5,25 +5,50 @@ render_doc_plots — generate grid + rule visualizations for the Hugo doc site.
 Writes PNG artifacts under ``docs/static/plots/``:
 
     grids/<family>.png            — typical configuration of each grid family
-    rules/<rule>-stencil.png      — stencil + coefficient diagram per rule
+    rules/<rule>-stencil.png      — stencil + coefficient diagram for the
+                                    curated subset of rules that have a
+                                    bespoke hand-authored diagram
     rules/<rule>-convergence.png  — empirical convergence (only for rules
                                     whose Layer-B fixtures are currently
                                     producing — Sec. APPLICABLE below)
 
-Rules whose convergence fixtures depend on in-flight ESS harness extensions
-do not produce a convergence plot here; the doc page renders a
-``pending`` callout instead.
+and one auto-generated content page per rule that has no hand-authored
+page under ``docs/content/rules/``:
 
-This is a documentation tool, not a numerics oracle. It uses idealized
-mathematical re-implementations of the rule and a manufactured solution to
-demonstrate the *shape* of the convergence curve (slope, asymptote). The
-authoritative convergence numbers come from the ESS walker; once the in-flight
-harness extensions land and the fixtures populate, this script will be
-extended to consume the walker output directly.
+    docs/content/rules/<rule>.md  — a textual rule entry whose discrete
+                                    operator is *pretty-printed from the
+                                    rule's own replacement AST* via
+                                    EarthSciSerialization
+                                    (``earthsci_toolkit``).
+
+The bespoke matplotlib stencil/convergence diagrams cover only a small
+curated subset of rules. The catalog as a whole is now authored in the
+EINSUM-unification replacement-AST format (``applies_to`` + a closed
+``replacement`` expression in the §4.2 op vocabulary — ``arrayop``,
+``index``, ``+``, ``-``, ``*``, ``/`` …; there is no longer a ``stencil``
+field), which a per-rule matplotlib diagram cannot scale to. For every
+rule that lacks a hand-authored page, we therefore emit a textual catalog
+entry that renders the rule's discrete operator directly from its
+replacement AST using ESS's expression pretty-printer
+(:func:`earthsci_toolkit.display.to_unicode`). This both documents the
+full catalog and gives every ``/rules/<name>/`` link in the rule × grid
+matrix a real target (the link-check step would otherwise 404 on the
+~25 undocumented rules).
+
+The convergence plots are a documentation aid, not a numerics oracle: they
+use idealized mathematical re-implementations of the rule and a manufactured
+solution to demonstrate the *shape* of the convergence curve (slope,
+asymptote). The authoritative convergence numbers come from the ESS walker;
+once the in-flight harness extensions land and the fixtures populate, this
+script will be extended to consume the walker output directly. Rules whose
+convergence fixtures depend on in-flight ESS harness extensions do not
+produce a convergence plot here; the doc page renders a ``pending`` callout
+instead.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -34,6 +59,8 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # ---------------------------------------------------------------------------
 # Layer-B applicability table (mirrors rule-catalog.md "applicable" axis).
@@ -50,26 +77,32 @@ APPLICABLE = {
     "weno5_advection_2d",
 }
 
+# Rules with a bespoke hand-authored matplotlib stencil diagram. This is the
+# curated subset whose doc pages embed a ``rules/<rule>-stencil.png``; every
+# other rule is documented by an auto-generated textual catalog entry (see
+# ``generate_rule_pages`` below). The cubed-sphere rules
+# (``covariant_laplacian_cubed_sphere``, ``transport_2d``) were removed when
+# the cubed-sphere grid was retired.
 ALL_RULES = (
     "centered_2nd_uniform",
     "centered_2nd_uniform_vertical",
     "centered_2nd_uniform_latlon",
     "upwind_1st",
-    "covariant_laplacian_cubed_sphere",
     "nn_diffusion_mpas",
     "ppm_reconstruction",
+    "flux_1d_ppm",
     "weno5_advection",
     "weno5_advection_2d",
     "flux_limiter_minmod",
     "flux_limiter_superbee",
     "divergence_arakawa_c",
-    "transport_2d",
 )
 
+# Grid families with a bespoke diagram. ``cubed_sphere`` was removed when the
+# cubed-sphere grid was retired.
 ALL_GRID_FAMILIES = (
     "cartesian",
     "latlon",
-    "cubed_sphere",
     "mpas",
     "duo",
     "vertical",
@@ -124,55 +157,6 @@ def plot_latlon(out: Path) -> None:
     ax.set_xlabel("longitude (deg)")
     ax.set_ylabel("latitude (deg)")
     ax.set_title("Lat-Lon — regular 24×12 mesh (cell area ∝ cos φ)")
-    fig.tight_layout()
-    fig.savefig(out, dpi=140)
-    plt.close(fig)
-
-
-def plot_cubed_sphere(out: Path) -> None:
-    """3D sphere with the 6 cubed-sphere panel boundaries overlaid."""
-    fig = plt.figure(figsize=(5.5, 5.0))
-    ax = fig.add_subplot(111, projection="3d")
-    # Sphere wireframe.
-    u = np.linspace(0, 2 * np.pi, 40)
-    v = np.linspace(0, np.pi, 20)
-    sx = np.outer(np.cos(u), np.sin(v))
-    sy = np.outer(np.sin(u), np.sin(v))
-    sz = np.outer(np.ones_like(u), np.cos(v))
-    ax.plot_surface(sx, sy, sz, color="#eef3f0", alpha=0.35, linewidth=0)
-
-    # Six panel face-grid lines via gnomonic projection of a cube face.
-    Nc = 6
-    grid = np.linspace(-1, 1, Nc + 1)
-    panels = []
-    # +X, -X, +Y, -Y, +Z, -Z
-    for axis in range(3):
-        for sign in (+1, -1):
-            face_pts = []
-            for i in grid:
-                row = []
-                for j in grid:
-                    p = [0.0, 0.0, 0.0]
-                    p[axis] = sign
-                    p[(axis + 1) % 3] = i
-                    p[(axis + 2) % 3] = j
-                    n = np.linalg.norm(p)
-                    row.append([p[0] / n, p[1] / n, p[2] / n])
-                face_pts.append(row)
-            panels.append(np.array(face_pts))
-
-    colors = ["#1f4f3a", "#b58a00", "#15315d", "#6c1d1d", "#5b3d09", "#1c4a31"]
-    for face, col in zip(panels, colors):
-        # iso-i lines
-        for i in range(Nc + 1):
-            ax.plot(face[i, :, 0], face[i, :, 1], face[i, :, 2], color=col, lw=0.6)
-        # iso-j lines
-        for j in range(Nc + 1):
-            ax.plot(face[:, j, 0], face[:, j, 1], face[:, j, 2], color=col, lw=0.6)
-
-    ax.set_box_aspect([1, 1, 1])
-    ax.set_axis_off()
-    ax.set_title("Cubed-sphere — gnomonic C6 (6 panels × 6×6 cells)")
     fig.tight_layout()
     fig.savefig(out, dpi=140)
     plt.close(fig)
@@ -350,7 +334,6 @@ def plot_arakawa(out: Path) -> None:
 GRID_PLOTTERS = {
     "cartesian": plot_cartesian,
     "latlon": plot_latlon,
-    "cubed_sphere": plot_cubed_sphere,
     "mpas": plot_mpas,
     "duo": plot_duo,
     "vertical": plot_vertical,
@@ -481,30 +464,47 @@ def stencil_upwind_1st(out: Path) -> None:
     )
 
 
-def stencil_transport_2d(out: Path) -> None:
-    pts = [
-        (0, 0, "−Σ_face inflow / A"),
-        (1, 0, "−((c_E−|c_E|)/2)·dx_E / A"),
-        (-1, 0, "+((c_W+|c_W|)/2)·dx_W / A"),
-        (0, 1, "−((c_N−|c_N|)/2)·dy_N / A"),
-        (0, -1, "+((c_S+|c_S|)/2)·dy_S / A"),
-    ]
-    _stencil_2d(out, "transport_2d — 5-point in-panel stencil (C-grid Courant)", pts)
+def stencil_flux_1d_ppm(out: Path) -> None:
+    """6-point cartesian stencil for the PPM flux at the interface i+1/2.
 
-
-def stencil_covariant_laplacian(out: Path) -> None:
-    pts = [
-        (0, 0, "−2(g^{ξξ}+g^{ηη})/h²"),
-        (1, 0, "g^{ξξ}/h² + ∂(Jg^{ξξ})/∂ξ +\n∂(Jg^{ξη})/∂η"),
-        (-1, 0, "g^{ξξ}/h² − …"),
-        (0, 1, "g^{ηη}/h² + …"),
-        (0, -1, "g^{ηη}/h² − …"),
-        (1, 1, "+g^{ξη}/(2 h²)"),
-        (-1, -1, "+g^{ξη}/(2 h²)"),
-        (1, -1, "−g^{ξη}/(2 h²)"),
-        (-1, 1, "−g^{ξη}/(2 h²)"),
-    ]
-    _stencil_2d(out, "covariant_laplacian_cubed_sphere — 9-point in-panel stencil", pts)
+    Cells {-2,-1,0,1} drive the 4th-order CW84 edge interpolation; the
+    additional {-3,+2} cells are needed for the left- and right-cell
+    parabolic reconstructions that feed the limiter and the Courant-fraction
+    flux integral."""
+    fig, ax = plt.subplots(figsize=(8.5, 3.2))
+    ax.axhline(0, color="#1f4f3a", lw=0.8)
+    for x in range(-4, 4):
+        ax.scatter([x], [0], color="#cccccc", s=70, zorder=2)
+        ax.text(x, -0.20, f"i{x:+d}" if x != 0 else "i", ha="center",
+                va="top", fontsize=9, color="#666")
+    # Stencil cells {-3,-2,-1,0,1,2} relative to the right cell of the face.
+    edge_cells = {-2: "CW84", -1: "CW84", 0: "CW84", 1: "CW84"}
+    support_cells = {-3: "parabola", 2: "parabola"}
+    for o in (-3, -2, -1, 0, 1, 2):
+        col = "#b58a00" if o in edge_cells else "#dec98e"
+        ax.scatter([o], [0], color=col, s=160, zorder=3, edgecolor="#5b3d09")
+    for o, c in edge_cells.items():
+        ax.annotate(c, xy=(o, 0), xytext=(o, 0.32), ha="center", fontsize=8,
+                    color="#1f4f3a")
+    for o, c in support_cells.items():
+        ax.annotate(c, xy=(o, 0), xytext=(o, 0.32), ha="center", fontsize=8,
+                    color="#5b3d09")
+    # mark the i+1/2 face
+    ax.annotate("F$_{i+1/2}$", xy=(0.5, 0), xytext=(0.5, -0.58),
+                ha="center", fontsize=11, color="#6c1d1d",
+                arrowprops=dict(arrowstyle="->", color="#6c1d1d"))
+    ax.set_xlim(-4.5, 3.5)
+    ax.set_ylim(-0.9, 0.95)
+    ax.set_yticks([])
+    ax.set_xticks(list(range(-4, 4)))
+    ax.set_xticklabels([])
+    ax.set_xlabel("$x$ (cell offset relative to the right cell of $F_{i+1/2}$)")
+    ax.set_title("flux_1d_ppm — 6-point cartesian stencil (CW84 + Courant integral)")
+    for spine in ("top", "right", "left"):
+        ax.spines[spine].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
 
 
 def stencil_nn_diffusion_mpas(out: Path) -> None:
@@ -785,15 +785,14 @@ RULE_STENCIL_PLOTTERS = {
     "centered_2nd_uniform_vertical": stencil_centered_2nd_vertical,
     "centered_2nd_uniform_latlon": stencil_centered_2nd_latlon,
     "upwind_1st": stencil_upwind_1st,
-    "covariant_laplacian_cubed_sphere": stencil_covariant_laplacian,
     "nn_diffusion_mpas": stencil_nn_diffusion_mpas,
     "ppm_reconstruction": stencil_ppm_reconstruction,
+    "flux_1d_ppm": stencil_flux_1d_ppm,
     "weno5_advection": stencil_weno5,
     "weno5_advection_2d": stencil_weno5_2d,
     "flux_limiter_minmod": stencil_limiter_minmod,
     "flux_limiter_superbee": stencil_limiter_superbee,
     "divergence_arakawa_c": stencil_arakawa_divergence,
-    "transport_2d": stencil_transport_2d,
 }
 
 
@@ -1016,6 +1015,270 @@ CONVERGENCE_PLOTTERS = {
 
 
 # ---------------------------------------------------------------------------
+# Textual rule catalog (ESS pretty-print fallback)
+#
+# The curated matplotlib diagrams above cover only a handful of rules. The
+# rest of the catalog is authored in the replacement-AST (EINSUM) format,
+# which a bespoke per-rule diagram cannot scale to. For every rule that has
+# no hand-authored page under ``docs/content/rules/`` we emit a textual
+# catalog entry whose discrete operator is pretty-printed *directly from the
+# rule's own replacement AST* using EarthSciSerialization's expression
+# renderer (``earthsci_toolkit.display.to_unicode``). This documents the full
+# catalog and gives every ``/rules/<name>/`` link in the rule × grid matrix a
+# real target, which the doc-site link-check requires.
+# ---------------------------------------------------------------------------
+
+
+def _ess_renderer():
+    """Import ESS's expression parser + pretty-printer.
+
+    Returns ``(parse_expression, to_unicode)`` from ``earthsci_toolkit`` (the
+    EarthSciSerialization Python toolkit the docs workflow installs). Kept as a
+    lazy import so the grid/stencil plotting paths do not hard-depend on ESS.
+    """
+    from earthsci_toolkit.parse import _parse_expression  # noqa: WPS437
+    from earthsci_toolkit.display import to_unicode
+
+    return _parse_expression, to_unicode
+
+
+def _render_expr(node, to_unicode, parse_expression) -> str:
+    """Pretty-print one ESM AST node (already-parsed Expr or raw JSON dict)."""
+    if isinstance(node, dict):
+        node = parse_expression(node)
+    return to_unicode(node)
+
+
+def _render_replacement(repl: dict, to_unicode, parse_expression) -> str:
+    """Render a rule ``replacement`` block as a readable unicode formula.
+
+    Handles the replacement shapes that appear in the catalog:
+
+    * ``arrayop`` — ``out[idx] = <expr>``; the reducing form
+      (``reduce`` + ``ranges``, e.g. the unstructured nn_diffusion rules)
+      renders as ``out = Σ[k ∈ range] ( <expr> )``.
+    * ``makearray`` — one ``region → value`` line per piece.
+    * any other top-level op (``+``, ``-``, ``/``, ``index`` …) renders
+      straight through ``to_unicode``.
+    """
+    op = repl.get("op")
+    if op == "arrayop":
+        body = repl.get("expr")
+        body_str = _render_expr(body, to_unicode, parse_expression) if body is not None else "?"
+        out_idx = repl.get("output_idx")
+        reduce = repl.get("reduce")
+        ranges = repl.get("ranges")
+        lhs = f"out[{', '.join(str(i) for i in out_idx)}]" if out_idx else "out"
+        if reduce and ranges:
+            def _range_str(v):
+                if isinstance(v, list):
+                    return "[" + ", ".join(
+                        _render_expr(x, to_unicode, parse_expression)
+                        if isinstance(x, dict) else str(x)
+                        for x in v
+                    ) + "]"
+                return str(v)
+
+            rng = ", ".join(f"{k} ∈ {_range_str(v)}" for k, v in ranges.items())
+            red = {"+": "Σ", "*": "Π"}.get(reduce, f"reduce[{reduce}]")
+            return f"{lhs} = {red}[{rng}] ( {body_str} )"
+        return f"{lhs} = {body_str}"
+    if op == "makearray":
+        regions = repl.get("regions") or []
+        values = repl.get("values") or []
+        lines = [
+            f"region {region}: {_render_expr(value, to_unicode, parse_expression)}"
+            for region, value in zip(regions, values)
+        ]
+        return "makearray:\n  " + "\n  ".join(lines)
+    return _render_expr(repl, to_unicode, parse_expression)
+
+
+def _render_applies_to(applies_to: dict) -> str:
+    """Compact one-line summary of a rule's ``applies_to`` pattern."""
+    if not isinstance(applies_to, dict):
+        return ""
+    op = applies_to.get("op", "?")
+    args = applies_to.get("args") or []
+    arg_str = ", ".join(str(a) for a in args)
+    out = f"{op}({arg_str})"
+    if applies_to.get("dim") is not None:
+        out += f", dim={applies_to['dim']}"
+    if applies_to.get("wrt") is not None:
+        out += f", wrt={applies_to['wrt']}"
+    return out
+
+
+def _walk_catalog_rules() -> list[dict]:
+    """One record per rule declared under ``discretizations/{finite_*}/*.json``."""
+    rules: list[dict] = []
+    disc = REPO_ROOT / "discretizations"
+    for family_dir in sorted(disc.iterdir()):
+        if not family_dir.is_dir() or family_dir.name in ("grids", "gdd", "ic"):
+            continue
+        for rule_path in sorted(family_dir.glob("*.json")):
+            doc = json.loads(rule_path.read_text())
+            blocks = doc.get("discretizations") or doc.get("rules") or {}
+            for name, body in blocks.items():
+                rules.append(
+                    {
+                        "name": name,
+                        "family": family_dir.name,
+                        "rule_path": str(rule_path.relative_to(REPO_ROOT)),
+                        "body": body,
+                    }
+                )
+    return rules
+
+
+def _yaml_quote(s: str) -> str:
+    """Double-quote a YAML scalar, escaping backslashes and quotes."""
+    return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _rule_page_markdown(rule: dict, to_unicode, parse_expression) -> str:
+    """Build the Hugo markdown for one auto-generated rule catalog page."""
+    name = rule["name"]
+    body = rule["body"]
+    family = rule["family"]
+    grid_family = body.get("grid_family") or ""
+    accuracy = body.get("accuracy") or ""
+    applies_to = body.get("applies_to") or {}
+    applies_to_str = _render_applies_to(applies_to)
+    op = applies_to.get("op", "")
+    repo_path = rule["rule_path"]
+
+    fm = [
+        "---",
+        f"title: {_yaml_quote(name)}",
+        f"slug: {_yaml_quote(name)}",
+        f"families: {_yaml_quote(family)}",
+    ]
+    if grid_family:
+        fm.append(f"grid_families: {_yaml_quote(grid_family)}")
+    fm.append('rule_kinds: "scheme"')
+    if accuracy:
+        fm.append(f"accuracy: {_yaml_quote(accuracy)}")
+    if applies_to_str:
+        fm.append(f"applies_to: {_yaml_quote(applies_to_str)}")
+    fm.append(f"rule_path: {_yaml_quote(repo_path)}")
+    desc = (
+        f"Auto-generated catalog entry for the {name} rule "
+        f"({family}, grid family {grid_family or 'n/a'}). The discrete "
+        f"operator is pretty-printed directly from the rule's replacement AST."
+    )
+    fm.append(f"description: {_yaml_quote(desc)}")
+    fm.append("---")
+
+    lines = ["\n".join(fm), ""]
+    lines.append(
+        '<div class="callout">\n'
+        "This page is <strong>auto-generated</strong> from the rule's JSON by "
+        "<code>tools/render_doc_plots.py</code>. The discrete operator below "
+        "is pretty-printed directly from the rule's replacement AST using "
+        "EarthSciSerialization (<code>earthsci_toolkit</code>). Rules with a "
+        "hand-authored page carry richer prose plus stencil and convergence "
+        "diagrams; see the curated entries linked from the "
+        '<a href="{{< ref "/rules" >}}">rule index</a>.\n'
+        "</div>"
+    )
+    lines.append("")
+    lines.append("## Pattern")
+    lines.append("")
+    if applies_to_str:
+        lines.append(
+            f"Matches the §4.2 operator `{op}` on the pattern "
+            f"`{applies_to_str}` for grid family "
+            f"`{grid_family or 'n/a'}`."
+        )
+    else:
+        lines.append(f"Grid family `{grid_family or 'n/a'}`.")
+    lines.append("")
+    lines.append("## Discrete operator")
+    lines.append("")
+
+    repl = body.get("replacement")
+    if repl is not None:
+        try:
+            rendered = _render_replacement(repl, to_unicode, parse_expression)
+            lines.append(
+                "Pretty-printed from the rule's `replacement` AST "
+                "(`$`-prefixed names are pattern variables bound by "
+                "`applies_to`; grid metrics such as `dx`/`dz` are resolved by "
+                "the grid):"
+            )
+            lines.append("")
+            lines.append("```text")
+            lines.append(rendered)
+            lines.append("```")
+        except Exception as exc:  # noqa: BLE001 — render diagnostics into the page
+            lines.append(
+                f"_Replacement AST could not be pretty-printed_ "
+                f"(`{type(exc).__name__}: {exc}`). See the raw rule JSON."
+            )
+    else:
+        # Legacy-format rules (formula/form text, no replacement AST yet).
+        formula = body.get("formula")
+        form = body.get("form")
+        if isinstance(formula, str) and formula.strip():
+            lines.append("Closed-form expression (from the rule's `formula` field):")
+            lines.append("")
+            lines.append("```text")
+            lines.append(formula.strip())
+            lines.append("```")
+        elif isinstance(form, str) and form.strip():
+            lines.append(f"Scheme form: `{form.strip()}`.")
+        else:
+            lines.append(
+                "This rule has no machine-renderable `replacement` AST yet "
+                "(it is still in the legacy authoring format). See the raw "
+                "rule JSON for its definition."
+            )
+        if isinstance(form, str) and form.strip() and (formula or "").strip():
+            lines.append("")
+            lines.append(f"Scheme form: `{form.strip()}`.")
+
+    lines.append("")
+    lines.append(
+        f"Source: [`{repo_path}`]({{{{< param repoURL >}}}}/blob/main/{repo_path})."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate_rule_pages(content_root: Path) -> int:
+    """Emit a textual catalog page for every rule lacking a hand-authored one.
+
+    Hand-authored pages under ``docs/content/rules/`` are never overwritten —
+    they carry richer prose plus the bespoke stencil/convergence diagrams.
+    Returns the number of pages written.
+    """
+    rules_dir = content_root / "rules"
+    _ensure_dir(rules_dir)
+    existing = {p.stem for p in rules_dir.glob("*.md")}
+    existing.discard("_index")
+
+    parse_expression, to_unicode = _ess_renderer()
+
+    written = 0
+    for rule in _walk_catalog_rules():
+        name = rule["name"]
+        # Only rules that declare a grid family get a /rules/<name>/ link in
+        # the matrix; rules without one (e.g. periodic_wrap) are not part of
+        # rule × grid dispatch and need no page. Skip them to avoid emitting
+        # pages nothing links to.
+        if not rule["body"].get("grid_family"):
+            continue
+        if name in existing:
+            continue
+        page = _rule_page_markdown(rule, to_unicode, parse_expression)
+        (rules_dir / f"{name}.md").write_text(page)
+        print(f"  content/rules/{name}.md (ESS pretty-print)", file=sys.stderr)
+        written += 1
+    return written
+
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
@@ -1054,10 +1317,21 @@ def render_all(out_root: Path, what: str = "all") -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="docs/static/plots",
-                    help="Output root (default: docs/static/plots)")
-    ap.add_argument("--what", choices=("all", "grids", "rules"), default="all")
+                    help="Output root for PNG artifacts (default: docs/static/plots)")
+    ap.add_argument("--content", default="docs/content",
+                    help="Hugo content root for auto-generated rule pages "
+                         "(default: docs/content)")
+    ap.add_argument("--what", choices=("all", "grids", "rules", "pages"),
+                    default="all",
+                    help="all = grid PNGs + rule PNGs + textual catalog pages; "
+                         "grids/rules = only those PNGs; pages = only the "
+                         "ESS-pretty-printed textual rule catalog")
     args = ap.parse_args()
-    render_all(Path(args.out), what=args.what)
+    if args.what in ("all", "grids", "rules"):
+        render_all(Path(args.out), what=args.what)
+    if args.what in ("all", "pages"):
+        n = generate_rule_pages(Path(args.content))
+        print(f"  generated {n} textual rule catalog page(s)", file=sys.stderr)
     return 0
 
 
