@@ -383,6 +383,119 @@ end
 end
 
 # ---------------------------------------------------------------------------
+# Route B open-mesh boundary fixture (no spurious Dirichlet-0 contribution).
+#
+# The declarative Route B path materializes the nn_diffusion reduction as a
+# constant-`max_edges` PADDED segment reduction whose padding-slot coefficient
+# is ZEROED. The numerical risk (design §7.1): if a padding/boundary slot's
+# coefficient is NOT zero, the 0-sentinel neighbour gathers u[0]=ghost-0 and
+# injects a spurious `coeff·(0 − u[c])` term — an unintended Dirichlet-0 forcing
+# at boundary cells. The shipped builtin MPAS/DUO meshes are CLOSED (no
+# 0-sentinel within a cell's valence), so they cannot catch this regression;
+# this fixture is a deliberately OPEN mesh whose boundary cells have fewer
+# neighbours, asserting the discretized operator has NO boundary contribution
+# beyond the genuine interior stencil.
+#
+# Mesh: a 4-cell OPEN strip 1—2—3—4 (a path graph, not a closed loop).
+#   edges: 1=(1,2), 2=(2,3), 3=(3,4).  all area=dv=dc=1 → per-edge weight 1.
+#   valence: cell1=1 (nbr 2), cell2=2 (nbrs 1,3), cell3=2 (nbrs 2,4), cell4=1 (nbr 3).
+# max_edges=3, so EVERY cell also has ≥1 trailing padding slot (k>valence),
+# AND the boundary cells 1,4 have valence 1 (< the interior valence 2). A naive
+# non-zeroed-padding impl would give boundary cells a spurious −u[c] term.
+@testitem "build_ode_problem: MPAS Route B open-mesh boundary has no spurious Dirichlet term" begin
+    using EarthSciDiscretizations: build_ode_problem, mpas_mesh_data
+    import SciMLBase
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_nn_diffusion_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_open_strip_4cell.gdd.json"
+    )
+
+    # OPEN 4-cell strip. cells_on_cell/edges_on_cell are (max_edges × n_cells),
+    # 1-based, 0-sentinel for absent slots. Boundary cells 1,4 have valence 1.
+    synth_mesh = mpas_mesh_data(
+        lon_cell = zeros(4),
+        lat_cell = zeros(4),
+        area_cell = [1.0, 1.0, 1.0, 1.0],
+        n_edges_on_cell = [1, 2, 2, 1],
+        cells_on_cell = [
+            2 1 2 3;    # slot 1: nbrs 2,1,2,3
+            0 3 4 0;    # slot 2: only interior cells 2,3 have one
+            0 0 0 0
+        ],   # slot 3: pure padding everywhere
+        edges_on_cell = [
+            1 1 2 3;    # slot 1
+            0 2 3 0;    # slot 2
+            0 0 0 0
+        ],   # slot 3 padding
+        lon_edge = zeros(3),
+        lat_edge = zeros(3),
+        cells_on_edge = [1 2 3; 2 3 4],   # 2 × n_edges
+        dc_edge = [1.0, 1.0, 1.0],
+        dv_edge = [1.0, 1.0, 1.0],
+        max_edges = 3,
+    )
+
+    prob, var_map = build_ode_problem(
+        esm_path;
+        grid_ref = gdd_path,
+        reader_fn = _ -> synth_mesh
+    )
+
+    @test prob isa SciMLBase.ODEProblem
+    @test all(haskey(var_map, "u[$c]") for c in 1:4)
+
+    du = similar(prob.u0)
+
+    # (1) Uniform field u≡1: a correct (no-spurious-term) discrete Laplacian is
+    #     EXACTLY zero everywhere, INCLUDING the open boundary cells. A spurious
+    #     Dirichlet-0 padding term would make du[1]=du[4]=−1 here.
+    u_uniform = copy(prob.u0)
+    for c in 1:4
+        u_uniform[var_map["u[$c]"]] = 1.0
+    end
+    prob.f(du, u_uniform, prob.p, 0.0)
+    for c in 1:4
+        @test du[var_map["u[$c]"]] ≈ 0.0  atol = 1.0e-12
+    end
+
+    # (2) Non-uniform field u=[0,1,0,0]: each cell's du is the sum over its
+    #     REAL neighbours only (boundary slots/padding drop out, weight 1/edge):
+    #       du[1] = (u[2]-u[1])                =  1   (valence-1 boundary cell)
+    #       du[2] = (u[1]-u[2]) + (u[3]-u[2])  = -2
+    #       du[3] = (u[2]-u[3]) + (u[4]-u[3])  =  1
+    #       du[4] = (u[3]-u[4])                =  0   (valence-1 boundary cell)
+    u_nu = copy(prob.u0)
+    u_nu[var_map["u[1]"]] = 0.0
+    u_nu[var_map["u[2]"]] = 1.0
+    u_nu[var_map["u[3]"]] = 0.0
+    u_nu[var_map["u[4]"]] = 0.0
+    prob.f(du, u_nu, prob.p, 0.0)
+    @test du[var_map["u[1]"]] ≈ 1.0   atol = 1.0e-12
+    @test du[var_map["u[2]"]] ≈ -2.0  atol = 1.0e-12
+    @test du[var_map["u[3]"]] ≈ 1.0   atol = 1.0e-12
+    @test du[var_map["u[4]"]] ≈ 0.0   atol = 1.0e-12
+
+    # (3) Direct witness that the open boundary is no-flux, not Dirichlet-0:
+    #     drive ONLY the boundary cell u=[5,0,0,0]. du[1] must be (u[2]-u[1])=−5,
+    #     i.e. it sees its single real neighbour and NOT an extra −u[1] ghost.
+    #     (A spurious padding term would give du[1] = −5 + (0−5) = −10.)
+    u_b = copy(prob.u0)
+    u_b[var_map["u[1]"]] = 5.0
+    prob.f(du, u_b, prob.p, 0.0)
+    @test du[var_map["u[1]"]] ≈ -5.0  atol = 1.0e-12   # exactly one real neighbour
+    @test du[var_map["u[2]"]] ≈ 5.0   atol = 1.0e-12
+    @test du[var_map["u[4]"]] ≈ 0.0   atol = 1.0e-12
+end
+
+# ---------------------------------------------------------------------------
 # esd-b6u: PIDE integral term via Euler/midpoint quadrature
 # ---------------------------------------------------------------------------
 

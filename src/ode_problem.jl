@@ -83,13 +83,21 @@ function build_ode_problem(
 
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
 
-    # Pre-bind unstructured connectivity into equations (esd-aij Route A).
-    isempty(loaded_grids) || _prebind_unstructured!(disc, loaded_grids, numeric_ics)
+    # Bind unstructured (MPAS/DUO) grid geometry declaratively (Route B):
+    # rewrite the rule's variable-valence reduction arrayop into a padded
+    # constant-`max_k` reduction whose per-(cell,slot) FVM weight and neighbour
+    # table arrive as `const_arrays` (zeroed padding slot ⇒ no spurious boundary
+    # term). The disc reduction arrayop stays a single arrayop — ESS's
+    # constant-bound einsum path (ess-6ny) materializes it with zero ESS change.
+    const_arrays = Dict{String, AbstractArray{Float64}}(coord_arrays)
+    if !isempty(loaded_grids)
+        merge!(const_arrays, _bind_unstructured!(disc, loaded_grids))
+    end
 
     f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(
         disc;
         initial_conditions = numeric_ics,
-        const_arrays = coord_arrays
+        const_arrays = const_arrays
     )
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
@@ -502,7 +510,7 @@ end
 # GDD domain_spec must carry "n_cells" (integer). Optional "n_edges" is
 # stored but not yet consumed by ESS discretize (pends ESS/esm-bpr).
 # When reader_fn is provided, loads MpasGrid from loader.path and returns
-# it as a third value so _prebind_unstructured! can extract connectivity.
+# it as a third value so _bind_unstructured! can build its const_arrays.
 function _inject_grids_mpas(
         domain_spec, gdd_path::AbstractString;
         reader_fn = nothing
@@ -581,7 +589,7 @@ end
 # Build dims for DUO icosahedral triangular grids.
 # GDD domain_spec must carry "n_cells" (integer = 20 * 4^level). When a
 # "loader" block is present, loads DuoGrid via build_duo_grid and returns it
-# as a third value so _prebind_unstructured! can extract connectivity tables.
+# as a third value so _bind_unstructured! can build its const_arrays.
 function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
     n_cells_raw = get(domain_spec, "n_cells", nothing)
     n_cells_raw === nothing && throw(
@@ -681,7 +689,7 @@ function _load_json_mutable(path::AbstractString)::Dict{String, Any}
 end
 
 # ---------------------------------------------------------------------------
-# Unstructured connectivity pre-binding (esd-aij)
+# Unstructured connectivity extraction (geometry source for Route B binding)
 # ---------------------------------------------------------------------------
 
 # Return (ctables, scalar_arrs) for a DuoGrid:
@@ -762,472 +770,271 @@ end
 _grid_n_cells(g::DuoGrid) = length(g.area)
 _grid_n_cells(g::MpasGrid) = g.mesh.n_cells
 
-# Substitute a string variable name with a concrete integer in a dict AST.
-# Recurses into "args" lists, "expr" sub-bodies, and range bound expressions
-# inside "ranges" dicts (keys are loop-var names and are preserved unchanged).
-function _dict_subst(node, var::String, val::Int)
-    node isa AbstractString && return String(node) == var ? val : node
-    node isa Number          && return node
-    node isa AbstractVector  && return Any[_dict_subst(x, var, val) for x in node]
-    node isa AbstractDict || return node
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_dict_subst(x, var, val) for x in v]
-        elseif ks == "expr" && v !== nothing
-            out[ks] = _dict_subst(v, var, val)
-        elseif ks == "ranges" && v isa AbstractDict
-            # Recurse into range bound expressions; preserve range var name keys.
-            new_ranges = Dict{String, Any}()
-            for (rv, rbound) in v
-                new_ranges[String(rv)] = rbound isa AbstractVector ?
-                    Any[_dict_subst(b, var, val) for b in rbound] :
-                    _dict_subst(rbound, var, val)
-            end
-            out[ks] = new_ranges
-        else
-            out[ks] = v
-        end
-    end
-    return out
+# ---------------------------------------------------------------------------
+# Declarative unstructured binding (Route B): the rule's variable-valence
+# reduction arrayop is materialized by ESS's constant-bound einsum path
+# (ess-6ny) without any ESS change. We do two host-side things:
+#
+#   1. _unstructured_const_arrays(grid): build, from the grid's connectivity
+#      traits, two padded `(n_cells, max_k)` const_arrays — a neighbour table
+#      and a precomputed per-(cell,slot) FVM-weight `coeff`. Padding slots
+#      (`slot > valence(cell)`) carry a 0 neighbour sentinel AND a ZEROED
+#      coeff, so a padded term contributes coeff·(u[ghost 0] − u[cell]) =
+#      0·(…) = 0 — i.e. no spurious boundary (Dirichlet-0) contribution.
+#
+#   2. _rewrite_unstructured_arrayop!(disc, grid): rewrite the rule's inner
+#      reduction arrayop in place so its `k`-range is the *constant* [1, max_k]
+#      and its coefficient subtree (dv_edge/dc_edge/area FVM weight built from
+#      a per-cell *dynamic* valence) is replaced by a single `index(coeff, i, k)`
+#      lookup against the precomputed const_array. The operator stays one
+#      arrayop; only the coefficient becomes a grid-derived table, exactly like
+#      Fornberg weights or coord_<dim>. The disc is otherwise untouched — no
+#      fake state variables, no per-cell equation unrolling.
+#
+# This retires the imperative _prebind_unstructured! residue (and its ~15
+# host-side unroll helpers) entirely.
+
+# Per-family descriptor: how to read the connectivity/edge/area tables that
+# _extract_connectivity returns, and how to assemble the FVM weight from them.
+struct _UnstructuredBinding
+    neighbor_table::String  # ctables key: (max_k, n_cells) 1-based neighbour cell idx, 0 = pad
+    edge_table::String      # ctables key: (max_k, n_cells) 1-based incident-edge idx, 0 = pad
+    valence_table::String   # ctables key: (n_cells,) per-cell valence, or "" if constant
+    area_arr::String        # scalar_arrs key: (n_cells,) per-cell normalisation area
+    num_edge_arr::String    # scalar_arrs key: edge metric in the weight numerator
+    den_edge_arr::String    # scalar_arrs key: edge metric in the weight denominator
+    max_k::Int              # constant padded slot count
 end
 
-# Return true if node (a disc expression dict) contains a reduction arrayop.
-function _has_reduction(node)::Bool
-    node isa AbstractDict || return false
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "arrayop"
-        get(node, "reduce", nothing) !== nothing && return true
-    end
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            any(_has_reduction(x) for x in v) && return true
-        elseif ks == "expr" && v !== nothing
-            _has_reduction(v) && return true
-        end
-    end
-    return false
-end
-
-# Evaluate a range bound expression that may reference 1D integer connectivity
-# lookups (e.g. index(n_edges_on_cell, c) - 1) to a concrete Int.
-# Returns nothing when the expression is not statically evaluable.
-function _eval_range_end(node, ctables::Dict{String, Any})::Union{Int, Nothing}
-    node isa Integer     && return Int(node)
-    node isa AbstractFloat && return Int(round(node))
-    node isa AbstractDict || return nothing
-    op = get(node, "op", nothing)
-    op isa AbstractString || return nothing
-    args = get(node, "args", Any[])
-    ops = String(op)
-    if ops == "-" && length(args) == 2
-        a = _eval_range_end(args[1], ctables)
-        b = _eval_range_end(args[2], ctables)
-        (a === nothing || b === nothing) && return nothing
-        return a - b
-    elseif ops == "+" && !isempty(args)
-        total = 0
-        for a in args
-            v = _eval_range_end(a, ctables); v === nothing && return nothing
-            total += v
-        end
-        return total
-    elseif ops == "index" && length(args) >= 2
-        tname = args[1]
-        tname isa AbstractString || return nothing
-        tbl = get(ctables, String(tname), nothing)
-        tbl isa Vector{Int} || return nothing
-        idx = args[2]
-        idx isa Integer || return nothing
-        return tbl[Int(idx)]  # 1-based lookup
-    end
-    return nothing
-end
-
-# Replace index(table, int[, int]) lookups with concrete integers in a dict
-# expression, where table is in ctables and all supplied index arguments are
-# concrete integers (after prior _dict_subst passes).
-# Convention: 1D Vector{Int} → 1-based; 2D Matrix{Int}(rows=k+1,cols=c) →
-#   first index is 1-based column (the outer cell c), second is 0-based row k.
-function _resolve_int_indices(node, ctables::Dict{String, Any})
-    node isa Number         && return node
-    node isa AbstractString && return node
-    node isa AbstractVector && return Any[_resolve_int_indices(x, ctables) for x in node]
-    node isa AbstractDict || return node
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "index"
-        args_raw = get(node, "args", Any[])
-        if length(args_raw) >= 2
-            tname = args_raw[1]
-            if tname isa AbstractString && haskey(ctables, String(tname))
-                tbl = ctables[String(tname)]
-                if length(args_raw) == 2 && args_raw[2] isa Integer && tbl isa Vector{Int}
-                    return tbl[Int(args_raw[2])]
-                elseif length(args_raw) == 3 && args_raw[2] isa Integer &&
-                        args_raw[3] isa Integer && tbl isa Matrix{Int}
-                    # index(mat, c, k): c is 1-based outer cell, k is 0-based neighbor slot
-                    return tbl[Int(args_raw[3]) + 1, Int(args_raw[2])]
-                end
-            end
-        end
-    end
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_resolve_int_indices(x, ctables) for x in v]
-        elseif ks == "expr" && v !== nothing
-            out[ks] = _resolve_int_indices(v, ctables)
-        else
-            out[ks] = v
-        end
-    end
-    return out
-end
-
-# Find the first genuine reduction arrayop (has "op"="arrayop" AND "reduce") in a
-# disc expression dict.  Returns the node or nothing.
-function _find_outer_reduction(node)
-    node isa AbstractDict || return nothing
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "arrayop" &&
-            get(node, "reduce", nothing) !== nothing
-        return node
-    end
-    for v in get(node, "args", Any[])
-        r = _find_outer_reduction(v); r !== nothing && return r
-    end
-    inner = get(node, "expr", nothing)
-    inner !== nothing && (r = _find_outer_reduction(inner); r !== nothing && return r)
-    return nothing
-end
-
-# Replace `index(operand_name, <any concrete index>)` with 1.0 in a dict AST.
-# Used to strip the state-variable operand from per-k body terms so that the
-# remaining expression is the pure coefficient.
-function _replace_operand_index_with_one(node, operand_name::String)
-    node isa Number         && return node
-    node isa AbstractString && return node
-    node isa AbstractVector && return Any[_replace_operand_index_with_one(x, operand_name) for x in node]
-    node isa AbstractDict || return node
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "index"
-        args = get(node, "args", Any[])
-        if !isempty(args) && args[1] isa AbstractString && String(args[1]) == operand_name
-            return 1.0
-        end
-    end
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_replace_operand_index_with_one(x, operand_name) for x in v]
-        elseif ks == "expr" && v !== nothing
-            out[ks] = _replace_operand_index_with_one(v, operand_name)
-        else
-            out[ks] = v
-        end
-    end
-    return out
-end
-
-# Compute sum_k(coeff_k) from the outer reduction's body by substituting the
-# state-variable operand with 1.0 in each per-k expansion.  This gives the
-# indirect-entry coeff when the stencil uses the same per-k expression for both
-# the reduction and the indirect (diagonal) term.
-# Returns a dict/number, or nothing if the range cannot be evaluated.
-function _compute_indirect_coeff(
-        outer_reduction, ctables::Dict{String, Any},
-        operand_name::String
+# MPAS: coeff = dv_edge[e] / (dc_edge[e] * area_cell[c]); valence varies (5/6),
+# pad to mesh.max_edges; neighbour/edge tables are (max_edges, n_cells), 0 = pad.
+function _unstructured_binding(grid::MpasGrid)
+    return _UnstructuredBinding(
+        "cells_on_cell", "edges_on_cell", "n_edges_on_cell",
+        "area_cell", "dv_edge", "dc_edge", grid.mesh.max_edges
     )
-    inner_body = get(outer_reduction, "expr", nothing)
-    inner_body === nothing && return nothing
-    ranges = get(outer_reduction, "ranges", nothing)
-    ranges isa AbstractDict && !isempty(ranges) || return nothing
-    k_var = String(first(keys(ranges)))
-    k_range = ranges[k_var]
-    k_range isa AbstractVector && length(k_range) == 2 || return nothing
-    k_lo = k_range[1] isa Integer ? Int(k_range[1]) : nothing
-    k_hi = _eval_range_end(k_range[2], ctables)
-    (k_lo === nothing || k_hi === nothing) && return nothing
-    reduce_op = String(get(outer_reduction, "reduce", "+"))
-    terms = Any[]
-    for k_val in k_lo:k_hi
-        body_k = _dict_subst(inner_body, k_var, k_val)
-        body_k = _resolve_int_indices(body_k, ctables)
-        coeff_k = _replace_operand_index_with_one(body_k, operand_name)
-        push!(terms, coeff_k)
-    end
-    isempty(terms) && return 0.0
-    length(terms) == 1 && return terms[1]
-    return Dict{String, Any}("op" => reduce_op, "args" => Any[terms...])
 end
 
-# True iff `node` contains an `index(operand_name, …)` anywhere.
-function _indexes_operand(node, operand_name::String)::Bool
-    node isa AbstractVector && return any(_indexes_operand(x, operand_name) for x in node)
+# DUO: coeff = dc_edge[e] / (dv_edge[e] * area_eff[c]); valence ≡ 3 (no padding,
+# closed icosahedral mesh). Neighbour/edge tables are (3, n_cells).
+function _unstructured_binding(::DuoGrid)
+    return _UnstructuredBinding(
+        "cell_neighbors", "edges_on_face", "",
+        "area", "dc_edge", "dv_edge", 3
+    )
+end
+
+# Build the padded (n_cells, max_k) neighbour + coeff const_arrays for a grid.
+# Returns Dict("cells_on_cell" => nbr, "coeff" => coeff), the names the rewritten
+# arrayop references. Slots beyond a cell's valence are zeroed in BOTH arrays.
+function _unstructured_const_arrays(grid)
+    bind = _unstructured_binding(grid)
+    ctables, scalar_arrs = _extract_connectivity(grid)
+    n_cells = _grid_n_cells(grid)
+    max_k = bind.max_k
+
+    nbr_src = ctables[bind.neighbor_table]::Matrix{Int}   # (rows≥max_k, n_cells)
+    edge_src = ctables[bind.edge_table]::Matrix{Int}      # (rows≥max_k, n_cells)
+    area = scalar_arrs[bind.area_arr]::Vector{Float64}
+    num_edge = scalar_arrs[bind.num_edge_arr]::Vector{Float64}
+    den_edge = scalar_arrs[bind.den_edge_arr]::Vector{Float64}
+    valence = isempty(bind.valence_table) ? nothing :
+        ctables[bind.valence_table]::Vector{Int}
+
+    nbr = zeros(Float64, n_cells, max_k)
+    coeff = zeros(Float64, n_cells, max_k)
+    for c in 1:n_cells
+        kc = valence === nothing ? max_k : valence[c]
+        kc = min(kc, max_k)
+        for slot in 1:kc
+            nb = nbr_src[slot, c]
+            e = edge_src[slot, c]
+            # A real slot must reference a real neighbour and a real edge; any
+            # 0-sentinel here (open boundary) is left as a zeroed padding slot so
+            # the term drops out (matches the imperative path, which never
+            # iterated absent slots — no spurious Dirichlet-0).
+            (nb >= 1 && e >= 1) || continue
+            nbr[c, slot] = Float64(nb)
+            coeff[c, slot] = num_edge[e] / (den_edge[e] * area[c])
+        end
+    end
+    return Dict{String, AbstractArray{Float64}}(
+        "cells_on_cell" => nbr,
+        "coeff" => coeff,
+    )
+end
+
+# True iff `node` is the inner reduction arrayop (op=="arrayop" with a "reduce").
+_is_reduction_arrayop(node) =
+    node isa AbstractDict && String(get(node, "op", "")) == "arrayop" &&
+    get(node, "reduce", nothing) !== nothing
+
+# Find the inner reduction arrayop (depth-first) inside a disc expression dict.
+function _find_reduction_arrayop(node)
+    _is_reduction_arrayop(node) && return node
+    node isa AbstractDict || return nothing
+    inner = get(node, "expr", nothing)
+    inner !== nothing && (r = _find_reduction_arrayop(inner); r !== nothing && return r)
+    for v in get(node, "args", Any[])
+        r = _find_reduction_arrayop(v)
+        r !== nothing && return r
+    end
+    return nothing
+end
+
+# In the reduction body `coeff_subtree * (u[nbr] - u[i])`, return the index
+# `("i","k")` loop-variable names from the neighbour gather `index(nbr_table,i,k)`,
+# and the two body factors. The body is the rule's `op:"*"` with two args; the
+# factor that contains the `op:"-"` difference is the operand factor, the other
+# is the coefficient subtree we replace.
+function _split_reduction_body(body, neighbor_table::String)
+    body isa AbstractDict && String(get(body, "op", "")) == "*" || return nothing
+    args = get(body, "args", Any[])
+    length(args) == 2 || return nothing
+    # Identify which arg is the operand difference (contains the neighbour gather).
+    coeff_arg = nothing
+    operand_arg = nothing
+    for a in args
+        if _contains_index_table(a, neighbor_table)
+            operand_arg = a
+        else
+            coeff_arg = a
+        end
+    end
+    (coeff_arg === nothing || operand_arg === nothing) && return nothing
+    # Read the loop-var names from the neighbour gather index(nbr_table, i, k).
+    ik = _neighbor_gather_indices(operand_arg, neighbor_table)
+    ik === nothing && return (coeff_arg, operand_arg, nothing, nothing)
+    return (coeff_arg, operand_arg, ik[1], ik[2])
+end
+
+# True iff node contains an `index(table, …)` anywhere.
+function _contains_index_table(node, table::String)::Bool
+    node isa AbstractVector && return any(_contains_index_table(x, table) for x in node)
     node isa AbstractDict || return false
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "index"
-        args = get(node, "args", Any[])
-        !isempty(args) && args[1] isa AbstractString &&
-            String(args[1]) == operand_name && return true
+    if String(get(node, "op", "")) == "index"
+        a = get(node, "args", Any[])
+        !isempty(a) && a[1] isa AbstractString && String(a[1]) == table && return true
     end
     for (_, v) in node
-        _indexes_operand(v, operand_name) && return true
+        _contains_index_table(v, table) && return true
     end
     return false
 end
 
-# Replace the indirect-entry (diagonal) coefficient sub-tree in a dict AST with
-# `replacement` (the concrete sum_k(coeff_k) computed by _compute_indirect_coeff).
-#
-# Historically this matched bare "arrayop" MARKER nodes (op="arrayop" with NO
-# "reduce" field): ESS's `_parse_expr` used to read only "op"/"args" from coeff
-# expressions, stripping "reduce"/"expr"/"ranges" from any nested reduction
-# arrayop, leaving a content-free marker. Once ESS `_parse_expr` parses arrayop
-# faithfully (esd-3d7 fix), the indirect entry survives as a FULL reduction
-# arrayop instead — but it is still distinguishable as the indirect/diagonal
-# coefficient because its body never indexes the operand variable (the operand
-# was abstracted out at authoring time, so the body is a pure coefficient over
-# the connectivity tables; its range bound also still references the symbolic
-# "$target"). We therefore also match a reduction arrayop whose body does not
-# index `operand_name`, so both the legacy-stripped and the faithfully-parsed
-# forms are replaced by the precomputed indirect coefficient.
-function _replace_marker_arrayops(node, replacement, operand_name::String = "")
-    node isa Number         && return node
-    node isa AbstractString && return node
-    node isa AbstractVector && return Any[_replace_marker_arrayops(x, replacement, operand_name) for x in node]
-    node isa AbstractDict || return node
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "arrayop"
-        is_legacy_marker = get(node, "reduce", nothing) === nothing
-        is_faithful_indirect = !isempty(operand_name) &&
-            get(node, "reduce", nothing) !== nothing &&
-            !_indexes_operand(get(node, "expr", nothing), operand_name)
-        (is_legacy_marker || is_faithful_indirect) && return replacement
-    end
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_replace_marker_arrayops(x, replacement, operand_name) for x in v]
-        elseif ks == "expr" && v !== nothing
-            out[ks] = _replace_marker_arrayops(v, replacement, operand_name)
-        else
-            out[ks] = v
-        end
-    end
-    return out
-end
-
-# Expand all reduction arrayop nodes in a disc expression dict into explicit
-# sums using ctables.  Must be called after _dict_subst has substituted the
-# outer cell index, so range bounds can be evaluated with _eval_range_end.
-function _expand_reductions(node, ctables::Dict{String, Any})
-    node isa Number         && return node
-    node isa AbstractString && return node
-    node isa AbstractVector && return Any[_expand_reductions(x, ctables) for x in node]
-    node isa AbstractDict || return node
-
-    op = get(node, "op", nothing)
-    if op isa AbstractString && String(op) == "arrayop"
-        reduce_op = get(node, "reduce", nothing)
-        if reduce_op !== nothing
-            inner_body = get(node, "expr", nothing)
-            inner_body === nothing && return node
-            ranges = get(node, "ranges", nothing)
-            ranges isa AbstractDict && !isempty(ranges) || return node
-            k_var = String(first(keys(ranges)))
-            k_range = ranges[k_var]
-            (k_range isa AbstractVector && length(k_range) == 2) || return node
-            k_lo = k_range[1] isa Integer ? Int(k_range[1]) : nothing
-            k_hi = _eval_range_end(k_range[2], ctables)
-            (k_lo === nothing || k_hi === nothing) && return node
-            terms = Any[]
-            for k_val in k_lo:k_hi
-                body_k = _dict_subst(inner_body, k_var, k_val)
-                body_k = _resolve_int_indices(body_k, ctables)
-                body_k = _expand_reductions(body_k, ctables)
-                push!(terms, body_k)
-            end
-            isempty(terms) && return 0.0
-            length(terms) == 1 && return terms[1]
-            return Dict{String, Any}("op" => String(reduce_op), "args" => Any[terms...])
-        end
-    end
-
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            out[ks] = Any[_expand_reductions(x, ctables) for x in v]
-        elseif ks == "expr" && v !== nothing
-            out[ks] = _expand_reductions(v, ctables)
-        else
-            out[ks] = v
-        end
-    end
-    return out
-end
-
-# Pre-bind unstructured grid connectivity into the disc equations (esd-aij).
-#
-# For each model whose grid is a loaded DuoGrid or MpasGrid:
-#   1. Inject scalar float arrays (area, dv_edge, …) as constant state
-#      variables in the disc model and their per-cell values into expr_ics.
-#   2. Replace the single outer-arrayop equation per variable with N explicit
-#      D(index(v, c)) = concrete_sum equations (one per cell) whose connectivity
-#      lookups have been resolved to concrete integers.
-#   3. Inject zero ICs for any shape=["n_cells"] state variables not yet in
-#      expr_ics so that build_evaluator's _detect_array_vars can find them.
-#
-# This transforms disc so that build_evaluator's _resolve_indices handles all
-# index ops with compile-time-constant indices — no change to ESS required.
-function _prebind_unstructured!(
-        disc::Dict{String, Any},
-        loaded_grids::Dict{String, Any},
-        expr_ics::Dict{String, Float64}
+# Find the first `index(table, i, k)` and return (i_name, k_name) as Strings.
+function _neighbor_gather_indices(node, table::String)
+    node isa AbstractVector && (
+        for x in node
+            r = _neighbor_gather_indices(x, table); r !== nothing && return r
+        end; return nothing
     )
-    models_disc = get(disc, "models", nothing)
-    models_disc isa AbstractDict || return
+    node isa AbstractDict || return nothing
+    if String(get(node, "op", "")) == "index"
+        a = get(node, "args", Any[])
+        if length(a) == 3 && a[1] isa AbstractString && String(a[1]) == table &&
+                a[2] isa AbstractString && a[3] isa AbstractString
+            return (String(a[2]), String(a[3]))
+        end
+    end
+    for (_, v) in node
+        r = _neighbor_gather_indices(v, table); r !== nothing && return r
+    end
+    return nothing
+end
 
+# Rewrite the inner reduction arrayop of `disc` for `grid` (Route B):
+#   • coefficient subtree → index(coeff, i, k)
+#   • neighbour gather table renamed to "cells_on_cell" (the const_array name)
+#   • k-range → constant [1, max_k]   (0-based [0, valence-1] → 1-based [1,max_k])
+#   • inner arrayop args → ["coeff", "cells_on_cell"]
+# Mutates the equation dicts in place. Returns true if a reduction was rewritten.
+function _rewrite_unstructured_arrayop!(mdisc::AbstractDict, grid)
+    bind = _unstructured_binding(grid)
+    eqs = get(mdisc, "equations", nothing)
+    eqs isa AbstractVector || return false
+    rewrote = false
+    for eq in eqs
+        eq isa AbstractDict || continue
+        rhs = get(eq, "rhs", nothing)
+        red = _find_reduction_arrayop(rhs)
+        red === nothing && continue
+        body = get(red, "expr", nothing)
+        split = _split_reduction_body(body, bind.neighbor_table)
+        split === nothing && continue
+        coeff_arg, operand_arg, i_name, k_name = split
+        (i_name === nothing || k_name === nothing) && continue
+
+        # Replace the coefficient factor with index(coeff, i, k); rename the
+        # neighbour table inside the operand difference to the const_array name.
+        coeff_idx = Dict{String, Any}(
+            "op" => "index", "args" => Any["coeff", i_name, k_name]
+        )
+        operand_renamed = _rename_index_table(operand_arg, bind.neighbor_table, "cells_on_cell")
+        red["expr"] = Dict{String, Any}(
+            "op" => "*", "args" => Any[coeff_idx, operand_renamed]
+        )
+
+        # Constant padded k-range [1, max_k]. (Rule had 0-based [0, valence-1];
+        # the const_arrays are built 1-based [cell, slot=1..max_k].)
+        ranges = get(red, "ranges", nothing)
+        ranges isa AbstractDict || (ranges = Dict{String, Any}(); red["ranges"] = ranges)
+        ranges[k_name] = Any[1, bind.max_k]
+
+        # The inner arrayop now references only the two const_arrays.
+        red["args"] = Any["coeff", "cells_on_cell"]
+        rewrote = true
+    end
+    return rewrote
+end
+
+# Rename every `index(old_table, …)` first-arg to `new_table` in a dict AST.
+function _rename_index_table(node, old_table::String, new_table::String)
+    node isa AbstractVector &&
+        return Any[_rename_index_table(x, old_table, new_table) for x in node]
+    node isa AbstractDict || return node
+    out = Dict{String, Any}()
+    for (k, v) in node
+        ks = String(k)
+        if ks == "args" && v isa AbstractVector
+            new_args = Any[]
+            for (j, a) in enumerate(v)
+                if j == 1 && a isa AbstractString && String(a) == old_table &&
+                        String(get(node, "op", "")) == "index"
+                    push!(new_args, new_table)
+                else
+                    push!(new_args, _rename_index_table(a, old_table, new_table))
+                end
+            end
+            out[ks] = new_args
+        elseif v isa AbstractDict
+            out[ks] = _rename_index_table(v, old_table, new_table)
+        else
+            out[ks] = v
+        end
+    end
+    return out
+end
+
+# Bind every model in `disc` whose grid is a loaded MpasGrid/DuoGrid (Route B).
+# Rewrites each model's reduction arrayop to the padded constant-`max_k` form and
+# returns the merged neighbour/coeff const_arrays for build_evaluator.
+function _bind_unstructured!(disc::Dict{String, Any}, loaded_grids::Dict{String, Any})
+    out = Dict{String, AbstractArray{Float64}}()
+    models_disc = get(disc, "models", nothing)
+    models_disc isa AbstractDict || return out
     for (_, mdisc_any) in models_disc
         mdisc_any isa AbstractDict || continue
         mdisc = mdisc_any
         grid_name = String(get(mdisc, "grid", ""))
         grid = get(loaded_grids, grid_name, nothing)
         grid === nothing && continue
-
-        ctables, scalar_arrs = _extract_connectivity(grid)
-        n_cells = _grid_n_cells(grid)
-
-        # 1. Inject scalar float arrays as constant state variables + ICs.
-        vars_disc = get(mdisc, "variables", nothing)
-        if vars_disc === nothing
-            mdisc["variables"] = Dict{String, Any}()
-            vars_disc = mdisc["variables"]
-        end
-        for (arr_name, vals) in scalar_arrs
-            vars_disc[arr_name] = Dict{String, Any}(
-                "type" => "state",
-                "shape" => Any["n_cells"],
-            )
-            for (c, v) in enumerate(vals)
-                expr_ics["$(arr_name)[$c]"] = Float64(v)
-            end
-        end
-
-        # 2. Pre-unroll outer-arrayop equations.
-        eqs_raw = get(mdisc, "equations", nothing)
-        eqs_raw isa AbstractVector || continue
-        new_eqs = Any[]
-
-        for eq in eqs_raw
-            eq isa AbstractDict || (push!(new_eqs, eq); continue)
-            lhs = get(eq, "lhs", nothing)
-            rhs = get(eq, "rhs", nothing)
-
-            # Only unroll equations whose LHS is an outer arrayop with a D expr.
-            lhs isa AbstractDict &&
-                String(get(lhs, "op", "")) == "arrayop" || (push!(new_eqs, eq); continue)
-            rhs isa AbstractDict                          || (push!(new_eqs, eq); continue)
-
-            out_idxs_raw = get(lhs, "output_idx", nothing)
-            out_idxs_raw isa AbstractVector && !isempty(out_idxs_raw) ||
-                (push!(new_eqs, eq); continue)
-            outer_var = String(out_idxs_raw[1])
-            outer_ranges = get(lhs, "ranges", nothing)
-            outer_ranges isa AbstractDict               || (push!(new_eqs, eq); continue)
-            haskey(outer_ranges, outer_var)             || (push!(new_eqs, eq); continue)
-            o_range = outer_ranges[outer_var]
-            o_range isa AbstractVector && length(o_range) == 2 ||
-                (push!(new_eqs, eq); continue)
-            o_lo = o_range[1] isa Integer ? Int(o_range[1]) : nothing
-            o_hi = _eval_range_end(o_range[2], ctables)
-            (o_lo === nothing || o_hi === nothing) && (push!(new_eqs, eq); continue)
-
-            # Extract LHS variable name and wrt from the inner D expression.
-            lhs_body = get(lhs, "expr", nothing)
-            lhs_var = nothing
-            wrt = "t"
-            if lhs_body isa AbstractDict && String(get(lhs_body, "op", "")) == "D"
-                wrt = String(get(lhs_body, "wrt", "t"))
-                d_args = get(lhs_body, "args", Any[])
-                if !isempty(d_args)
-                    inner = d_args[1]
-                    if inner isa AbstractDict &&
-                            String(get(inner, "op", "")) == "index"
-                        ia = get(inner, "args", Any[])
-                        !isempty(ia) && ia[1] isa AbstractString &&
-                            (lhs_var = String(ia[1]))
-                    end
-                end
-            end
-            lhs_var === nothing && (push!(new_eqs, eq); continue)
-
-            # Extract the RHS body from the outer lift arrayop.
-            rhs_body = get(rhs, "expr", nothing)
-            rhs_body === nothing && (push!(new_eqs, eq); continue)
-            _has_reduction(rhs_body) || (push!(new_eqs, eq); continue)
-
-            # Expand: one per-cell equation for each outer cell c.
-            # ESS scheme_expansion uses "c" as target letter for cell_center schemes;
-            # arrayop lifting uses a positional name ("i" for 1-D). Substitute both
-            # so no free variable remains in the per-cell equation body.
-            for c in o_lo:o_hi
-                rhs_c = _dict_subst(rhs_body, outer_var, c)
-                outer_var == "c" || (rhs_c = _dict_subst(rhs_c, "c", c))
-                # ESS's _parse_expr strips "reduce"/"expr"/"ranges" from any nested
-                # reduction arrayop inside an indirect-entry coeff.  The disc therefore
-                # contains bare MARKER nodes {"op":"arrayop","args":[var_names...]}
-                # (no "reduce") that _expand_reductions cannot expand.  Replace each
-                # such MARKER with the concrete indirect coeff: sum_k(coeff_k), computed
-                # from the outer genuine-reduction body with the state operand set to 1.
-                outer_red = _find_outer_reduction(rhs_c)
-                if outer_red !== nothing
-                    indirect_coeff = _compute_indirect_coeff(outer_red, ctables, lhs_var)
-                    if indirect_coeff !== nothing
-                        rhs_c = _replace_marker_arrayops(rhs_c, indirect_coeff, lhs_var)
-                    end
-                end
-                rhs_expanded = _expand_reductions(rhs_c, ctables)
-                push!(
-                    new_eqs, Dict{String, Any}(
-                        "lhs" => Dict{String, Any}(
-                            "op" => "D",
-                            "args" => Any[
-                                Dict{String, Any}(
-                                    "op" => "index",
-                                    "args" => Any[lhs_var, c],
-                                ),
-                            ],
-                            "wrt" => wrt,
-                        ),
-                        "rhs" => rhs_expanded,
-                    )
-                )
-            end
-        end
-
-        mdisc["equations"] = new_eqs
-
-        # 3. Inject zero ICs for shape=["n_cells"] state variables with no ICs
-        #    so build_evaluator's _detect_array_vars can discover them as array vars.
-        for (vname_any, vmeta_any) in vars_disc
-            vname = String(vname_any)
-            vmeta_any isa AbstractDict || continue
-            String(get(vmeta_any, "type", "state")) == "state" || continue
-            shape = get(vmeta_any, "shape", nothing)
-            shape isa AbstractVector && length(shape) == 1 &&
-                String(shape[1]) == "n_cells" || continue
-            any(startswith(String(k), "$(vname)[") for k in keys(expr_ics)) && continue
-            for c in 1:n_cells
-                expr_ics["$(vname)[$c]"] = 0.0
-            end
+        # Only emit the const_arrays the rewrite actually wired in. If no
+        # reduction arrayop was rewritten (model has no nn_diffusion operator on
+        # this grid), there is nothing for build_evaluator to resolve.
+        if _rewrite_unstructured_arrayop!(mdisc, grid)
+            merge!(out, _unstructured_const_arrays(grid))
         end
     end
-    return
+    return out
 end
