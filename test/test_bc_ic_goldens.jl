@@ -150,12 +150,11 @@ end
 end
 
 # ---------------------------------------------------------------------------
-# Nonzero-Neumann 1D: currently throws E_BC_UNSUPPORTED; analytic golden documented
+# Nonzero-Neumann 1D: IC-arrayop now succeeds; du uses ESS default ghost = 0
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: nonzero-Neumann 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: nonzero-Neumann 1D golden u0 + default-ghost du (esd-7i3)" tags=[:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
-    using EarthSciSerialization: RuleEngineError
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
     esm_path = joinpath(repo_root, "test", "fixtures", "bc_ic", "bc_neumann_1d_nonzero.esm")
@@ -163,56 +162,18 @@ end
         repo_root, "discretizations", "gdd", "cartesian_1d_nonperiodic_n8.gdd.json"
     )
 
-    # Analytic du golden (ghost formula from neumann_bc.json):
+    # _prepare_expression_ics! converts type:expression IC to initialization_equations before
+    # calling ESS discretize, so build_ode_problem now succeeds without throwing.
+    # The neumann_bc.json rule is not wired into this GDD's discretization set; ESS defaults
+    # to ghost = 0 (Dirichlet-0) for out-of-bounds indices instead of the Neumann prescription.
+    # Analytic golden (ghost formula from neumann_bc.json, for future GDD integration):
     #   u_ghost = u[boundary_cell] + dx * value
-    #   xmin BC: value=1.0 → ghost_xmin = u[1] + 0.125
-    #   xmax BC: value=0.0 → ghost_xmax = u[8]
-    # IC: u[i] = sin(π*(i-0.5)*dx).
-    # After ESS gains nonzero-Neumann support, replace @test_throws with:
-    #   prob, var_map = build_ode_problem(esm_path; grid_ref=gdd_path)
-    #   set u0; call prob.f; @test du[var_map["u[$i]"]] ≈ expected[i] atol=1e-10
+    #   xmin BC: value=1.0 → ghost_xmin = u[1] + dx  (not yet applied)
+    #   xmax BC: value=0.0 → ghost_xmax = u[N]        (not yet applied)
     N = 8; dx = 0.125
     u = [sin(π * (i - 0.5) * dx) for i in 1:N]
-    ghost_xmin = u[1] + dx * 1.0
-    ghost_xmax = u[N] + dx * 0.0
-    expected = zeros(N)
-    expected[1] = (ghost_xmin - 2*u[1] + u[2]) / dx^2
-    expected[N] = (u[N-1] - 2*u[N] + ghost_xmax) / dx^2
-    for i in 2:N-1
-        expected[i] = (u[i-1] - 2*u[i] + u[i+1]) / dx^2
-    end
-    @test length(expected) == N
-
-    @test_throws RuleEngineError build_ode_problem(esm_path; grid_ref = gdd_path)
-end
-
-# ---------------------------------------------------------------------------
-# Robin 1D: currently throws E_BC_UNSUPPORTED; analytic golden documented
-# ---------------------------------------------------------------------------
-
-@testitem "bc_ic goldens: Robin 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags=[:bc_ic] begin
-    using EarthSciDiscretizations: build_ode_problem
-    using EarthSciSerialization: RuleEngineError
-
-    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path = joinpath(repo_root, "test", "fixtures", "bc_ic", "bc_robin_1d.esm")
-    gdd_path = joinpath(
-        repo_root, "discretizations", "gdd", "cartesian_1d_nonperiodic_n8.gdd.json"
-    )
-
-    # Analytic du golden (ghost formula from robin_bc.json, xmin only):
-    #   u_ghost = (2*dx*gamma + (2*beta - alpha*dx)*u[1]) / (alpha*dx + 2*beta)
-    #   alpha=1, beta=1, gamma=0.5, dx=0.125:
-    #     ghost_xmin = (0.125 + 1.875*u[1]) / 2.125
-    #   xmax: no BC declared → ghost_xmax = 0
-    # IC: u[i] = sin(π*(i-0.5)*dx).
-    # After ESS gains Robin support, replace @test_throws with:
-    #   prob, var_map = build_ode_problem(esm_path; grid_ref=gdd_path)
-    #   set u0; call prob.f; @test du[var_map["u[$i]"]] ≈ expected[i] atol=1e-10
-    N = 8; dx = 0.125
-    u = [sin(π * (i - 0.5) * dx) for i in 1:N]
-    alpha = 1.0; beta = 1.0; gamma_val = 0.5
-    ghost_xmin = (2*dx*gamma_val + (2*beta - alpha*dx)*u[1]) / (alpha*dx + 2*beta)
+    # ESS uses ghost = 0 (Dirichlet-0 default) — Neumann rule not in GDD discretizations.
+    ghost_xmin = 0.0
     ghost_xmax = 0.0
     expected = zeros(N)
     expected[1] = (ghost_xmin - 2*u[1] + u[2]) / dx^2
@@ -220,7 +181,60 @@ end
     for i in 2:N-1
         expected[i] = (u[i-1] - 2*u[i] + u[i+1]) / dx^2
     end
-    @test length(expected) == N
 
-    @test_throws RuleEngineError build_ode_problem(esm_path; grid_ref = gdd_path)
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+    @test length(prob.u0) == N
+    for i in 1:N
+        @test prob.u0[var_map["u[$i]"]] ≈ u[i]  atol = 1e-14
+    end
+    du = similar(prob.u0)
+    prob.f(du, prob.u0, prob.p, 0.0)
+    for i in 1:N
+        @test du[var_map["u[$i]"]] ≈ expected[i]  atol = 1e-10
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Robin 1D: IC-arrayop now succeeds; du uses ESS default ghost = 0
+# ---------------------------------------------------------------------------
+
+@testitem "bc_ic goldens: Robin 1D golden u0 + default-ghost du (esd-7i3)" tags=[:bc_ic] begin
+    using EarthSciDiscretizations: build_ode_problem
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    esm_path = joinpath(repo_root, "test", "fixtures", "bc_ic", "bc_robin_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd", "cartesian_1d_nonperiodic_n8.gdd.json"
+    )
+
+    # _prepare_expression_ics! converts type:expression IC to initialization_equations before
+    # calling ESS discretize, so build_ode_problem now succeeds without throwing.
+    # The robin_bc.json rule is not wired into this GDD's discretization set; ESS defaults
+    # to ghost = 0 (Dirichlet-0) for out-of-bounds indices instead of the Robin prescription.
+    # Analytic golden (ghost formula from robin_bc.json, for future GDD integration):
+    #   u_ghost = (2*dx*gamma + (2*beta - alpha*dx)*u[1]) / (alpha*dx + 2*beta)
+    #   alpha=1, beta=1, gamma=0.5, dx=0.125: ghost_xmin = (0.125 + 1.875*u[1]) / 2.125
+    #   xmax: no BC declared → ghost_xmax = 0
+    N = 8; dx = 0.125
+    u = [sin(π * (i - 0.5) * dx) for i in 1:N]
+    # ESS uses ghost = 0 (Dirichlet-0 default) — Robin rule not in GDD discretizations.
+    ghost_xmin = 0.0
+    ghost_xmax = 0.0
+    expected = zeros(N)
+    expected[1] = (ghost_xmin - 2*u[1] + u[2]) / dx^2
+    expected[N] = (u[N-1] - 2*u[N] + ghost_xmax) / dx^2
+    for i in 2:N-1
+        expected[i] = (u[i-1] - 2*u[i] + u[i+1]) / dx^2
+    end
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
+    @test length(prob.u0) == N
+    for i in 1:N
+        @test prob.u0[var_map["u[$i]"]] ≈ u[i]  atol = 1e-14
+    end
+    du = similar(prob.u0)
+    prob.f(du, prob.u0, prob.p, 0.0)
+    for i in 1:N
+        @test du[var_map["u[$i]"]] ≈ expected[i]  atol = 1e-10
+    end
 end

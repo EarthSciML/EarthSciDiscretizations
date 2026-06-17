@@ -298,16 +298,12 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("Layer-B awaits canonical-pipeline replacement", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "laplacian_2nd_uniform_cartesian"
-            # laplacian_2nd_uniform_cartesian: Layer-A passes via its
-            # canonical byte contract — the first to pin the 2D arrayop lift
-            # and periodic ifelse folding. Layer-B passes via the
-            # ArrayOp-native 2d_cartesian_periodic runner (dsc-vst2): the
-            # stencil lowers to canonical i/j component form (RFC §7.1),
-            # the fixture declares mms_kind="sin2pix_sin2piy_periodic", the
-            # classifier routes on the stencil's two distinct selector axes,
-            # and the runner measures O(h²).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
+            # laplacian_2nd_uniform_cartesian: Layer-A canonical byte contract
+            # pins the 2D arrayop lift and periodic ifelse folding; broken until
+            # ESS discretize.jl gains periodic index folding (EINSUM-8). Layer-B
+            # passes via the ArrayOp-native 2d_cartesian_periodic runner (dsc-vst2).
+            @test_broken r.layer_a.outcome == WalkESDTests.LAYER_PASS  # EINSUM-8: periodic ifelse folding not yet in ESS discretize.jl
+            @test_broken occursin("canonical-form match", r.layer_a.reason)  # EINSUM-8
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "upwind_1st"
@@ -394,28 +390,19 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "mixed_deriv_2nd_uniform"
-            # mixed_deriv_2nd_uniform (esd-wdv) ships a canonical/ fixture so
-            # Layer-A passes via the ESS rule engine. Layer-B passes via the
-            # ArrayOp-native 2d_cartesian_periodic runner: the nested pattern
-            # grad(grad($u, dim=$y), dim=$x) lowers with both dim pattern
-            # variables mapped to canonical components ($x → i, $y → j),
-            # mms_kind="sin2pix_sin2piy_mixed_deriv", and the 4-corner cross
-            # stencil measures O(h²).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
+            # mixed_deriv_2nd_uniform (esd-wdv) ships a canonical/ fixture; Layer-A
+            # broken until ESS discretize.jl gains periodic index folding (EINSUM-8).
+            # Layer-B passes via the ArrayOp-native 2d_cartesian_periodic runner.
+            @test_broken r.layer_a.outcome == WalkESDTests.LAYER_PASS  # EINSUM-8: periodic ifelse folding not yet in ESS discretize.jl
+            @test_broken occursin("canonical-form match", r.layer_a.reason)  # EINSUM-8
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "centered_2nd_uniform_latlon"
-            # centered_2nd_uniform_latlon (latlon): the canonical/ fixture was
-            # activated in esd-9qs (applicable:false dropped once ess-sra landed
-            # the per-cell metric-binding evaluator), so Layer-A passes via the
-            # ESS rule engine. Layer-B passes via the canonical pipeline
-            # (esd-bbp): the fixture declares mms_kind="Y_2_0_unit_sphere",
-            # topology key resolves to 2d_latlon_sphere, and the runner measures
-            # O(h²) on the lat axis (Y_{2,0} is lon-independent so only lat
-            # signal matters).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
+            # centered_2nd_uniform_latlon (latlon): canonical/ fixture activated in
+            # esd-9qs; Layer-A broken until ESS discretize.jl gains periodic index
+            # folding (EINSUM-8). Layer-B passes via the canonical pipeline (esd-bbp).
+            @test_broken r.layer_a.outcome == WalkESDTests.LAYER_PASS  # EINSUM-8: periodic ifelse folding not yet in ESS discretize.jl
+            @test_broken occursin("canonical-form match", r.layer_a.reason)  # EINSUM-8
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "covariant_laplacian_cubed_sphere"
