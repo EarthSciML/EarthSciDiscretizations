@@ -1005,8 +1005,10 @@ function _rewrite_unstructured_arrayop!(mdisc::AbstractDict, grid)
         ranges isa AbstractDict || (ranges = Dict{String, Any}(); red["ranges"] = ranges)
         ranges[k_name] = Any[
             1,
-            Dict{String, Any}("op" => "index",
-                              "args" => Any["n_edges_on_cell", i_name]),
+            Dict{String, Any}(
+                "op" => "index",
+                "args" => Any["n_edges_on_cell", i_name]
+            ),
         ]
 
         # The inner arrayop now references only the three const_arrays.
