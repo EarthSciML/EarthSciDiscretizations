@@ -8,8 +8,8 @@ const _CURVILINEAR_FAMILIES = Set{String}(["latlon", "cubed_sphere"])
 
 # Computational axis pair for each curvilinear family (xi_axis, eta_axis).
 const _CURVILINEAR_AXES = Dict{String, Tuple{Symbol, Symbol}}(
-    "latlon"       => (:lon, :lat),
-    "cubed_sphere" => (:xi,  :eta),
+    "latlon" => (:lon, :lat),
+    "cubed_sphere" => (:xi, :eta),
 )
 
 """
@@ -55,17 +55,19 @@ via a per-variable `coord_<var>_<dim>` array (nonuniform axes use the per-cell
 widths analogously).  Sampling a staggered field at the cell centre would
 degrade an otherwise O(h²) operator to O(h).
 """
-function build_ode_problem(esm_path::AbstractString;
-                           grid_ref::AbstractString = "",
-                           reader_fn = nothing,
-                           extra_ics::Dict{String,Float64} = Dict{String,Float64}())
+function build_ode_problem(
+        esm_path::AbstractString;
+        grid_ref::AbstractString = "",
+        reader_fn = nothing,
+        extra_ics::Dict{String, Float64} = Dict{String, Float64}()
+    )
     esm = _load_json_mutable(esm_path)
 
-    loaded_grids = Dict{String,Any}()
+    loaded_grids = Dict{String, Any}()
 
     if !isempty(grid_ref)
         gdd_path = isabspath(grid_ref) ? grid_ref :
-                   joinpath(dirname(abspath(esm_path)), grid_ref)
+            joinpath(dirname(abspath(esm_path)), grid_ref)
         gdd = _load_json_mutable(gdd_path)
         if _has_curvilinear_domain(gdd)
             return _build_path_b(esm_path, gdd)
@@ -85,9 +87,11 @@ function build_ode_problem(esm_path::AbstractString;
     # Pre-bind unstructured connectivity into equations (esd-aij Route A).
     isempty(loaded_grids) || _prebind_unstructured!(disc, loaded_grids, numeric_ics)
 
-    f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(disc;
-                                    initial_conditions = numeric_ics,
-                                    const_arrays = coord_arrays)
+    f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(
+        disc;
+        initial_conditions = numeric_ics,
+        const_arrays = coord_arrays
+    )
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
     return prob, var_map
@@ -97,43 +101,45 @@ end
 # Path B: PDESystem → ESS.discretize(sys, grid) curvilinear pipeline (esd-ncg)
 # ---------------------------------------------------------------------------
 
-function _has_curvilinear_domain(gdd::Dict{String,Any})::Bool
-    for (_, domain_spec) in get(gdd, "grids", Dict{String,Any}())
+function _has_curvilinear_domain(gdd::Dict{String, Any})::Bool
+    for (_, domain_spec) in get(gdd, "grids", Dict{String, Any}())
         family = String(get(domain_spec, "family", "cartesian"))
         family in _CURVILINEAR_FAMILIES && return true
     end
     return false
 end
 
-function _build_path_b(esm_path::AbstractString, gdd::Dict{String,Any})
+function _build_path_b(esm_path::AbstractString, gdd::Dict{String, Any})
     esmfile = EarthSciSerialization.load(esm_path)
-    flat    = EarthSciSerialization.flatten(esmfile)
-    sys     = ModelingToolkit.PDESystem(flat)
+    flat = EarthSciSerialization.flatten(esmfile)
+    sys = ModelingToolkit.PDESystem(flat)
 
     # Locate the first curvilinear grid spec in the GDD.
-    family      = ""
-    domain_spec = Dict{String,Any}()
-    for (_, dspec) in get(gdd, "grids", Dict{String,Any}())
+    family = ""
+    domain_spec = Dict{String, Any}()
+    for (_, dspec) in get(gdd, "grids", Dict{String, Any}())
         f = String(get(dspec, "family", "cartesian"))
         if f in _CURVILINEAR_FAMILIES
-            family      = f
-            domain_spec = Dict{String,Any}(String(k) => v for (k, v) in dspec)
+            family = f
+            domain_spec = Dict{String, Any}(String(k) => v for (k, v) in dspec)
             break
         end
     end
 
-    grid              = _construct_curvilinear_grid(family, domain_spec)
+    grid = _construct_curvilinear_grid(family, domain_spec)
     xi_axis, eta_axis = _CURVILINEAR_AXES[family]
 
-    prob = EarthSciSerialization.discretize(sys, grid;
-                                            xi_axis  = xi_axis,
-                                            eta_axis = eta_axis)
+    prob = EarthSciSerialization.discretize(
+        sys, grid;
+        xi_axis = xi_axis,
+        eta_axis = eta_axis
+    )
 
     # Best-effort var_map: one entry per cell of each dependent variable.
     N = EarthSciSerialization.n_cells(grid)
-    var_map = Dict{String,Int}()
+    var_map = Dict{String, Int}()
     for (dv_idx, dv) in enumerate(sys.dvs)
-        nm   = String(Symbolics.tosymbol(dv, escape=false))
+        nm = String(Symbolics.tosymbol(dv, escape = false))
         base = split(nm, "(")[1]
         for i in 1:N
             var_map["$(base)[$i]"] = (dv_idx - 1) * N + i
@@ -143,19 +149,21 @@ function _build_path_b(esm_path::AbstractString, gdd::Dict{String,Any})
     return prob, var_map
 end
 
-function _construct_curvilinear_grid(family::String, domain_spec::Dict{String,Any})
+function _construct_curvilinear_grid(family::String, domain_spec::Dict{String, Any})
     if family == "latlon"
-        R       = Float64(get(domain_spec, "R", 1.0))
-        spatial = Dict{String,Any}(String(k) => v
-                                   for (k, v) in get(domain_spec, "spatial", Dict()))
-        lon_sp  = Dict{String,Any}(String(k) => v for (k, v) in spatial["lon"])
-        lat_sp  = Dict{String,Any}(String(k) => v for (k, v) in spatial["lat"])
-        nlon = round(Int, (Float64(get(lon_sp, "max",  π))    - Float64(get(lon_sp, "min", -π)))    / Float64(lon_sp["grid_spacing"]))
-        nlat = round(Int, (Float64(get(lat_sp, "max",  π/2))  - Float64(get(lat_sp, "min", -π/2))) / Float64(lat_sp["grid_spacing"]))
+        R = Float64(get(domain_spec, "R", 1.0))
+        spatial = Dict{String, Any}(
+            String(k) => v
+                for (k, v) in get(domain_spec, "spatial", Dict())
+        )
+        lon_sp = Dict{String, Any}(String(k) => v for (k, v) in spatial["lon"])
+        lat_sp = Dict{String, Any}(String(k) => v for (k, v) in spatial["lat"])
+        nlon = round(Int, (Float64(get(lon_sp, "max", π)) - Float64(get(lon_sp, "min", -π))) / Float64(lon_sp["grid_spacing"]))
+        nlat = round(Int, (Float64(get(lat_sp, "max", π / 2)) - Float64(get(lat_sp, "min", -π / 2))) / Float64(lat_sp["grid_spacing"]))
         return _latlon(; nlon = nlon, nlat = nlat, R = R)
     elseif family == "cubed_sphere"
         Nc = Int(get(domain_spec, "Nc", 4))
-        R  = Float64(get(domain_spec, "R", 1.0))
+        R = Float64(get(domain_spec, "R", 1.0))
         return CubedSphereGrid(Nc; R = R)
     else
         error("_construct_curvilinear_grid: unsupported family '$family'")
@@ -173,12 +181,12 @@ end
 #                   passed to build_evaluator: shared cell-centre "coord_<dim>"
 #                   plus per-variable "coord_<var>_<dim>" for face-staggered
 #                   components (sampled at their own location, not cell centres).
-function _prepare_expression_ics!(esm::Dict{String,Any})
-    numeric_ics  = Dict{String,Float64}()
-    coord_arrays = Dict{String,Vector{Float64}}()
-    grids = get(esm, "grids", Dict{String,Any}())
+function _prepare_expression_ics!(esm::Dict{String, Any})
+    numeric_ics = Dict{String, Float64}()
+    coord_arrays = Dict{String, Vector{Float64}}()
+    grids = get(esm, "grids", Dict{String, Any}())
 
-    for (_, mspec) in get(esm, "models", Dict{String,Any}())
+    for (_, mspec) in get(esm, "models", Dict{String, Any}())
         ic_spec = get(mspec, "initial_conditions", nothing)
         ic_spec === nothing && continue
 
@@ -196,13 +204,13 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
         grid = get(grids, grid_name, nothing)
         grid === nothing && continue
 
-        dim_size = Dict{String,Int}()
+        dim_size = Dict{String, Int}()
         for d in get(grid, "dimensions", Any[])
             dim_size[String(d["name"])] = Int(d["size"])
         end
 
-        vars = get(mspec, "variables", Dict{String,Any}())
-        dim_spacing = Dict{String,Float64}()
+        vars = get(mspec, "variables", Dict{String, Any}())
+        dim_spacing = Dict{String, Float64}()
         for (pname, vspec) in vars
             get(vspec, "type", "") == "parameter" || continue
             dflt = get(vspec, "default", nothing)
@@ -218,7 +226,7 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
         end
 
         # Per-dim cell widths (nonuniform) or `nothing` (uniform, use dim_spacing).
-        dim_widths = Dict{String,Union{Vector{Float64},Nothing}}()
+        dim_widths = Dict{String, Union{Vector{Float64}, Nothing}}()
         for (dname, N) in dim_size
             pname = "d$(dname)"
             widths = Float64[]
@@ -246,11 +254,11 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
             init_eqs = Any[]
             mspec["initialization_equations"] = init_eqs
         end
-        for (var_name, expr_json) in get(ic_spec, "values", Dict{String,Any}())
-            vstr  = String(var_name)
+        for (var_name, expr_json) in get(ic_spec, "values", Dict{String, Any}())
+            vstr = String(var_name)
             vspec = get(vars, vstr, nothing)
             shape = vspec === nothing ? nothing : get(vspec, "shape", nothing)
-            loc   = vspec === nothing ? "" : String(get(vspec, "location", ""))
+            loc = vspec === nothing ? "" : String(get(vspec, "location", ""))
             faced = _faced_dims(loc)
 
             rhs = expr_json
@@ -262,25 +270,27 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
                 # shape position, so the per-variable coord array we inject and the
                 # index node we splice must use that same letter.
                 idx_letters = ("i", "j", "k", "l", "m", "n")
-                coord_subst = Dict{String,Any}()
+                coord_subst = Dict{String, Any}()
                 for (d, dim_any) in enumerate(shape)
                     d <= length(idx_letters) || break
                     dname = String(dim_any)
                     N = get(dim_size, dname, nothing)
                     N === nothing && continue
-                    is_face    = dname in faced
+                    is_face = dname in faced
                     coord_name = is_face ? "coord_$(vstr)_$dname" : "coord_$dname"
                     if is_face
                         coord_arrays[coord_name] = _coord_axis_array(
-                            dim_widths[dname], get(dim_spacing, dname, 1.0 / N), N, true)
+                            dim_widths[dname], get(dim_spacing, dname, 1.0 / N), N, true
+                        )
                     end
-                    coord_subst[dname] = Dict{String,Any}(
-                        "op" => "index", "args" => Any[coord_name, idx_letters[d]])
+                    coord_subst[dname] = Dict{String, Any}(
+                        "op" => "index", "args" => Any[coord_name, idx_letters[d]]
+                    )
                 end
                 rhs = _subst_ic_coords(expr_json, coord_subst)
             end
 
-            push!(init_eqs, Dict{String,Any}("lhs" => vstr, "rhs" => rhs))
+            push!(init_eqs, Dict{String, Any}("lhs" => vstr, "rhs" => rhs))
         end
         delete!(ic_spec, "type")
         delete!(ic_spec, "values")
@@ -294,8 +304,10 @@ end
 # `face=true` returns the lower (west/south) cell-face positions; `face=false`
 # returns cell centres. Mirrors the (idx-0.5)*h / (idx-1)*h Arakawa convention
 # in src/grids/arakawa.jl (no domain-min offset, matching the shared coord_<dim>).
-function _coord_axis_array(widths::Union{Vector{Float64},Nothing}, h::Float64,
-                           N::Int, face::Bool)
+function _coord_axis_array(
+        widths::Union{Vector{Float64}, Nothing}, h::Float64,
+        N::Int, face::Bool
+    )
     if widths !== nothing
         edges = cumsum(widths)            # edges[k] = upper face of cell k
         return face ? [edges[k] - widths[k] for k in 1:N] :
@@ -310,7 +322,7 @@ end
 # "vertex" stages every horizontal axis. "cell_center" (or unset) ⇒ none.
 function _faced_dims(location::AbstractString)::Set{String}
     loc = String(location)
-    startswith(loc, "face_") && return Set{String}([loc[length("face_")+1:end]])
+    startswith(loc, "face_") && return Set{String}([loc[(length("face_") + 1):end]])
     loc == "vertex" && return Set{String}(["x", "y"])
     return Set{String}()
 end
@@ -319,10 +331,10 @@ end
 # coord-index nodes (the same rewrite ESS's _substitute_coord_syms performs, but
 # done here so a staggered variable resolves its own coord array). op/wrt/key
 # names are untouched; once rewritten, ESS finds no bare symbol left to swap.
-function _subst_ic_coords(node, subst::Dict{String,Any})
+function _subst_ic_coords(node, subst::Dict{String, Any})
     node isa AbstractString && return get(subst, String(node), node)
     node isa AbstractDict || return node
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         key = String(k)
         if key == "args" && v isa AbstractVector
@@ -342,11 +354,13 @@ end
 # GDD merge helpers
 # ---------------------------------------------------------------------------
 
-function _merge_gdd!(esm::Dict{String, Any}, gdd_path::AbstractString;
-                     reader_fn = nothing)
+function _merge_gdd!(
+        esm::Dict{String, Any}, gdd_path::AbstractString;
+        reader_fn = nothing
+    )
     gdd = _load_json_mutable(gdd_path)
 
-    loaded = Dict{String,Any}()
+    loaded = Dict{String, Any}()
     gdd_grids = get(gdd, "grids", nothing)
     gdd_grids !== nothing &&
         (loaded = _inject_grids!(esm, gdd_grids, gdd_path; reader_fn = reader_fn))
@@ -357,10 +371,12 @@ function _merge_gdd!(esm::Dict{String, Any}, gdd_path::AbstractString;
     return loaded
 end
 
-function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractString;
-                        reader_fn = nothing)
+function _inject_grids!(
+        esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractString;
+        reader_fn = nothing
+    )
     esm_grids = get!(esm, "grids", Dict{String, Any}())
-    loaded = Dict{String,Any}()
+    loaded = Dict{String, Any}()
 
     for (domain_key, domain_spec) in gdd_grids
         domain_name = String(domain_key)
@@ -368,8 +384,10 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
         family = String(get(domain_spec, "family", "cartesian"))
 
         if family == "mpas"
-            dims, spacing_vals, grid = _inject_grids_mpas(domain_spec, gdd_path;
-                                                            reader_fn = reader_fn)
+            dims, spacing_vals, grid = _inject_grids_mpas(
+                domain_spec, gdd_path;
+                reader_fn = reader_fn
+            )
             grid !== nothing && (loaded[domain_name] = grid)
             cell_widths_by_axis = Dict{String, Vector{Float64}}()
         elseif family == "duo"
@@ -381,14 +399,14 @@ function _inject_grids!(esm::Dict{String, Any}, gdd_grids, gdd_path::AbstractStr
         end
 
         esm_grids[domain_name] = Dict{String, Any}(
-            "family"     => family,
+            "family" => family,
             "dimensions" => dims,
         )
 
         for (_, mspec) in get(esm, "models", Dict())
             get(mspec, "grid", "") == domain_name || continue
             vars = get(mspec, "variables", Dict())
-            ics  = get(mspec, "initial_conditions", nothing)
+            ics = get(mspec, "initial_conditions", nothing)
 
             # Inject uniform spacing as parameter defaults.
             for (pname, hval) in spacing_vals
@@ -431,7 +449,7 @@ end
 # uniform axes use "grid_spacing" + optional "min"/"max".
 function _inject_grids_spatial(domain_spec)
     spatial = get(domain_spec, "spatial", Dict())
-    bcs     = get(domain_spec, "boundary_conditions", Any[])
+    bcs = get(domain_spec, "boundary_conditions", Any[])
 
     periodic_dims = Set{String}()
     for bc in bcs
@@ -453,27 +471,31 @@ function _inject_grids_spatial(domain_spec)
             levels = Float64.(axis_spec["levels"])
             N = length(levels) - 1
             N >= 1 || error("_inject_grids_spatial: 'levels' for axis '$axis_name' must have ≥ 2 entries")
-            widths = [levels[k+1] - levels[k] for k in 1:N]
+            widths = [levels[k + 1] - levels[k] for k in 1:N]
             all(w > 0 for w in widths) || error("_inject_grids_spatial: 'levels' must be strictly increasing for axis '$axis_name'")
-            push!(dims, Dict{String, Any}(
-                "name"     => axis_name,
-                "size"     => N,
-                "periodic" => axis_name in periodic_dims,
-                "spacing"  => "nonuniform",
-            ))
+            push!(
+                dims, Dict{String, Any}(
+                    "name" => axis_name,
+                    "size" => N,
+                    "periodic" => axis_name in periodic_dims,
+                    "spacing" => "nonuniform",
+                )
+            )
             cell_widths_by_axis[axis_name] = widths
             spacing_vals["d$(axis_name)"] = (levels[end] - levels[1]) / N  # average spacing
         else
-            h  = Float64(axis_spec["grid_spacing"])
+            h = Float64(axis_spec["grid_spacing"])
             lo = Float64(get(axis_spec, "min", 0.0))
             hi = Float64(get(axis_spec, "max", 1.0))
-            N  = round(Int, (hi - lo) / h)
-            push!(dims, Dict{String, Any}(
-                "name"     => axis_name,
-                "size"     => N,
-                "periodic" => axis_name in periodic_dims,
-                "spacing"  => "uniform",
-            ))
+            N = round(Int, (hi - lo) / h)
+            push!(
+                dims, Dict{String, Any}(
+                    "name" => axis_name,
+                    "size" => N,
+                    "periodic" => axis_name in periodic_dims,
+                    "spacing" => "uniform",
+                )
+            )
             spacing_vals["d$(axis_name)"] = h
         end
     end
@@ -486,13 +508,15 @@ end
 # stored but not yet consumed by ESS discretize (pends ESS/esm-bpr).
 # When reader_fn is provided, loads MpasGrid from loader.path and returns
 # it as a third value so _prebind_unstructured! can extract connectivity.
-function _inject_grids_mpas(domain_spec, gdd_path::AbstractString;
-                             reader_fn = nothing)
+function _inject_grids_mpas(
+        domain_spec, gdd_path::AbstractString;
+        reader_fn = nothing
+    )
     n_cells_raw = get(domain_spec, "n_cells", nothing)
     n_cells_raw === nothing && throw(
         ArgumentError(
             "MPAS GDD domain_spec missing required field 'n_cells'. " *
-            "Add \"n_cells\": <integer> to the GDD's grids.<domain> block."
+                "Add \"n_cells\": <integer> to the GDD's grids.<domain> block."
         )
     )
     n_cells = Int(n_cells_raw)
@@ -500,21 +524,25 @@ function _inject_grids_mpas(domain_spec, gdd_path::AbstractString;
         ArgumentError("MPAS GDD 'n_cells' must be a positive integer (got $n_cells)")
     )
 
-    dims = [Dict{String, Any}(
-        "name"     => "n_cells",
-        "size"     => n_cells,
-        "periodic" => false,
-        "spacing"  => "unstructured",
-    )]
+    dims = [
+        Dict{String, Any}(
+            "name" => "n_cells",
+            "size" => n_cells,
+            "periodic" => false,
+            "spacing" => "unstructured",
+        ),
+    ]
 
     n_edges_raw = get(domain_spec, "n_edges", nothing)
     if n_edges_raw !== nothing
-        push!(dims, Dict{String, Any}(
-            "name"     => "n_edges",
-            "size"     => Int(n_edges_raw),
-            "periodic" => false,
-            "spacing"  => "unstructured",
-        ))
+        push!(
+            dims, Dict{String, Any}(
+                "name" => "n_edges",
+                "size" => Int(n_edges_raw),
+                "periodic" => false,
+                "spacing" => "unstructured",
+            )
+        )
     end
 
     # Load MpasGrid: builtin Voronoi paths need no reader_fn; all others do.
@@ -523,22 +551,28 @@ function _inject_grids_mpas(domain_spec, gdd_path::AbstractString;
     if loader_spec !== nothing
         loader_path_raw = String(get(loader_spec, "path", ""))
         loader_path_abs = startswith(loader_path_raw, "builtin://") ? loader_path_raw :
-            (isabspath(loader_path_raw) ? loader_path_raw :
-             joinpath(dirname(gdd_path), loader_path_raw))
+            (
+                isabspath(loader_path_raw) ? loader_path_raw :
+                joinpath(dirname(gdd_path), loader_path_raw)
+            )
         R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
         builtin_level = _parse_builtin_voronoi_level(loader_path_abs)
         if builtin_level !== nothing
             grid = build_mpas_grid(
-                loader = Dict("path"   => loader_path_abs,
-                              "reader" => "auto",
-                              "check"  => String(get(loader_spec, "check", "strict"))),
+                loader = Dict(
+                    "path" => loader_path_abs,
+                    "reader" => "auto",
+                    "check" => String(get(loader_spec, "check", "strict"))
+                ),
                 R = R_sphere,
             )
         elseif reader_fn !== nothing
             grid = build_mpas_grid(
-                loader   = Dict("path"   => loader_path_abs,
-                                "reader" => String(get(loader_spec, "reader", "mpas_mesh")),
-                                "check"  => String(get(loader_spec, "check",  "strict"))),
+                loader = Dict(
+                    "path" => loader_path_abs,
+                    "reader" => String(get(loader_spec, "reader", "mpas_mesh")),
+                    "check" => String(get(loader_spec, "check", "strict"))
+                ),
                 reader_fn = reader_fn,
                 R = R_sphere,
             )
@@ -558,7 +592,7 @@ function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
     n_cells_raw === nothing && throw(
         ArgumentError(
             "DUO GDD domain_spec missing required field 'n_cells'. " *
-            "Add \"n_cells\": <integer> (= 20 * 4^level) to the GDD's grids.<domain> block."
+                "Add \"n_cells\": <integer> (= 20 * 4^level) to the GDD's grids.<domain> block."
         )
     )
     n_cells = Int(n_cells_raw)
@@ -566,12 +600,14 @@ function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
         ArgumentError("DUO GDD 'n_cells' must be a positive integer (got $n_cells)")
     )
 
-    dims = [Dict{String, Any}(
-        "name"     => "n_cells",
-        "size"     => n_cells,
-        "periodic" => false,
-        "spacing"  => "unstructured",
-    )]
+    dims = [
+        Dict{String, Any}(
+            "name" => "n_cells",
+            "size" => n_cells,
+            "periodic" => false,
+            "spacing" => "unstructured",
+        ),
+    ]
 
     # Load the DUO grid from the builtin icosahedral loader if specified.
     grid = nothing
@@ -594,7 +630,7 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
 
     for (rule_key, rule_ref) in gdd_discs
         rname = String(rule_key)
-        ref   = get(rule_ref, "ref", nothing)
+        ref = get(rule_ref, "ref", nothing)
 
         spec = if ref !== nothing
             ref_path = joinpath(dirname(gdd_path), String(ref))
@@ -611,24 +647,29 @@ function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractStr
             # build_evaluator's {i→val, j→val} substitution resolves all index expressions.
             # Axes sort alphabetically: "lat" → "i", "lon" → "j" (esd-t4h).
             if String(get(spec, "grid_family", "")) == "latlon"
-                replacement = _subst_axis_names(replacement,
-                    Dict{String, String}("lat" => "i", "lon" => "j"))
+                replacement = _subst_axis_names(
+                    replacement,
+                    Dict{String, String}("lat" => "i", "lon" => "j")
+                )
             end
-            push!(rules, Dict{String, Any}(
-                "name"        => rname,
-                "pattern"     => spec["applies_to"],
-                "replacement" => replacement,
-            ))
+            push!(
+                rules, Dict{String, Any}(
+                    "name" => rname,
+                    "pattern" => spec["applies_to"],
+                    "replacement" => replacement,
+                )
+            )
         end
     end
+    return
 end
 
-function _subst_axis_names(expr, mapping::Dict{String,String})
+function _subst_axis_names(expr, mapping::Dict{String, String})
     if expr isa AbstractString
         s = String(expr)
         return get(mapping, s, s)
     elseif expr isa AbstractDict
-        out = Dict{String,Any}()
+        out = Dict{String, Any}()
         for (k, v) in expr
             out[String(k)] = _subst_axis_names(v, mapping)
         end
@@ -658,7 +699,7 @@ function _extract_connectivity(grid::DuoGrid)
 
     # Invert cells_on_edge: (DUO vertex pair) → MPAS edge index.
     Ne = mesh.n_edges
-    edge_idx_duo = Dict{Tuple{Int,Int},Int}()
+    edge_idx_duo = Dict{Tuple{Int, Int}, Int}()
     sizehint!(edge_idx_duo, Ne)
     for e in 1:Ne
         v1 = mesh.cells_on_edge[1, e]
@@ -696,12 +737,12 @@ function _extract_connectivity(grid::DuoGrid)
         area_eff[c] = 0.25 * s
     end
 
-    ctables = Dict{String,Any}(
+    ctables = Dict{String, Any}(
         "cell_neighbors" => grid.cell_neighbors,  # 3 × n_cells, 1-based, 0-based k
-        "edges_on_face"  => edges_on_face,         # 3 × n_cells, MPAS edge idx, 0-based k
+        "edges_on_face" => edges_on_face,         # 3 × n_cells, MPAS edge idx, 0-based k
     )
-    scalar_arrs = Dict{String,Vector{Float64}}(
-        "area"    => area_eff,
+    scalar_arrs = Dict{String, Vector{Float64}}(
+        "area" => area_eff,
         "dv_edge" => mesh.dv_edge,
         "dc_edge" => mesh.dc_edge,
     )
@@ -710,20 +751,20 @@ end
 
 function _extract_connectivity(grid::MpasGrid)
     mesh = grid.mesh
-    ctables = Dict{String,Any}(
-        "cells_on_cell"  => mesh.cells_on_cell,   # max_edges × n_cells, 1-based
-        "edges_on_cell"  => mesh.edges_on_cell,   # max_edges × n_cells, 1-based
+    ctables = Dict{String, Any}(
+        "cells_on_cell" => mesh.cells_on_cell,   # max_edges × n_cells, 1-based
+        "edges_on_cell" => mesh.edges_on_cell,   # max_edges × n_cells, 1-based
         "n_edges_on_cell" => mesh.n_edges_on_cell, # n_cells,   1-based cell → valence
     )
-    scalar_arrs = Dict{String,Vector{Float64}}(
+    scalar_arrs = Dict{String, Vector{Float64}}(
         "area_cell" => mesh.area_cell,
-        "dv_edge"   => mesh.dv_edge,
-        "dc_edge"   => mesh.dc_edge,
+        "dv_edge" => mesh.dv_edge,
+        "dc_edge" => mesh.dc_edge,
     )
     return ctables, scalar_arrs
 end
 
-_grid_n_cells(g::DuoGrid)  = length(g.area)
+_grid_n_cells(g::DuoGrid) = length(g.area)
 _grid_n_cells(g::MpasGrid) = g.mesh.n_cells
 
 # Substitute a string variable name with a concrete integer in a dict AST.
@@ -734,7 +775,7 @@ function _dict_subst(node, var::String, val::Int)
     node isa Number          && return node
     node isa AbstractVector  && return Any[_dict_subst(x, var, val) for x in node]
     node isa AbstractDict || return node
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
@@ -743,7 +784,7 @@ function _dict_subst(node, var::String, val::Int)
             out[ks] = _dict_subst(v, var, val)
         elseif ks == "ranges" && v isa AbstractDict
             # Recurse into range bound expressions; preserve range var name keys.
-            new_ranges = Dict{String,Any}()
+            new_ranges = Dict{String, Any}()
             for (rv, rbound) in v
                 new_ranges[String(rv)] = rbound isa AbstractVector ?
                     Any[_dict_subst(b, var, val) for b in rbound] :
@@ -778,14 +819,14 @@ end
 # Evaluate a range bound expression that may reference 1D integer connectivity
 # lookups (e.g. index(n_edges_on_cell, c) - 1) to a concrete Int.
 # Returns nothing when the expression is not statically evaluable.
-function _eval_range_end(node, ctables::Dict{String,Any})::Union{Int,Nothing}
+function _eval_range_end(node, ctables::Dict{String, Any})::Union{Int, Nothing}
     node isa Integer     && return Int(node)
     node isa AbstractFloat && return Int(round(node))
     node isa AbstractDict || return nothing
-    op   = get(node, "op", nothing)
+    op = get(node, "op", nothing)
     op isa AbstractString || return nothing
     args = get(node, "args", Any[])
-    ops  = String(op)
+    ops = String(op)
     if ops == "-" && length(args) == 2
         a = _eval_range_end(args[1], ctables)
         b = _eval_range_end(args[2], ctables)
@@ -815,7 +856,7 @@ end
 # concrete integers (after prior _dict_subst passes).
 # Convention: 1D Vector{Int} → 1-based; 2D Matrix{Int}(rows=k+1,cols=c) →
 #   first index is 1-based column (the outer cell c), second is 0-based row k.
-function _resolve_int_indices(node, ctables::Dict{String,Any})
+function _resolve_int_indices(node, ctables::Dict{String, Any})
     node isa Number         && return node
     node isa AbstractString && return node
     node isa AbstractVector && return Any[_resolve_int_indices(x, ctables) for x in node]
@@ -830,14 +871,14 @@ function _resolve_int_indices(node, ctables::Dict{String,Any})
                 if length(args_raw) == 2 && args_raw[2] isa Integer && tbl isa Vector{Int}
                     return tbl[Int(args_raw[2])]
                 elseif length(args_raw) == 3 && args_raw[2] isa Integer &&
-                       args_raw[3] isa Integer && tbl isa Matrix{Int}
+                        args_raw[3] isa Integer && tbl isa Matrix{Int}
                     # index(mat, c, k): c is 1-based outer cell, k is 0-based neighbor slot
                     return tbl[Int(args_raw[3]) + 1, Int(args_raw[2])]
                 end
             end
         end
     end
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
@@ -857,7 +898,7 @@ function _find_outer_reduction(node)
     node isa AbstractDict || return nothing
     op = get(node, "op", nothing)
     if op isa AbstractString && String(op) == "arrayop" &&
-       get(node, "reduce", nothing) !== nothing
+            get(node, "reduce", nothing) !== nothing
         return node
     end
     for v in get(node, "args", Any[])
@@ -883,7 +924,7 @@ function _replace_operand_index_with_one(node, operand_name::String)
             return 1.0
         end
     end
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
@@ -902,13 +943,15 @@ end
 # indirect-entry coeff when the stencil uses the same per-k expression for both
 # the reduction and the indirect (diagonal) term.
 # Returns a dict/number, or nothing if the range cannot be evaluated.
-function _compute_indirect_coeff(outer_reduction, ctables::Dict{String,Any},
-                                  operand_name::String)
+function _compute_indirect_coeff(
+        outer_reduction, ctables::Dict{String, Any},
+        operand_name::String
+    )
     inner_body = get(outer_reduction, "expr", nothing)
     inner_body === nothing && return nothing
     ranges = get(outer_reduction, "ranges", nothing)
     ranges isa AbstractDict && !isempty(ranges) || return nothing
-    k_var  = String(first(keys(ranges)))
+    k_var = String(first(keys(ranges)))
     k_range = ranges[k_var]
     k_range isa AbstractVector && length(k_range) == 2 || return nothing
     k_lo = k_range[1] isa Integer ? Int(k_range[1]) : nothing
@@ -924,7 +967,7 @@ function _compute_indirect_coeff(outer_reduction, ctables::Dict{String,Any},
     end
     isempty(terms) && return 0.0
     length(terms) == 1 && return terms[1]
-    return Dict{String,Any}("op" => reduce_op, "args" => Any[terms...])
+    return Dict{String, Any}("op" => reduce_op, "args" => Any[terms...])
 end
 
 # True iff `node` contains an `index(operand_name, …)` anywhere.
@@ -958,7 +1001,7 @@ end
 # "$target"). We therefore also match a reduction arrayop whose body does not
 # index `operand_name`, so both the legacy-stripped and the faithfully-parsed
 # forms are replaced by the precomputed indirect coefficient.
-function _replace_marker_arrayops(node, replacement, operand_name::String="")
+function _replace_marker_arrayops(node, replacement, operand_name::String = "")
     node isa Number         && return node
     node isa AbstractString && return node
     node isa AbstractVector && return Any[_replace_marker_arrayops(x, replacement, operand_name) for x in node]
@@ -971,7 +1014,7 @@ function _replace_marker_arrayops(node, replacement, operand_name::String="")
             !_indexes_operand(get(node, "expr", nothing), operand_name)
         (is_legacy_marker || is_faithful_indirect) && return replacement
     end
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
@@ -988,7 +1031,7 @@ end
 # Expand all reduction arrayop nodes in a disc expression dict into explicit
 # sums using ctables.  Must be called after _dict_subst has substituted the
 # outer cell index, so range bounds can be evaluated with _eval_range_end.
-function _expand_reductions(node, ctables::Dict{String,Any})
+function _expand_reductions(node, ctables::Dict{String, Any})
     node isa Number         && return node
     node isa AbstractString && return node
     node isa AbstractVector && return Any[_expand_reductions(x, ctables) for x in node]
@@ -1002,7 +1045,7 @@ function _expand_reductions(node, ctables::Dict{String,Any})
             inner_body === nothing && return node
             ranges = get(node, "ranges", nothing)
             ranges isa AbstractDict && !isempty(ranges) || return node
-            k_var  = String(first(keys(ranges)))
+            k_var = String(first(keys(ranges)))
             k_range = ranges[k_var]
             (k_range isa AbstractVector && length(k_range) == 2) || return node
             k_lo = k_range[1] isa Integer ? Int(k_range[1]) : nothing
@@ -1017,11 +1060,11 @@ function _expand_reductions(node, ctables::Dict{String,Any})
             end
             isempty(terms) && return 0.0
             length(terms) == 1 && return terms[1]
-            return Dict{String,Any}("op" => String(reduce_op), "args" => Any[terms...])
+            return Dict{String, Any}("op" => String(reduce_op), "args" => Any[terms...])
         end
     end
 
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     for (k, v) in node
         ks = String(k)
         if ks == "args" && v isa AbstractVector
@@ -1048,9 +1091,11 @@ end
 #
 # This transforms disc so that build_evaluator's _resolve_indices handles all
 # index ops with compile-time-constant indices — no change to ESS required.
-function _prebind_unstructured!(disc::Dict{String,Any},
-                                 loaded_grids::Dict{String,Any},
-                                 expr_ics::Dict{String,Float64})
+function _prebind_unstructured!(
+        disc::Dict{String, Any},
+        loaded_grids::Dict{String, Any},
+        expr_ics::Dict{String, Float64}
+    )
     models_disc = get(disc, "models", nothing)
     models_disc isa AbstractDict || return
 
@@ -1067,12 +1112,12 @@ function _prebind_unstructured!(disc::Dict{String,Any},
         # 1. Inject scalar float arrays as constant state variables + ICs.
         vars_disc = get(mdisc, "variables", nothing)
         if vars_disc === nothing
-            mdisc["variables"] = Dict{String,Any}()
+            mdisc["variables"] = Dict{String, Any}()
             vars_disc = mdisc["variables"]
         end
         for (arr_name, vals) in scalar_arrs
-            vars_disc[arr_name] = Dict{String,Any}(
-                "type"  => "state",
+            vars_disc[arr_name] = Dict{String, Any}(
+                "type" => "state",
                 "shape" => Any["n_cells"],
             )
             for (c, v) in enumerate(vals)
@@ -1098,7 +1143,7 @@ function _prebind_unstructured!(disc::Dict{String,Any},
             out_idxs_raw = get(lhs, "output_idx", nothing)
             out_idxs_raw isa AbstractVector && !isempty(out_idxs_raw) ||
                 (push!(new_eqs, eq); continue)
-            outer_var    = String(out_idxs_raw[1])
+            outer_var = String(out_idxs_raw[1])
             outer_ranges = get(lhs, "ranges", nothing)
             outer_ranges isa AbstractDict               || (push!(new_eqs, eq); continue)
             haskey(outer_ranges, outer_var)             || (push!(new_eqs, eq); continue)
@@ -1111,15 +1156,15 @@ function _prebind_unstructured!(disc::Dict{String,Any},
 
             # Extract LHS variable name and wrt from the inner D expression.
             lhs_body = get(lhs, "expr", nothing)
-            lhs_var  = nothing
-            wrt      = "t"
+            lhs_var = nothing
+            wrt = "t"
             if lhs_body isa AbstractDict && String(get(lhs_body, "op", "")) == "D"
                 wrt = String(get(lhs_body, "wrt", "t"))
                 d_args = get(lhs_body, "args", Any[])
                 if !isempty(d_args)
                     inner = d_args[1]
                     if inner isa AbstractDict &&
-                       String(get(inner, "op", "")) == "index"
+                            String(get(inner, "op", "")) == "index"
                         ia = get(inner, "args", Any[])
                         !isempty(ia) && ia[1] isa AbstractString &&
                             (lhs_var = String(ia[1]))
@@ -1154,17 +1199,21 @@ function _prebind_unstructured!(disc::Dict{String,Any},
                     end
                 end
                 rhs_expanded = _expand_reductions(rhs_c, ctables)
-                push!(new_eqs, Dict{String,Any}(
-                    "lhs" => Dict{String,Any}(
-                        "op"   => "D",
-                        "args" => Any[Dict{String,Any}(
-                            "op"   => "index",
-                            "args" => Any[lhs_var, c],
-                        )],
-                        "wrt"  => wrt,
-                    ),
-                    "rhs" => rhs_expanded,
-                ))
+                push!(
+                    new_eqs, Dict{String, Any}(
+                        "lhs" => Dict{String, Any}(
+                            "op" => "D",
+                            "args" => Any[
+                                Dict{String, Any}(
+                                    "op" => "index",
+                                    "args" => Any[lhs_var, c],
+                                ),
+                            ],
+                            "wrt" => wrt,
+                        ),
+                        "rhs" => rhs_expanded,
+                    )
+                )
             end
         end
 
@@ -1173,7 +1222,7 @@ function _prebind_unstructured!(disc::Dict{String,Any},
         # 3. Inject zero ICs for shape=["n_cells"] state variables with no ICs
         #    so build_evaluator's _detect_array_vars can discover them as array vars.
         for (vname_any, vmeta_any) in vars_disc
-            vname  = String(vname_any)
+            vname = String(vname_any)
             vmeta_any isa AbstractDict || continue
             String(get(vmeta_any, "type", "state")) == "state" || continue
             shape = get(vmeta_any, "shape", nothing)
@@ -1185,4 +1234,5 @@ function _prebind_unstructured!(disc::Dict{String,Any},
             end
         end
     end
+    return
 end
