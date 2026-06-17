@@ -18,8 +18,10 @@ Supported pipeline_kinds:
 - `eigenvalue_analytic`     — generic discrete-eigenvalue verifier
 - `mms_convergence`         — generic MMS convergence sweep
 """
-function run_esd_field_pipeline(name::AbstractString, manifest::AbstractDict,
-                                base_dir::AbstractString)
+function run_esd_field_pipeline(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
     pkind = String(get(manifest, "pipeline_kind", ""))
     if pkind == "diffusion_1d_analytic"
         return _diffusion_1d_analytic(name, manifest, base_dir)
@@ -47,26 +49,30 @@ end
 # Axes are sorted by name for deterministic ordering.
 function _read_gdd_axes(gdd_path::AbstractString)
     gdd = JSON.parse(read(gdd_path, String))
-    for (_, domain_spec) in get(gdd, "grids", Dict{String,Any}())
-        spatial = get(domain_spec, "spatial", Dict{String,Any}())
+    for (_, domain_spec) in get(gdd, "grids", Dict{String, Any}())
+        spatial = get(domain_spec, "spatial", Dict{String, Any}())
         sorted_names = sort!([String(k) for k in keys(spatial)])
         return map(sorted_names) do axis_name
             s = spatial[axis_name]
             if haskey(s, "levels")
                 levels = Float64.(s["levels"])
                 N = length(levels) - 1
-                widths = [levels[k+1] - levels[k] for k in 1:N]
+                widths = [levels[k + 1] - levels[k] for k in 1:N]
                 lo = levels[1]; hi = levels[end]
-                h  = (hi - lo) / N
-                (name = axis_name, lo = lo, hi = hi, h = h, N = N,
-                 cell_widths = widths)
+                h = (hi - lo) / N
+                (
+                    name = axis_name, lo = lo, hi = hi, h = h, N = N,
+                    cell_widths = widths,
+                )
             else
                 lo = Float64(get(s, "min", 0.0))
                 hi = Float64(get(s, "max", 1.0))
-                h  = Float64(s["grid_spacing"])
-                N  = round(Int, (hi - lo) / h)
-                (name = axis_name, lo = lo, hi = hi, h = h, N = N,
-                 cell_widths = nothing)
+                h = Float64(s["grid_spacing"])
+                N = round(Int, (hi - lo) / h)
+                (
+                    name = axis_name, lo = lo, hi = hi, h = h, N = N,
+                    cell_widths = nothing,
+                )
             end
         end
     end
@@ -88,9 +94,9 @@ const _EV_KIND_CATALOG = Dict{String, Function}(
     # Eigenvector: sin(2πx)·sin(2πy).  λ_h = λ_x + λ_y (Kronecker sum, separable)
     "cartesian_2d_laplacian" =>
         axes -> begin
-            hx = axes[1].h; hy = axes[2].h
-            (2.0 * (cos(2π * hx) - 1.0) / hx^2) + (2.0 * (cos(2π * hy) - 1.0) / hy^2)
-        end,
+        hx = axes[1].h; hy = axes[2].h
+        (2.0 * (cos(2π * hx) - 1.0) / hx^2) + (2.0 * (cos(2π * hy) - 1.0) / hy^2)
+    end,
 )
 
 # ---------------------------------------------------------------------------
@@ -105,15 +111,15 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
     # Manifest field: velocity (Float64, default 1.0).
     "cos_2pi_x_transport" =>
         (u_vec, var_map, axes, t, manifest) -> begin
-            ax = axes[1]
-            v  = Float64(get(manifest, "velocity", 1.0))
-            maximum(
-                let x = ax.lo + (i - 0.5) * ax.h
+        ax = axes[1]
+        v = Float64(get(manifest, "velocity", 1.0))
+        maximum(
+            let x = ax.lo + (i - 0.5) * ax.h
                     abs(u_vec[var_map["u[$i]"]] - cos(2π * (x - v * t)))
-                end
+            end
                 for i in 1:ax.N
-            )
-        end,
+        )
+    end,
 
     # 1-D vertical diffusion with zero Dirichlet BCs at top and bottom.
     # IC: sin(π z).  Exact continuous solution: sin(π z) · exp(−π² t).
@@ -122,20 +128,20 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
     # derived from cumulative sum of cell_widths.
     "sin_pi_z_dirichlet" =>
         (u_vec, var_map, axes, t, manifest) -> begin
-            ax = axes[1]
-            centres = if ax.cell_widths !== nothing
-                ws = ax.cell_widths
-                cumws = [sum(ws[1:k-1]) + ws[k] / 2.0 for k in 1:length(ws)]
-                cumws
-            else
-                [ax.lo + (k - 0.5) * ax.h for k in 1:ax.N]
-            end
-            factor = exp(-π^2 * t)
-            maximum(
-                abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
+        ax = axes[1]
+        centres = if ax.cell_widths !== nothing
+            ws = ax.cell_widths
+            cumws = [sum(ws[1:(k - 1)]) + ws[k] / 2.0 for k in 1:length(ws)]
+            cumws
+        else
+            [ax.lo + (k - 0.5) * ax.h for k in 1:ax.N]
+        end
+        factor = exp(-π^2 * t)
+        maximum(
+            abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
                 for k in 1:ax.N
-            )
-        end,
+        )
+    end,
 
     # 1-D vertical diffusion, interior cells only.
     # Same PDE and analytic reference as sin_pi_z_dirichlet, but skips
@@ -147,26 +153,26 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
     # negligible vs. the O(h²)·t interior truncation error for N≥16.
     "sin_pi_z_dirichlet_interior" =>
         (u_vec, var_map, axes, t, manifest) -> begin
-            ax = axes[1]
-            N  = ax.N
-            n_skip = Int(get(manifest, "boundary_skip", 3))
-            k_lo = n_skip + 1
-            k_hi = N - n_skip
-            k_hi >= k_lo ||
-                error("sin_pi_z_dirichlet_interior: no interior cells (N=$N, boundary_skip=$n_skip)")
-            centres = if ax.cell_widths !== nothing
-                ws = ax.cell_widths
-                cumws = cumsum(ws)
-                [cumws[k] - ws[k] / 2.0 for k in 1:N]
-            else
-                [ax.lo + (k - 0.5) * ax.h for k in 1:N]
-            end
-            factor = exp(-π^2 * t)
-            maximum(
-                abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
+        ax = axes[1]
+        N = ax.N
+        n_skip = Int(get(manifest, "boundary_skip", 3))
+        k_lo = n_skip + 1
+        k_hi = N - n_skip
+        k_hi >= k_lo ||
+            error("sin_pi_z_dirichlet_interior: no interior cells (N=$N, boundary_skip=$n_skip)")
+        centres = if ax.cell_widths !== nothing
+            ws = ax.cell_widths
+            cumws = cumsum(ws)
+            [cumws[k] - ws[k] / 2.0 for k in 1:N]
+        else
+            [ax.lo + (k - 0.5) * ax.h for k in 1:N]
+        end
+        factor = exp(-π^2 * t)
+        maximum(
+            abs(u_vec[var_map["u[$k]"]] - sin(π * centres[k]) * factor)
                 for k in k_lo:k_hi
-            )
-        end,
+        )
+    end,
 
     # 2-D lat-lon Y_{2,0} colatitude advection (unit sphere, R=1).
     # ESM shape ["lat","lon"] → var_map key "u[i_lat,j_lon]".
@@ -176,23 +182,23 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
     # (interior-lat scope per bead esd-sqb); lon terms cancel for this lon-independent IC.
     "Y_2_0_latlon_advection_lat" =>
         (u_vec, var_map, axes, t, manifest) -> begin
-            lat_ax = axes[findfirst(a -> a.name == "lat", axes)]
-            lon_ax = axes[findfirst(a -> a.name == "lon", axes)]
-            N_lat = lat_ax.N
-            N_lon = lon_ax.N
-            c = 0.25 * sqrt(5.0 / pi)
-            err = 0.0
-            for i in 2:(N_lat - 1)
-                lat_c = lat_ax.lo + (i - 0.5) * lat_ax.h
-                exact = c * (3 * cos(lat_c + t)^2 - 1)
-                for j in 1:N_lon
-                    idx = get(var_map, "u[$i,$j]", nothing)
-                    idx === nothing && continue
-                    err = max(err, abs(u_vec[idx] - exact))
-                end
+        lat_ax = axes[findfirst(a -> a.name == "lat", axes)]
+        lon_ax = axes[findfirst(a -> a.name == "lon", axes)]
+        N_lat = lat_ax.N
+        N_lon = lon_ax.N
+        c = 0.25 * sqrt(5.0 / pi)
+        err = 0.0
+        for i in 2:(N_lat - 1)
+            lat_c = lat_ax.lo + (i - 0.5) * lat_ax.h
+            exact = c * (3 * cos(lat_c + t)^2 - 1)
+            for j in 1:N_lon
+                idx = get(var_map, "u[$i,$j]", nothing)
+                idx === nothing && continue
+                err = max(err, abs(u_vec[idx] - exact))
             end
-            err
-        end,
+        end
+        err
+    end,
 
     # 2-D Arakawa C-grid divergence via vec_sincos_2d_periodic MMS.
     # F(x,y) = (sin(2πx)cos(2πy), cos(2πx)sin(2πy))  →  ∇·F = 4π cos(2πx)cos(2πy).
@@ -200,16 +206,16 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
     # Exact solution: div(t)[i,j] = t · 4π cos(2πx_c) cos(2πy_c) at cell centre.
     "vec_sincos_2d_periodic" =>
         (u_vec, var_map, axes, t, manifest) -> begin
-            ax = axes[1]; ay = axes[2]
-            maximum(
-                let x = ax.lo + (i - 0.5) * ax.h,
+        ax = axes[1]; ay = axes[2]
+        maximum(
+            let x = ax.lo + (i - 0.5) * ax.h,
                     y = ay.lo + (j - 0.5) * ay.h,
                     exact = t * 4π * cos(2π * x) * cos(2π * y)
                     abs(u_vec[var_map["div[$i,$j]"]] - exact)
-                end
+            end
                 for i in 1:ax.N, j in 1:ay.N
-            )
-        end,
+        )
+    end,
 )
 
 # ---------------------------------------------------------------------------
@@ -226,25 +232,27 @@ const _UNSTRUCTURED_MMS_CONV_CATALOG = Dict{String, Function}(
     # Exact solution at time t: u(lon,lat,t) = sin(lon)*cos(lat) * exp(-2*t/R²).
     "sin_lon_cos_lat" =>
         (u_vec, var_map, lon_c, lat_c, R_val, t, manifest) -> begin
-            Nc = length(lon_c)
-            decay = exp(-2.0 * t / R_val^2)
-            maximum(
-                let idx = get(var_map, "u[$c]", nothing)
+        Nc = length(lon_c)
+        decay = exp(-2.0 * t / R_val^2)
+        maximum(
+            let idx = get(var_map, "u[$c]", nothing)
                     idx === nothing ? 0.0 :
                     abs(u_vec[idx] - sin(lon_c[c]) * cos(lat_c[c]) * decay)
-                end
+            end
                 for c in 1:Nc
-            )
-        end,
+        )
+    end,
 )
 
-function _run_unstructured_mms_convergence(name::AbstractString, manifest::AbstractDict,
-                                            base_dir::AbstractString)
-    esm_path  = abspath(joinpath(base_dir, String(manifest["esm"])))
+function _run_unstructured_mms_convergence(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
+    esm_path = abspath(joinpath(base_dir, String(manifest["esm"])))
     grid_refs = String.(manifest["grid_refs"])
-    t_final   = Float64(manifest["t_final"])
+    t_final = Float64(manifest["t_final"])
     min_order = Float64(manifest["convergence"]["min_order"])
-    mms_kind  = String(get(manifest, "mms_kind", ""))
+    mms_kind = String(get(manifest, "mms_kind", ""))
 
     length(grid_refs) < 2 &&
         return (:fail, "$name: need ≥ 2 grid_refs for convergence check (got $(length(grid_refs)))")
@@ -258,7 +266,7 @@ function _run_unstructured_mms_convergence(name::AbstractString, manifest::Abstr
         gdd_path = isabspath(gdd_rel) ? gdd_rel : abspath(joinpath(base_dir, gdd_rel))
 
         gdd = JSON.parse(read(gdd_path, String))
-        domain_spec = get(get(gdd, "grids", Dict{String,Any}()), "domain", Dict{String,Any}())
+        domain_spec = get(get(gdd, "grids", Dict{String, Any}()), "domain", Dict{String, Any}())
         family = String(get(domain_spec, "family", ""))
 
         local lon_c::Vector{Float64}
@@ -271,49 +279,57 @@ function _run_unstructured_mms_convergence(name::AbstractString, manifest::Abstr
             loader_path = String(get(loader_spec, "path", ""))
             R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
             grid = build_mpas_grid(
-                loader = Dict("path"   => loader_path,
-                              "reader" => String(get(loader_spec, "reader", "auto")),
-                              "check"  => String(get(loader_spec, "check", "strict"))),
+                loader = Dict(
+                    "path" => loader_path,
+                    "reader" => String(get(loader_spec, "reader", "auto")),
+                    "check" => String(get(loader_spec, "check", "strict"))
+                ),
                 R = R_sphere,
             )
             lon_c = grid.mesh.lon_cell
             lat_c = grid.mesh.lat_cell
             R_val = Float64(grid.R)
-            Nc    = length(lon_c)
+            Nc = length(lon_c)
         elseif family == "duo"
             loader_spec = get(domain_spec, "loader", nothing)
             loader_path = String(get(loader_spec, "path", ""))
             R_sphere = Float64(get(loader_spec, "sphere_radius", 6.371e6))
             grid = build_duo_grid(
-                loader = (path   = loader_path,
-                          reader = String(get(loader_spec, "reader", "auto"))),
+                loader = (
+                    path = loader_path,
+                    reader = String(get(loader_spec, "reader", "auto")),
+                ),
                 R = R_sphere,
             )
             lon_c = grid.cc_lon
             lat_c = grid.cc_lat
             R_val = Float64(grid.R)
-            Nc    = length(lon_c)
+            Nc = length(lon_c)
         else
             return (:fail, "$name: unstructured runner does not support grid family '$family'")
         end
 
-        extra_ics = Dict{String,Float64}("u[$c]" => sin(lon_c[c]) * cos(lat_c[c]) for c in 1:Nc)
+        extra_ics = Dict{String, Float64}("u[$c]" => sin(lon_c[c]) * cos(lat_c[c]) for c in 1:Nc)
         prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
         prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
-        sol   = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
+        sol = solve(prob2; reltol = 1.0e-10, abstol = 1.0e-12, save_everystep = false)
 
         push!(errors, linf_fn(sol.u[end], var_map, lon_c, lat_c, R_val, t_final, manifest))
     end
 
     orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
-    order  = minimum(orders)
+    order = minimum(orders)
 
     if order >= min_order
-        return (:pass, "$name: min order = $(round(order; sigdigits = 3)) ≥ $min_order " *
-                "(orders=$(round.(orders; sigdigits=3)), L∞=$(round.(errors; sigdigits=3)))")
+        return (
+            :pass, "$name: min order = $(round(order; sigdigits = 3)) ≥ $min_order " *
+                "(orders=$(round.(orders; sigdigits = 3)), L∞=$(round.(errors; sigdigits = 3)))",
+        )
     else
-        return (:fail, "$name: min order = $(round(order; sigdigits = 3)) < $min_order " *
-                "(orders=$(round.(orders; sigdigits=3)), L∞=$(round.(errors; sigdigits=3)))")
+        return (
+            :fail, "$name: min order = $(round(order; sigdigits = 3)) < $min_order " *
+                "(orders=$(round.(orders; sigdigits = 3)), L∞=$(round.(errors; sigdigits = 3)))",
+        )
     end
 end
 
@@ -335,14 +351,16 @@ end
 #   t_final          final integration time
 #   tolerance.max    maximum acceptable L∞ error
 # ---------------------------------------------------------------------------
-function run_eigenvalue_case(name::AbstractString, manifest::AbstractDict,
-                              base_dir::AbstractString)
+function run_eigenvalue_case(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
     esm_path = abspath(joinpath(base_dir, String(manifest["esm"])))
-    gdd_rel  = String(manifest["gdd"])
+    gdd_rel = String(manifest["gdd"])
     gdd_path = isabspath(gdd_rel) ? gdd_rel : abspath(joinpath(base_dir, gdd_rel))
-    t_final  = Float64(manifest["t_final"])
-    tol_max  = Float64(manifest["tolerance"]["max"])
-    ev_kind  = String(get(manifest, "eigenvalue_kind", "cartesian_1d_laplacian"))
+    t_final = Float64(manifest["t_final"])
+    tol_max = Float64(manifest["tolerance"]["max"])
+    ev_kind = String(get(manifest, "eigenvalue_kind", "cartesian_1d_laplacian"))
 
     ev_fn = get(_EV_KIND_CATALOG, ev_kind, nothing)
     if ev_fn === nothing
@@ -358,7 +376,7 @@ function run_eigenvalue_case(name::AbstractString, manifest::AbstractDict,
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
     prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
-    sol = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
+    sol = solve(prob2; reltol = 1.0e-10, abstol = 1.0e-12, save_everystep = false)
     u_final = sol.u[end]
 
     # Exact ODE solution: u_i(t) = u_i(0) · exp(λ_h · t) for every cell i.
@@ -390,8 +408,10 @@ end
 #   convergence.min_order  minimum acceptable convergence order (log₂ ratio)
 #   (additional fields may be required by the chosen mms_kind, e.g. velocity)
 # ---------------------------------------------------------------------------
-function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
-                                   base_dir::AbstractString)
+function run_mms_convergence_case(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
     grid_refs = String.(manifest["grid_refs"])
 
     # Detect unstructured family by probing the first GDD. Unstructured grids
@@ -410,15 +430,17 @@ function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
         end
     end
 
-    esm_path  = abspath(joinpath(base_dir, String(manifest["esm"])))
-    t_final   = Float64(manifest["t_final"])
+    esm_path = abspath(joinpath(base_dir, String(manifest["esm"])))
+    t_final = Float64(manifest["t_final"])
     min_order = Float64(manifest["convergence"]["min_order"])
-    mms_kind  = String(get(manifest, "mms_kind", ""))
+    mms_kind = String(get(manifest, "mms_kind", ""))
 
     if length(grid_refs) < 2
-        return (:fail,
-                "$name: need at least 2 grid_refs for convergence check " *
-                "(got $(length(grid_refs)))")
+        return (
+            :fail,
+            "$name: need at least 2 grid_refs for convergence check " *
+                "(got $(length(grid_refs)))",
+        )
     end
 
     linf_fn = get(_MMS_CONV_CATALOG, mms_kind, nothing)
@@ -427,7 +449,7 @@ function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
     end
 
     errors = Float64[]
-    ns     = Int[]
+    ns = Int[]
     for gdd_rel in grid_refs
         gdd_path = isabspath(gdd_rel) ? gdd_rel : abspath(joinpath(base_dir, gdd_rel))
 
@@ -438,7 +460,7 @@ function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
 
         prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
         prob2 = SciMLBase.ODEProblem(prob.f, prob.u0, (0.0, t_final), prob.p)
-        sol = solve(prob2; reltol = 1e-10, abstol = 1e-12, save_everystep = false)
+        sol = solve(prob2; reltol = 1.0e-10, abstol = 1.0e-12, save_everystep = false)
 
         push!(errors, linf_fn(sol.u[end], var_map, axes, t_final, manifest))
         push!(ns, axes[1].N)
@@ -447,13 +469,17 @@ function run_mms_convergence_case(name::AbstractString, manifest::AbstractDict,
     order = log2(errors[1] / errors[2])
 
     if order >= min_order
-        return (:pass,
-                "$name: order = $(round(order; sigdigits = 3)) ≥ $min_order " *
-                "(N=$(ns[1])→$(ns[2]), L∞=$(round.(errors; sigdigits=3)))")
+        return (
+            :pass,
+            "$name: order = $(round(order; sigdigits = 3)) ≥ $min_order " *
+                "(N=$(ns[1])→$(ns[2]), L∞=$(round.(errors; sigdigits = 3)))",
+        )
     else
-        return (:fail,
-                "$name: order = $(round(order; sigdigits = 3)) < $min_order " *
-                "(N=$(ns[1])→$(ns[2]), L∞=$(round.(errors; sigdigits=3)))")
+        return (
+            :fail,
+            "$name: order = $(round(order; sigdigits = 3)) < $min_order " *
+                "(N=$(ns[1])→$(ns[2]), L∞=$(round.(errors; sigdigits = 3)))",
+        )
     end
 end
 
@@ -462,23 +488,35 @@ end
 # Existing manifest schemas are preserved; no callers need updating.
 # ---------------------------------------------------------------------------
 
-function _diffusion_1d_analytic(name::AbstractString, manifest::AbstractDict,
-                                base_dir::AbstractString)
-    return run_eigenvalue_case(name,
-        merge(Dict{String,Any}("eigenvalue_kind" => "cartesian_1d_laplacian"), manifest),
-        base_dir)
+function _diffusion_1d_analytic(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
+    return run_eigenvalue_case(
+        name,
+        merge(Dict{String, Any}("eigenvalue_kind" => "cartesian_1d_laplacian"), manifest),
+        base_dir
+    )
 end
 
-function _diffusion_2d_analytic(name::AbstractString, manifest::AbstractDict,
-                                base_dir::AbstractString)
-    return run_eigenvalue_case(name,
-        merge(Dict{String,Any}("eigenvalue_kind" => "cartesian_2d_laplacian"), manifest),
-        base_dir)
+function _diffusion_2d_analytic(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
+    return run_eigenvalue_case(
+        name,
+        merge(Dict{String, Any}("eigenvalue_kind" => "cartesian_2d_laplacian"), manifest),
+        base_dir
+    )
 end
 
-function _advection_1d_convergence(name::AbstractString, manifest::AbstractDict,
-                                   base_dir::AbstractString)
-    return run_mms_convergence_case(name,
-        merge(Dict{String,Any}("mms_kind" => "cos_2pi_x_transport"), manifest),
-        base_dir)
+function _advection_1d_convergence(
+        name::AbstractString, manifest::AbstractDict,
+        base_dir::AbstractString
+    )
+    return run_mms_convergence_case(
+        name,
+        merge(Dict{String, Any}("mms_kind" => "cos_2pi_x_transport"), manifest),
+        base_dir
+    )
 end

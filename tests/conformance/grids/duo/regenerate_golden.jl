@@ -90,6 +90,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

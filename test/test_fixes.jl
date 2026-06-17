@@ -141,4 +141,3 @@ end
         @test uη_ext[p, i + Ng, j + Ng] == uη[p, i, j]
     end
 end
-

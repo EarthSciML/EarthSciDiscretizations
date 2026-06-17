@@ -7,9 +7,11 @@ import SciMLBase
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n16.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n16.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
@@ -27,13 +29,15 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n16.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n16.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 16
+    N = 16
     dx = 1.0 / N
 
     # Set a nontrivial initial condition so the check is not trivial.
@@ -51,10 +55,12 @@ end
     for i in 1:N
         im1 = mod1(i - 1, N)
         ip1 = mod1(i + 1, N)
-        expected = (u0[var_map["u[$im1]"]] -
-                    2 * u0[var_map["u[$i]"]] +
-                    u0[var_map["u[$ip1]"]]) / dx^2
-        @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
+        expected = (
+            u0[var_map["u[$im1]"]] -
+                2 * u0[var_map["u[$i]"]] +
+                u0[var_map["u[$ip1]"]]
+        ) / dx^2
+        @test du[var_map["u[$i]"]] ≈ expected rtol = 1.0e-10
     end
 end
 
@@ -63,9 +69,11 @@ end
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n16.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n16.gdd.json"
+    )
 
     prob, _ = build_ode_problem(esm_path; grid_ref = gdd_path)
 
@@ -80,13 +88,15 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n32.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n32.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 32
+    N = 32
     dx = 1.0 / N
 
     @test length(prob.u0) == N
@@ -103,10 +113,12 @@ end
     for i in 1:N
         im1 = mod1(i - 1, N)
         ip1 = mod1(i + 1, N)
-        expected = (u0[var_map["u[$im1]"]] -
-                    2 * u0[var_map["u[$i]"]] +
-                    u0[var_map["u[$ip1]"]]) / dx^2
-        @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
+        expected = (
+            u0[var_map["u[$im1]"]] -
+                2 * u0[var_map["u[$i]"]] +
+                u0[var_map["u[$ip1]"]]
+        ) / dx^2
+        @test du[var_map["u[$i]"]] ≈ expected rtol = 1.0e-10
     end
 end
 
@@ -114,19 +126,23 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "centered_2nd_deriv_uniform", "fixtures", "integration",
-                         "diffusion_1d_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n32.gdd.json")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "centered_2nd_deriv_uniform", "fixtures", "integration",
+        "diffusion_1d_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n32.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 32
+    N = 32
     dx = 1.0 / N
     for i in 1:N
         expected = sin(2π * (i - 0.5) * dx)
-        @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1e-15
+        @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1.0e-15
     end
 end
 
@@ -134,19 +150,23 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "laplacian_2nd_uniform_cartesian", "fixtures", "integration",
-                         "diffusion_2d_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_2d_periodic_n32.gdd.json")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "laplacian_2nd_uniform_cartesian", "fixtures", "integration",
+        "diffusion_2d_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_2d_periodic_n32.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 32
+    N = 32
     dx = 1.0 / N
     for i in 1:N, j in 1:N
         expected = sin(2π * (i - 0.5) * dx) * sin(2π * (j - 0.5) * dx)
-        @test prob.u0[var_map["u[$i,$j]"]] ≈ expected  rtol = 1e-15
+        @test prob.u0[var_map["u[$i,$j]"]] ≈ expected  rtol = 1.0e-15
     end
 end
 
@@ -154,17 +174,21 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "upwind_1st", "fixtures", "integration", "advection_1d_pde.esm")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "upwind_1st", "fixtures", "integration", "advection_1d_pde.esm"
+    )
 
     for (gdd_file, N) in [("adv_n16.gdd.json", 16), ("adv_n32.gdd.json", 32)]
-        gdd_path = joinpath(repo_root, "discretizations", "finite_difference",
-                            "upwind_1st", "fixtures", "integration", gdd_file)
+        gdd_path = joinpath(
+            repo_root, "discretizations", "finite_difference",
+            "upwind_1st", "fixtures", "integration", gdd_file
+        )
         prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
         dx = 1.0 / N
         for i in 1:N
             expected = cos(2π * (i - 0.5) * dx)
-            @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1e-15
+            @test prob.u0[var_map["u[$i]"]] ≈ expected  rtol = 1.0e-15
         end
     end
 end
@@ -178,12 +202,16 @@ end
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_duo", "fixtures", "integration",
-                         "duo_nn_diffusion_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_duo", "fixtures", "integration",
-                         "duo_level2.gdd.json")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_duo", "fixtures", "integration",
+        "duo_nn_diffusion_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_duo", "fixtures", "integration",
+        "duo_level2.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
@@ -206,7 +234,7 @@ end
         @test isfinite(du[var_map["u[$c]"]])
     end
     for c in 1:N
-        @test du[var_map["u[$c]"]] ≈ 0.0  atol = 1e-8
+        @test du[var_map["u[$c]"]] ≈ 0.0  atol = 1.0e-8
     end
 end
 
@@ -214,16 +242,20 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_duo", "fixtures", "integration",
-                         "duo_nn_diffusion_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_duo", "fixtures", "integration",
-                         "duo_level2.gdd.json")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_duo", "fixtures", "integration",
+        "duo_nn_diffusion_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_duo", "fixtures", "integration",
+        "duo_level2.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 320
+    N = 320
     du = similar(prob.u0)
     u0 = copy(prob.u0)
     # Non-uniform IC: alternating 0 / 1 by cell parity.
@@ -245,35 +277,41 @@ end
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_mpas", "fixtures", "integration",
-                         "mpas_nn_diffusion_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_mpas", "fixtures", "integration",
-                         "mpas_triangle_3cell.gdd.json")
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_nn_diffusion_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_triangle_3cell.gdd.json"
+    )
 
     # Synthetic 3-cell triangular mesh.
     # Topology: cells 1,2,3 form a triangle; edges 1=(1,2), 2=(1,3), 3=(2,3).
     # All areas=1, dv_edge=1, dc_edge=1 → Laplacian weight per edge = 1/(1*1).
     # For uniform u=1: du[c] = 2*1 - 2*1 = 0 (each cell has 2 neighbors).
     synth_mesh = mpas_mesh_data(
-        lon_cell         = zeros(3),
-        lat_cell         = zeros(3),
-        area_cell        = [1.0, 1.0, 1.0],
-        n_edges_on_cell  = [2, 2, 2],
-        cells_on_cell    = [2 1 1; 3 3 2; 0 0 0],  # max_edges × n_cells
-        edges_on_cell    = [1 1 2; 2 3 3; 0 0 0],  # max_edges × n_cells
-        lon_edge         = zeros(3),
-        lat_edge         = zeros(3),
-        cells_on_edge    = [1 1 2; 2 3 3],          # 2 × n_edges
-        dc_edge          = [1.0, 1.0, 1.0],
-        dv_edge          = [1.0, 1.0, 1.0],
-        max_edges        = 3,
+        lon_cell = zeros(3),
+        lat_cell = zeros(3),
+        area_cell = [1.0, 1.0, 1.0],
+        n_edges_on_cell = [2, 2, 2],
+        cells_on_cell = [2 1 1; 3 3 2; 0 0 0],  # max_edges × n_cells
+        edges_on_cell = [1 1 2; 2 3 3; 0 0 0],  # max_edges × n_cells
+        lon_edge = zeros(3),
+        lat_edge = zeros(3),
+        cells_on_edge = [1 1 2; 2 3 3],          # 2 × n_edges
+        dc_edge = [1.0, 1.0, 1.0],
+        dv_edge = [1.0, 1.0, 1.0],
+        max_edges = 3,
     )
 
-    prob, var_map = build_ode_problem(esm_path;
-                                      grid_ref  = gdd_path,
-                                      reader_fn = _ -> synth_mesh)
+    prob, var_map = build_ode_problem(
+        esm_path;
+        grid_ref = gdd_path,
+        reader_fn = _ -> synth_mesh
+    )
 
     @test prob isa SciMLBase.ODEProblem
     @test haskey(var_map, "u[1]") && haskey(var_map, "u[3]")
@@ -287,7 +325,7 @@ end
 
     # Uniform field must have zero Laplacian.
     for c in 1:3
-        @test du[var_map["u[$c]"]] ≈ 0.0  atol = 1e-12
+        @test du[var_map["u[$c]"]] ≈ 0.0  atol = 1.0e-12
     end
 end
 
@@ -295,31 +333,37 @@ end
     using EarthSciDiscretizations: build_ode_problem, mpas_mesh_data
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_mpas", "fixtures", "integration",
-                         "mpas_nn_diffusion_pde.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "finite_difference",
-                         "nn_diffusion_mpas", "fixtures", "integration",
-                         "mpas_triangle_3cell.gdd.json")
-
-    synth_mesh = mpas_mesh_data(
-        lon_cell         = zeros(3),
-        lat_cell         = zeros(3),
-        area_cell        = [1.0, 1.0, 1.0],
-        n_edges_on_cell  = [2, 2, 2],
-        cells_on_cell    = [2 1 1; 3 3 2; 0 0 0],
-        edges_on_cell    = [1 1 2; 2 3 3; 0 0 0],
-        lon_edge         = zeros(3),
-        lat_edge         = zeros(3),
-        cells_on_edge    = [1 1 2; 2 3 3],
-        dc_edge          = [1.0, 1.0, 1.0],
-        dv_edge          = [1.0, 1.0, 1.0],
-        max_edges        = 3,
+    esm_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_nn_diffusion_pde.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "nn_diffusion_mpas", "fixtures", "integration",
+        "mpas_triangle_3cell.gdd.json"
     )
 
-    prob, var_map = build_ode_problem(esm_path;
-                                      grid_ref  = gdd_path,
-                                      reader_fn = _ -> synth_mesh)
+    synth_mesh = mpas_mesh_data(
+        lon_cell = zeros(3),
+        lat_cell = zeros(3),
+        area_cell = [1.0, 1.0, 1.0],
+        n_edges_on_cell = [2, 2, 2],
+        cells_on_cell = [2 1 1; 3 3 2; 0 0 0],
+        edges_on_cell = [1 1 2; 2 3 3; 0 0 0],
+        lon_edge = zeros(3),
+        lat_edge = zeros(3),
+        cells_on_edge = [1 1 2; 2 3 3],
+        dc_edge = [1.0, 1.0, 1.0],
+        dv_edge = [1.0, 1.0, 1.0],
+        max_edges = 3,
+    )
+
+    prob, var_map = build_ode_problem(
+        esm_path;
+        grid_ref = gdd_path,
+        reader_fn = _ -> synth_mesh
+    )
 
     du = similar(prob.u0)
     u0 = copy(prob.u0)
@@ -333,9 +377,9 @@ end
     #   du[1] = u[2] + u[3] - 2*u[1] = 1 + 0 - 0 = 1
     #   du[2] = u[1] + u[3] - 2*u[2] = 0 + 0 - 2 = -2
     #   du[3] = u[1] + u[2] - 2*u[3] = 0 + 1 - 0 = 1
-    @test du[var_map["u[1]"]] ≈  1.0  atol = 1e-12
-    @test du[var_map["u[2]"]] ≈ -2.0  atol = 1e-12
-    @test du[var_map["u[3]"]] ≈  1.0  atol = 1e-12
+    @test du[var_map["u[1]"]] ≈ 1.0  atol = 1.0e-12
+    @test du[var_map["u[2]"]] ≈ -2.0  atol = 1.0e-12
+    @test du[var_map["u[3]"]] ≈ 1.0  atol = 1.0e-12
 end
 
 # ---------------------------------------------------------------------------
@@ -346,26 +390,28 @@ end
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "pide_integral_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n16.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "pide_integral_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n16.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
-    N  = 16
+    N = 16
     dx = 1.0 / N
 
     # IC from ESM expression: u(x,0) = 1.0 for all cells.
     u0 = copy(prob.u0)
     for i in 1:N
-        @test u0[var_map["u[$i]"]] ≈ 1.0 rtol = 1e-15
+        @test u0[var_map["u[$i]"]] ≈ 1.0 rtol = 1.0e-15
     end
 
     # Uniform IC: integral(u) = dx*N*1.0 = 1.0, so du/dt = -1.0 for every cell.
     du = similar(u0)
     prob.f(du, u0, prob.p, 0.0)
     for i in 1:N
-        @test du[var_map["u[$i]"]] ≈ -1.0 rtol = 1e-10
+        @test du[var_map["u[$i]"]] ≈ -1.0 rtol = 1.0e-10
     end
 
     # Linear IC: u[i] = x_i = (i-0.5)*dx (cell centres).
@@ -375,7 +421,7 @@ end
     end
     prob.f(du, u0, prob.p, 0.0)
     for i in 1:N
-        @test du[var_map["u[$i]"]] ≈ -0.5 rtol = 1e-10
+        @test du[var_map["u[$i]"]] ≈ -0.5 rtol = 1.0e-10
     end
 end
 
@@ -389,14 +435,16 @@ end
     import JSON
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "upwind_nonuniform.esm")
-    rule_path = joinpath(repo_root, "discretizations", "finite_difference",
-                         "upwind_1st_nonuniform.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "upwind_nonuniform.esm")
+    rule_path = joinpath(
+        repo_root, "discretizations", "finite_difference",
+        "upwind_1st_nonuniform.json"
+    )
 
     # 4-cell nonuniform x-axis with widths [0.1, 0.2, 0.3, 0.4].
     # Periodic BC. GDD inlines the rule spec via absolute ref path.
     gdd = Dict(
-        "esm"  => "0.5.0",
+        "esm" => "0.5.0",
         "kind" => "grid_discretization_descriptor",
         "metadata" => Dict("title" => "nonuniform cartesian 1D N=4 (esd-7h2 test)"),
         "grids" => Dict(
@@ -437,8 +485,8 @@ end
     for i in 1:N
         im1 = mod1(i - 1, N)
         expected = (-1.0 / dx_widths[i]) * u0[var_map["u[$im1]"]] +
-                   ( 1.0 / dx_widths[i]) * u0[var_map["u[$i]"]]
-        @test du[var_map["u[$i]"]] ≈ expected rtol = 1e-10
+            (1.0 / dx_widths[i]) * u0[var_map["u[$i]"]]
+        @test du[var_map["u[$i]"]] ≈ expected rtol = 1.0e-10
     end
 end
 
@@ -479,10 +527,10 @@ end
 
     # Conservation: periodic domain → sum of discrete divergences telescopes to 0.
     div_sum = sum(du[var_map["div[$i,$j]"]] for j in 1:N for i in 1:N)
-    @test abs(div_sum) < 1e-10
+    @test abs(div_sum) < 1.0e-10
 
     # Spot-check cell (1,1): div = (Fu[2,1]-Fu[1,1])/dx + (Fv[1,2]-Fv[1,1])/dy.
     expected_div_1_1 = (u0[var_map["Fu[2,1]"]] - u0[var_map["Fu[1,1]"]]) / dx +
-                       (u0[var_map["Fv[1,2]"]] - u0[var_map["Fv[1,1]"]]) / dy
-    @test du[var_map["div[1,1]"]] ≈ expected_div_1_1  rtol = 1e-12
+        (u0[var_map["Fv[1,2]"]] - u0[var_map["Fv[1,1]"]]) / dy
+    @test du[var_map["div[1,1]"]] ≈ expected_div_1_1  rtol = 1.0e-12
 end

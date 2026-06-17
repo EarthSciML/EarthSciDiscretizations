@@ -110,7 +110,7 @@ function stencil_bindings(grid, Nc::Int, p::Int, i::Int, j::Int)
     ξc = grid.ξ_centers[i + 1]
     ηc = grid.η_centers[j + 1]
     J, = gnomonic_metric(ξc, ηc, grid.R)
-    return Dict{String,Float64}("h" => h, "J" => J)
+    return Dict{String, Float64}("h" => h, "J" => J)
 end
 
 function _load_rules(rel_path::String)
@@ -124,7 +124,7 @@ end
 # canonical ESS → eval passthrough in src/rule_eval.jl). Bindings come from the
 # grid accessor: h is uniform across the fixture, J varies per cell.
 function rule_eval_block(grid, Nc::Int, qps)
-    blocks = Dict{String,Any}[]
+    blocks = Dict{String, Any}[]
     for rel_path in RULE_PATHS
         discs = _load_rules(rel_path)
         for rule_name in RULE_NAMES
@@ -133,7 +133,7 @@ function rule_eval_block(grid, Nc::Int, qps)
             n_entries = length(stencil)
             n_qp = length(qps)
 
-            bindings_per_qp = Vector{Dict{String,Float64}}(undef, n_qp)
+            bindings_per_qp = Vector{Dict{String, Float64}}(undef, n_qp)
             stencil_coeffs = Vector{Vector{Float64}}(undef, n_qp)
 
             for (k, qp) in enumerate(qps)
@@ -146,13 +146,15 @@ function rule_eval_block(grid, Nc::Int, qps)
                 stencil_coeffs[k] = [eval_coeff(entry["coeff"], binds) for entry in stencil]
             end
 
-            push!(blocks, Dict(
-                "rule" => rule_name,
-                "rule_path" => rel_path,
-                "stencil_selectors" => [entry["selectors"] for entry in stencil],
-                "bindings_per_qp" => bindings_per_qp,
-                "stencil_coeffs" => stencil_coeffs,
-            ))
+            push!(
+                blocks, Dict(
+                    "rule" => rule_name,
+                    "rule_path" => rel_path,
+                    "stencil_selectors" => [entry["selectors"] for entry in stencil],
+                    "bindings_per_qp" => bindings_per_qp,
+                    "stencil_coeffs" => stencil_coeffs,
+                )
+            )
         end
     end
     return blocks
@@ -167,10 +169,12 @@ function build_output(fixture::AbstractDict)
 
     qps = fixture["query_points"]
     n = length(qps)
-    centers = Vector{Dict{String,Float64}}(undef, n)
+    centers = Vector{Dict{String, Float64}}(undef, n)
     nbrs = Dict(k => Vector{Vector{Int}}(undef, n) for k in DIR_KEYS)
-    metric_names = ("J", "g_xixi", "g_etaeta", "g_xieta",
-                    "ginv_xixi", "ginv_etaeta", "ginv_xieta")
+    metric_names = (
+        "J", "g_xixi", "g_etaeta", "g_xieta",
+        "ginv_xixi", "ginv_etaeta", "ginv_xieta",
+    )
     metrics = Dict(m => Vector{Float64}(undef, n) for m in metric_names)
     areas = Vector{Float64}(undef, n)
 
@@ -229,6 +233,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

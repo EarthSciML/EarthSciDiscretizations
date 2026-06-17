@@ -23,9 +23,9 @@ export generate_rule_catalog
 
 const FAMILY_HEADINGS = Dict(
     :finite_difference => "Finite-difference rules",
-    :finite_volume     => "Finite-volume rules",
-    :spectral          => "Spectral rules",
-    :grids             => "Grid family schemas",
+    :finite_volume => "Finite-volume rules",
+    :spectral => "Spectral rules",
+    :grids => "Grid family schemas",
 )
 
 # A single row in the catalog. One row corresponds to one inner rule key
@@ -58,16 +58,18 @@ function catalog_rows(catalog_dir::AbstractString; repo_root::AbstractString)
     for rf in rules
         try
             body = JSON.parsefile(rf.path)
-            append!(rows, _rows_for_file(rf, body; repo_root=repo_root))
+            append!(rows, _rows_for_file(rf, body; repo_root = repo_root))
         catch err
             # Surface parse errors as catalog rows rather than blowing up the
             # doc build; a malformed rule file should be visible in the
             # catalog as a parse error, not silently dropped.
-            push!(rows, CatalogRow(
-                rf.family, rf.name, rf.name, "parse_error",
-                "—", "—", "—", "PARSE ERROR: $(err)",
-                _relpath(rf.path, repo_root),
-            ))
+            push!(
+                rows, CatalogRow(
+                    rf.family, rf.name, rf.name, "parse_error",
+                    "—", "—", "—", "PARSE ERROR: $(err)",
+                    _relpath(rf.path, repo_root),
+                )
+            )
         end
     end
     return rows
@@ -78,33 +80,45 @@ function _rows_for_file(rf::RuleFile, body; repo_root)
         # Sort inner keys for deterministic output (JSON.jl returns an
         # unordered Dict; we want the catalog to be reproducible regardless
         # of hash insertion order).
-        return [_row_for_inner(rf, k, body["discretizations"][k],
-                               "discretizations"; repo_root=repo_root)
-                for k in sort!(collect(keys(body["discretizations"])))]
+        return [
+            _row_for_inner(
+                    rf, k, body["discretizations"][k],
+                    "discretizations"; repo_root = repo_root
+                )
+                for k in sort!(collect(keys(body["discretizations"])))
+        ]
     elseif haskey(body, "rules")
-        return [_row_for_inner(rf, k, body["rules"][k],
-                               "rules"; repo_root=repo_root)
-                for k in sort!(collect(keys(body["rules"])))]
+        return [
+            _row_for_inner(
+                    rf, k, body["rules"][k],
+                    "rules"; repo_root = repo_root
+                )
+                for k in sort!(collect(keys(body["rules"])))
+        ]
     elseif haskey(body, "family") && haskey(body, "options")
         # grid-family schema (e.g. discretizations/grids/cartesian.schema.json)
-        return [CatalogRow(
-            rf.family, rf.name, String(get(body, "family", rf.name)),
-            "schema",
-            "—",
-            String(get(body, "family", "—")),
-            String(get(body, "version", "—")),
-            "Grid family schema (required: " *
-                join(get(body, "required", String[]), ", ") * ")",
-            _relpath(rf.path, repo_root),
-        )]
+        return [
+            CatalogRow(
+                rf.family, rf.name, String(get(body, "family", rf.name)),
+                "schema",
+                "—",
+                String(get(body, "family", "—")),
+                String(get(body, "version", "—")),
+                "Grid family schema (required: " *
+                    join(get(body, "required", String[]), ", ") * ")",
+                _relpath(rf.path, repo_root),
+            ),
+        ]
     else
-        return [CatalogRow(
-            rf.family, rf.name, rf.name, "unknown",
-            "—", "—", "—",
-            "Unrecognised rule shape (top keys: " *
-                join(sort(collect(keys(body))), ", ") * ")",
-            _relpath(rf.path, repo_root),
-        )]
+        return [
+            CatalogRow(
+                rf.family, rf.name, rf.name, "unknown",
+                "—", "—", "—",
+                "Unrecognised rule shape (top keys: " *
+                    join(sort(collect(keys(body))), ", ") * ")",
+                _relpath(rf.path, repo_root),
+            ),
+        ]
     end
 end
 
@@ -121,8 +135,12 @@ function _row_for_inner(rf::RuleFile, key, def, shape; repo_root)
             op = String(pat["op"])
         end
     end
-    grid_family = String(get(def, "grid_family",
-                              get(def, "region", "—")))
+    grid_family = String(
+        get(
+            def, "grid_family",
+            get(def, "region", "—")
+        )
+    )
     accuracy = String(get(def, "accuracy", "—"))
     reference = _short_reference(def)
     return CatalogRow(
@@ -154,7 +172,7 @@ function _relpath(path::AbstractString, repo_root::AbstractString)
     p = abspath(path)
     r = abspath(repo_root)
     if startswith(p, r)
-        return lstrip(p[length(r)+1:end], '/')
+        return lstrip(p[(length(r) + 1):end], '/')
     end
     return p
 end
@@ -166,20 +184,26 @@ end
 function render_catalog(io::IO, rows::Vector{CatalogRow}; catalog_dir, repo_root)
     println(io, "# EarthSciDiscretizations — Rule Catalog")
     println(io)
-    println(io, "<!-- AUTOGENERATED by `docs/generate_rule_catalog.jl`. ",
-                "Do not edit by hand — regenerate from `discretizations/` instead. -->")
+    println(
+        io, "<!-- AUTOGENERATED by `docs/generate_rule_catalog.jl`. ",
+        "Do not edit by hand — regenerate from `discretizations/` instead. -->"
+    )
     println(io)
-    println(io, "Authoritative manifest of every discretization rule and grid-family ",
-                "schema currently committed under `$(_relpath(catalog_dir, repo_root))`. ",
-                "Each row corresponds to one inner rule key inside one JSON file, as ",
-                "discovered via `EarthSciDiscretizations.load_rules` — the same ",
-                "production path the walker harness uses for rule discovery.")
+    println(
+        io, "Authoritative manifest of every discretization rule and grid-family ",
+        "schema currently committed under `$(_relpath(catalog_dir, repo_root))`. ",
+        "Each row corresponds to one inner rule key inside one JSON file, as ",
+        "discovered via `EarthSciDiscretizations.load_rules` — the same ",
+        "production path the walker harness uses for rule discovery."
+    )
     println(io)
-    println(io, "Hand-authored planning prose (aspirational rules not yet committed, ",
-                "audit lenses, and source-by-source roadmaps) is preserved in ",
-                "[`rule-catalog-roadmap.md`](rule-catalog-roadmap.md) ",
-                "until a follow-up bead migrates that content into a ",
-                "generated form.")
+    println(
+        io, "Hand-authored planning prose (aspirational rules not yet committed, ",
+        "audit lenses, and source-by-source roadmaps) is preserved in ",
+        "[`rule-catalog-roadmap.md`](rule-catalog-roadmap.md) ",
+        "until a follow-up bead migrates that content into a ",
+        "generated form."
+    )
     println(io)
 
     println(io, "## Header metadata")
@@ -189,15 +213,17 @@ function render_catalog(io::IO, rows::Vector{CatalogRow}; catalog_dir, repo_root
     println(io, "| Generator | `docs/generate_rule_catalog.jl` |")
     println(io, "| Catalog root | `$(_relpath(catalog_dir, repo_root))` |")
     println(io, "| Total rule entries | $(length(rows)) |")
-    println(io, "| Families discovered | ",
-                join(sort(unique(string.(getfield.(rows, :family)))), ", "), " |")
+    println(
+        io, "| Families discovered | ",
+        join(sort(unique(string.(getfield.(rows, :family)))), ", "), " |"
+    )
     println(io)
 
     println(io, "## Counts by family")
     println(io)
     println(io, "| Family | Entries |")
     println(io, "|---|---:|")
-    for fam in sort(unique(getfield.(rows, :family)); by=string)
+    for fam in sort(unique(getfield.(rows, :family)); by = string)
         n = count(r -> r.family == fam, rows)
         println(io, "| `$(string(fam))` | $n |")
     end
@@ -218,17 +244,19 @@ function render_catalog(io::IO, rows::Vector{CatalogRow}; catalog_dir, repo_root
     println(io, "| `path` | Repo-relative path to the JSON file. |")
     println(io)
 
-    for fam in sort(unique(getfield.(rows, :family)); by=string)
+    for fam in sort(unique(getfield.(rows, :family)); by = string)
         heading = get(FAMILY_HEADINGS, fam, "Family `$(string(fam))`")
         println(io, "## $(heading) (`$(string(fam))`)")
         println(io)
         println(io, "| name | shape | op | grid_family | accuracy | reference | path |")
         println(io, "|---|---|---|---|---|---|---|")
-        fam_rows = sort(filter(r -> r.family == fam, rows); by=r -> r.rule_key)
+        fam_rows = sort(filter(r -> r.family == fam, rows); by = r -> r.rule_key)
         for r in fam_rows
-            println(io, "| `$(r.rule_key)` | $(r.shape) | `$(r.op)` | ",
-                        "$(r.grid_family) | $(r.accuracy) | $(r.reference) | ",
-                        "`$(r.rel_path)` |")
+            println(
+                io, "| `$(r.rule_key)` | $(r.shape) | `$(r.op)` | ",
+                "$(r.grid_family) | $(r.accuracy) | $(r.reference) | ",
+                "`$(r.rel_path)` |"
+            )
         end
         println(io)
     end
@@ -251,10 +279,11 @@ Returns the absolute output path.
 function generate_rule_catalog(;
         catalog_dir::AbstractString,
         output_path::AbstractString,
-        repo_root::AbstractString = dirname(catalog_dir))
-    rows = catalog_rows(catalog_dir; repo_root=repo_root)
+        repo_root::AbstractString = dirname(catalog_dir)
+    )
+    rows = catalog_rows(catalog_dir; repo_root = repo_root)
     open(output_path, "w") do io
-        render_catalog(io, rows; catalog_dir=catalog_dir, repo_root=repo_root)
+        render_catalog(io, rows; catalog_dir = catalog_dir, repo_root = repo_root)
     end
     return abspath(output_path)
 end

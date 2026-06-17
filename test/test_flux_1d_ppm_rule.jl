@@ -98,4 +98,3 @@ end
     @test spec["flux_form"]["produces"] == "F_{i+1/2}"
     @test haskey(spec, "schema_gaps")
 end
-

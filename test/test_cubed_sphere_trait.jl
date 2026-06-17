@@ -44,7 +44,7 @@ end
     @test clats[1] ≈ g.lat[1, 1, 1]
     # lon in [-π, π], lat in [-π/2, π/2]
     @test all(-π .<= clons .<= π)
-    @test all(-π/2 .<= clats .<= π/2)
+    @test all(-π / 2 .<= clats .<= π / 2)
     # Unknown axis still throws
     @test_throws ArgumentError cell_centers(g, :z)
     # Memoization: second call returns identical array object

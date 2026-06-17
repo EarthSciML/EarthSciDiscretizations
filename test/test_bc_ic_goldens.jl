@@ -11,7 +11,7 @@ using TestItems
 # IC goldens: pin _eval_expression_ics output
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: IC sin(2π·x) on uniform 1D N=8 (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: IC sin(2π·x) on uniform 1D N=8 (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -26,11 +26,11 @@ using TestItems
     @test length(prob.u0) == N
     for i in 1:N
         x = (i - 0.5) * dx
-        @test prob.u0[var_map["u[$i]"]] ≈ sin(2π * x)  atol = 1e-15
+        @test prob.u0[var_map["u[$i]"]] ≈ sin(2π * x)  atol = 1.0e-15
     end
 end
 
-@testitem "bc_ic goldens: IC sin(2π·z) on nonuniform vertical N=16 (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: IC sin(2π·z) on nonuniform vertical N=16 (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -54,7 +54,7 @@ end
 
     @test length(prob.u0) >= N
     for i in 1:N
-        @test prob.u0[var_map["u[$i]"]] ≈ sin(2π * centres[i])  atol = 1e-14
+        @test prob.u0[var_map["u[$i]"]] ≈ sin(2π * centres[i])  atol = 1.0e-14
     end
 end
 
@@ -62,7 +62,7 @@ end
 # 2-D Dirichlet non-periodic: pin du byte-identity (all four sides + corners)
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: 2D Dirichlet-0 nonperiodic Laplacian du (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: 2D Dirichlet-0 nonperiodic Laplacian du (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -93,13 +93,13 @@ end
 
     # Expected: 5-point Laplacian with Dirichlet-0 ghost (ghost = bc value = 0)
     for i in 1:N, j in 1:N
-        u_left  = i > 1 ? u[i-1, j] : 0.0
-        u_right = i < N ? u[i+1, j] : 0.0
-        u_below = j > 1 ? u[i, j-1] : 0.0
-        u_above = j < N ? u[i, j+1] : 0.0
-        expected = (u_left - 2*u[i,j] + u_right) / dx^2 +
-                   (u_below - 2*u[i,j] + u_above) / dy^2
-        @test du[var_map["u[$i,$j]"]] ≈ expected  atol = 1e-10
+        u_left = i > 1 ? u[i - 1, j] : 0.0
+        u_right = i < N ? u[i + 1, j] : 0.0
+        u_below = j > 1 ? u[i, j - 1] : 0.0
+        u_above = j < N ? u[i, j + 1] : 0.0
+        expected = (u_left - 2 * u[i, j] + u_right) / dx^2 +
+            (u_below - 2 * u[i, j] + u_above) / dy^2
+        @test du[var_map["u[$i,$j]"]] ≈ expected  atol = 1.0e-10
     end
 end
 
@@ -107,7 +107,7 @@ end
 # 2-D periodic-x + Dirichlet-y: pin du byte-identity
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: 2D periodic-x + Dirichlet-y Laplacian du (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: 2D periodic-x + Dirichlet-y Laplacian du (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -139,13 +139,13 @@ end
 
     # Expected: x is periodic (mod-wrap), y has Dirichlet-0 ghosts
     for i in 1:N, j in 1:N
-        u_left  = u[mod1(i - 1, N), j]       # periodic x
+        u_left = u[mod1(i - 1, N), j]       # periodic x
         u_right = u[mod1(i + 1, N), j]       # periodic x
-        u_below = j > 1 ? u[i, j-1] : 0.0   # Dirichlet ymin = 0
-        u_above = j < N ? u[i, j+1] : 0.0   # Dirichlet ymax = 0
-        expected = (u_left - 2*u[i,j] + u_right) / dx^2 +
-                   (u_below - 2*u[i,j] + u_above) / dy^2
-        @test du[var_map["u[$i,$j]"]] ≈ expected  atol = 1e-10
+        u_below = j > 1 ? u[i, j - 1] : 0.0   # Dirichlet ymin = 0
+        u_above = j < N ? u[i, j + 1] : 0.0   # Dirichlet ymax = 0
+        expected = (u_left - 2 * u[i, j] + u_right) / dx^2 +
+            (u_below - 2 * u[i, j] + u_above) / dy^2
+        @test du[var_map["u[$i,$j]"]] ≈ expected  atol = 1.0e-10
     end
 end
 
@@ -153,7 +153,7 @@ end
 # Nonzero-Neumann 1D: currently throws E_BC_UNSUPPORTED; analytic golden documented
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: nonzero-Neumann 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: nonzero-Neumann 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
     using EarthSciSerialization: RuleEngineError
 
@@ -176,10 +176,10 @@ end
     ghost_xmin = u[1] + dx * 1.0
     ghost_xmax = u[N] + dx * 0.0
     expected = zeros(N)
-    expected[1] = (ghost_xmin - 2*u[1] + u[2]) / dx^2
-    expected[N] = (u[N-1] - 2*u[N] + ghost_xmax) / dx^2
-    for i in 2:N-1
-        expected[i] = (u[i-1] - 2*u[i] + u[i+1]) / dx^2
+    expected[1] = (ghost_xmin - 2 * u[1] + u[2]) / dx^2
+    expected[N] = (u[N - 1] - 2 * u[N] + ghost_xmax) / dx^2
+    for i in 2:(N - 1)
+        expected[i] = (u[i - 1] - 2 * u[i] + u[i + 1]) / dx^2
     end
     @test length(expected) == N
 
@@ -190,7 +190,7 @@ end
 # Robin 1D: currently throws E_BC_UNSUPPORTED; analytic golden documented
 # ---------------------------------------------------------------------------
 
-@testitem "bc_ic goldens: Robin 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags=[:bc_ic] begin
+@testitem "bc_ic goldens: Robin 1D throws E_BC_UNSUPPORTED (esd-7i3)" tags = [:bc_ic] begin
     using EarthSciDiscretizations: build_ode_problem
     using EarthSciSerialization: RuleEngineError
 
@@ -212,13 +212,13 @@ end
     N = 8; dx = 0.125
     u = [sin(π * (i - 0.5) * dx) for i in 1:N]
     alpha = 1.0; beta = 1.0; gamma_val = 0.5
-    ghost_xmin = (2*dx*gamma_val + (2*beta - alpha*dx)*u[1]) / (alpha*dx + 2*beta)
+    ghost_xmin = (2 * dx * gamma_val + (2 * beta - alpha * dx) * u[1]) / (alpha * dx + 2 * beta)
     ghost_xmax = 0.0
     expected = zeros(N)
-    expected[1] = (ghost_xmin - 2*u[1] + u[2]) / dx^2
-    expected[N] = (u[N-1] - 2*u[N] + ghost_xmax) / dx^2
-    for i in 2:N-1
-        expected[i] = (u[i-1] - 2*u[i] + u[i+1]) / dx^2
+    expected[1] = (ghost_xmin - 2 * u[1] + u[2]) / dx^2
+    expected[N] = (u[N - 1] - 2 * u[N] + ghost_xmax) / dx^2
+    for i in 2:(N - 1)
+        expected[i] = (u[i - 1] - 2 * u[i] + u[i + 1]) / dx^2
     end
     @test length(expected) == N
 

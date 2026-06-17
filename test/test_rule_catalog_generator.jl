@@ -21,7 +21,7 @@ using TestItems
         RuleCatalogGenerator.generate_rule_catalog(;
             catalog_dir = joinpath(repo_root, "discretizations"),
             output_path = out_path,
-            repo_root   = repo_root,
+            repo_root = repo_root,
         )
 
         @test isfile(out_path)

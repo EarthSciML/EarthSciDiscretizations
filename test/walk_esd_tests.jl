@@ -538,7 +538,8 @@ const _LAYER_B_PIPELINE_PENDING = "Layer-B awaits canonical-pipeline replacement
 # bare D(u) LHS, which the tree-walk evaluator cannot expand). Detected at
 # load so an older resolved ESS yields a structured SKIP, not a FAIL.
 const _ESS_SUPPORTS_LIFT_1D = hasmethod(
-    EarthSciSerialization.discretize, Tuple{AbstractDict}, (:lift_1d_arrayop,))
+    EarthSciSerialization.discretize, Tuple{AbstractDict}, (:lift_1d_arrayop,)
+)
 
 # ---------------------------------------------------------------------------
 # Generic MMS catalog. Indexed by `mms_kind` declared in the convergence
@@ -740,7 +741,7 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 # bind to the transported state `u`.
 # ---------------------------------------------------------------------------
 const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
-    "sin_2pi_x_unit_advection"      => Dict{String, Any}("U" => 1.0),
+    "sin_2pi_x_unit_advection" => Dict{String, Any}("U" => 1.0),
     "sin_2pi_x_nonlinear_diffusion" => Dict{String, Any}("f" => (x -> 2 + sin(2π * x))),
 )
 
@@ -759,78 +760,80 @@ const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
 # schema attributes, not on rule identity. Per-rule-shape dispatch (e.g.
 # `if rule.name == "centered_2nd_uniform" then ...`) is forbidden.
 # ---------------------------------------------------------------------------
-const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}([
-    # `1d_cartesian_periodic` (esd-0ip; ArrayOp-native under dsc-kswm) —
-    # runner implemented; builds a PDE ESM document (array state + grad op)
-    # and drives `discretize(lift_1d_arrayop=true) → ArrayOp → build_evaluator`
-    # with the rule's replacement AST as a document rule. No per-cell scalarization.
-    # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
-    "1d_cartesian_periodic",
-    # `1d_vertical_column` (esd-bbp) — runner implemented; reuses the
-    # 1D Cartesian per-cell-scalar machinery with parameter "h" (spacing).
-    # Activated for `centered_2nd_uniform_vertical` (O(h²)).
-    "1d_vertical_column",
-    # `2d_latlon_sphere` (esd-bbp) — runner implemented; drives
-    # `discretize → build_evaluator` via a per-cell-scalar ESM model on
-    # an n×n lat-lon grid, substituting per-row cos_lat parameters.
-    # Activated for `centered_2nd_uniform_latlon` (O(h²) on lat axis).
-    "2d_latlon_sphere",
-    # `2d_arakawa_periodic` (esd-bbp) — runner implemented; evaluates the
-    # stencil's coeff ASTs via the canonical pipeline with face values from
-    # the MMS IC embedded as literals. Activated for `divergence_arakawa_c`
-    # (O(h²) divergence test).
-    "2d_arakawa_periodic",
-    # `2d_cartesian_periodic` (dsc-vst2) — ArrayOp-native runner; builds a
-    # 2D periodic PDE ESM document and drives `discretize → ArrayOp →
-    # build_evaluator` with the rule's replacement AST (canonical `$target`
-    # component names i/j per RFC §7.1) as a document rule. No 1D-lift
-    # kwarg needed — multidimensional equations lift by default. Activated
-    # for `laplacian_2nd_uniform_cartesian` (O(h²) 5-point Laplacian).
-    "2d_cartesian_periodic",
-    # `fv_cell_average_1d` (dsc-a7b2) — runner was implemented for FV
-    # reconstruction rules that used stencil form + lower_stencil_to_scheme.
-    # esd-agh: lower_stencil_to_scheme is retired; ppm_reconstruction still
-    # carries stencil form (EINSUM-8 territory). Removed from supported
-    # topologies — runner reports SKIP for stencil-form fv_cell_average_1d.
-    # "fv_cell_average_1d",  ← retired in esd-agh
-    # `cubed_sphere_cross_metric` (esd-ecq) — direct-evaluation runner for
-    # cross_metric composite rules on the gnomonic cubed sphere. Evaluates
-    # each term of the cross_metric rule by binding per-cell metric arrays
-    # (ginv_xi_xi, ginv_eta_eta, ginv_xi_eta, J, dJgxx_dxi, dJgyy_deta,
-    # dJgxe_dxi, dJgxe_deta) from CubedSphereGrid.metric_eval and running
-    # eval_coeff on each stencil entry. Ghost cells are filled via
-    # extend_with_ghosts (panel connectivity aware). Analytic reference from
-    # gnomonic_metric + FD metric derivatives. Activated for
-    # `covariant_laplacian_cubed_sphere` (O(h²) full covariant Laplacian).
-    # The ESS canonical pipeline extension (discretize → build_evaluator with
-    # cubed_sphere selector dispatch) is tracked at ESS/ess-cubed-sphere-pipeline.
-    "cubed_sphere_cross_metric",
-    # `unstructured_ode` (esd-cal) — ODE-pipeline runner for unstructured
-    # sphere rules (grid_family=unstructured: nn_diffusion_mpas, nn_diffusion_duo).
-    # Loads the MPAS Voronoi or DUO icosahedral mesh via builtin paths,
-    # injects per-cell MMS ICs, calls build_ode_problem, evaluates the RHS
-    # at t=0, and measures L∞ error vs the analytic Laplacian. Convergence
-    # order is computed across the builtin mesh ladder.
-    "unstructured_ode",
-])
+const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}(
+    [
+        # `1d_cartesian_periodic` (esd-0ip; ArrayOp-native under dsc-kswm) —
+        # runner implemented; builds a PDE ESM document (array state + grad op)
+        # and drives `discretize(lift_1d_arrayop=true) → ArrayOp → build_evaluator`
+        # with the rule's replacement AST as a document rule. No per-cell scalarization.
+        # Activated for `centered_2nd_uniform` (O(h²)) and `upwind_1st` (O(h)).
+        "1d_cartesian_periodic",
+        # `1d_vertical_column` (esd-bbp) — runner implemented; reuses the
+        # 1D Cartesian per-cell-scalar machinery with parameter "h" (spacing).
+        # Activated for `centered_2nd_uniform_vertical` (O(h²)).
+        "1d_vertical_column",
+        # `2d_latlon_sphere` (esd-bbp) — runner implemented; drives
+        # `discretize → build_evaluator` via a per-cell-scalar ESM model on
+        # an n×n lat-lon grid, substituting per-row cos_lat parameters.
+        # Activated for `centered_2nd_uniform_latlon` (O(h²) on lat axis).
+        "2d_latlon_sphere",
+        # `2d_arakawa_periodic` (esd-bbp) — runner implemented; evaluates the
+        # stencil's coeff ASTs via the canonical pipeline with face values from
+        # the MMS IC embedded as literals. Activated for `divergence_arakawa_c`
+        # (O(h²) divergence test).
+        "2d_arakawa_periodic",
+        # `2d_cartesian_periodic` (dsc-vst2) — ArrayOp-native runner; builds a
+        # 2D periodic PDE ESM document and drives `discretize → ArrayOp →
+        # build_evaluator` with the rule's replacement AST (canonical `$target`
+        # component names i/j per RFC §7.1) as a document rule. No 1D-lift
+        # kwarg needed — multidimensional equations lift by default. Activated
+        # for `laplacian_2nd_uniform_cartesian` (O(h²) 5-point Laplacian).
+        "2d_cartesian_periodic",
+        # `fv_cell_average_1d` (dsc-a7b2) — runner was implemented for FV
+        # reconstruction rules that used stencil form + lower_stencil_to_scheme.
+        # esd-agh: lower_stencil_to_scheme is retired; ppm_reconstruction still
+        # carries stencil form (EINSUM-8 territory). Removed from supported
+        # topologies — runner reports SKIP for stencil-form fv_cell_average_1d.
+        # "fv_cell_average_1d",  ← retired in esd-agh
+        # `cubed_sphere_cross_metric` (esd-ecq) — direct-evaluation runner for
+        # cross_metric composite rules on the gnomonic cubed sphere. Evaluates
+        # each term of the cross_metric rule by binding per-cell metric arrays
+        # (ginv_xi_xi, ginv_eta_eta, ginv_xi_eta, J, dJgxx_dxi, dJgyy_deta,
+        # dJgxe_dxi, dJgxe_deta) from CubedSphereGrid.metric_eval and running
+        # eval_coeff on each stencil entry. Ghost cells are filled via
+        # extend_with_ghosts (panel connectivity aware). Analytic reference from
+        # gnomonic_metric + FD metric derivatives. Activated for
+        # `covariant_laplacian_cubed_sphere` (O(h²) full covariant Laplacian).
+        # The ESS canonical pipeline extension (discretize → build_evaluator with
+        # cubed_sphere selector dispatch) is tracked at ESS/ess-cubed-sphere-pipeline.
+        "cubed_sphere_cross_metric",
+        # `unstructured_ode` (esd-cal) — ODE-pipeline runner for unstructured
+        # sphere rules (grid_family=unstructured: nn_diffusion_mpas, nn_diffusion_duo).
+        # Loads the MPAS Voronoi or DUO icosahedral mesh via builtin paths,
+        # injects per-cell MMS ICs, calls build_ode_problem, evaluates the RHS
+        # at t=0, and measures L∞ error vs the analytic Laplacian. Convergence
+        # order is computed across the builtin mesh ladder.
+        "unstructured_ode",
+    ]
+)
 
 # Map topology_key → follow-up bead tracking the implementation. Used in
 # SKIP reasons so the walker report points to the open work.
 const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
-    "1d_cartesian_periodic"  => "ESD/dsc-k1li",
-    "1d_vertical_column"     => "ESD/dsc-yz0m",
-    "2d_cartesian_periodic"  => "ESD/dsc-vst2",
-    "2d_arakawa_periodic"    => "ESD/dsc-70zp",
-    "2d_latlon_sphere"       => "ESD/dsc-mps8",
-    "fv_cell_average_1d"     => "ESD/dsc-a7b2",
+    "1d_cartesian_periodic" => "ESD/dsc-k1li",
+    "1d_vertical_column" => "ESD/dsc-yz0m",
+    "2d_cartesian_periodic" => "ESD/dsc-vst2",
+    "2d_arakawa_periodic" => "ESD/dsc-70zp",
+    "2d_latlon_sphere" => "ESD/dsc-mps8",
+    "fv_cell_average_1d" => "ESD/dsc-a7b2",
     # dsc-y0jj (the stencil → replacement lowerer) landed; this key fires for
     # stencil rules that lower_stencil_to_replacement rejects for non-unstructured
     # families (not yet classified). Unstructured rules short-circuit to
     # "unstructured_ode" before reaching the lowering gate.
-    "stencil_form_rule"           => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
-    "cubed_sphere_cross_metric"   => "ESD/esd-ecq",
-    "unstructured_ode"            => "ESD/esd-cal",
-    "unsupported"                 => "no follow-up bead — out of Layer-B scope",
+    "stencil_form_rule" => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
+    "cubed_sphere_cross_metric" => "ESD/esd-ecq",
+    "unstructured_ode" => "ESD/esd-cal",
+    "unsupported" => "no follow-up bead — out of Layer-B scope",
 )
 
 function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
@@ -882,10 +885,12 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
         return LayerResult(LAYER_SKIP, _LAYER_B_PIPELINE_PENDING * " (topology=$topology_key; tracked at $(bead))")
     end
     if topology_key in ("1d_cartesian_periodic", "fv_cell_average_1d") && !_ESS_SUPPORTS_LIFT_1D
-        return LayerResult(LAYER_SKIP,
+        return LayerResult(
+            LAYER_SKIP,
             "$(topology_key) runner requires EarthSciSerialization.discretize(...; " *
-            "lift_1d_arrayop=true); the resolved ESS version predates it — update ESS to " *
-            "enable the ArrayOp-native Layer-B path")
+                "lift_1d_arrayop=true); the resolved ESS version predates it — update ESS to " *
+                "enable the ArrayOp-native Layer-B path"
+        )
     end
 
     # Generic MMS lookup. Only fixtures that declare a registered `mms_kind`
@@ -902,8 +907,10 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     # Unstructured ODE topology: reads grid_refs (GDD paths), not {n:} dicts.
     # Delegate to a separate sweep function that builds the ODE problem directly.
     if topology_key == "unstructured_ode"
-        return _run_layer_b_unstructured_ode_sweep(rule, mms, input_json,
-                                                    convergence_dir, expected_min_order)
+        return _run_layer_b_unstructured_ode_sweep(
+            rule, mms, input_json,
+            convergence_dir, expected_min_order
+        )
     end
 
     # Per-topology runner. Each family's implementation lands in a
@@ -1137,18 +1144,22 @@ function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFil
     topology_key == "2d_latlon_sphere"           && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     topology_key == "2d_arakawa_periodic"        && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
     topology_key == "cubed_sphere_cross_metric"  && return _run_layer_b_cubed_sphere_cross_metric(rule, mms, n)
-    error("Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
-          "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
-          "for this topology key.")
+    error(
+        "Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
+            "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
+            "for this topology key."
+    )
 end
 
 # ---------------------------------------------------------------------------
 # Unstructured ODE runner (esd-cal): nn_diffusion_mpas / nn_diffusion_duo
 # ---------------------------------------------------------------------------
 
-function _run_layer_b_unstructured_ode_sweep(rule::RuleFile, mms, input_json::AbstractDict,
-                                              convergence_dir::AbstractString,
-                                              expected_min_order::Float64)
+function _run_layer_b_unstructured_ode_sweep(
+        rule::RuleFile, mms, input_json::AbstractDict,
+        convergence_dir::AbstractString,
+        expected_min_order::Float64
+    )
     esm_rel = get(input_json, "esm", nothing)
     esm_rel === nothing &&
         return LayerResult(LAYER_FAIL, "convergence/input.esm missing 'esm' field for unstructured_ode runner")
@@ -1174,12 +1185,16 @@ function _run_layer_b_unstructured_ode_sweep(rule::RuleFile, mms, input_json::Ab
         err = try
             _run_layer_b_unstructured_ode(mms, esm_path, gdd_path)
         catch e
-            return LayerResult(LAYER_FAIL,
-                "unstructured ODE pipeline threw at grid=$(basename(gdd_path)): $(sprint(showerror, e))")
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured ODE pipeline threw at grid=$(basename(gdd_path)): $(sprint(showerror, e))"
+            )
         end
         if !(err isa Real) || !isfinite(err)
-            return LayerResult(LAYER_FAIL,
-                "unstructured ODE runner at grid=$(basename(gdd_path)) returned non-finite: $(typeof(err))")
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured ODE runner at grid=$(basename(gdd_path)) returned non-finite: $(typeof(err))"
+            )
         end
         push!(errors, Float64(err))
     end
@@ -1206,7 +1221,7 @@ end
 
 function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::AbstractString)
     gdd = JSON.parse(read(gdd_path, String))
-    domain_spec = get(get(gdd, "grids", Dict{String,Any}()), "domain", Dict{String,Any}())
+    domain_spec = get(get(gdd, "grids", Dict{String, Any}()), "domain", Dict{String, Any}())
     family = String(get(domain_spec, "family", ""))
 
     local lon_c::Vector{Float64}
@@ -1218,10 +1233,13 @@ function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::
         loader_spec === nothing && error("MPAS GDD missing loader spec")
         loader_path = String(get(loader_spec, "path", ""))
         startswith(loader_path, "builtin://") || error(
-            "unstructured_ode Layer-B runner requires builtin:// MPAS path; got $loader_path")
+            "unstructured_ode Layer-B runner requires builtin:// MPAS path; got $loader_path"
+        )
         grid = build_mpas_grid(
-            loader = Dict("path" => loader_path, "reader" => "auto",
-                          "check" => String(get(loader_spec, "check", "strict"))),
+            loader = Dict(
+                "path" => loader_path, "reader" => "auto",
+                "check" => String(get(loader_spec, "check", "strict"))
+            ),
         )
         lon_c = grid.mesh.lon_cell
         lat_c = grid.mesh.lat_cell
@@ -1241,7 +1259,7 @@ function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::
     end
 
     Nc = length(lon_c)
-    extra_ics = Dict{String,Float64}("u[$c]" => mms.ic(lon_c[c], lat_c[c]) for c in 1:Nc)
+    extra_ics = Dict{String, Float64}("u[$c]" => mms.ic(lon_c[c], lat_c[c]) for c in 1:Nc)
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
 
@@ -1304,8 +1322,8 @@ function _run_layer_b_cubed_sphere_cross_metric(rule::RuleFile, mms, n::Int)
     terms = get(main_spec, "terms", Any[])
     for term in terms
         axis_stencil = String(term["axis_stencil"])
-        metric_name  = String(term["metric_component"])
-        sign_val     = Float64(term["sign"])
+        metric_name = String(term["metric_component"])
+        sign_val = Float64(term["sign"])
 
         stencil_spec = get(discretizations, axis_stencil, nothing)
         stencil_spec isa AbstractDict ||
@@ -1327,7 +1345,7 @@ function _run_layer_b_cubed_sphere_cross_metric(rule::RuleFile, mms, n::Int)
                     sel isa AbstractDict || continue
                     ax = String(get(sel, "axis", ""))
                     off = Int(get(sel, "offset", 0))
-                    ax == "xi"  && (xi_off  = off)
+                    ax == "xi"  && (xi_off = off)
                     ax == "eta" && (eta_off = off)
                 end
                 phi_val = phi_ext[p, ic + Ng + xi_off, jc + Ng + eta_off]
@@ -1400,7 +1418,7 @@ function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
     spec isa AbstractDict || error("rule spec missing for $(rule.name)")
     repl = spec["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-           repl["expr"] : repl
+        repl["expr"] : repl
 
     # 2. Build an n_lat × n_lon grid on the unit sphere.
     #    n_lat = n_lon = n (square angular resolution) — Y_{2,0} is lon-independent
@@ -1415,7 +1433,7 @@ function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
     # 3. Build per-cell scalar ESM model. cos_lat varies per row, so each row
     #    gets its own parameter cos_lat_i. R, dlat, dlon are global parameters.
     variables = Dict{String, Any}()
-    variables["R"]    = Dict{String, Any}("type" => "parameter", "default" => 1.0,  "units" => "1")
+    variables["R"] = Dict{String, Any}("type" => "parameter", "default" => 1.0, "units" => "1")
     variables["dlat"] = Dict{String, Any}("type" => "parameter", "default" => dlat, "units" => "1")
     variables["dlon"] = Dict{String, Any}("type" => "parameter", "default" => dlon, "units" => "1")
     for i in 1:n_lat
@@ -1436,17 +1454,19 @@ function _run_layer_b_2d_latlon_sphere(rule::RuleFile, mms, n::Int)
         row_expr = _layer_b_sub_str(expr, "cos_lat", "cos_lat_$(i)")
         for j in 1:n_lon
             rhs = _layer_b_2d_latlon_build_cell_expr(row_expr, i, j, n_lat, n_lon)
-            push!(equations, Dict{String, Any}(
-                "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(i)_$(j)"], "wrt" => "t"),
-                "rhs" => rhs,
-            ))
+            push!(
+                equations, Dict{String, Any}(
+                    "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(i)_$(j)"], "wrt" => "t"),
+                    "rhs" => rhs,
+                )
+            )
         end
     end
 
     esm = Dict{String, Any}(
-        "esm"      => "0.2.0",
+        "esm" => "0.2.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_latlon_n$(n)"),
-        "models"   => Dict{String, Any}(
+        "models" => Dict{String, Any}(
             "M" => Dict{String, Any}("variables" => variables, "equations" => equations),
         ),
     )
@@ -1484,7 +1504,7 @@ function _layer_b_sub_str(expr, old::String, new_name::String)
     expr isa Number && return expr
     expr isa AbstractDict || return expr
     return Dict{String, Any}(
-        "op"   => String(expr["op"]),
+        "op" => String(expr["op"]),
         "args" => Any[_layer_b_sub_str(a, old, new_name) for a in expr["args"]],
     )
 end
@@ -1496,18 +1516,18 @@ function _layer_b_2d_latlon_build_cell_expr(expr, i::Int, j::Int, n_lat::Int, n_
     expr isa Number && return expr
     expr isa AbstractString && return String(expr)
     expr isa AbstractDict || error("unexpected node in latlon expr: $(typeof(expr))")
-    op   = String(expr["op"])
+    op = String(expr["op"])
     args = expr["args"]
     if op == "index"
         # Lowered latlon: args = [variable, lat_arg, lon_arg] (axes sorted "lat" < "lon").
         lat_idx = _layer_b_2d_eval_axis(args[2], "lat", i)
         lon_idx = _layer_b_2d_eval_axis(args[3], "lon", j)
-        i_wrap  = mod(lat_idx - 1, n_lat) + 1
-        j_wrap  = mod(lon_idx - 1, n_lon) + 1
+        i_wrap = mod(lat_idx - 1, n_lat) + 1
+        j_wrap = mod(lon_idx - 1, n_lon) + 1
         return "u_$(i_wrap)_$(j_wrap)"
     end
     return Dict{String, Any}(
-        "op"   => op,
+        "op" => op,
         "args" => Any[_layer_b_2d_latlon_build_cell_expr(a, i, j, n_lat, n_lon) for a in args],
     )
 end
@@ -1521,8 +1541,8 @@ function _layer_b_2d_eval_axis(expr, axis_name::String, cur::Int)::Int
     end
     (expr isa Integer || expr isa AbstractFloat) && return Int(expr)
     op = String(expr["op"])
-    a  = _layer_b_2d_eval_axis(expr["args"][1], axis_name, cur)
-    b  = _layer_b_2d_eval_axis(expr["args"][2], axis_name, cur)
+    a = _layer_b_2d_eval_axis(expr["args"][1], axis_name, cur)
+    b = _layer_b_2d_eval_axis(expr["args"][2], axis_name, cur)
     op == "+" && return a + b
     op == "-" && return a - b
     error("unsupported axis op '$(op)' in latlon index")
@@ -1549,10 +1569,12 @@ The expected order is O(h²) — `expected_min_order=1.9` in the convergence
 fixture leaves a 0.1 margin over the n=16→32→64→128 sweep.
 """
 function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
-    disc_dir  = dirname(dirname(rule.path))  # .../discretizations
-    esm_path  = joinpath(dirname(rule.path), rule.name, "fixtures", "integration",
-                         "$(rule.name)_pde.esm")
-    gdd_path  = joinpath(disc_dir, "gdd", "arakawa_2d_periodic_n$(n).gdd.json")
+    disc_dir = dirname(dirname(rule.path))  # .../discretizations
+    esm_path = joinpath(
+        dirname(rule.path), rule.name, "fixtures", "integration",
+        "$(rule.name)_pde.esm"
+    )
+    gdd_path = joinpath(disc_dir, "gdd", "arakawa_2d_periodic_n$(n).gdd.json")
 
     isfile(esm_path) || error("arakawa runner: integration ESM not found: $esm_path")
     isfile(gdd_path) || error("arakawa runner: GDD not found: $gdd_path")
@@ -1574,7 +1596,7 @@ function _run_layer_b_2d_arakawa_periodic(rule::RuleFile, mms, n::Int)
     for j in 1:n, i in 1:n
         cx = (i - 0.5) * dx
         cy = (j - 0.5) * dy
-        e  = abs(du[var_map["div[$i,$j]"]] - mms.derivative(cx, cy))
+        e = abs(du[var_map["div[$i,$j]"]] - mms.derivative(cx, cy))
         err = max(err, e)
     end
     return err
@@ -1646,27 +1668,31 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
             "shape" => Any["x"], "location" => "cell_center",
         )
         # Frozen auxiliary field: zero tendency, cells set from the aux value.
-        push!(equations, Dict{String, Any}(
-            "lhs" => Dict{String, Any}("op" => "D", "args" => Any[name], "wrt" => "t"),
-            "rhs" => 0.0,
-        ))
+        push!(
+            equations, Dict{String, Any}(
+                "lhs" => Dict{String, Any}("op" => "D", "args" => Any[name], "wrt" => "t"),
+                "rhs" => 0.0,
+            )
+        )
     end
 
     esm = Dict{String, Any}(
-        "esm"      => "0.4.0",
+        "esm" => "0.4.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_1d_cartesian_periodic_n$(n)"),
-        "grids"    => Dict{String, Any}(
+        "grids" => Dict{String, Any}(
             "g" => Dict{String, Any}(
-                "family"     => "cartesian",
+                "family" => "cartesian",
                 "dimensions" => Any[
-                    Dict{String, Any}("name" => "x", "size" => n,
-                                      "periodic" => true, "spacing" => "uniform"),
+                    Dict{String, Any}(
+                        "name" => "x", "size" => n,
+                        "periodic" => true, "spacing" => "uniform"
+                    ),
                 ],
             ),
         ),
         "models" => Dict{String, Any}(
             "M" => Dict{String, Any}(
-                "grid"      => "g",
+                "grid" => "g",
                 "variables" => variables,
                 "equations" => equations,
             ),
@@ -1675,11 +1701,13 @@ function _run_layer_b_1d_cartesian_periodic(rule::RuleFile, mms, n::Int)
 
     # Replacement form → plain pattern + authored replacement AST.
     # esd-agh: stencil-lowering path retired; all active 1d_cartesian_periodic rules carry replacement.
-    esm["rules"] = Any[Dict{String, Any}(
-        "name"        => rule.name,
-        "pattern"     => spec["applies_to"],
-        "replacement" => spec["replacement"],
-    )]
+    esm["rules"] = Any[
+        Dict{String, Any}(
+            "name" => rule.name,
+            "pattern" => spec["applies_to"],
+            "replacement" => spec["replacement"],
+        ),
+    ]
 
     # 3-4. Canonical pipeline: discretize (rule rewrite + arrayop lift +
     # periodic folding) → tree-walk build_evaluator.
@@ -1737,24 +1765,30 @@ function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     cell(c) = (c - 0.5) * h
 
     esm = Dict{String, Any}(
-        "esm"      => "0.4.0",
+        "esm" => "0.4.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_2d_cartesian_periodic_n$(n)"),
-        "grids"    => Dict{String, Any}(
+        "grids" => Dict{String, Any}(
             "g" => Dict{String, Any}(
-                "family"     => "cartesian",
+                "family" => "cartesian",
                 "dimensions" => Any[
-                    Dict{String, Any}("name" => "x", "size" => n,
-                                      "periodic" => true, "spacing" => "uniform"),
-                    Dict{String, Any}("name" => "y", "size" => n,
-                                      "periodic" => true, "spacing" => "uniform"),
+                    Dict{String, Any}(
+                        "name" => "x", "size" => n,
+                        "periodic" => true, "spacing" => "uniform"
+                    ),
+                    Dict{String, Any}(
+                        "name" => "y", "size" => n,
+                        "periodic" => true, "spacing" => "uniform"
+                    ),
                 ],
             ),
         ),
-        "rules" => Any[Dict{String, Any}(
-            "name"        => rule.name,
-            "pattern"     => spec["applies_to"],
-            "replacement" => expr,
-        )],
+        "rules" => Any[
+            Dict{String, Any}(
+                "name" => rule.name,
+                "pattern" => spec["applies_to"],
+                "replacement" => expr,
+            ),
+        ],
         "models" => Dict{String, Any}(
             "M" => Dict{String, Any}(
                 "grid" => "g",
@@ -1790,7 +1824,8 @@ function _run_layer_b_2d_cartesian_periodic(rule::RuleFile, mms, n::Int)
     f!(du, u0, p, 0.0)
     return maximum(
         abs(du[var_map["u[$(i),$(j)]"]] - mms.derivative(cell(i), cell(j)))
-        for j in 1:n, i in 1:n)
+            for j in 1:n, i in 1:n
+    )
 end
 
 """
@@ -1830,8 +1865,10 @@ function _run_layer_b_fv_cell_average_1d(rule::RuleFile, mms, n::Int)
     # esd-agh: lower_stencil_to_scheme is retired and fv_cell_average_1d has been
     # removed from _LAYER_B_SUPPORTED_TOPOLOGIES.  This function is unreachable;
     # if somehow called it surfaces the routing bug with a clear error.
-    error("_run_layer_b_fv_cell_average_1d: lower_stencil_to_scheme retired (esd-agh); " *
-          "fv_cell_average_1d must not appear in _LAYER_B_SUPPORTED_TOPOLOGIES")
+    error(
+        "_run_layer_b_fv_cell_average_1d: lower_stencil_to_scheme retired (esd-agh); " *
+            "fv_cell_average_1d must not appear in _LAYER_B_SUPPORTED_TOPOLOGIES"
+    )
     return 0.0  # unreachable; satisfies return type
 end
 
@@ -1862,8 +1899,10 @@ end
 # grid, and the authored replacement's canonical components stay aligned.
 # Purely structural — mirrors how ESS pattern matching re-binds the same
 # variables during `discretize`.
-function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
-                                         dim_names::Vector{String})
+function _layer_b_instantiate_applies_to(
+        spec::AbstractDict, bindings::Dict{String, String},
+        dim_names::Vector{String}
+    )
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || error("rule spec has no applies_to object")
 
@@ -1879,7 +1918,8 @@ function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{Stri
     sort!(dim_vars)
     length(dim_vars) <= length(dim_names) || error(
         "applies_to binds $(length(dim_vars)) dim pattern variables but the document " *
-        "declares only $(length(dim_names)) dimensions")
+            "declares only $(length(dim_names)) dimensions"
+    )
     dim_map = Dict{String, String}(v => dim_names[k] for (k, v) in enumerate(dim_vars))
 
     subst(node) =
@@ -1887,11 +1927,12 @@ function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{Stri
         node isa AbstractDict ? begin
             out = Dict{String, Any}(
                 String(k) => (String(k) == "args" ? Any[subst(a) for a in v] : v)
-                for (k, v) in node)
+                for (k, v) in node
+            )
             d = get(out, "dim", nothing)
             if d isa AbstractString && startswith(String(d), "\$")
                 out["dim"] = dim_map[String(d)]
-            end
+        end
             out
         end :
         node
@@ -1899,15 +1940,19 @@ function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{Stri
 end
 
 # Single-dimension convenience used by the 1D runners.
-function _layer_b_instantiate_applies_to(spec::AbstractDict, bindings::Dict{String, String},
-                                         dim_name::String)
+function _layer_b_instantiate_applies_to(
+        spec::AbstractDict, bindings::Dict{String, String},
+        dim_name::String
+    )
     return _layer_b_instantiate_applies_to(spec, bindings, [dim_name])
 end
 
 # Convenience for runners without auxiliary fields: bind every pattern
 # variable to the single operand.
-function _layer_b_instantiate_applies_to(spec::AbstractDict, operand::String,
-                                         dim_names::Union{String, Vector{String}})
+function _layer_b_instantiate_applies_to(
+        spec::AbstractDict, operand::String,
+        dim_names::Union{String, Vector{String}}
+    )
     applies_to = get(spec, "applies_to", nothing)
     applies_to isa AbstractDict || error("rule spec has no applies_to object")
     bindings = _layer_b_pattern_bindings(applies_to, Dict{String, Any}())
@@ -1928,11 +1973,11 @@ function _layer_b_1d_build_cell_expr(expr, i::Int, n::Int)
         return String(expr)
     end
     expr isa AbstractDict || error("unexpected node type in rule expression: $(typeof(expr))")
-    op   = String(expr["op"])
+    op = String(expr["op"])
     args = expr["args"]
     if op == "index"
         idx = _layer_b_1d_eval_index(args[2], i)
-        j   = mod(idx - 1, n) + 1   # 1-based periodic wrap
+        j = mod(idx - 1, n) + 1   # 1-based periodic wrap
         return "u_$(j)"
     end
     new_args = Any[_layer_b_1d_build_cell_expr(a, i, n) for a in args]
@@ -1950,10 +1995,10 @@ function _layer_b_1d_eval_index(expr, i::Int)::Int
     expr isa Integer && return Int(expr)
     expr isa AbstractFloat && return Int(expr)
     expr isa AbstractDict || error("cannot evaluate index expression: $expr")
-    op   = String(expr["op"])
+    op = String(expr["op"])
     args = expr["args"]
-    a    = _layer_b_1d_eval_index(args[1], i)
-    b    = _layer_b_1d_eval_index(args[2], i)
+    a = _layer_b_1d_eval_index(args[1], i)
+    b = _layer_b_1d_eval_index(args[2], i)
     op == "+" && return a + b
     op == "-" && return a - b
     error("unsupported index op in rule expression: $(op)")
@@ -1993,30 +2038,32 @@ function _run_layer_b_1d_vertical_column(rule::RuleFile, mms, n::Int)
     variables = Dict{String, Any}()
     for k in 1:n
         variables["u_$(k)"] = Dict{String, Any}(
-            "type"    => "state",
+            "type" => "state",
             "default" => mms.ic(cell_z(k)),
-            "units"   => "1",
+            "units" => "1",
         )
     end
     variables["h"] = Dict{String, Any}(
-        "type"    => "parameter",
+        "type" => "parameter",
         "default" => h,
-        "units"   => "1",
+        "units" => "1",
     )
 
     equations = Any[]
     for k in 1:n
         rhs = _layer_b_1d_build_cell_expr(expr, k, n)
-        push!(equations, Dict{String, Any}(
-            "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(k)"], "wrt" => "t"),
-            "rhs" => rhs,
-        ))
+        push!(
+            equations, Dict{String, Any}(
+                "lhs" => Dict{String, Any}("op" => "D", "args" => Any["u_$(k)"], "wrt" => "t"),
+                "rhs" => rhs,
+            )
+        )
     end
 
     esm = Dict{String, Any}(
-        "esm"      => "0.2.0",
+        "esm" => "0.2.0",
         "metadata" => Dict{String, Any}("name" => "layer_b_1d_vertical_n$(n)"),
-        "models"   => Dict{String, Any}(
+        "models" => Dict{String, Any}(
             "M" => Dict{String, Any}(
                 "variables" => variables,
                 "equations" => equations,
@@ -2276,12 +2323,12 @@ function _eval_repl_2d(node, fields::Dict{String, Matrix{Float64}}, bindings::Di
         error("unresolved variable '$s' in canonical replacement")
     end
     node isa AbstractDict || error("unexpected node type $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
     if op == "index"
         length(args) == 3 || error("index expects 3 args, got $(length(args))")
         fname = String(args[1])
-        mat   = get(fields, fname, nothing)
+        mat = get(fields, fname, nothing)
         mat === nothing && error("unknown field '$fname' in canonical replacement")
         ii = _resolve_repl_axis(args[2], ci, cj)
         jj = _resolve_repl_axis(args[3], ci, cj)
@@ -2374,7 +2421,7 @@ function _run_conservation_divergence_2d_periodic(rule::RuleFile, fixture::Abstr
         end
     elseif haskey(spec, "replacement")
         # Canonical bare replacement (esd-eg5): evaluate AST at each cell.
-        repl   = spec["replacement"]
+        repl = spec["replacement"]
         fields = Dict{String, Matrix{Float64}}("\$Fx" => Fx, "\$Fy" => Fy)
         for j in 1:ny, i in 1:nx
             div_sum += _eval_repl_2d(repl, fields, bindings, i, j, nx, ny)

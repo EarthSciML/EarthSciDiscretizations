@@ -12,7 +12,7 @@
             cw = courant[p, ci, j]
             ce = courant[p, ci + 1, j]
             Fw = (cw + abs(cw)) / 2 * q[p, ci - 1, j] + (cw - abs(cw)) / 2 * q[p, ci, j]
-            Fe = (ce + abs(ce)) / 2 * q[p, ci, j]     + (ce - abs(ce)) / 2 * q[p, ci + 1, j]
+            Fe = (ce + abs(ce)) / 2 * q[p, ci, j] + (ce - abs(ce)) / 2 * q[p, ci + 1, j]
             T[p, k, j] = -(Fe * grid.dx[p, ci + 1, j] - Fw * grid.dx[p, ci, j]) / grid.area[p, ci, j]
         end
         return T
@@ -47,9 +47,8 @@ end
     q1 = randn(6, Nc, Nc)
     q2 = randn(6, Nc, Nc)
     courant = fill(0.3, 6, Nc, Nc)
-    t1    = _lf_xi_tendency_interior(q1,      courant, grid)
-    t2    = _lf_xi_tendency_interior(q2,      courant, grid)
+    t1 = _lf_xi_tendency_interior(q1, courant, grid)
+    t2 = _lf_xi_tendency_interior(q2, courant, grid)
     t_sum = _lf_xi_tendency_interior(q1 + q2, courant, grid)
     @test isapprox(t_sum, t1 + t2; rtol = 1.0e-10)
 end
-

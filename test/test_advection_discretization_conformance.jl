@@ -30,7 +30,7 @@ end
             cell_idx::Int,
             bindings::Dict{String, Float64},
             N::Int,
-    )::Float64
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -39,7 +39,7 @@ end
             error("_eval_replacement: unresolved variable '$s'")
         end
         node isa AbstractDict || error("_eval_replacement: unexpected node type")
-        op   = String(node["op"])
+        op = String(node["op"])
         args = node["args"]
         if op == "index"
             function _resolve_idx(ie)
@@ -64,24 +64,32 @@ end
         error("unsupported op '$op'")
     end
 
-    function _apply_rule_1d_periodic(rule_path::String, rule_name::String,
-                                     u::Vector{Float64}, dx::Float64)
-        raw  = JSON.parsefile(rule_path)
+    function _apply_rule_1d_periodic(
+            rule_path::String, rule_name::String,
+            u::Vector{Float64}, dx::Float64
+        )
+        raw = JSON.parsefile(rule_path)
         body = raw["discretizations"][rule_name]
         repl = body["replacement"]
         expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-               repl["expr"] : repl
-        N    = length(u)
+            repl["expr"] : repl
+        N = length(u)
         bindings = Dict{String, Float64}("dx" => dx)
         return Float64[_eval_replacement(expr, u, i, bindings, N) for i in 1:N]
     end
 
-    function _gaussian_field(n::Int, x_start::Float64, x_end::Float64,
-                             center::Float64, sigma::Float64, scale::Float64)
-        dx  = (x_end - x_start) / n
+    function _gaussian_field(
+            n::Int, x_start::Float64, x_end::Float64,
+            center::Float64, sigma::Float64, scale::Float64
+        )
+        dx = (x_end - x_start) / n
         amp = scale / (sigma * sqrt(2π))
-        return Float64[amp * exp(-(x_start + (i - 0.5) * dx - center)^2 /
-                                 (2 * sigma^2)) for i in 1:n]
+        return Float64[
+            amp * exp(
+                    -(x_start + (i - 0.5) * dx - center)^2 /
+                    (2 * sigma^2)
+                ) for i in 1:n
+        ]
     end
 end
 
@@ -100,8 +108,10 @@ end
         error("unsupported index op '$op2'")
     end
 
-    function _eval_nonuniform(node, u::Vector{Float64}, dx_arr::Vector{Float64},
-                              cell_idx::Int, N::Int)::Float64
+    function _eval_nonuniform(
+            node, u::Vector{Float64}, dx_arr::Vector{Float64},
+            cell_idx::Int, N::Int
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -109,7 +119,7 @@ end
             error("_eval_nonuniform: unresolved variable '$s'")
         end
         node isa AbstractDict || error("unexpected node type: $(typeof(node))")
-        op   = String(node["op"])
+        op = String(node["op"])
         args = node["args"]
         if op == "index"
             arr_name = String(args[1])
@@ -126,29 +136,35 @@ end
         error("unsupported op '$op'")
     end
 
-    function _apply_rule_1d_nonuniform_periodic(rule_path::String, rule_name::String,
-                                                u::Vector{Float64}, dx_arr::Vector{Float64})
-        raw  = JSON.parsefile(rule_path)
+    function _apply_rule_1d_nonuniform_periodic(
+            rule_path::String, rule_name::String,
+            u::Vector{Float64}, dx_arr::Vector{Float64}
+        )
+        raw = JSON.parsefile(rule_path)
         body = raw["discretizations"][rule_name]
         repl = body["replacement"]
         expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-               repl["expr"] : repl
+            repl["expr"] : repl
         N = length(u)
         return Float64[_eval_nonuniform(expr, u, dx_arr, i, N) for i in 1:N]
     end
 
-    function _stretched_dx(n::Int, x_start::Float64, x_end::Float64,
-                           amplitude::Float64)::Vector{Float64}
+    function _stretched_dx(
+            n::Int, x_start::Float64, x_end::Float64,
+            amplitude::Float64
+        )::Vector{Float64}
         L = x_end - x_start
         h = L / n
         dx = Float64[h * (1.0 + amplitude * sin(2π * (i - 1) / n)) for i in 1:n]
-        @assert abs(sum(dx) - L) < 1e-10
+        @assert abs(sum(dx) - L) < 1.0e-10
         return dx
     end
 
-    function _gaussian_field_nonuniform(dx_arr::Vector{Float64}, x_start::Float64,
-                                        center::Float64, sigma::Float64,
-                                        scale::Float64)::Vector{Float64}
+    function _gaussian_field_nonuniform(
+            dx_arr::Vector{Float64}, x_start::Float64,
+            center::Float64, sigma::Float64,
+            scale::Float64
+        )::Vector{Float64}
         N = length(dx_arr)
         x_c = Vector{Float64}(undef, N)
         pos = x_start
@@ -165,12 +181,14 @@ end
 # Centered 2nd-order advection conformance
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_1d_advection_centered_periodic" setup=[AdvectionConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                       "rect_1d_advection_centered_periodic")
+@testitem "Discretization conformance: rect_1d_advection_centered_periodic" setup = [AdvectionConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_1d_advection_centered_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     # Verify the SHA header is present in fixtures so capture provenance is self-documenting.
     @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
@@ -178,13 +196,15 @@ end
     rule_path = joinpath(REPO_ROOT, FIXTURES["rule_path"])
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
-        u   = _gaussian_field(N, Float64(g["x_start"]), Float64(g["x_end"]),
-                              Float64(ic["center"]), Float64(ic["sigma"]),
-                              Float64(ic["scale_factor"]))
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        u = _gaussian_field(
+            N, Float64(g["x_start"]), Float64(g["x_end"]),
+            Float64(ic["center"]), Float64(ic["sigma"]),
+            Float64(ic["scale_factor"])
+        )
 
         du_dx = _apply_rule_1d_periodic(rule_path, FIXTURES["rule"], u, dx)
 
@@ -194,9 +214,9 @@ end
         @test golden["_mol531_sha"] == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
 
         g_du_dx = Float64.(golden["du_dx"])
-        g_u     = Float64.(golden["field_u"])
+        g_u = Float64.(golden["field_u"])
         @test length(du_dx) == length(g_du_dx)
-        @test length(u)     == length(g_u)
+        @test length(u) == length(g_u)
 
         @testset "fixture=$(fx["name"])" begin
             for i in 1:N
@@ -211,23 +231,27 @@ end
 # 1st-order upwind advection conformance
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_1d_advection_upwind_periodic" setup=[AdvectionConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                       "rect_1d_advection_upwind_periodic")
+@testitem "Discretization conformance: rect_1d_advection_upwind_periodic" setup = [AdvectionConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_1d_advection_upwind_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     rule_path = joinpath(REPO_ROOT, FIXTURES["rule_path"])
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
-        u   = _gaussian_field(N, Float64(g["x_start"]), Float64(g["x_end"]),
-                              Float64(ic["center"]), Float64(ic["sigma"]),
-                              Float64(ic["scale_factor"]))
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        u = _gaussian_field(
+            N, Float64(g["x_start"]), Float64(g["x_end"]),
+            Float64(ic["center"]), Float64(ic["sigma"]),
+            Float64(ic["scale_factor"])
+        )
 
         du_dx = _apply_rule_1d_periodic(rule_path, FIXTURES["rule"], u, dx)
 
@@ -251,28 +275,32 @@ end
 # 1st-order upwind non-uniform advection conformance (esd-02z)
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_1d_advection_upwind_nonuniform_periodic" setup=[NonuniformAdvectionHelpers] tags=[:conformance, :discretization] begin
-    HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                       "rect_1d_advection_upwind_nonuniform_periodic")
+@testitem "Discretization conformance: rect_1d_advection_upwind_nonuniform_periodic" setup = [NonuniformAdvectionHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_1d_advection_upwind_nonuniform_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     rule_path = joinpath(REPO_ROOT, FIXTURES["rule_path"])
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
         x_start = Float64(g["x_start"])
-        x_end   = Float64(g["x_end"])
+        x_end = Float64(g["x_end"])
         amp = Float64(g["stretching_amplitude"])
 
         dx_arr = _stretched_dx(N, x_start, x_end, amp)
-        u      = _gaussian_field_nonuniform(dx_arr, x_start,
-                                            Float64(ic["center"]),
-                                            Float64(ic["sigma"]),
-                                            Float64(ic["scale_factor"]))
+        u = _gaussian_field_nonuniform(
+            dx_arr, x_start,
+            Float64(ic["center"]),
+            Float64(ic["sigma"]),
+            Float64(ic["scale_factor"])
+        )
 
         du_dx = _apply_rule_1d_nonuniform_periodic(rule_path, FIXTURES["rule"], u, dx_arr)
 

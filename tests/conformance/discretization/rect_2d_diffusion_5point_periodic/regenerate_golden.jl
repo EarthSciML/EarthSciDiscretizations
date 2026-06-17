@@ -30,8 +30,8 @@ end
 using EarthSciDiscretizations: eval_coeff
 using JSON
 
-const HERE    = @__DIR__
-const ROOT    = abspath(joinpath(HERE, "..", "..", "..", ".."))
+const HERE = @__DIR__
+const ROOT = abspath(joinpath(HERE, "..", "..", "..", ".."))
 const FX_PATH = joinpath(HERE, "fixtures.json")
 const GLD_DIR = joinpath(HERE, "golden")
 
@@ -64,7 +64,7 @@ function _resolve_axis_idx(ie, xi::Int, yi::Int)::Int
         error("_resolve_axis_idx: unknown axis variable '$s'")
     end
     ie isa AbstractDict || error("_resolve_axis_idx: unexpected type $(typeof(ie))")
-    ia  = ie["args"]
+    ia = ie["args"]
     op2 = String(ie["op"])
     lhs = String(ia[1])
     off = Int(ia[2])
@@ -89,7 +89,7 @@ function _eval_replacement_2d(
         xi::Int, yi::Int,
         bindings::Dict{String, Float64},
         Nx::Int, Ny::Int,
-)::Float64
+    )::Float64
     node isa Number && return Float64(node)
     if node isa AbstractString
         s = String(node)
@@ -100,7 +100,7 @@ function _eval_replacement_2d(
     end
 
     node isa AbstractDict || error("unexpected node type $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
 
     if op == "index"
@@ -125,15 +125,17 @@ end
 # Field construction
 # ---------------------------------------------------------------------------
 
-function _gaussian_2d_field(nx::Int, ny::Int,
-                             x_start::Float64, x_end::Float64,
-                             y_start::Float64, y_end::Float64,
-                             cx::Float64, cy::Float64,
-                             sigma::Float64, scale::Float64)
-    dx  = (x_end - x_start) / nx
-    dy  = (y_end - y_start) / ny
+function _gaussian_2d_field(
+        nx::Int, ny::Int,
+        x_start::Float64, x_end::Float64,
+        y_start::Float64, y_end::Float64,
+        cx::Float64, cy::Float64,
+        sigma::Float64, scale::Float64
+    )
+    dx = (x_end - x_start) / nx
+    dy = (y_end - y_start) / ny
     amp = scale / (2π * sigma^2)
-    u   = Matrix{Float64}(undef, nx, ny)
+    u = Matrix{Float64}(undef, nx, ny)
     for ix in 1:nx
         x = x_start + (ix - 0.5) * dx
         for iy in 1:ny
@@ -151,23 +153,23 @@ end
 function main()
     spec = JSON.parsefile(FX_PATH)
     rule_path = joinpath(ROOT, spec["rule_path"])
-    raw_rule  = JSON.parsefile(rule_path)
+    raw_rule = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     isdir(GLD_DIR) || mkpath(GLD_DIR)
 
     for fx in spec["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        Nx  = Int(g["n_cells_x"])
-        Ny  = Int(g["n_cells_y"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
-        dy  = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
-        bc  = String(g["bc"])
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        Nx = Int(g["n_cells_x"])
+        Ny = Int(g["n_cells_y"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
+        dy = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
+        bc = String(g["bc"])
         @assert bc == "periodic" "Only periodic BC supported in this script"
 
         u = _gaussian_2d_field(
@@ -187,17 +189,17 @@ function main()
 
         # Store as array-of-rows: laplacian_u[ix][iy]
         out = Dict{String, Any}(
-            "_mol531_sha"  => MOL531_SHA,
+            "_mol531_sha" => MOL531_SHA,
             "_captured_by" => "esd-i73",
-            "version"      => spec["version"],
-            "rule"         => rule_name,
-            "fixture"      => fx["name"],
-            "grid"         => Dict{String, Any}(
+            "version" => spec["version"],
+            "rule" => rule_name,
+            "fixture" => fx["name"],
+            "grid" => Dict{String, Any}(
                 "n_cells_x" => Nx, "n_cells_y" => Ny,
                 "dx" => dx, "dy" => dy, "bc" => bc,
             ),
-            "field_u"      => [u[ix, :] for ix in 1:Nx],
-            "laplacian_u"  => [lap_u[ix, :] for ix in 1:Nx],
+            "field_u" => [u[ix, :] for ix in 1:Nx],
+            "laplacian_u" => [lap_u[ix, :] for ix in 1:Nx],
         )
 
         path = joinpath(GLD_DIR, "$(fx["name"]).json")
@@ -207,6 +209,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

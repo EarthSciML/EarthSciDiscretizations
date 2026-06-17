@@ -31,8 +31,8 @@ end
 using EarthSciDiscretizations: eval_coeff
 using JSON
 
-const HERE    = @__DIR__
-const ROOT    = abspath(joinpath(HERE, "..", "..", "..", ".."))
+const HERE = @__DIR__
+const ROOT = abspath(joinpath(HERE, "..", "..", "..", ".."))
 const FX_PATH = joinpath(HERE, "fixtures.json")
 const GLD_DIR = joinpath(HERE, "golden")
 
@@ -55,7 +55,7 @@ function _eval_replacement(
         cell_idx::Int,
         bindings::Dict{String, Float64},
         N::Int,
-)::Float64
+    )::Float64
     node isa Number && return Float64(node)
     if node isa AbstractString
         s = String(node)
@@ -65,14 +65,14 @@ function _eval_replacement(
     end
 
     node isa AbstractDict || error("_eval_replacement: unexpected node type $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
 
     if op == "index"
         function _resolve_idx(ie)
             ie isa AbstractString && String(ie) == "\$x" && return cell_idx
             ie isa AbstractDict || error("unsupported index expression: $ie")
-            ia  = ie["args"]
+            ia = ie["args"]
             String(ia[1]) == "\$x" || error("index lhs not '\$x': $(ia[1])")
             op2 = String(ie["op"])
             op2 == "+" && return cell_idx + Int(ia[2])
@@ -97,12 +97,16 @@ end
 # Field construction
 # ---------------------------------------------------------------------------
 
-function _gaussian_field(n::Int, x_start::Float64, x_end::Float64,
-                         center::Float64, sigma::Float64, scale::Float64)
-    dx  = (x_end - x_start) / n
+function _gaussian_field(
+        n::Int, x_start::Float64, x_end::Float64,
+        center::Float64, sigma::Float64, scale::Float64
+    )
+    dx = (x_end - x_start) / n
     amp = scale / (sigma * sqrt(2π))
-    return Float64[amp * exp(-(x_start + (i - 0.5) * dx - center)^2 / (2 * sigma^2))
-                   for i in 1:n]
+    return Float64[
+        amp * exp(-(x_start + (i - 0.5) * dx - center)^2 / (2 * sigma^2))
+            for i in 1:n
+    ]
 end
 
 # ---------------------------------------------------------------------------
@@ -112,39 +116,41 @@ end
 function main()
     spec = JSON.parsefile(FX_PATH)
     rule_path = joinpath(ROOT, spec["rule_path"])
-    raw_rule  = JSON.parsefile(rule_path)
+    raw_rule = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     isdir(GLD_DIR) || mkpath(GLD_DIR)
 
     for fx in spec["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
-        bc  = String(g["bc"])
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        bc = String(g["bc"])
         @assert bc == "periodic" "Only periodic BC supported in this script"
 
-        u = _gaussian_field(N, Float64(g["x_start"]), Float64(g["x_end"]),
-                            Float64(ic["center"]), Float64(ic["sigma"]),
-                            Float64(ic["scale_factor"]))
+        u = _gaussian_field(
+            N, Float64(g["x_start"]), Float64(g["x_end"]),
+            Float64(ic["center"]), Float64(ic["sigma"]),
+            Float64(ic["scale_factor"])
+        )
 
-        bindings  = Dict{String, Float64}("dx" => dx)
-        d2u_dx2   = [_eval_replacement(replacement, u, i, bindings, N) for i in 1:N]
+        bindings = Dict{String, Float64}("dx" => dx)
+        d2u_dx2 = [_eval_replacement(replacement, u, i, bindings, N) for i in 1:N]
 
         out = Dict{String, Any}(
-            "_mol531_sha"  => MOL531_SHA,
+            "_mol531_sha" => MOL531_SHA,
             "_captured_by" => "esd-i73",
-            "version"      => spec["version"],
-            "rule"         => rule_name,
-            "fixture"      => fx["name"],
-            "grid"         => Dict{String, Any}("n_cells" => N, "dx" => dx, "bc" => bc),
-            "field_u"      => u,
-            "d2u_dx2"      => d2u_dx2,
+            "version" => spec["version"],
+            "rule" => rule_name,
+            "fixture" => fx["name"],
+            "grid" => Dict{String, Any}("n_cells" => N, "dx" => dx, "bc" => bc),
+            "field_u" => u,
+            "d2u_dx2" => d2u_dx2,
         )
 
         path = joinpath(GLD_DIR, "$(fx["name"]).json")
@@ -154,6 +160,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

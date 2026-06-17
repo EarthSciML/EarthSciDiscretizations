@@ -62,6 +62,7 @@ function main()
         write(path, canonical_bytes(d))
         println("wrote $(path) (level=$(level), n_cells=$(d["n_cells"]))")
     end
+    return
 end
 
 main()

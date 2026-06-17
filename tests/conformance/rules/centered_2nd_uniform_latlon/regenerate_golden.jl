@@ -47,12 +47,13 @@ function _skip_ws!(r::JSONReader)
     while !_eof(r) && _peek(r) in (' ', '\t', '\r', '\n')
         r.pos = nextind(r.s, r.pos)
     end
+    return
 end
 
 function _expect!(r::JSONReader, c::Char)
     _skip_ws!(r)
     @assert !_eof(r) && _peek(r) == c "expected $c at pos $(r.pos), got $(_eof(r) ? "EOF" : string(_peek(r)))"
-    r.pos = nextind(r.s, r.pos)
+    return r.pos = nextind(r.s, r.pos)
 end
 
 function _read_string!(r::JSONReader)::String
@@ -65,14 +66,22 @@ function _read_string!(r::JSONReader)::String
             return String(take!(io))
         elseif c == '\\'
             esc = _peek(r); r.pos = nextind(r.s, r.pos)
-            if esc == '"'; print(io, '"')
-            elseif esc == '\\'; print(io, '\\')
-            elseif esc == '/'; print(io, '/')
-            elseif esc == 'b'; print(io, '\b')
-            elseif esc == 'f'; print(io, '\f')
-            elseif esc == 'n'; print(io, '\n')
-            elseif esc == 'r'; print(io, '\r')
-            elseif esc == 't'; print(io, '\t')
+            if esc == '"'
+                print(io, '"')
+            elseif esc == '\\'
+                print(io, '\\')
+            elseif esc == '/'
+                print(io, '/')
+            elseif esc == 'b'
+                print(io, '\b')
+            elseif esc == 'f'
+                print(io, '\f')
+            elseif esc == 'n'
+                print(io, '\n')
+            elseif esc == 'r'
+                print(io, '\r')
+            elseif esc == 't'
+                print(io, '\t')
             else
                 error("unsupported escape \\$(esc) at pos $(r.pos)")
             end
@@ -101,11 +110,11 @@ function _read_value!(r::JSONReader)
     c = _peek(r)
     if c == '{'
         r.pos = nextind(r.s, r.pos)
-        obj = Pair{String,Any}[]
+        obj = Pair{String, Any}[]
         _skip_ws!(r)
         if _peek(r) == '}'
             r.pos = nextind(r.s, r.pos)
-            return Dict{String,Any}()
+            return Dict{String, Any}()
         end
         while true
             k = _read_string!(r)
@@ -119,7 +128,7 @@ function _read_value!(r::JSONReader)
                 _expect!(r, '}'); break
             end
         end
-        return Dict{String,Any}(obj)
+        return Dict{String, Any}(obj)
     elseif c == '['
         r.pos = nextind(r.s, r.pos)
         arr = Any[]
@@ -161,24 +170,32 @@ end
 
 function _write_json(io::IO, v, indent::Int = 0)
     pad(n) = "  "^n
-    if v isa AbstractDict
-        if isempty(v); print(io, "{}"); return; end
+    return if v isa AbstractDict
+        if isempty(v)
+            print(io, "{}"); return
+        end
         print(io, "{\n")
         keys_sorted = collect(keys(v))
         for (k, key) in enumerate(keys_sorted)
             print(io, pad(indent + 1), "\"", _escape(key), "\": ")
             _write_json(io, v[key], indent + 1)
-            if k < length(keys_sorted); print(io, ","); end
+            if k < length(keys_sorted)
+                print(io, ",")
+            end
             print(io, "\n")
         end
         print(io, pad(indent), "}")
     elseif v isa AbstractVector
-        if isempty(v); print(io, "[]"); return; end
+        if isempty(v)
+            print(io, "[]"); return
+        end
         print(io, "[\n")
         for (k, item) in enumerate(v)
             print(io, pad(indent + 1))
             _write_json(io, item, indent + 1)
-            if k < length(v); print(io, ","); end
+            if k < length(v)
+                print(io, ",")
+            end
             print(io, "\n")
         end
         print(io, pad(indent), "]")
@@ -196,7 +213,7 @@ function _write_json(io::IO, v, indent::Int = 0)
             error("cannot serialize non-finite float to JSON: $v")
         end
         # Integer-valued floats: emit ".0" so they round-trip as floats in Python.
-        if v == trunc(v) && abs(v) < 1e16
+        if v == trunc(v) && abs(v) < 1.0e16
             print(io, Float64(v), "")  # Julia prints e.g. 1.0
         else
             print(io, repr(Float64(v)))
@@ -209,11 +226,16 @@ end
 function _escape(s::AbstractString)
     io = IOBuffer()
     for c in s
-        if c == '"'; print(io, "\\\"")
-        elseif c == '\\'; print(io, "\\\\")
-        elseif c == '\n'; print(io, "\\n")
-        elseif c == '\r'; print(io, "\\r")
-        elseif c == '\t'; print(io, "\\t")
+        if c == '"'
+            print(io, "\\\"")
+        elseif c == '\\'
+            print(io, "\\\\")
+        elseif c == '\n'
+            print(io, "\\n")
+        elseif c == '\r'
+            print(io, "\\r")
+        elseif c == '\t'
+            print(io, "\\t")
         else
             print(io, c)
         end
@@ -242,17 +264,19 @@ end
 function _coefficient_block(rule_body, cases)
     out = []
     for case in cases
-        bindings = Dict{String,Float64}(string(k) => Float64(v) for (k, v) in case["bindings"])
-        coeffs = Dict{String,Float64}()
+        bindings = Dict{String, Float64}(string(k) => Float64(v) for (k, v) in case["bindings"])
+        coeffs = Dict{String, Float64}()
         for entry in rule_body["stencil"]
             sel = entry["selector"]
             coeffs[_selector_key(sel)] = eval_coeff(entry["coeff"], bindings)
         end
-        push!(out, Dict{String,Any}(
-            "name" => case["name"],
-            "bindings" => case["bindings"],
-            "coefficients" => coeffs,
-        ))
+        push!(
+            out, Dict{String, Any}(
+                "name" => case["name"],
+                "bindings" => case["bindings"],
+                "coefficients" => coeffs,
+            )
+        )
     end
     return out
 end
@@ -283,8 +307,8 @@ function _stencil_block(rule_body, cases)
         end
 
         cb = CellBindings(
-            Dict{String,Float64}("R" => R, "dlon" => dlon, "dlat" => dlat),
-            Dict{String,Function}(
+            Dict{String, Float64}("R" => R, "dlon" => dlon, "dlat" => dlat),
+            Dict{String, Function}(
                 "cos_lat" => (i, j) -> cos(lat_c0(j - 1)),
             ),
         )
@@ -294,18 +318,22 @@ function _stencil_block(rule_body, cases)
         for qp in case["interior_query_points"]
             j = Int(qp[1])
             i = Int(qp[2])
-            push!(results, Dict{String,Any}(
-                "j" => j, "i" => i,
-                "cos_lat" => cos(lat_c0(j)),
-                "lon" => lon_c0(i), "lat" => lat_c0(j),
-                "result" => du[i + 1, j + 1],
-            ))
+            push!(
+                results, Dict{String, Any}(
+                    "j" => j, "i" => i,
+                    "cos_lat" => cos(lat_c0(j)),
+                    "lon" => lon_c0(i), "lat" => lat_c0(j),
+                    "result" => du[i + 1, j + 1],
+                )
+            )
         end
-        push!(out, Dict{String,Any}(
-            "name" => case["name"],
-            "grid" => case["grid"],
-            "results" => results,
-        ))
+        push!(
+            out, Dict{String, Any}(
+                "name" => case["name"],
+                "grid" => case["grid"],
+                "results" => results,
+            )
+        )
     end
     return out
 end
@@ -315,7 +343,7 @@ function main()
     rule_path = joinpath(REPO_ROOT, fixtures["rule_path"])
     _, rule_body = _load_rule(rule_path)
 
-    out = Dict{String,Any}(
+    out = Dict{String, Any}(
         "version" => fixtures["version"],
         "rule" => fixtures["rule"],
         "reference_binding" => "julia",
@@ -327,7 +355,7 @@ function main()
         _write_json(io, out, 0)
         write(io, "\n")
     end
-    println("Wrote $(GOLDEN_PATH)")
+    return println("Wrote $(GOLDEN_PATH)")
 end
 
 main()

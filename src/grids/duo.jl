@@ -382,9 +382,9 @@ function build_duo_grid(;
         ax = Float64(V[1, a_i]); ay = Float64(V[2, a_i]); az = Float64(V[3, a_i])
         bx = Float64(V[1, b_i]); by = Float64(V[2, b_i]); bz = Float64(V[3, b_i])
         cx = Float64(V[1, c_i]); cy = Float64(V[2, c_i]); cz = Float64(V[3, c_i])
-        ccx = (ay*bz - az*by) + (by*cz - bz*cy) + (cy*az - cz*ay)
-        ccy = (az*bx - ax*bz) + (bz*cx - bx*cz) + (cz*ax - cx*az)
-        ccz = (ax*by - ay*bx) + (bx*cy - by*cx) + (cx*ay - cy*ax)
+        ccx = (ay * bz - az * by) + (by * cz - bz * cy) + (cy * az - cz * ay)
+        ccy = (az * bx - ax * bz) + (bz * cx - bx * cz) + (cz * ax - cx * az)
+        ccz = (ax * by - ay * bx) + (bx * cy - by * cx) + (cx * ay - cy * ax)
         # Centroid sanity check — flip if facing wrong way.
         if ccx * Float64(cell_cart[1, c]) + ccy * Float64(cell_cart[2, c]) + ccz * Float64(cell_cart[3, c]) < 0
             ccx = -ccx; ccy = -ccy; ccz = -ccz

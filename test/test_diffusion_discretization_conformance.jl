@@ -29,7 +29,7 @@ end
             error("unknown axis variable '$s'")
         end
         ie isa AbstractDict || error("unexpected type $(typeof(ie))")
-        ia  = ie["args"]
+        ia = ie["args"]
         op2 = String(ie["op"])
         lhs = String(ia[1])
         off = Int(ia[2])
@@ -45,7 +45,7 @@ end
             xi::Int, yi::Int,
             bindings::Dict{String, Float64},
             Nx::Int, Ny::Int,
-    )::Float64
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -55,7 +55,7 @@ end
             error("unresolved variable '$s'")
         end
         node isa AbstractDict || error("unexpected node type $(typeof(node))")
-        op   = String(node["op"])
+        op = String(node["op"])
         args = node["args"]
         if op == "index"
             length(args) == 3 || error("index expects 3 args, got $(length(args))")
@@ -72,15 +72,17 @@ end
         error("unsupported op '$op'")
     end
 
-    function _gaussian_2d_field(nx::Int, ny::Int,
-                                x_start::Float64, x_end::Float64,
-                                y_start::Float64, y_end::Float64,
-                                cx::Float64, cy::Float64,
-                                sigma::Float64, scale::Float64)
-        dx  = (x_end - x_start) / nx
-        dy  = (y_end - y_start) / ny
+    function _gaussian_2d_field(
+            nx::Int, ny::Int,
+            x_start::Float64, x_end::Float64,
+            y_start::Float64, y_end::Float64,
+            cx::Float64, cy::Float64,
+            sigma::Float64, scale::Float64
+        )
+        dx = (x_end - x_start) / nx
+        dy = (y_end - y_start) / ny
         amp = scale / (2π * sigma^2)
-        u   = Matrix{Float64}(undef, nx, ny)
+        u = Matrix{Float64}(undef, nx, ny)
         for ix in 1:nx
             x = x_start + (ix - 0.5) * dx
             for iy in 1:ny
@@ -114,7 +116,7 @@ end
             cell_idx::Int,
             bindings::Dict{String, Float64},
             N::Int,
-    )::Float64
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -123,13 +125,13 @@ end
             error("unresolved variable '$s'")
         end
         node isa AbstractDict || error("unexpected node type $(typeof(node))")
-        op   = String(node["op"])
+        op = String(node["op"])
         args = node["args"]
         if op == "index"
             function _resolve_idx(ie)
                 ie isa AbstractString && String(ie) == "\$x" && return cell_idx
                 ie isa AbstractDict || error("unsupported index: $ie")
-                ia  = ie["args"]
+                ia = ie["args"]
                 String(ia[1]) == "\$x" || error("index lhs not '\$x': $(ia[1])")
                 op2 = String(ie["op"])
                 op2 == "+" && return cell_idx + Int(ia[2])
@@ -148,12 +150,16 @@ end
         error("unsupported op '$op'")
     end
 
-    function _gaussian_field_1d(n::Int, x_start::Float64, x_end::Float64,
-                                center::Float64, sigma::Float64, scale::Float64)
-        dx  = (x_end - x_start) / n
+    function _gaussian_field_1d(
+            n::Int, x_start::Float64, x_end::Float64,
+            center::Float64, sigma::Float64, scale::Float64
+        )
+        dx = (x_end - x_start) / n
         amp = scale / (sigma * sqrt(2π))
-        return Float64[amp * exp(-(x_start + (i - 0.5) * dx - center)^2 / (2 * sigma^2))
-                       for i in 1:n]
+        return Float64[
+            amp * exp(-(x_start + (i - 0.5) * dx - center)^2 / (2 * sigma^2))
+                for i in 1:n
+        ]
     end
 end
 
@@ -179,7 +185,7 @@ end
             cell_idx::Int,
             bindings::Dict{String, Float64},
             N::Int,
-    )::Float64
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -188,17 +194,17 @@ end
             error("unresolved variable '$s'")
         end
         node isa AbstractDict || error("unexpected node type $(typeof(node))")
-        op   = String(node["op"])
+        op = String(node["op"])
         args = node["args"]
         if op == "index"
             field_name = String(args[1])
             field = field_name == "\$u" ? u :
-                    field_name == "\$f" ? f :
-                    error("unknown field '$field_name'")
+                field_name == "\$f" ? f :
+                error("unknown field '$field_name'")
             function _resolve_idx(ie)
                 ie isa AbstractString && String(ie) == "\$x" && return cell_idx
                 ie isa AbstractDict || error("unsupported index: $ie")
-                ia  = ie["args"]
+                ia = ie["args"]
                 String(ia[1]) == "\$x" || error("index lhs not '\$x': $(ia[1])")
                 op2 = String(ie["op"])
                 op2 == "+" && return cell_idx + Int(ia[2])
@@ -217,11 +223,15 @@ end
         error("unsupported op '$op'")
     end
 
-    function _sinusoidal_plus_const_field(n::Int, x_start::Float64, x_end::Float64,
-                                          amplitude::Float64, constant::Float64)
+    function _sinusoidal_plus_const_field(
+            n::Int, x_start::Float64, x_end::Float64,
+            amplitude::Float64, constant::Float64
+        )
         dx = (x_end - x_start) / n
-        return Float64[constant + amplitude * sin(π * (x_start + (i - 0.5) * dx))
-                       for i in 1:n]
+        return Float64[
+            constant + amplitude * sin(π * (x_start + (i - 0.5) * dx))
+                for i in 1:n
+        ]
     end
 end
 
@@ -229,29 +239,31 @@ end
 # 2D diffusion (5-point Laplacian) conformance
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_2d_diffusion_5point_periodic" setup=[Diffusion2DConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS   = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                         "rect_2d_diffusion_5point_periodic")
+@testitem "Discretization conformance: rect_2d_diffusion_5point_periodic" setup = [Diffusion2DConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_2d_diffusion_5point_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
 
-    raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
+    raw_rule = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        Nx  = Int(g["n_cells_x"])
-        Ny  = Int(g["n_cells_y"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
-        dy  = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        Nx = Int(g["n_cells_x"])
+        Ny = Int(g["n_cells_y"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
+        dy = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
 
         u = _gaussian_2d_field(
             Nx, Ny,
@@ -278,8 +290,8 @@ end
 
         @testset "fixture=$(fx["name"])" begin
             for ix in 1:Nx, iy in 1:Ny
-                v     = lap_u[ix, iy]
-                g_v   = Float64(g_lap[ix][iy])
+                v = lap_u[ix, iy]
+                g_v = Float64(g_lap[ix][iy])
                 scale = max(1.0, abs(v), abs(g_v))
                 @test abs(v - g_v) <= REL_TOL * scale
             end
@@ -291,34 +303,38 @@ end
 # 1D Burgers diffusion (d2u/dx2, centered 2nd-order) conformance
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_1d_burgers_diffusion_periodic" setup=[Diffusion1DConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS   = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                         "rect_1d_burgers_diffusion_periodic")
+@testitem "Discretization conformance: rect_1d_burgers_diffusion_periodic" setup = [Diffusion1DConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_1d_burgers_diffusion_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
 
-    raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
+    raw_rule = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
 
-        u = _gaussian_field_1d(N, Float64(g["x_start"]), Float64(g["x_end"]),
-                               Float64(ic["center"]), Float64(ic["sigma"]),
-                               Float64(ic["scale_factor"]))
+        u = _gaussian_field_1d(
+            N, Float64(g["x_start"]), Float64(g["x_end"]),
+            Float64(ic["center"]), Float64(ic["sigma"]),
+            Float64(ic["scale_factor"])
+        )
 
-        bindings  = Dict{String, Float64}("dx" => dx)
-        d2u_dx2   = [_eval_replacement_1d(replacement, u, i, bindings, N) for i in 1:N]
+        bindings = Dict{String, Float64}("dx" => dx)
+        d2u_dx2 = [_eval_replacement_1d(replacement, u, i, bindings, N) for i in 1:N]
 
         golden = JSON.parsefile(joinpath(HARNESS, "golden", "$(fx["name"]).json"))
 
@@ -340,27 +356,29 @@ end
 # 1D nonlinear diffusion (nonlinear_laplacian_uniform) conformance
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_1d_nonlinear_diffusion_periodic" setup=[NonlinearDiffusion1DConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS   = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                         "rect_1d_nonlinear_diffusion_periodic")
+@testitem "Discretization conformance: rect_1d_nonlinear_diffusion_periodic" setup = [NonlinearDiffusion1DConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_1d_nonlinear_diffusion_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc553ac7d3619738bd77b250c1ed162f"
 
-    raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
+    raw_rule = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     for fx in FIXTURES["fixtures"]
-        g    = fx["grid"]
-        ic   = fx["initial_condition"]
-        N    = Int(g["n_cells"])
-        dx   = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
 
         u_ic = ic["u"]
         u = _sinusoidal_plus_const_field(
@@ -369,8 +387,8 @@ end
         )
         f = 1.0 ./ u
 
-        bindings  = Dict{String, Float64}("dx" => dx)
-        nl_lap_u  = [_eval_replacement_nl(replacement, u, f, i, bindings, N) for i in 1:N]
+        bindings = Dict{String, Float64}("dx" => dx)
+        nl_lap_u = [_eval_replacement_nl(replacement, u, f, i, bindings, N) for i in 1:N]
 
         golden = JSON.parsefile(joinpath(HARNESS, "golden", "$(fx["name"]).json"))
 
@@ -392,32 +410,34 @@ end
 # 2D mixed cross-derivative Dxy(u) conformance + 2nd-order convergence
 # ---------------------------------------------------------------------------
 
-@testitem "Discretization conformance: rect_2d_mixed_deriv_periodic" setup=[Diffusion2DConformanceHelpers] tags=[:conformance, :discretization] begin
-    HARNESS   = joinpath(@__DIR__, "..", "tests", "conformance", "discretization",
-                         "rect_2d_mixed_deriv_periodic")
+@testitem "Discretization conformance: rect_2d_mixed_deriv_periodic" setup = [Diffusion2DConformanceHelpers] tags = [:conformance, :discretization] begin
+    HARNESS = joinpath(
+        @__DIR__, "..", "tests", "conformance", "discretization",
+        "rect_2d_mixed_deriv_periodic"
+    )
     REPO_ROOT = abspath(joinpath(HARNESS, "..", "..", "..", ".."))
-    FIXTURES  = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
-    REL_TOL   = Float64(FIXTURES["tolerance"]["relative"])
+    FIXTURES = JSON.parsefile(joinpath(HARNESS, "fixtures.json"))
+    REL_TOL = Float64(FIXTURES["tolerance"]["relative"])
 
     @test get(FIXTURES, "_mol531_sha", nothing) == "35cc9143dc953ac7d3619738bd77b250c1ed162f"
 
-    raw_rule  = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
+    raw_rule = JSON.parsefile(joinpath(REPO_ROOT, FIXTURES["rule_path"]))
     rule_name = FIXTURES["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     for fx in FIXTURES["fixtures"]
-        g   = fx["grid"]
-        Nx  = Int(g["n_cells_x"])
-        Ny  = Int(g["n_cells_y"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
-        dy  = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
-        x0  = Float64(g["x_start"])
-        y0  = Float64(g["y_start"])
-        xs  = [x0 + (i - 0.5) * dx for i in 1:Nx]
-        ys  = [y0 + (j - 0.5) * dy for j in 1:Ny]
+        g = fx["grid"]
+        Nx = Int(g["n_cells_x"])
+        Ny = Int(g["n_cells_y"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / Nx
+        dy = (Float64(g["y_end"]) - Float64(g["y_start"])) / Ny
+        x0 = Float64(g["x_start"])
+        y0 = Float64(g["y_start"])
+        xs = [x0 + (i - 0.5) * dx for i in 1:Nx]
+        ys = [y0 + (j - 0.5) * dy for j in 1:Ny]
 
         u = [sin(xs[i]) * sin(ys[j]) for i in 1:Nx, j in 1:Ny]
 
@@ -438,8 +458,8 @@ end
 
         @testset "fixture=$(fx["name"])" begin
             for ix in 1:Nx, iy in 1:Ny
-                v     = dxy_u[ix, iy]
-                g_v   = Float64(g_dxy[ix][iy])
+                v = dxy_u[ix, iy]
+                g_v = Float64(g_dxy[ix][iy])
                 scale = max(1.0, abs(v), abs(g_v))
                 @test abs(v - g_v) <= REL_TOL * scale
             end
@@ -447,28 +467,32 @@ end
     end
 end
 
-@testitem "Mixed cross-derivative Dxy(u) converges 2nd order on sin(x)*sin(y)" setup=[Diffusion2DConformanceHelpers] tags=[:conformance, :discretization] begin
+@testitem "Mixed cross-derivative Dxy(u) converges 2nd order on sin(x)*sin(y)" setup = [Diffusion2DConformanceHelpers] tags = [:conformance, :discretization] begin
     # Verify O(dx^2) convergence of the 4-point stencil on u=sin(x)*sin(y) on
     # [0,2π]×[0,2π]. Exact Dxy(u) = cos(x)*cos(y). Grid doubles from N=16→32→64;
     # L∞-error ratio must be ≥ 3.5 (theoretical 4 for exact 2nd order).
 
     REPO_ROOT = abspath(joinpath(@__DIR__, ".."))
-    rule_body = JSON.parsefile(joinpath(REPO_ROOT, "discretizations", "finite_difference",
-                               "mixed_deriv_2nd_uniform.json"))["discretizations"]["mixed_deriv_2nd_uniform"]
-    repl_raw  = rule_body["replacement"]
+    rule_body = JSON.parsefile(
+        joinpath(
+            REPO_ROOT, "discretizations", "finite_difference",
+            "mixed_deriv_2nd_uniform.json"
+        )
+    )["discretizations"]["mixed_deriv_2nd_uniform"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     function _linf_error(N)
         dx = 2π / N; dy = 2π / N
         xs = [(i - 0.5) * dx for i in 1:N]
         ys = [(j - 0.5) * dy for j in 1:N]
-        u  = [sin(xs[i]) * sin(ys[j]) for i in 1:N, j in 1:N]
-        b  = Dict{String,Float64}("dx" => dx, "dy" => dy)
+        u = [sin(xs[i]) * sin(ys[j]) for i in 1:N, j in 1:N]
+        b = Dict{String, Float64}("dx" => dx, "dy" => dy)
         err = 0.0
         for iy in 1:N, ix in 1:N
-            fd  = _eval_replacement_2d(replacement, u, ix, iy, b, N, N)
-            ex  = cos(xs[ix]) * cos(ys[iy])
+            fd = _eval_replacement_2d(replacement, u, ix, iy, b, N, N)
+            ex = cos(xs[ix]) * cos(ys[iy])
             err = max(err, abs(fd - ex))
         end
         return err

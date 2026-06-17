@@ -99,22 +99,24 @@ using TestItems
 
     # Term metric_component names match the full covariant Laplacian expansion.
     mc = [t["metric_component"] for t in terms]
-    @test "ginv_xi_xi"  in mc
+    @test "ginv_xi_xi" in mc
     @test "ginv_eta_eta" in mc
-    @test "ginv_xi_eta"  in mc   # two entries (ξη and ηξ for symmetric metric)
-    @test "dJgxx_dxi"   in mc
-    @test "dJgxe_deta"  in mc
-    @test "dJgyy_deta"  in mc
-    @test "dJgxe_dxi"   in mc
+    @test "ginv_xi_eta" in mc   # two entries (ξη and ηξ for symmetric metric)
+    @test "dJgxx_dxi" in mc
+    @test "dJgxe_deta" in mc
+    @test "dJgyy_deta" in mc
+    @test "dJgxe_dxi" in mc
 
     # All axis_stencil references resolve to entries in the same discretizations block.
-    expected_per_axis = Set([
-        "d2_dxi2_cubed_sphere",
-        "d2_deta2_cubed_sphere",
-        "d2_dxieta_cubed_sphere",
-        "d1_dxi_over_J_cubed_sphere",
-        "d1_deta_over_J_cubed_sphere",
-    ])
+    expected_per_axis = Set(
+        [
+            "d2_dxi2_cubed_sphere",
+            "d2_deta2_cubed_sphere",
+            "d2_dxieta_cubed_sphere",
+            "d1_dxi_over_J_cubed_sphere",
+            "d1_deta_over_J_cubed_sphere",
+        ]
+    )
     referenced = Set(t["axis_stencil"] for t in terms)
     @test referenced ⊆ expected_per_axis
     for name in referenced

@@ -3,7 +3,7 @@
     using JSON
 end
 
-@testitem "DAE binding contract: mixed_dae_observed (dae_support=true)" setup=[DAEConformanceSetup] tags=[:conformance, :dae, :discretization] begin
+@testitem "DAE binding contract: mixed_dae_observed (dae_support=true)" setup = [DAEConformanceSetup] tags = [:conformance, :dae, :discretization] begin
     HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization", "dae_missing")
     spec = JSON.parsefile(joinpath(HARNESS, "mixed_dae_observed.json"))
 
@@ -21,7 +21,7 @@ end
     end
 end
 
-@testitem "DAE binding contract: mixed_dae_observed (dae_support=false)" setup=[DAEConformanceSetup] tags=[:conformance, :dae, :discretization] begin
+@testitem "DAE binding contract: mixed_dae_observed (dae_support=false)" setup = [DAEConformanceSetup] tags = [:conformance, :dae, :discretization] begin
     HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization", "dae_missing")
     spec = JSON.parsefile(joinpath(HARNESS, "mixed_dae_observed.json"))
 
@@ -45,7 +45,7 @@ end
     end
 end
 
-@testitem "DAE binding contract: pure_ode_baseline (dae_support=true)" setup=[DAEConformanceSetup] tags=[:conformance, :dae, :discretization] begin
+@testitem "DAE binding contract: pure_ode_baseline (dae_support=true)" setup = [DAEConformanceSetup] tags = [:conformance, :dae, :discretization] begin
     HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization", "dae_missing")
     spec = JSON.parsefile(joinpath(HARNESS, "pure_ode_baseline.json"))
 
@@ -63,7 +63,7 @@ end
     end
 end
 
-@testitem "DAE binding contract: pure_ode_baseline (dae_support=false)" setup=[DAEConformanceSetup] tags=[:conformance, :dae, :discretization] begin
+@testitem "DAE binding contract: pure_ode_baseline (dae_support=false)" setup = [DAEConformanceSetup] tags = [:conformance, :dae, :discretization] begin
     HARNESS = joinpath(@__DIR__, "..", "tests", "conformance", "discretization", "dae_missing")
     spec = JSON.parsefile(joinpath(HARNESS, "pure_ode_baseline.json"))
 

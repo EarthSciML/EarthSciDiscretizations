@@ -31,8 +31,8 @@ end
 using EarthSciDiscretizations: eval_coeff
 using JSON
 
-const HERE    = @__DIR__
-const ROOT    = abspath(joinpath(HERE, "..", "..", "..", ".."))
+const HERE = @__DIR__
+const ROOT = abspath(joinpath(HERE, "..", "..", "..", ".."))
 const FX_PATH = joinpath(HERE, "fixtures.json")
 const GLD_DIR = joinpath(HERE, "golden")
 
@@ -60,7 +60,7 @@ function _eval_replacement(
         cell_idx::Int,
         bindings::Dict{String, Float64},
         N::Int,
-)::Float64
+    )::Float64
     node isa Number && return Float64(node)
     if node isa AbstractString
         s = String(node)
@@ -70,19 +70,19 @@ function _eval_replacement(
     end
 
     node isa AbstractDict || error("_eval_replacement: unexpected node type $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
 
     if op == "index"
         # args[1] is the field name ("\$u" or "\$f"), args[2] is the index expression
         field_name = String(args[1])
         field = field_name == "\$u" ? u :
-                field_name == "\$f" ? f :
-                error("_eval_replacement: unknown field '$field_name'")
+            field_name == "\$f" ? f :
+            error("_eval_replacement: unknown field '$field_name'")
         function _resolve_idx(ie)
             ie isa AbstractString && String(ie) == "\$x" && return cell_idx
             ie isa AbstractDict || error("unsupported index expression: $ie")
-            ia  = ie["args"]
+            ia = ie["args"]
             String(ia[1]) == "\$x" || error("index lhs not '\$x': $(ia[1])")
             op2 = String(ie["op"])
             op2 == "+" && return cell_idx + Int(ia[2])
@@ -107,11 +107,15 @@ end
 # Field construction
 # ---------------------------------------------------------------------------
 
-function _sinusoidal_plus_const_field(n::Int, x_start::Float64, x_end::Float64,
-                                      amplitude::Float64, constant::Float64)
+function _sinusoidal_plus_const_field(
+        n::Int, x_start::Float64, x_end::Float64,
+        amplitude::Float64, constant::Float64
+    )
     dx = (x_end - x_start) / n
-    return Float64[constant + amplitude * sin(π * (x_start + (i - 0.5) * dx))
-                   for i in 1:n]
+    return Float64[
+        constant + amplitude * sin(π * (x_start + (i - 0.5) * dx))
+            for i in 1:n
+    ]
 end
 
 # ---------------------------------------------------------------------------
@@ -121,22 +125,22 @@ end
 function main()
     spec = JSON.parsefile(FX_PATH)
     rule_path = joinpath(ROOT, spec["rule_path"])
-    raw_rule  = JSON.parsefile(rule_path)
+    raw_rule = JSON.parsefile(rule_path)
     rule_name = spec["rule"]
     rule_body = raw_rule["discretizations"][rule_name]
     # nonlinear_laplacian_uniform already ships with a `replacement` field
-    repl_raw  = rule_body["replacement"]
+    repl_raw = rule_body["replacement"]
     replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-                  repl_raw["expr"] : repl_raw
+        repl_raw["expr"] : repl_raw
 
     isdir(GLD_DIR) || mkpath(GLD_DIR)
 
     for fx in spec["fixtures"]
-        g   = fx["grid"]
-        ic  = fx["initial_condition"]
-        N   = Int(g["n_cells"])
-        dx  = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
-        bc  = String(g["bc"])
+        g = fx["grid"]
+        ic = fx["initial_condition"]
+        N = Int(g["n_cells"])
+        dx = (Float64(g["x_end"]) - Float64(g["x_start"])) / N
+        bc = String(g["bc"])
         @assert bc == "periodic" "Only periodic BC supported in this script"
 
         u_ic = ic["u"]
@@ -150,14 +154,14 @@ function main()
         nl_lap_u = [_eval_replacement(replacement, u, f, i, bindings, N) for i in 1:N]
 
         out = Dict{String, Any}(
-            "_mol531_sha"        => MOL531_SHA,
-            "_captured_by"       => "esd-i73",
-            "version"            => spec["version"],
-            "rule"               => rule_name,
-            "fixture"            => fx["name"],
-            "grid"               => Dict{String, Any}("n_cells" => N, "dx" => dx, "bc" => bc),
-            "field_u"            => u,
-            "field_f"            => f,
+            "_mol531_sha" => MOL531_SHA,
+            "_captured_by" => "esd-i73",
+            "version" => spec["version"],
+            "rule" => rule_name,
+            "fixture" => fx["name"],
+            "grid" => Dict{String, Any}("n_cells" => N, "dx" => dx, "bc" => bc),
+            "field_u" => u,
+            "field_f" => f,
             "nonlinear_laplacian_u" => nl_lap_u,
         )
 
@@ -168,6 +172,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

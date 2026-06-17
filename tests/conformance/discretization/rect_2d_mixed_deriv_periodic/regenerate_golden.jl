@@ -32,8 +32,8 @@ end
 using EarthSciDiscretizations: eval_coeff
 using JSON
 
-const HERE    = @__DIR__
-const ROOT    = abspath(joinpath(HERE, "..", "..", "..", ".."))
+const HERE = @__DIR__
+const ROOT = abspath(joinpath(HERE, "..", "..", "..", ".."))
 const FX_PATH = joinpath(HERE, "fixtures.json")
 const GLD_DIR = joinpath(HERE, "golden")
 
@@ -53,7 +53,7 @@ function _resolve_axis_idx(ie, xi::Int, yi::Int)::Int
         error("_resolve_axis_idx: unknown axis variable '$s'")
     end
     ie isa AbstractDict || error("_resolve_axis_idx: unexpected type $(typeof(ie))")
-    ia  = ie["args"]
+    ia = ie["args"]
     op2 = String(ie["op"])
     lhs = String(ia[1])
     off = Int(ia[2])
@@ -69,7 +69,7 @@ function _eval_replacement_2d(
         xi::Int, yi::Int,
         bindings::Dict{String, Float64},
         Nx::Int, Ny::Int,
-)::Float64
+    )::Float64
     node isa Number && return Float64(node)
     if node isa AbstractString
         s = String(node)
@@ -79,7 +79,7 @@ function _eval_replacement_2d(
         error("_eval_replacement_2d: unresolved variable '$s'")
     end
     node isa AbstractDict || error("unexpected node type $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
     if op == "index"
         length(args) == 3 || error("index expects 3 args, got $(length(args))")
@@ -96,29 +96,31 @@ function _eval_replacement_2d(
     error("unsupported op '$op'")
 end
 
-rule_path = joinpath(ROOT, "discretizations", "finite_difference",
-                     "mixed_deriv_2nd_uniform.json")
-raw_rule  = JSON.parsefile(rule_path)
+rule_path = joinpath(
+    ROOT, "discretizations", "finite_difference",
+    "mixed_deriv_2nd_uniform.json"
+)
+raw_rule = JSON.parsefile(rule_path)
 rule_body = raw_rule["discretizations"]["mixed_deriv_2nd_uniform"]
-repl_raw  = rule_body["replacement"]
+repl_raw = rule_body["replacement"]
 replacement = (repl_raw isa AbstractDict && get(repl_raw, "op", nothing) == "arrayop") ?
-              repl_raw["expr"] : repl_raw
+    repl_raw["expr"] : repl_raw
 
 fxs = JSON.parsefile(FX_PATH)
 mkpath(GLD_DIR)
 
 for fx in fxs["fixtures"]
-    g   = fx["grid"]
-    Nx  = Int(g["n_cells_x"])
-    Ny  = Int(g["n_cells_y"])
-    x0  = Float64(g["x_start"])
-    x1  = Float64(g["x_end"])
-    y0  = Float64(g["y_start"])
-    y1  = Float64(g["y_end"])
-    dx  = (x1 - x0) / Nx
-    dy  = (y1 - y0) / Ny
-    xs  = [x0 + (i - 0.5) * dx for i in 1:Nx]
-    ys  = [y0 + (j - 0.5) * dy for j in 1:Ny]
+    g = fx["grid"]
+    Nx = Int(g["n_cells_x"])
+    Ny = Int(g["n_cells_y"])
+    x0 = Float64(g["x_start"])
+    x1 = Float64(g["x_end"])
+    y0 = Float64(g["y_start"])
+    y1 = Float64(g["y_end"])
+    dx = (x1 - x0) / Nx
+    dy = (y1 - y0) / Ny
+    xs = [x0 + (i - 0.5) * dx for i in 1:Nx]
+    ys = [y0 + (j - 0.5) * dy for j in 1:Ny]
 
     # u(x,y) = sin(x) * sin(y)
     u = [sin(xs[i]) * sin(ys[j]) for i in 1:Nx, j in 1:Ny]
@@ -134,17 +136,17 @@ for fx in fxs["fixtures"]
 
     out = Dict(
         "_captured_by" => "esd-wdv",
-        "_mol531_sha"  => MOL531_SHA,
-        "rule"         => "mixed_deriv_2nd_uniform",
-        "fixture"      => fx["name"],
-        "grid"         => Dict(
-            "bc"        => "periodic",
-            "dx"        => dx,
-            "dy"        => dy,
+        "_mol531_sha" => MOL531_SHA,
+        "rule" => "mixed_deriv_2nd_uniform",
+        "fixture" => fx["name"],
+        "grid" => Dict(
+            "bc" => "periodic",
+            "dx" => dx,
+            "dy" => dy,
             "n_cells_x" => Nx,
             "n_cells_y" => Ny,
         ),
-        "dxy_u"        => field_rows,
+        "dxy_u" => field_rows,
     )
 
     out_path = joinpath(GLD_DIR, fx["name"] * ".json")

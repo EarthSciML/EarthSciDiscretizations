@@ -56,11 +56,13 @@ function neighbors_0idx(grid, idx1)
         for s in (-1, +1)
             haskey(dict, (d, s)) || continue
             nb1 = dict[(d, s)]
-            push!(out, Dict{String, Any}(
-                "axis" => d - 1,
-                "side" => s,
-                "index" => [Int(x) - 1 for x in nb1],
-            ))
+            push!(
+                out, Dict{String, Any}(
+                    "axis" => d - 1,
+                    "side" => s,
+                    "index" => [Int(x) - 1 for x in nb1],
+                )
+            )
         end
     end
     return out
@@ -155,6 +157,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

@@ -319,8 +319,11 @@ function _parse_builtin_voronoi_level(path::AbstractString)
     startswith(path, prefix) || return nothing
     tail = path[(length(prefix) + 1):end]
     lvl = tryparse(Int, tail)
-    lvl === nothing && throw(ArgumentError(
-        "mpas: cannot parse voronoi level from loader path $path"))
+    lvl === nothing && throw(
+        ArgumentError(
+            "mpas: cannot parse voronoi level from loader path $path"
+        )
+    )
     lvl < 1 && throw(DomainError(lvl, "mpas: voronoi level must be ≥ 1"))
     return lvl
 end
@@ -360,7 +363,7 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
     end
 
     # ---- 2. Lookup tables ----
-    edge_idx = Dict{Tuple{Int,Int}, Int}()          # sorted (v1,v2) → edge index
+    edge_idx = Dict{Tuple{Int, Int}, Int}()          # sorted (v1,v2) → edge index
     sizehint!(edge_idx, Ne)
     for e in 1:Ne
         v1, v2 = duo.edges[1, e], duo.edges[2, e]
@@ -368,7 +371,7 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
     end
 
     # edge_faces: sorted (v1,v2) → [f1, f2] (the two DUO faces sharing each edge)
-    edge_faces = Dict{Tuple{Int,Int}, Vector{Int}}()
+    edge_faces = Dict{Tuple{Int, Int}, Vector{Int}}()
     sizehint!(edge_faces, Ne)
     face_vset = Vector{Set{Int}}(undef, Nc)
     for f in 1:Nc
@@ -395,14 +398,14 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
         a3x = Float64(duo.vertices[1, v3]) / R_f
         a3y = Float64(duo.vertices[2, v3]) / R_f
         a3z = Float64(duo.vertices[3, v3]) / R_f
-        ccx = (a1y*a2z - a1z*a2y) + (a2y*a3z - a2z*a3y) + (a3y*a1z - a3z*a1y)
-        ccy = (a1z*a2x - a1x*a2z) + (a2z*a3x - a2x*a3z) + (a3z*a1x - a3x*a1z)
-        ccz = (a1x*a2y - a1y*a2x) + (a2x*a3y - a2y*a3x) + (a3x*a1y - a3y*a1x)
+        ccx = (a1y * a2z - a1z * a2y) + (a2y * a3z - a2z * a3y) + (a3y * a1z - a3z * a1y)
+        ccy = (a1z * a2x - a1x * a2z) + (a2z * a3x - a2x * a3z) + (a3z * a1x - a3x * a1z)
+        ccz = (a1x * a2y - a1y * a2x) + (a2x * a3y - a2y * a3x) + (a3x * a1y - a3y * a1x)
         # Ensure outward orientation (same side as centroid)
         cx_cen = Float64(duo.cell_cart[1, f]) / R_f
         cy_cen = Float64(duo.cell_cart[2, f]) / R_f
         cz_cen = Float64(duo.cell_cart[3, f]) / R_f
-        if ccx*cx_cen + ccy*cy_cen + ccz*cz_cen < 0
+        if ccx * cx_cen + ccy * cy_cen + ccz * cz_cen < 0
             ccx = -ccx; ccy = -ccy; ccz = -ccz
         end
         cn = sqrt(ccx^2 + ccy^2 + ccz^2)
@@ -456,29 +459,30 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
 
     # ---- 4. Per-vertex topology and Voronoi cell area ----
     n_edges_on_cell = Int[length(sorted_vf[v]) for v in 1:Nv]
-    max_edges_val   = maximum(n_edges_on_cell)
+    max_edges_val = maximum(n_edges_on_cell)
 
     cells_on_cell = zeros(Int, max_edges_val, Nv)
     edges_on_cell = zeros(Int, max_edges_val, Nv)
-    area_cell     = zeros(Float64, Nv)
+    area_cell = zeros(Float64, Nv)
 
     for v in 1:Nv
         sfaces = sorted_vf[v]
-        kv     = length(sfaces)
+        kv = length(sfaces)
         Pvx = Float64(duo.vertices[1, v]) / R_f
         Pvy = Float64(duo.vertices[2, v]) / R_f
         Pvz = Float64(duo.vertices[3, v]) / R_f
 
         area_v = 0.0
         for i in 1:kv
-            fi    = sfaces[i]
+            fi = sfaces[i]
             fnext = sfaces[(i % kv) + 1]
             # Bridge vertex: unique vertex shared by fi and fnext that is NOT v
             shared = intersect(face_vset[fi], face_vset[fnext])
             delete!(shared, v)
             length(shared) == 1 || error(
                 "_duo_voronoi_dual: vertex $v: expected 1 bridge between faces " *
-                "$fi/$fnext, got $(length(shared))")
+                    "$fi/$fnext, got $(length(shared))"
+            )
             w = first(shared)
             cells_on_cell[i, v] = w
             key_vw = v < w ? (v, w) : (w, v)
@@ -491,16 +495,17 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
             cy = face_cc[2, fnext]
             cz = face_cc[3, fnext]
             area_v += _spherical_triangle_area(
-                (Pvx, Pvy, Pvz), (bx, by, bz), (cx, cy, cz))
+                (Pvx, Pvy, Pvz), (bx, by, bz), (cx, cy, cz)
+            )
         end
         area_cell[v] = R_f^2 * area_v
     end
 
     # ---- 5. Per-edge arrays ----
-    lon_edge      = Vector{Float64}(undef, Ne)
-    lat_edge      = Vector{Float64}(undef, Ne)
-    dc_edge       = Vector{Float64}(undef, Ne)
-    dv_edge       = Vector{Float64}(undef, Ne)
+    lon_edge = Vector{Float64}(undef, Ne)
+    lat_edge = Vector{Float64}(undef, Ne)
+    dc_edge = Vector{Float64}(undef, Ne)
+    dv_edge = Vector{Float64}(undef, Ne)
     cells_on_edge = Matrix{Int}(undef, 2, Ne)
 
     for e in 1:Ne
@@ -531,20 +536,20 @@ function _duo_voronoi_dual(level::Int; R::Real = 6.371e6)
     end
 
     return mpas_mesh_data(;
-        lon_cell        = lon_cell,
-        lat_cell        = lat_cell,
-        area_cell       = area_cell,
+        lon_cell = lon_cell,
+        lat_cell = lat_cell,
+        area_cell = area_cell,
         n_edges_on_cell = n_edges_on_cell,
-        cells_on_cell   = cells_on_cell,
-        edges_on_cell   = edges_on_cell,
-        lon_edge        = lon_edge,
-        lat_edge        = lat_edge,
-        cells_on_edge   = cells_on_edge,
-        dc_edge         = dc_edge,
-        dv_edge         = dv_edge,
-        max_edges       = max_edges_val,
-        n_vertices      = Nc,
-        R               = R_f,
+        cells_on_cell = cells_on_cell,
+        edges_on_cell = edges_on_cell,
+        lon_edge = lon_edge,
+        lat_edge = lat_edge,
+        cells_on_edge = cells_on_edge,
+        dc_edge = dc_edge,
+        dv_edge = dv_edge,
+        max_edges = max_edges_val,
+        n_vertices = Nc,
+        R = R_f,
     )
 end
 

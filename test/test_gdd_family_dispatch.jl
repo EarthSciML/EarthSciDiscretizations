@@ -7,14 +7,14 @@ using TestItems
 @testitem "GDD family dispatch: default family is cartesian when omitted" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
             # no "family" field → must default to "cartesian"
-            "spatial" => Dict{String,Any}(
-                "x" => Dict{String,Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.25),
+            "spatial" => Dict{String, Any}(
+                "x" => Dict{String, Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.25),
             ),
-            "boundary_conditions" => Any[Dict{String,Any}("type" => "periodic", "dimensions" => ["x"])],
+            "boundary_conditions" => Any[Dict{String, Any}("type" => "periodic", "dimensions" => ["x"])],
         ),
     )
     _inject_grids!(esm, gdd_grids, "/dev/null")
@@ -30,12 +30,12 @@ end
 @testitem "GDD family dispatch: explicit cartesian family passes through" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "cartesian",
-            "spatial" => Dict{String,Any}(
-                "x" => Dict{String,Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "cartesian",
+            "spatial" => Dict{String, Any}(
+                "x" => Dict{String, Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
             ),
             "boundary_conditions" => Any[],
         ),
@@ -48,16 +48,16 @@ end
 @testitem "GDD family dispatch: latlon family propagates to ESM grid block" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "latlon",
-            "spatial" => Dict{String,Any}(
-                "lat" => Dict{String,Any}("min" => -90.0, "max" => 90.0,  "grid_spacing" => 5.0),
-                "lon" => Dict{String,Any}("min" => 0.0,   "max" => 360.0, "grid_spacing" => 5.0),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "latlon",
+            "spatial" => Dict{String, Any}(
+                "lat" => Dict{String, Any}("min" => -90.0, "max" => 90.0, "grid_spacing" => 5.0),
+                "lon" => Dict{String, Any}("min" => 0.0, "max" => 360.0, "grid_spacing" => 5.0),
             ),
             "boundary_conditions" => Any[
-                Dict{String,Any}("type" => "periodic", "dimensions" => ["lon"]),
+                Dict{String, Any}("type" => "periodic", "dimensions" => ["lon"]),
             ],
         ),
     )
@@ -81,12 +81,12 @@ end
 @testitem "GDD family dispatch: vertical family propagates to ESM grid block" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "vertical",
-            "spatial" => Dict{String,Any}(
-                "k" => Dict{String,Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "vertical",
+            "spatial" => Dict{String, Any}(
+                "k" => Dict{String, Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
             ),
             "boundary_conditions" => Any[],
         ),
@@ -103,16 +103,16 @@ end
 @testitem "GDD family dispatch: arakawa family propagates to ESM grid block" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "arakawa",
-            "spatial" => Dict{String,Any}(
-                "x" => Dict{String,Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
-                "y" => Dict{String,Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "arakawa",
+            "spatial" => Dict{String, Any}(
+                "x" => Dict{String, Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
+                "y" => Dict{String, Any}("min" => 0.0, "max" => 1.0, "grid_spacing" => 0.1),
             ),
             "boundary_conditions" => Any[
-                Dict{String,Any}("type" => "periodic", "dimensions" => ["x", "y"]),
+                Dict{String, Any}("type" => "periodic", "dimensions" => ["x", "y"]),
             ],
         ),
     )
@@ -139,20 +139,36 @@ end
 @testitem "GDD rules dispatch: latlon authored replacement → axis substitution (lat→i, lon→j)" begin
     using EarthSciDiscretizations: _inject_rules!
 
-    esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
-    latlon_replacement = Dict{String,Any}(
-        "latlon_grad" => Dict{String,Any}(
-            "applies_to"  => Dict{String,Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+    esm = Dict{String, Any}("rules" => Any[], "discretizations" => Dict{String, Any}())
+    latlon_replacement = Dict{String, Any}(
+        "latlon_grad" => Dict{String, Any}(
+            "applies_to" => Dict{String, Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
             "grid_family" => "latlon",
-            "replacement" => Dict{String,Any}(
-                "op"   => "+",
+            "replacement" => Dict{String, Any}(
+                "op" => "+",
                 "args" => Any[
-                    Dict{String,Any}("op" => "*", "args" => Any[-0.5,
-                        Dict{String,Any}("op" => "index", "args" => Any["\$u", "lat",
-                            Dict{String,Any}("op" => "+", "args" => Any["lon", -1])])]),
-                    Dict{String,Any}("op" => "*", "args" => Any[ 0.5,
-                        Dict{String,Any}("op" => "index", "args" => Any["\$u", "lat",
-                            Dict{String,Any}("op" => "+", "args" => Any["lon",  1])])]),
+                    Dict{String, Any}(
+                        "op" => "*", "args" => Any[
+                            -0.5,
+                            Dict{String, Any}(
+                                "op" => "index", "args" => Any[
+                                    "\$u", "lat",
+                                    Dict{String, Any}("op" => "+", "args" => Any["lon", -1]),
+                                ]
+                            ),
+                        ]
+                    ),
+                    Dict{String, Any}(
+                        "op" => "*", "args" => Any[
+                            0.5,
+                            Dict{String, Any}(
+                                "op" => "index", "args" => Any[
+                                    "\$u", "lat",
+                                    Dict{String, Any}("op" => "+", "args" => Any["lon", 1]),
+                                ]
+                            ),
+                        ]
+                    ),
                 ],
             ),
         ),
@@ -185,21 +201,25 @@ end
 @testitem "GDD rules dispatch: vertical authored replacement → replacement rule, no axis subst" begin
     using EarthSciDiscretizations: _inject_rules!
 
-    esm = Dict{String,Any}("rules" => Any[], "discretizations" => Dict{String,Any}())
-    vertical_replacement = Dict{String,Any}(
-        "vertical_grad" => Dict{String,Any}(
-            "applies_to"  => Dict{String,Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
+    esm = Dict{String, Any}("rules" => Any[], "discretizations" => Dict{String, Any}())
+    vertical_replacement = Dict{String, Any}(
+        "vertical_grad" => Dict{String, Any}(
+            "applies_to" => Dict{String, Any}("op" => "grad", "args" => ["\$u"], "dim" => "\$k"),
             "grid_family" => "vertical",
-            "replacement" => Dict{String,Any}(
-                "op"   => "/",
+            "replacement" => Dict{String, Any}(
+                "op" => "/",
                 "args" => Any[
-                    Dict{String,Any}("op" => "+", "args" => Any[
-                        Dict{String,Any}("op" => "index", "args" => Any["\$u", Dict{String,Any}("op" => "+", "args" => Any["\$k", 1])]),
-                        Dict{String,Any}("op" => "-", "args" => Any[
-                            Dict{String,Any}("op" => "index", "args" => Any["\$u", Dict{String,Any}("op" => "-", "args" => Any["\$k", 1])]),
-                        ]),
-                    ]),
-                    Dict{String,Any}("op" => "*", "args" => Any[2, "h"]),
+                    Dict{String, Any}(
+                        "op" => "+", "args" => Any[
+                            Dict{String, Any}("op" => "index", "args" => Any["\$u", Dict{String, Any}("op" => "+", "args" => Any["\$k", 1])]),
+                            Dict{String, Any}(
+                                "op" => "-", "args" => Any[
+                                    Dict{String, Any}("op" => "index", "args" => Any["\$u", Dict{String, Any}("op" => "-", "args" => Any["\$k", 1])]),
+                                ]
+                            ),
+                        ]
+                    ),
+                    Dict{String, Any}("op" => "*", "args" => Any[2, "h"]),
                 ],
             ),
         ),
@@ -230,12 +250,12 @@ end
 @testitem "GDD grids dispatch: mpas family emits n_cells dimension" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "mpas",
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "mpas",
             "n_cells" => 642,
-            "loader"  => Dict{String,Any}("path" => "meshes/x1.642.grid.nc", "reader" => "mpas_mesh"),
+            "loader" => Dict{String, Any}("path" => "meshes/x1.642.grid.nc", "reader" => "mpas_mesh"),
         ),
     )
     _inject_grids!(esm, gdd_grids, "/dev/null")
@@ -251,10 +271,10 @@ end
 @testitem "GDD grids dispatch: mpas family with n_edges emits both dimensions" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "mpas",
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "mpas",
             "n_cells" => 642,
             "n_edges" => 1920,
         ),
@@ -273,9 +293,9 @@ end
 @testitem "GDD grids dispatch: mpas missing n_cells raises" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}("family" => "mpas"),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}("family" => "mpas"),
     )
     @test_throws ArgumentError _inject_grids!(esm, gdd_grids, "/dev/null")
 end
@@ -283,12 +303,12 @@ end
 @testitem "GDD grids dispatch: duo family emits n_cells dimension" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}(
-            "family"  => "duo",
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}(
+            "family" => "duo",
             "n_cells" => 320,
-            "loader"  => Dict{String,Any}("path" => "builtin://icosahedral/2", "reader" => "auto"),
+            "loader" => Dict{String, Any}("path" => "builtin://icosahedral/2", "reader" => "auto"),
         ),
     )
     _inject_grids!(esm, gdd_grids, "/dev/null")
@@ -305,12 +325,12 @@ end
     using EarthSciDiscretizations: _inject_grids!
 
     for (level, expected_n) in ((2, 320), (3, 1280), (4, 5120))
-        esm = Dict{String,Any}("grids" => Dict{String,Any}())
-        gdd_grids = Dict{String,Any}(
-            "domain" => Dict{String,Any}(
-                "family"  => "duo",
+        esm = Dict{String, Any}("grids" => Dict{String, Any}())
+        gdd_grids = Dict{String, Any}(
+            "domain" => Dict{String, Any}(
+                "family" => "duo",
                 "n_cells" => expected_n,
-                "loader"  => Dict{String,Any}("path" => "builtin://icosahedral/$level", "reader" => "auto"),
+                "loader" => Dict{String, Any}("path" => "builtin://icosahedral/$level", "reader" => "auto"),
             ),
         )
         _inject_grids!(esm, gdd_grids, "/dev/null")
@@ -324,9 +344,9 @@ end
 @testitem "GDD grids dispatch: duo missing n_cells raises" begin
     using EarthSciDiscretizations: _inject_grids!
 
-    esm = Dict{String,Any}("grids" => Dict{String,Any}())
-    gdd_grids = Dict{String,Any}(
-        "domain" => Dict{String,Any}("family" => "duo"),
+    esm = Dict{String, Any}("grids" => Dict{String, Any}())
+    gdd_grids = Dict{String, Any}(
+        "domain" => Dict{String, Any}("family" => "duo"),
     )
     err = @test_throws ArgumentError _inject_grids!(esm, gdd_grids, "/dev/null")
     @test occursin("DUO GDD", sprint(showerror, err.value))

@@ -17,7 +17,7 @@ if get(ENV, "ESD_RUN_INTEGRATION", "0") != "1"
 end
 
 repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-catalog   = joinpath(repo_root, "discretizations")
+catalog = joinpath(repo_root, "discretizations")
 
 println("Running Layer-C integration suite (catalog: $(catalog))")
 results = WalkESDTests.walk_esd_tests(; catalog = catalog)

@@ -120,7 +120,7 @@ end
                         p, i, j = Int(qp[1]), Int(qp[2]), Int(qp[3])
                         h = π / (2 * Nc)
                         J_val, = gnomonic_metric(grid.ξ_centers[i + 1], grid.η_centers[j + 1], R)
-                        binds = Dict{String,Float64}("h" => h, "J" => J_val)
+                        binds = Dict{String, Float64}("h" => h, "J" => J_val)
 
                         # Binding check: golden bindings_per_qp must match the
                         # values extracted from the Julia grid accessor.

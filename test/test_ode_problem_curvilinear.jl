@@ -12,10 +12,14 @@ import SciMLBase
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "latlon_diffusion.esm")
-    gdd_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "latlon_diffusion.gdd.json")
+    esm_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "latlon_diffusion.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "latlon_diffusion.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
@@ -36,10 +40,14 @@ end
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "cubed_sphere_smoke.esm")
-    gdd_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "cubed_sphere_smoke.gdd.json")
+    esm_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "cubed_sphere_smoke.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "cubed_sphere_smoke.gdd.json"
+    )
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
 
@@ -61,10 +69,14 @@ end
     using OrdinaryDiffEqDefault: solve
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "cubed_sphere_transport.esm")
-    gdd_path  = joinpath(repo_root, "test", "fixtures", "curvilinear",
-                         "cubed_sphere_transport.gdd.json")
+    esm_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "cubed_sphere_transport.esm"
+    )
+    gdd_path = joinpath(
+        repo_root, "test", "fixtures", "curvilinear",
+        "cubed_sphere_transport.gdd.json"
+    )
 
     # Build the spatial operator via Path B.
     prob_template, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)
@@ -80,11 +92,11 @@ end
     grid = CubedSphereGrid(Nc; R = R)
     lons = cell_centers(grid, :lon)
     lats = cell_centers(grid, :lat)
-    N    = 6 * Nc * Nc
+    N = 6 * Nc * Nc
 
     u0_cb = map(1:N) do c
         cosd = sin(lat0) * sin(lats[c]) + cos(lat0) * cos(lats[c]) * cos(lons[c] - lon0)
-        r    = R * acos(clamp(cosd, -1.0, 1.0))
+        r = R * acos(clamp(cosd, -1.0, 1.0))
         r < r0 ? (h0 / 2) * (1 + cos(π * r / r0)) : 0.0
     end
 
@@ -97,13 +109,13 @@ end
     # Solve for one full revolution (tspan = (0, 2π) from the ESM domain).
     # remake preserves MTK's initialization data while swapping the IC vector.
     prob = SciMLBase.remake(prob_template; u0 = u0_cb)
-    sol = solve(prob; reltol = 1e-6, abstol = 1e-8, save_everystep = false)
+    sol = solve(prob; reltol = 1.0e-6, abstol = 1.0e-8, save_everystep = false)
 
     @test sol.retcode == SciMLBase.ReturnCode.Success
 
     # After one revolution the field should return close to the IC.
-    u_final   = sol.u[end]
-    linf_norm = maximum(abs.(u_final .- u0_cb)) / max(h0, 1e-12)
+    u_final = sol.u[end]
+    linf_norm = maximum(abs.(u_final .- u0_cb)) / max(h0, 1.0e-12)
     @test linf_norm <= 0.5  # ≤ 50% of h0 on Nc=8; tighten in follow-up
 end
 
@@ -112,9 +124,11 @@ end
     import SciMLBase
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
-    esm_path  = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
-    gdd_path  = joinpath(repo_root, "discretizations", "gdd",
-                         "cartesian_1d_periodic_n16.gdd.json")
+    esm_path = joinpath(repo_root, "test", "fixtures", "diffusion_1d.esm")
+    gdd_path = joinpath(
+        repo_root, "discretizations", "gdd",
+        "cartesian_1d_periodic_n16.gdd.json"
+    )
 
     # Should still work via Path A
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path)

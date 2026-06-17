@@ -8,7 +8,7 @@ let repo_root = abspath(joinpath(@__DIR__, ".."))
     RuleCatalogGenerator.generate_rule_catalog(;
         catalog_dir = joinpath(repo_root, "discretizations"),
         output_path = joinpath(@__DIR__, "rule-catalog.md"),
-        repo_root   = repo_root,
+        repo_root = repo_root,
     )
 end
 

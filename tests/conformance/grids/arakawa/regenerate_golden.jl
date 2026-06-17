@@ -55,8 +55,10 @@ end
 # 1-based and splits the accessor across (cell_centers, u_face, v_face,
 # corners); we pass separate per-location grids so u_face hits UEdge and
 # v_face hits VEdge regardless of stagger.
-function coord_0idx(grid_cc::ArakawaGrid, grid_c::ArakawaGrid,
-        loc::VarLocation, i::Int, j::Int)
+function coord_0idx(
+        grid_cc::ArakawaGrid, grid_c::ArakawaGrid,
+        loc::VarLocation, i::Int, j::Int
+    )
     if loc === CellCenter
         return cell_centers(grid_cc, i + 1, j + 1)
     elseif loc === Corner
@@ -211,6 +213,7 @@ function main()
         end
         println("wrote $path")
     end
+    return
 end
 
 main()

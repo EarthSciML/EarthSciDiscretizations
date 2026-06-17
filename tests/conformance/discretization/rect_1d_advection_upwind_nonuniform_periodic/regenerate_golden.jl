@@ -32,8 +32,10 @@ function _resolve_idx(ie, cell_idx::Int)::Int
     error("unsupported index op '$op2'")
 end
 
-function eval_nonuniform(node, u::Vector{Float64}, dx_arr::Vector{Float64},
-                         cell_idx::Int, N::Int)::Float64
+function eval_nonuniform(
+        node, u::Vector{Float64}, dx_arr::Vector{Float64},
+        cell_idx::Int, N::Int
+    )::Float64
     node isa Number && return Float64(node)
     if node isa AbstractString
         s = String(node)
@@ -41,7 +43,7 @@ function eval_nonuniform(node, u::Vector{Float64}, dx_arr::Vector{Float64},
         error("unresolved variable '$s'")
     end
     node isa AbstractDict || error("unexpected node type: $(typeof(node))")
-    op   = String(node["op"])
+    op = String(node["op"])
     args = node["args"]
     if op == "index"
         arr_name = String(args[1])
@@ -58,13 +60,15 @@ function eval_nonuniform(node, u::Vector{Float64}, dx_arr::Vector{Float64},
     error("unsupported op '$op'")
 end
 
-function apply_rule_nonuniform(rule_path::String, rule_name::String,
-                               u::Vector{Float64}, dx_arr::Vector{Float64})
-    raw  = JSON.parsefile(rule_path)
+function apply_rule_nonuniform(
+        rule_path::String, rule_name::String,
+        u::Vector{Float64}, dx_arr::Vector{Float64}
+    )
+    raw = JSON.parsefile(rule_path)
     body = raw["discretizations"][rule_name]
     repl = body["replacement"]
     expr = (repl isa AbstractDict && get(repl, "op", nothing) == "arrayop") ?
-           repl["expr"] : repl
+        repl["expr"] : repl
     N = length(u)
     return Float64[eval_nonuniform(expr, u, dx_arr, i, N) for i in 1:N]
 end
@@ -73,13 +77,15 @@ end
 # Grid and IC helpers
 # --------------------------------------------------------------------------
 
-function stretched_dx(n::Int, x_start::Float64, x_end::Float64,
-                      amplitude::Float64)::Vector{Float64}
+function stretched_dx(
+        n::Int, x_start::Float64, x_end::Float64,
+        amplitude::Float64
+    )::Vector{Float64}
     L = x_end - x_start
     h = L / n
     dx = Float64[h * (1.0 + amplitude * sin(2π * (i - 1) / n)) for i in 1:n]
     # Verify normalisation: sum(dx) must equal L to machine precision
-    @assert abs(sum(dx) - L) < 1e-10 "stretched_dx: sum(dx)=$(sum(dx)) ≠ L=$L"
+    @assert abs(sum(dx) - L) < 1.0e-10 "stretched_dx: sum(dx)=$(sum(dx)) ≠ L=$L"
     return dx
 end
 
@@ -94,8 +100,10 @@ function cell_centers(dx_arr::Vector{Float64}, x_start::Float64)::Vector{Float64
     return x_c
 end
 
-function gaussian_field(x_c::Vector{Float64}, center::Float64,
-                        sigma::Float64, scale::Float64)::Vector{Float64}
+function gaussian_field(
+        x_c::Vector{Float64}, center::Float64,
+        sigma::Float64, scale::Float64
+    )::Vector{Float64}
     amp = scale / (sigma * sqrt(2π))
     return Float64[amp * exp(-(xi - center)^2 / (2 * sigma^2)) for xi in x_c]
 end
@@ -112,25 +120,27 @@ FIXTURES = JSON.parsefile(fixtures_path)
 rule_path = joinpath(repo_root, FIXTURES["rule_path"])
 
 for fx in FIXTURES["fixtures"]
-    g   = fx["grid"]
-    ic  = fx["initial_condition"]
-    N   = Int(g["n_cells"])
+    g = fx["grid"]
+    ic = fx["initial_condition"]
+    N = Int(g["n_cells"])
     x_start = Float64(g["x_start"])
-    x_end   = Float64(g["x_end"])
+    x_end = Float64(g["x_end"])
     amp = Float64(g["stretching_amplitude"])
 
     dx_arr = stretched_dx(N, x_start, x_end, amp)
-    x_c    = cell_centers(dx_arr, x_start)
-    u      = gaussian_field(x_c, Float64(ic["center"]),
-                            Float64(ic["sigma"]), Float64(ic["scale_factor"]))
+    x_c = cell_centers(dx_arr, x_start)
+    u = gaussian_field(
+        x_c, Float64(ic["center"]),
+        Float64(ic["sigma"]), Float64(ic["scale_factor"])
+    )
 
     du_dx = apply_rule_nonuniform(rule_path, FIXTURES["rule"], u, dx_arr)
 
     golden = Dict(
         "_captured_by" => get(FIXTURES, "_captured_by", "esd-02z"),
-        "field_u"      => u,
-        "du_dx"        => du_dx,
-        "dx"           => dx_arr,
+        "field_u" => u,
+        "du_dx" => du_dx,
+        "dx" => dx_arr,
     )
 
     out_path = joinpath(@__DIR__, "golden", "$(fx["name"]).json")
