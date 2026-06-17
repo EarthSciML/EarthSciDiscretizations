@@ -15,7 +15,9 @@
 //!     `centered_2nd_uniform_latlon` rule, byte-for-byte against the
 //!     reference.
 //!  2. `earthsci_grids::eval_coeff` walks the ESS expression-AST and
-//!     evaluates each stencil entry's `coeff` to the same float as the
+//!     evaluates each directional coefficient — lifted from the migrated
+//!     `replacement` op-tree (esd-t4h) by `extract_terms`, in the order the
+//!     golden's `stencil_selectors` record — to the same float as the
 //!     reference evaluator.
 
 use std::collections::HashMap;
@@ -144,6 +146,95 @@ fn load_rule(rel_path: &str) -> (String, Value) {
     (name.clone(), rule.clone())
 }
 
+/// A directional term lifted from the migrated `replacement` op-tree (esd-t4h).
+///
+/// The rule no longer carries a `stencil` list; `centered_2nd_uniform_latlon`
+/// lowers `grad(u)` to `{op: "+", args: [term, term, term, term]}` where each
+/// `term` is `{op: "*", args: [<coeff-AST>, {op: "index", args: ["$u",
+/// <lat-pos>, <lon-pos>]}]}`. Each `<pos>` is either a bare axis name
+/// ("lat"/"lon") or an offset node `{op: "+", args: [<axis>, <int>]}`. We
+/// reconstruct the `(axis, offset, coeff)` triples the conformance math needs
+/// directly from that AST — the real current contract.
+struct StencilTerm {
+    axis: String,
+    offset: i64,
+    coeff: Value,
+}
+
+/// Parse one index position into `Some((axis, offset))` when it differences an
+/// axis, or `None` for a bare (zero-offset) axis reference.
+fn axis_offset(pos: &Value) -> Option<(String, i64)> {
+    if pos.is_string() {
+        return None;
+    }
+    let obj = pos
+        .as_object()
+        .unwrap_or_else(|| panic!("unrecognized index position node: {pos}"));
+    assert_eq!(
+        obj.get("op").and_then(Value::as_str),
+        Some("+"),
+        "offset index position must be a `+` node, got {pos}"
+    );
+    let args = obj["args"].as_array().unwrap();
+    let axis = args
+        .iter()
+        .find_map(|a| a.as_str())
+        .unwrap_or_else(|| panic!("offset node missing an axis name: {pos}"));
+    let offset = args
+        .iter()
+        .find_map(Value::as_i64)
+        .unwrap_or_else(|| panic!("offset node missing an integer offset: {pos}"));
+    (offset != 0).then(|| (axis.to_string(), offset))
+}
+
+/// Extract the directional `{axis, offset, coeff}` terms from a `replacement`
+/// op-tree (post-migration analogue of the old `stencil` entries).
+fn extract_terms(rule: &Value) -> Vec<StencilTerm> {
+    let repl = &rule["replacement"];
+    assert_eq!(
+        repl["op"].as_str(),
+        Some("+"),
+        "expected a sum replacement, got {}",
+        repl["op"]
+    );
+    repl["args"]
+        .as_array()
+        .expect("replacement args array")
+        .iter()
+        .map(|term| {
+            assert_eq!(
+                term["op"].as_str(),
+                Some("*"),
+                "expected a scaled index term, got {}",
+                term["op"]
+            );
+            let factors = term["args"].as_array().unwrap();
+            let coeff = factors[0].clone();
+            let idx = &factors[1];
+            assert_eq!(
+                idx["op"].as_str(),
+                Some("index"),
+                "expected the second factor to be an index op, got {idx}"
+            );
+            // index args: [field, lat-pos, lon-pos]
+            let idx_args = idx["args"].as_array().unwrap();
+            let differenced: Vec<(String, i64)> =
+                idx_args[1..].iter().filter_map(axis_offset).collect();
+            assert_eq!(
+                differenced.len(),
+                1,
+                "each term must difference exactly one axis, got {differenced:?}"
+            );
+            let (axis, offset) = differenced.into_iter().next().unwrap();
+            StencilTerm {
+                axis,
+                offset,
+                coeff,
+            }
+        })
+        .collect()
+}
+
 #[test]
 fn lat_lon_rule_evals_match_golden() {
     let hdir = harness_dir();
@@ -173,9 +264,31 @@ fn lat_lon_rule_evals_match_golden() {
                 "{name}: rule name mismatch for {rule_path}"
             );
 
-            let stencil = rule["stencil"].as_array().unwrap();
+            let terms = extract_terms(&rule);
+            let golden_selectors = block["stencil_selectors"].as_array().unwrap();
             let golden_coeffs = block["stencil_coeffs"].as_array().unwrap();
             let golden_bindings = block["bindings_per_qp"].as_array().unwrap();
+
+            // The replacement terms must line up, in order, with the directional
+            // selectors the reference binding recorded in the golden.
+            assert_eq!(
+                terms.len(),
+                golden_selectors.len(),
+                "{name}/{rule_name}: replacement term count != golden selectors"
+            );
+            for (s_idx, term) in terms.iter().enumerate() {
+                let sel = &golden_selectors[s_idx];
+                assert_eq!(
+                    term.axis.as_str(),
+                    sel["axis"].as_str().unwrap(),
+                    "{name}/{rule_name}: term[{s_idx}] axis != golden selector axis"
+                );
+                assert_eq!(
+                    term.offset,
+                    sel["offset"].as_i64().unwrap(),
+                    "{name}/{rule_name}: term[{s_idx}] offset != golden selector offset"
+                );
+            }
 
             assert_eq!(
                 qps.len(),
@@ -202,25 +315,26 @@ fn lat_lon_rule_evals_match_golden() {
                     );
                 }
 
-                // (2) Each stencil entry's AST coefficient evaluates to the
-                //     same float as the reference walker emitted.
+                // (2) Each directional term's AST coefficient evaluates to the
+                //     same float as the reference walker emitted, in selector
+                //     order.
                 let golden_row = golden_coeffs[k].as_array().unwrap();
                 assert_eq!(
-                    stencil.len(),
+                    terms.len(),
                     golden_row.len(),
-                    "{name}/{rule_name} qp[{k}]: stencil length != golden coeff length"
+                    "{name}/{rule_name} qp[{k}]: term count != golden coeff length"
                 );
-                for (s_idx, entry) in stencil.iter().enumerate() {
-                    let got = eval_coeff(&entry["coeff"], &bindings).unwrap_or_else(|e| {
+                for (s_idx, term) in terms.iter().enumerate() {
+                    let got = eval_coeff(&term.coeff, &bindings).unwrap_or_else(|e| {
                         panic!(
-                            "{name}/{rule_name} qp[{k}]=({j},{i}) stencil[{s_idx}]: \
+                            "{name}/{rule_name} qp[{k}]=({j},{i}) term[{s_idx}]: \
                              eval_coeff failed: {e}"
                         )
                     });
                     let expected = golden_row[s_idx].as_f64().unwrap();
                     assert!(
                         close_rel(got, expected, rel_tol),
-                        "{name}/{rule_name} qp[{k}]=({j},{i}) stencil[{s_idx}]: \
+                        "{name}/{rule_name} qp[{k}]=({j},{i}) term[{s_idx}]: \
                          eval {got} vs golden {expected}"
                     );
                 }

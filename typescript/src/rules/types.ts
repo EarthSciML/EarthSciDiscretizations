@@ -49,7 +49,19 @@ export interface Rule {
   grid_family: string;
   combine?: string;
   accuracy?: string;
-  stencil: RuleStencil;
+  /**
+   * Legacy stencil form: present only on rules that still carry an explicit
+   * coefficient list (e.g. `ppm_reconstruction`). Finite-difference rules were
+   * migrated (esd-t4h) to a closed `replacement` op-tree and carry no
+   * `stencil`; consumers must guard for `undefined`.
+   */
+  stencil?: RuleStencil;
+  /**
+   * Closed replacement op-tree (esd-t4h): an `ExpressionNode` that lowers the
+   * `applies_to` operator directly in §4.2 ops. Present on migrated FD rules in
+   * place of `stencil`.
+   */
+  replacement?: ExpressionNode;
   /** Declared output kinds for multi-output rules (e.g. PPM). */
   outputs?: string[];
   /** Reconstruction form (e.g. `"piecewise_parabolic"`). */

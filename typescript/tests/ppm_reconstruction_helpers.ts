@@ -44,9 +44,12 @@ export function assertPpmRule(rule: Rule): void {
       `assertPpmRule: ppm_reconstruction grid_family must be 'cartesian', got '${rule.grid_family}'`,
     );
   }
-  if (Array.isArray(rule.stencil)) {
+  // PPM retains the legacy multi-stencil object form (it was not migrated to a
+  // `replacement` op-tree); `stencil` is now optional on `Rule`, so guard for
+  // its presence as well as its shape.
+  if (rule.stencil === undefined || Array.isArray(rule.stencil)) {
     throw new Error(
-      "assertPpmRule: ppm_reconstruction stencil must be a multi-stencil object (q_left_edge / q_right_edge), not an array",
+      "assertPpmRule: ppm_reconstruction stencil must be a multi-stencil object (q_left_edge / q_right_edge), not an array or absent",
     );
   }
   for (const sub of ["q_left_edge", "q_right_edge"] as const) {
@@ -73,9 +76,9 @@ export function resolveAxis(rule: Rule): string {
 }
 
 export function getSubStencil(rule: Rule, name: string): RuleStencilEntry[] {
-  if (Array.isArray(rule.stencil)) {
+  if (rule.stencil === undefined || Array.isArray(rule.stencil)) {
     throw new Error(
-      `getSubStencil: rule '${rule.name}' has flat stencil array; cannot dispatch to sub-stencil '${name}'`,
+      `getSubStencil: rule '${rule.name}' has no multi-stencil object; cannot dispatch to sub-stencil '${name}'`,
     );
   }
   const entries = rule.stencil[name];

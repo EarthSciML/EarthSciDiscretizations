@@ -18,6 +18,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { grids, rules } from "../src/index.js";
+import type { ExpressionNode, OpNode } from "../src/rules/types.js";
 import type { LatLonGrid, LatLonOpts } from "../src/grids/lat_lon.js";
 
 const REPO_ROOT = resolve(
@@ -94,25 +95,81 @@ function tagFor(key: StencilKey): string {
   return `${key.axis}_${key.offset >= 0 ? "p" : "m"}${Math.abs(key.offset)}`;
 }
 
-function flatStencil(rule: rules.Rule): rules.RuleStencilEntry[] {
-  if (!Array.isArray(rule.stencil)) {
-    throw new Error(
-      `centered_2nd_uniform_latlon expected a flat stencil array, got a multi-stencil object`,
-    );
-  }
-  return rule.stencil;
+// esd-t4h: the rule no longer carries a `stencil` list. centered_2nd_uniform_latlon
+// lowers grad(u) to a closed `replacement` op-tree:
+//   { op: "+", args: [term, term, term, term] }
+//   term = { op: "*", args: [<coeff-AST>, { op: "index",
+//            args: ["$u", <lat-pos>, <lon-pos>] }] }
+// Each <pos> is either a bare axis name ("lat"/"lon") or an offset node
+// { op: "+", args: [<axis>, <int>] }. We reconstruct the directional
+// { axis, offset, coeff } triples from that AST — the real current contract.
+
+interface StencilTerm {
+  axis: "lon" | "lat";
+  offset: number;
+  coeff: ExpressionNode;
 }
 
-function findStencil(
-  rule: rules.Rule,
+function isOpNode(node: ExpressionNode): node is OpNode {
+  return typeof node === "object" && node !== null && "op" in node;
+}
+
+/** Parse an index position into `{axis, offset}`, or `null` for a bare axis. */
+function axisOffset(pos: ExpressionNode): StencilTerm | null {
+  if (typeof pos === "string") return null;
+  if (!isOpNode(pos) || pos.op !== "+") {
+    throw new Error(`unrecognized index position node: ${JSON.stringify(pos)}`);
+  }
+  const axis = pos.args.find(
+    (a): a is "lon" | "lat" => a === "lon" || a === "lat",
+  );
+  const offset = pos.args.find((a): a is number => typeof a === "number");
+  if (axis === undefined || offset === undefined || offset === 0) {
+    throw new Error(`malformed offset node: ${JSON.stringify(pos)}`);
+  }
+  return { axis, offset, coeff: 0 };
+}
+
+/** Extract the directional `{axis, offset, coeff}` terms from `replacement`. */
+function extractTerms(rule: rules.Rule): StencilTerm[] {
+  const repl = rule.replacement;
+  if (repl === undefined || !isOpNode(repl) || repl.op !== "+") {
+    throw new Error(
+      `centered_2nd_uniform_latlon expected a sum replacement op-tree, got ${JSON.stringify(repl)}`,
+    );
+  }
+  return repl.args.map((term) => {
+    if (!isOpNode(term) || term.op !== "*") {
+      throw new Error(`expected a scaled index term, got ${JSON.stringify(term)}`);
+    }
+    const [coeff, idx] = term.args;
+    if (!isOpNode(idx) || idx.op !== "index") {
+      throw new Error(`expected an index op as the second factor, got ${JSON.stringify(idx)}`);
+    }
+    // index args: [field, lat-pos, lon-pos]
+    const differenced = idx.args
+      .slice(1)
+      .map(axisOffset)
+      .filter((d): d is StencilTerm => d !== null);
+    if (differenced.length !== 1) {
+      throw new Error(
+        `each term must difference exactly one axis, got ${differenced.length}`,
+      );
+    }
+    return { axis: differenced[0].axis, offset: differenced[0].offset, coeff };
+  });
+}
+
+function findTerm(
+  terms: StencilTerm[],
   axis: string,
   offset: number,
-): rules.RuleStencilEntry {
-  for (const entry of flatStencil(rule)) {
-    const sel = entry.selector as rules.RuleSelector;
-    if (sel.axis === axis && sel.offset === offset) return entry;
+): StencilTerm {
+  const found = terms.find((t) => t.axis === axis && t.offset === offset);
+  if (!found) {
+    throw new Error(`replacement term for axis=${axis} offset=${offset} not found`);
   }
-  throw new Error(`stencil entry for axis=${axis} offset=${offset} not found`);
+  return found;
 }
 
 describe("centered_2nd_uniform_latlon rule eval cross-binding conformance", () => {
@@ -144,12 +201,13 @@ describe("centered_2nd_uniform_latlon rule eval cross-binding conformance", () =
     }
   });
 
-  it("evaluates each stencil coefficient to match the golden", () => {
+  it("evaluates each directional coefficient to match the golden", () => {
     const dlon = (2 * Math.PI) / fixture.grid.nlon;
     const dlat = Math.PI / fixture.grid.nlat;
 
+    const terms = extractTerms(rule);
     for (const key of fixture.stencil_order) {
-      const entry = findStencil(rule, key.axis, key.offset);
+      const entry = findTerm(terms, key.axis, key.offset);
       const tag = tagFor(key);
       const expected = golden.coeffs[tag];
       expect(
@@ -175,20 +233,20 @@ describe("centered_2nd_uniform_latlon rule eval cross-binding conformance", () =
     }
   });
 
-  it("rule structural shape matches the dsc-8ad contract", () => {
+  it("rule structural shape matches the migrated (esd-t4h) contract", () => {
     expect(rule.family).toBe("finite_difference");
     expect(rule.grid_family).toBe("latlon");
     expect(rule.combine).toBe("+");
-    const stencil = flatStencil(rule);
-    expect(stencil.length).toBe(4);
-    const axes = new Set(
-      stencil.map((e) => (e.selector as rules.RuleSelector).axis),
-    );
+    // Migrated off `stencil` to a closed `replacement` op-tree that sums four
+    // directional terms (lon±1, lat±1).
+    expect(rule.stencil).toBeUndefined();
+    expect(rule.replacement).toBeDefined();
+    const terms = extractTerms(rule);
+    expect(terms.length).toBe(4);
+    const axes = new Set(terms.map((t) => t.axis));
     expect(axes.has("lon")).toBe(true);
     expect(axes.has("lat")).toBe(true);
-    const offsets = new Set(
-      stencil.map((e) => (e.selector as rules.RuleSelector).offset),
-    );
+    const offsets = new Set(terms.map((t) => t.offset));
     expect(offsets.has(-1)).toBe(true);
     expect(offsets.has(1)).toBe(true);
   });

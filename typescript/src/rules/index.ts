@@ -12,7 +12,7 @@
  * under `<repo>/discretizations/<family>/*.json`.
  */
 
-import { evaluate as essEvaluate } from "earthsci-toolkit";
+import { evaluateExpression as essEvaluate } from "earthsci-toolkit";
 import type { Bindings, ExpressionNode } from "./types.js";
 
 type EssExpr = Parameters<typeof essEvaluate>[0];

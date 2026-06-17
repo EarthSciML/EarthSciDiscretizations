@@ -74,7 +74,12 @@ function closeRel(a: number, b: number, tol = REL_TOL): boolean {
   return Math.abs(a - b) <= tol * scale;
 }
 
-const METRIC_NAMES: LatLonMetricName[] = [
+// The tensor metrics carried as `metric_<name>` fields on the golden. `"area"`
+// is a `LatLonMetricName` too but is verified separately via `cell_area`
+// against the golden's `area` field, so exclude it here — otherwise
+// `golden[`metric_${name}`]` could index a non-existent `metric_area` key
+// (TS7053).
+const METRIC_NAMES: Exclude<LatLonMetricName, "area">[] = [
   "J",
   "g_lonlon",
   "g_latlat",

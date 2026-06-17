@@ -74,15 +74,27 @@ describe("rule loader", () => {
           grid_family: "latlon",
           combine: "+",
           accuracy: "O(h^2)",
-          stencil: [
-            {
-              selector: { kind: "latlon", axis: "lon", offset: -1 },
-              coeff: {
-                op: "/",
-                args: [-1, { op: "*", args: [2, "R", "cos_lat", "dlon"] }],
+          // esd-t4h: the catalog rule was migrated off `stencil` to a closed
+          // `replacement` op-tree; mirror that shape so the loader passthrough
+          // test matches the real on-disk contract.
+          replacement: {
+            op: "+",
+            args: [
+              {
+                op: "*",
+                args: [
+                  {
+                    op: "/",
+                    args: [-1, { op: "*", args: [2, "R", "cos_lat", "dlon"] }],
+                  },
+                  {
+                    op: "index",
+                    args: ["$u", "lat", { op: "+", args: ["lon", -1] }],
+                  },
+                ],
               },
-            },
-          ],
+            ],
+          },
         },
       },
     });
@@ -95,6 +107,7 @@ describe("rule loader", () => {
     expect(rule).toBeDefined();
     expect(rule!.family).toBe("finite_difference");
     expect(rule!.grid_family).toBe("latlon");
-    expect(rule!.stencil.length).toBe(1);
+    expect(rule!.stencil).toBeUndefined();
+    expect(rule!.replacement).toBeDefined();
   });
 });

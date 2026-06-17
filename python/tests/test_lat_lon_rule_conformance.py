@@ -5,15 +5,20 @@ coefficient values matching the Julia reference golden in
 ``tests/conformance/rules/centered_2nd_uniform_latlon/`` within the tolerance
 specified in ``fixtures.json``.
 
+The rule was migrated (esd-t4h) off the legacy ``stencil`` list to a single
+closed ``replacement`` op-tree; ``_extract_terms`` reconstructs the
+per-direction ``(axis, offset, coeff)`` triples from that AST so the
+coefficient math below still verifies the real current contract.
+
 Two levels of coverage:
 
 1. ``coefficient_cases`` — direct bindings-to-coefficient verification.
    Each case provides explicit scalar bindings; ``eval_coeff`` is called once
-   per stencil entry and compared against the Julia reference value.
+   per directional replacement term and compared against the Julia reference.
 
 2. ``stencil_cases`` — whole-stencil application on a real lat-lon grid.
-   Per-cell bindings are derived from the grid accessor; the stencil sum
-   applied to ``f(lon, lat) = sin(lon)*cos(lat)`` is compared against the
+   Per-cell bindings are derived from the grid accessor; the directional-term
+   sum applied to ``f(lon, lat) = sin(lon)*cos(lat)`` is compared against the
    Julia reference result.
 """
 
@@ -53,10 +58,69 @@ def _load_rule() -> dict:
     return data["discretizations"][_SPEC["rule"]]
 
 
-def _selector_key(selector: dict) -> str:
-    """Map a selector dict to its golden coefficient key (e.g. ``'lon_m1'``)."""
-    axis = selector["axis"]
-    offset = int(selector["offset"])
+# ---------------------------------------------------------------------------
+# Replacement-AST term extraction (esd-t4h schema)
+# ---------------------------------------------------------------------------
+#
+# The rule was migrated off the legacy ``stencil`` list (entries carrying a
+# ``selector`` axis/offset and a ``coeff`` AST) to a single closed
+# ``replacement`` op-tree. ``centered_2nd_uniform_latlon`` lowers ``grad(u)``
+# to a sum of four directional terms:
+#
+#   replacement = {op: "+", args: [term, term, term, term]}
+#   term        = {op: "*", args: [<coeff-AST>, {op: "index",
+#                  args: ["$u", <lat-pos>, <lon-pos>]}]}
+#
+# Each ``<pos>`` is either the bare axis name ("lat"/"lon") or an offset node
+# ``{op: "+", args: [<axis>, <int-offset>]}``. We reconstruct the per-direction
+# ``(axis, offset, coeff)`` triples the conformance math needs by walking the
+# index args — this is the real current contract, not a removed ``stencil``
+# field.
+
+_AXES = ("lat", "lon")
+
+
+def _axis_offset(pos: object) -> tuple[str, int] | None:
+    """Return ``(axis, offset)`` for an index position, or ``None`` if it is a
+    bare (zero-offset) axis reference."""
+    if isinstance(pos, str):
+        # Bare axis name → offset 0 (the non-differenced axis of this term).
+        return None
+    if isinstance(pos, dict) and pos.get("op") == "+":
+        args = pos["args"]
+        axis = next((a for a in args if isinstance(a, str) and a in _AXES), None)
+        offset = next((a for a in args if isinstance(a, int)), None)
+        if axis is not None and offset is not None and offset != 0:
+            return axis, int(offset)
+    raise AssertionError(f"unrecognized index position node: {pos!r}")
+
+
+def _extract_terms(rule: dict) -> list[dict]:
+    """Extract directional ``{axis, offset, coeff}`` triples from the
+    ``replacement`` op-tree (the post-migration analogue of the old
+    ``stencil`` entries)."""
+    repl = rule["replacement"]
+    assert repl["op"] == "+", f"expected a sum replacement, got op={repl['op']!r}"
+    terms: list[dict] = []
+    for term in repl["args"]:
+        assert term["op"] == "*", f"expected a scaled index term, got op={term['op']!r}"
+        coeff, idx = term["args"]
+        assert isinstance(idx, dict) and idx.get("op") == "index", (
+            f"expected the second factor to be an index op, got {idx!r}"
+        )
+        # index args: [field, lat-pos, lon-pos]
+        _field, lat_pos, lon_pos = idx["args"]
+        differenced = [ao for ao in (_axis_offset(lat_pos), _axis_offset(lon_pos)) if ao]
+        assert len(differenced) == 1, (
+            f"each term must difference exactly one axis, got {differenced!r}"
+        )
+        axis, offset = differenced[0]
+        terms.append({"axis": axis, "offset": offset, "coeff": coeff})
+    return terms
+
+
+def _selector_key(axis: str, offset: int) -> str:
+    """Map an (axis, offset) to its golden coefficient key (e.g. ``'lon_m1'``)."""
     suffix = "m1" if offset == -1 else "p1"
     return f"{axis}_{suffix}"
 
@@ -73,8 +137,13 @@ def test_coefficient_case(case_name: str) -> None:
     bindings = {k: float(v) for k, v in _COEFF_CASES[case_name]["bindings"].items()}
     golden_coeffs = _GOLDEN_COEFF[case_name]["coefficients"]
 
-    for entry in rule["stencil"]:
-        key = _selector_key(entry["selector"])
+    terms = _extract_terms(rule)
+    # All four directional terms (lon±1, lat±1) must be present and accounted
+    # for against the golden — guards against a replacement that silently drops
+    # or duplicates a directional contribution.
+    assert {_selector_key(t["axis"], t["offset"]) for t in terms} == set(golden_coeffs)
+    for entry in terms:
+        key = _selector_key(entry["axis"], entry["offset"])
         expected = float(golden_coeffs[key])
         got = eval_coeff(entry["coeff"], bindings)
         assert _close_rel(got, expected), (
@@ -138,10 +207,9 @@ def test_stencil_case(case_name: str) -> None:
         neighbors = grid.neighbors(j, i)
 
         stencil_sum = 0.0
-        for entry in rule["stencil"]:
-            sel = entry["selector"]
+        for entry in _extract_terms(rule):
             coeff = eval_coeff(entry["coeff"], bindings)
-            direction = _DIR_FOR_SELECTOR[(sel["axis"], int(sel["offset"]))]
+            direction = _DIR_FOR_SELECTOR[(entry["axis"], int(entry["offset"]))]
             nbr = neighbors[direction]
             assert nbr is not None, (
                 f"{case_name} ({j},{i}): {direction} neighbor is None (unexpected pole)"
