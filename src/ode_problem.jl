@@ -807,7 +807,9 @@ struct _UnstructuredBinding
 end
 
 # MPAS: coeff = dv_edge[e] / (dc_edge[e] * area_cell[c]); valence varies (5/6),
-# pad to mesh.max_edges; neighbour/edge tables are (max_edges, n_cells), 0 = pad.
+# read per cell from n_edges_on_cell. max_k = mesh.max_edges is only the column
+# allocation; the per-cell dynamic bound (Route A) stops at the real-neighbour
+# valence, so trailing columns are never iterated. Tables are (max_edges, n_cells).
 function _unstructured_binding(grid::MpasGrid)
     return _UnstructuredBinding(
         "cells_on_cell", "edges_on_cell", "n_edges_on_cell",
@@ -815,8 +817,9 @@ function _unstructured_binding(grid::MpasGrid)
     )
 end
 
-# DUO: coeff = dc_edge[e] / (dv_edge[e] * area_eff[c]); valence ≡ 3 (no padding,
-# closed icosahedral mesh). Neighbour/edge tables are (3, n_cells).
+# DUO: coeff = dc_edge[e] / (dv_edge[e] * area_eff[c]); valence ≡ 3 (closed
+# icosahedral mesh). The emitted n_edges_on_cell is the (uniform) real-neighbour
+# count 3. Neighbour/edge tables are (3, n_cells).
 function _unstructured_binding(::DuoGrid)
     return _UnstructuredBinding(
         "cell_neighbors", "edges_on_face", "",
@@ -824,9 +827,23 @@ function _unstructured_binding(::DuoGrid)
     )
 end
 
-# Build the padded (n_cells, max_k) neighbour + coeff const_arrays for a grid.
-# Returns Dict("cells_on_cell" => nbr, "coeff" => coeff), the names the rewritten
-# arrayop references. Slots beyond a cell's valence are zeroed in BOTH arrays.
+# Build the (n_cells, max_k) neighbour + coeff const_arrays for a grid, PLUS a
+# per-cell real-neighbour valence vector (Route A). Returns
+#   Dict("cells_on_cell" => nbr, "coeff" => coeff, "n_edges_on_cell" => valence)
+# the names the rewritten arrayop references.
+#
+# Route A drops the host-side constant-max-edges PADDING that Route B relied on:
+# the rewritten reduction's upper bound is the per-cell `index(n_edges_on_cell,i)`
+# (ESS evaluates it lazily per output cell), so a cell iterates ONLY its real
+# neighbours. To make that bound a simple `[1, valence]` range, the real
+# neighbours are COMPACTED into the leading slots `1..valence[c]`: any 0-sentinel
+# slot (open boundary edge with no neighbour, or a trailing padding column) is
+# skipped during the build, so it never occupies an iterated slot and can never
+# inject a spurious ghost `(u[0]-u[c])` Dirichlet-0 term. For closed meshes
+# (MPAS-global, DUO icosahedral) every slot is real and valence == the raw edge
+# count; for an open mesh valence is the genuine real-neighbour count.
+# The arrays are still allocated (n_cells, max_k); trailing columns beyond a
+# cell's valence remain zero but are NEVER read (the dynamic bound stops short).
 function _unstructured_const_arrays(grid)
     bind = _unstructured_binding(grid)
     ctables, scalar_arrs = _extract_connectivity(grid)
@@ -838,29 +855,32 @@ function _unstructured_const_arrays(grid)
     area = scalar_arrs[bind.area_arr]::Vector{Float64}
     num_edge = scalar_arrs[bind.num_edge_arr]::Vector{Float64}
     den_edge = scalar_arrs[bind.den_edge_arr]::Vector{Float64}
-    valence = isempty(bind.valence_table) ? nothing :
+    raw_valence = isempty(bind.valence_table) ? nothing :
         ctables[bind.valence_table]::Vector{Int}
 
     nbr = zeros(Float64, n_cells, max_k)
     coeff = zeros(Float64, n_cells, max_k)
+    valence = zeros(Float64, n_cells)   # real-neighbour count = the dynamic bound
     for c in 1:n_cells
-        kc = valence === nothing ? max_k : valence[c]
-        kc = min(kc, max_k)
+        kc = raw_valence === nothing ? max_k : min(raw_valence[c], max_k)
+        slot_out = 0
         for slot in 1:kc
             nb = nbr_src[slot, c]
             e = edge_src[slot, c]
             # A real slot must reference a real neighbour and a real edge; any
-            # 0-sentinel here (open boundary) is left as a zeroed padding slot so
-            # the term drops out (matches the imperative path, which never
-            # iterated absent slots — no spurious Dirichlet-0).
+            # 0-sentinel (open boundary, or padding) is dropped — compacted out
+            # so it never occupies an iterated leading slot.
             (nb >= 1 && e >= 1) || continue
-            nbr[c, slot] = Float64(nb)
-            coeff[c, slot] = num_edge[e] / (den_edge[e] * area[c])
+            slot_out += 1
+            nbr[c, slot_out] = Float64(nb)
+            coeff[c, slot_out] = num_edge[e] / (den_edge[e] * area[c])
         end
+        valence[c] = Float64(slot_out)
     end
     return Dict{String, AbstractArray{Float64}}(
         "cells_on_cell" => nbr,
         "coeff" => coeff,
+        "n_edges_on_cell" => valence,
     )
 end
 
@@ -975,14 +995,22 @@ function _rewrite_unstructured_arrayop!(mdisc::AbstractDict, grid)
             "op" => "*", "args" => Any[coeff_idx, operand_renamed]
         )
 
-        # Constant padded k-range [1, max_k]. (Rule had 0-based [0, valence-1];
-        # the const_arrays are built 1-based [cell, slot=1..max_k].)
+        # Per-cell DYNAMIC k-range [1, index(n_edges_on_cell, i)] (Route A): ESS
+        # evaluates the upper bound lazily per output cell from the
+        # `n_edges_on_cell` const_array (the cell's real-neighbour valence), so
+        # the reduction iterates ONLY real neighbours — NO host-side
+        # constant-max-edges padding. (Rule had 0-based [0, valence-1]; the
+        # const_arrays are compacted 1-based [cell, slot=1..valence].)
         ranges = get(red, "ranges", nothing)
         ranges isa AbstractDict || (ranges = Dict{String, Any}(); red["ranges"] = ranges)
-        ranges[k_name] = Any[1, bind.max_k]
+        ranges[k_name] = Any[
+            1,
+            Dict{String, Any}("op" => "index",
+                              "args" => Any["n_edges_on_cell", i_name]),
+        ]
 
-        # The inner arrayop now references only the two const_arrays.
-        red["args"] = Any["coeff", "cells_on_cell"]
+        # The inner arrayop now references only the three const_arrays.
+        red["args"] = Any["coeff", "cells_on_cell", "n_edges_on_cell"]
         rewrote = true
     end
     return rewrote
