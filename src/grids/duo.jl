@@ -623,3 +623,110 @@ Per-cell neighbour count (always `3` for triangular meshes).
 function cell_valence(g::DuoGrid)
     return fill(3, size(g.cell_neighbors, 2))
 end
+
+# Tier-U edge geometry. The trait contract (ESS `abstract_grid.jl`: an
+# unstructured grid "must provide `cell_neighbor_table`, `cell_valence`,
+# `edge_length`, `cell_distance`") asks for per-edge arrays, parallel to
+# `g.edges` (`(2, n_edges)` sorted vertex pairs). Mirrors `MpasGrid`'s
+# `dv_edge`/`dc_edge`: `edge_length` is the great-circle arc between the
+# edge's two vertices; `cell_distance` is the great-circle arc between the
+# centers of the two cells sharing the edge.
+
+# Map each edge index `e` (column of `g.edges`) to the (≤ 2) incident cell
+# indices. Built directly from `faces` so the result stays edge-aligned with
+# the stored `g.edges` array regardless of build order. Memoized.
+function _duo_edge_cells(g::DuoGrid)
+    return _grid_memo!(g, :edge_cells) do
+        F = g.faces
+        cells_by_key = Dict{Tuple{Int, Int}, Tuple{Int, Int}}()
+        for c in 1:size(F, 2)
+            v1 = F[1, c]; v2 = F[2, c]; v3 = F[3, c]
+            for (a, b) in ((v2, v3), (v3, v1), (v1, v2))
+                key = a < b ? (a, b) : (b, a)
+                prev = get(cells_by_key, key, (0, 0))
+                # First cell seen on this edge fills slot 1; second fills slot 2.
+                cells_by_key[key] = prev[1] == 0 ? (c, 0) : (prev[1], c)
+            end
+        end
+        Ne = size(g.edges, 2)
+        out = Matrix{Int}(undef, 2, Ne)
+        @inbounds for e in 1:Ne
+            key = (g.edges[1, e], g.edges[2, e])
+            cc = get(cells_by_key, key, (0, 0))
+            out[1, e] = cc[1]
+            out[2, e] = cc[2]
+        end
+        return out
+    end
+end
+
+# Great-circle arc (on the sphere of radius R) between two stored points,
+# each given as a column of an `R`-scaled cartesian array. Normalizes to the
+# unit sphere first, so the result is `R · central_angle`.
+@inline function _duo_arc(g::DuoGrid{T}, P::AbstractMatrix{T}, i::Int, j::Int) where {T}
+    R = g.R
+    ax = P[1, i] / R; ay = P[2, i] / R; az = P[3, i] / R
+    bx = P[1, j] / R; by = P[2, j] / R; bz = P[3, j] / R
+    d = clamp(ax * bx + ay * by + az * bz, -one(T), one(T))
+    return R * acos(d)
+end
+
+"""
+    edge_length(g::DuoGrid) -> Vector
+
+Great-circle arc length of each mesh edge (vertex-to-vertex), shape
+`(n_edges,)`, edge-aligned with `g.edges`. Units follow `R`.
+"""
+function edge_length(g::DuoGrid{T}) where {T}
+    return _grid_memo!(g, :edge_length) do
+        Ne = size(g.edges, 2)
+        out = Vector{T}(undef, Ne)
+        @inbounds for e in 1:Ne
+            out[e] = _duo_arc(g, g.vertices, g.edges[1, e], g.edges[2, e])
+        end
+        return out
+    end
+end
+
+"""
+    edge_length(g::DuoGrid, e::Integer) -> T
+
+Great-circle arc length of edge `e` (vertex-to-vertex).
+"""
+function edge_length(g::DuoGrid, e::Integer)
+    (1 <= e <= size(g.edges, 2)) ||
+        throw(BoundsError("duo: edge index $e out of range 1:$(size(g.edges, 2))"))
+    return _duo_arc(g, g.vertices, g.edges[1, e], g.edges[2, e])
+end
+
+"""
+    cell_distance(g::DuoGrid) -> Vector
+
+Great-circle distance between the centers of the two cells sharing each
+edge, shape `(n_edges,)`, edge-aligned with `g.edges`. On a closed
+icosahedral mesh every edge has two incident cells. A boundary edge with a
+single incident cell (not reachable on a closed mesh) yields `0`.
+"""
+function cell_distance(g::DuoGrid{T}) where {T}
+    return _grid_memo!(g, :cell_distance) do
+        ec = _duo_edge_cells(g)
+        Ne = size(g.edges, 2)
+        out = Vector{T}(undef, Ne)
+        @inbounds for e in 1:Ne
+            c1 = ec[1, e]; c2 = ec[2, e]
+            out[e] = (c1 != 0 && c2 != 0) ? _duo_arc(g, g.cell_cart, c1, c2) : zero(T)
+        end
+        return out
+    end
+end
+
+"""
+    cell_distance(g::DuoGrid, e::Integer) -> T
+
+Great-circle distance between the centers of the two cells sharing edge `e`.
+"""
+function cell_distance(g::DuoGrid, e::Integer)
+    (1 <= e <= size(g.edges, 2)) ||
+        throw(BoundsError("duo: edge index $e out of range 1:$(size(g.edges, 2))"))
+    return cell_distance(g)[e]
+end

@@ -165,3 +165,72 @@ end
         @test isapprox(sqrt(x^2 + y^2 + z^2), R; rtol = 1.0e-12)
     end
 end
+
+@testitem "DUO Tier-U edge_length: shape, positivity, scalar==bulk, analytic" setup = [DuoSetup] tags = [:grid, :duo, :trait] begin
+    # Level 0: all 30 icosahedron edges are congruent; each subtends a
+    # central angle acos(1/√5) ≈ 1.1071487 rad, so arc = R · that angle.
+    R = 6.371e6
+    g = grids.duo(loader = _builtin(0), R = R)
+    el = edge_length(g)
+    @test el isa AbstractVector
+    @test length(el) == n_edges(g)        # == 30
+    @test all(el .> 0)
+    expected = R * acos(1 / sqrt(5))
+    @test all(isapprox.(el, expected; rtol = 1.0e-12))
+    # Scalar form must agree with the bulk array, edge-by-edge.
+    for e in 1:n_edges(g)
+        @test edge_length(g, e) == el[e]
+    end
+    @test_throws BoundsError edge_length(g, 0)
+    @test_throws BoundsError edge_length(g, n_edges(g) + 1)
+    # Subdivision shortens edges: level-1 edges are < level-0 edges.
+    g1 = grids.duo(loader = _builtin(1), R = R)
+    @test maximum(edge_length(g1)) < expected
+end
+
+@testitem "DUO Tier-U cell_distance: shape, positivity, scalar==bulk, alignment" setup = [DuoSetup] tags = [:grid, :duo, :trait] begin
+    R = 6.371e6
+    g = grids.duo(loader = _builtin(1), R = R)
+    cd = cell_distance(g)
+    @test cd isa AbstractVector
+    @test length(cd) == n_edges(g)
+    # Closed mesh → every edge has two incident cells → all distances > 0.
+    @test all(cd .> 0)
+    for e in 1:n_edges(g)
+        @test cell_distance(g, e) == cd[e]
+    end
+    @test_throws BoundsError cell_distance(g, 0)
+    @test_throws BoundsError cell_distance(g, n_edges(g) + 1)
+    # Cross-check directly: cell_distance[e] is the great-circle arc between
+    # the centers of the two cells sharing edge e. Every (cell, neighbor)
+    # pair shares exactly one edge, so its center-to-center arc must appear
+    # in cd. Build the set of expected distances from cell_neighbors and
+    # confirm each matches some entry of cd (set equality up to multiplicity
+    # is checked via membership both ways).
+    Nc = n_cells(g)
+    function _arc(c1, c2)
+        a = g.cell_cart[:, c1] ./ R
+        b = g.cell_cart[:, c2] ./ R
+        return R * acos(clamp(a[1] * b[1] + a[2] * b[2] + a[3] * b[3], -1.0, 1.0))
+    end
+    expected = Float64[]
+    for c in 1:Nc, k in 1:3
+        nb = g.cell_neighbors[k, c]
+        if c < nb            # count each undirected pair (edge) once
+            push!(expected, _arc(c, nb))
+        end
+    end
+    @test length(expected) == n_edges(g)
+    sort!(expected)
+    @test all(isapprox.(sort(copy(cd)), expected; rtol = 1.0e-10))
+    # Edge-alignment: edge_length and cell_distance are both indexed by edge.
+    @test length(edge_length(g)) == length(cell_distance(g)) == n_edges(g)
+end
+
+@testitem "DUO Tier-U edge accessors honor Float32" setup = [DuoSetup] tags = [:grid, :duo, :trait] begin
+    g = grids.duo(loader = _builtin(1), R = 1.0f0, dtype = Float32)
+    @test eltype(edge_length(g)) === Float32
+    @test eltype(cell_distance(g)) === Float32
+    @test all(edge_length(g) .> 0)
+    @test all(cell_distance(g) .> 0)
+end
