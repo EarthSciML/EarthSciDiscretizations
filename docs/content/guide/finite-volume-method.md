@@ -1,4 +1,8 @@
-# Finite-Volume Method
+---
+title: "The finite-volume method"
+slug: "finite-volume-method"
+description: "Mathematical foundations of the FV method and how a rule's pattern match plus closed arrayop replacement encode an FV operator."
+---
 
 ## Overview
 
@@ -27,9 +31,7 @@ named coefficient table.
 For a vector field $\mathbf{F}$ over a cell with area $A$ and boundary
 $\partial A$, the divergence theorem reads
 
-```math
-\int_A \nabla \cdot \mathbf{F} \, dA = \oint_{\partial A} \mathbf{F} \cdot \hat{n} \, ds.
-```
+$$\int_A \nabla \cdot \mathbf{F} \, dA = \oint_{\partial A} \mathbf{F} \cdot \hat{n} \, ds.$$
 
 A rule that lowers `div(F)` is therefore expected to produce an `arrayop`
 whose body sums signed edge fluxes scaled by edge lengths and the inverse
@@ -39,18 +41,15 @@ cell area. The rule does not need a custom dispatcher to express this: the
 ## Worked example: `centered_2nd_uniform`
 
 The smallest rule in the catalog —
-`centered_2nd_uniform` (rule page:
-`docs/content/rules/centered_2nd_uniform.md` in the Hugo catalog site),
-landed in commit `7b26ffd` — is the canonical exemplar of the closed-AST
-lowering pattern. It targets `grad(u, dim=x)` on a uniform Cartesian axis.
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) — is the
+canonical exemplar of the closed-AST lowering pattern. It targets
+`grad(u, dim=x)` on a uniform Cartesian axis.
 
 ### (a) The PDE operator
 
 The continuous operator is the partial derivative
 
-```math
-\left(\frac{\partial u}{\partial x}\right)(x).
-```
+$$\left(\frac{\partial u}{\partial x}\right)(x).$$
 
 In §4.2 it is encoded as `{"op": "grad", "args": ["u"], "dim": "x"}`.
 
@@ -97,9 +96,7 @@ two-point difference:
 After substitution (`$u → u`, `$x → i`), the lowering at each interior
 cell reduces to
 
-```math
-\left(\frac{\partial u}{\partial x}\right)_i \approx \frac{u_{i+1} - u_{i-1}}{2\,\Delta x}.
-```
+$$\left(\frac{\partial u}{\partial x}\right)_i \approx \frac{u_{i+1} - u_{i-1}}{2\,\Delta x}.$$
 
 There is no `coeff` table, no `stencil[]` array, no per-host kernel: the
 arithmetic that yields the second-order centered difference is visible
@@ -115,7 +112,7 @@ concrete indices**. The lowered AST does not contain `bc:*` ops.
 
 | Domain BC | Index transformation applied to `$u[$x ± 1]` |
 |---|---|
-| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see the `periodic_bc` rule) |
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
 | `dirichlet` / `constant` | boundary cell reads the prescribed value |
 | `neumann` / `zero_gradient` | mirror in-range neighbor (clamp the index) |
 | `robin` | mixed coefficient row at the boundary |
@@ -132,22 +129,17 @@ matching rule fires against the corresponding §4.2 op". For example:
 
 - `grad(u, dim=x)` on a uniform Cartesian axis → `centered_2nd_uniform`
   → centered two-point difference (above).
-- `div(F^ξ, F^η)` on a cubed-sphere C-grid → a rule that lowers to an
-  `arrayop` summing edge-flux-times-edge-length and dividing by cell area.
-- `laplacian(φ)` on the cubed sphere → a rule whose `arrayop` encodes the
-  5-point orthogonal stencil plus the cross-metric correction terms (the
-  geometry lives in the body of the AST, not in a separate dispatch table).
+- `div(F)` on an Arakawa C-grid → a rule that lowers to an `arrayop`
+  summing edge-flux-times-edge-length and dividing by cell area (see
+  [`divergence_arakawa_c`]({{< ref "/rules/divergence_arakawa_c" >}})).
+- `laplacian(φ)` on a curvilinear (lat-lon) grid → a rule whose `arrayop`
+  encodes the orthogonal stencil plus the metric-correction terms (the
+  geometry lives in the body of the AST, not in a separate dispatch
+  table).
 
 In every case the *math* — the integral form, the metric tensor, the
 truncation error — is the motivation for the AST shape; the *authoring
 artifact* is just the AST.
-
-## Where to read more
-
-- [Operators](@ref) — the §4.2 op vocabulary you may use inside a `replacement`.
-- [Tutorial: Authoring a rule](@ref) — end-to-end walkthrough.
-- `esm-spec.md` §4.2 (operator vocabulary), §4.3 (array semantics),
-  §11.5 (BC types) for the definitive specification.
 
 ## C-grid staggering
 
@@ -158,22 +150,25 @@ operand shapes — which in turn come from the staggering:
 
 | Location | Symbol | Grid Size | Description |
 |:---------|:-------|:----------|:------------|
-| `CellCenter` | $(i, j)$ | $(N_c, N_c)$ | Scalar fields (tracer, pressure, temperature) |
-| `UEdge` | $(i+1/2, j)$ | $(N_c+1, N_c)$ | Normal velocity component in $\xi$-direction |
-| `VEdge` | $(i, j+1/2)$ | $(N_c, N_c+1)$ | Normal velocity component in $\eta$-direction |
-| `Corner` | $(i+1/2, j+1/2)$ | $(N_c+1, N_c+1)$ | Vorticity, stream function |
+| `CellCenter` | $(i, j)$ | $(N, N)$ | Scalar fields (tracer, pressure, temperature) |
+| `UEdge` | $(i+1/2, j)$ | $(N+1, N)$ | Normal velocity component in $\xi$-direction |
+| `VEdge` | $(i, j+1/2)$ | $(N, N+1)$ | Normal velocity component in $\eta$-direction |
+| `Corner` | $(i+1/2, j+1/2)$ | $(N+1, N+1)$ | Vorticity, stream function |
 
 A rule that produces an edge-quantity output gives an `output_idx` whose
 range matches the corresponding edge-staggered grid; one that consumes an
-edge quantity uses `index` into an array shaped that way.
+edge quantity uses `index` into an array shaped that way. See the
+[Arakawa grid family]({{< ref "/grids/arakawa" >}}) page for the full
+stagger contract.
 
 ## Ghost cells
 
-Inter-panel communication is handled through ghost cells. Each panel is
-padded with $N_g$ ghost layers on each side, filled from neighboring
-panels using the connectivity table and index transformations. This
-happens at the *grid* level, before any rule fires; rule lowerings see
-the ghosted arrays as ordinary inputs.
+Boundary and inter-domain communication is handled through ghost cells.
+A grid is padded with $N_g$ ghost layers on each side, filled from the
+declared boundary conditions (or, for unstructured/loader-backed grids,
+from the connectivity table). This happens at the *grid* level, before
+any rule fires; rule lowerings see the ghosted arrays as ordinary
+inputs.
 
 ## References
 
@@ -182,8 +177,15 @@ foundational works. Their algorithms motivate the *shape* of the AST
 lowerings; nothing in the rule files reproduces a host-language
 implementation of them.
 
-- Lin, S.-J. and R. B. Rood (1996). "Multidimensional Flux-Form Semi-Lagrangian Transport Schemes." *Monthly Weather Review*, 124(9), 2046--2070. — Dimensionally-split transport.
-- Colella, P. and P. R. Woodward (1984). "The Piecewise Parabolic Method (PPM) for gas-dynamical simulations." *Journal of Computational Physics*, 54(1), 174--201. — PPM reconstruction and monotonicity limiter.
-- Lin, S.-J. (2004). "A 'Vertically Lagrangian' Finite-Volume Dynamical Core for Global Models." *Monthly Weather Review*, 132(10), 2293--2307. — Vertically Lagrangian FV framework.
-- Putman, W. M. and S.-J. Lin (2007). "Finite-volume transport on various cubed-sphere grids." *Journal of Computational Physics*, 227(1), 55--78. — FV transport on cubed-sphere grids.
-- Ronchi, C., R. Iacono, and P. S. Paolucci (1996). "The 'Cubed Sphere': A New Method for the Solution of Partial Differential Equations in Spherical Geometry." *Journal of Computational Physics*, 124(1), 93--114. — Gnomonic cubed-sphere projection and metric tensors.
+- Lin, S.-J. and R. B. Rood (1996). "Multidimensional Flux-Form Semi-Lagrangian Transport Schemes." *Monthly Weather Review*, 124(9), 2046–2070. — Dimensionally-split transport.
+- Colella, P. and P. R. Woodward (1984). "The Piecewise Parabolic Method (PPM) for gas-dynamical simulations." *Journal of Computational Physics*, 54(1), 174–201. — PPM reconstruction and monotonicity limiter.
+- Lin, S.-J. (2004). "A 'Vertically Lagrangian' Finite-Volume Dynamical Core for Global Models." *Monthly Weather Review*, 132(10), 2293–2307. — Vertically Lagrangian FV framework.
+
+## Where to read more
+
+- [Operators]({{< ref "/guide/operators" >}}) — the §4.2 op vocabulary you
+  may use inside a `replacement`.
+- [Authoring a rule]({{< ref "/guide/authoring-a-rule" >}}) — end-to-end
+  walkthrough.
+- `esm-spec.md` §4.2 (operator vocabulary), §4.3 (array semantics),
+  §11.5 (BC types) for the definitive specification.

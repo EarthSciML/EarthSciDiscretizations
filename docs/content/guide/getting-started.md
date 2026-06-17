@@ -1,4 +1,8 @@
-# Getting started: solve a PDE
+---
+title: "Getting started: solve a PDE"
+slug: "getting-started"
+description: "From a PDE written as an .esm file to a solved ODEProblem: the build_ode_problem workflow exercised throughout the ESD test suite."
+---
 
 This page takes you from a partial differential equation, written as an
 `.esm` file, to a solved `ODEProblem`. It is the workflow exercised
@@ -16,7 +20,7 @@ time integrator. The intended solver dependency is
 
 ## A complete example (Path A)
 
-```@example getting_started
+```julia
 using EarthSciDiscretizations
 using OrdinaryDiffEqDefault: solve
 
@@ -156,41 +160,40 @@ sol = solve(prob; saveat = [0.0, 0.05])
 | Path | Grid families | Pipeline | IC handling |
 |---|---|---|---|
 | **A** (default) | `cartesian`, `vertical`, `arakawa`, `mpas`, `duo`, and the no-grid case | ESS rule engine: `discretize → ArrayOp → build_evaluator` | ICs are carried into `prob.u0` (see below) |
-| **B** (curvilinear) | `latlon`, `cubed_sphere` | ESS `PDESystem` pipeline: `load → flatten → PDESystem → discretize(sys, grid)` | Always produces a **zero IC** — inject it with `remake` (see below) |
+| **B** (curvilinear) | `latlon` | ESS `PDESystem` pipeline: `load → flatten → PDESystem → discretize(sys, grid)` | Produces a **zero IC** — inject your physical IC with `remake` (see below) |
 
 The example above is Path A. For a curvilinear family you set
-`family: "latlon"` or `family: "cubed_sphere"` in the GDD; the example
-GDDs are `test/fixtures/curvilinear/{latlon_diffusion,cubed_sphere_transport}.gdd.json`,
-e.g.:
+`family: "latlon"` in the GDD; the example GDD is
+`test/fixtures/curvilinear/latlon_diffusion.gdd.json`, e.g.:
 
 ```json
-{ "grids": { "panel": { "family": "cubed_sphere", "Nc": 8, "R": 1.0 } } }
+{ "grids": { "sphere": { "family": "latlon", "R": 1.0,
+    "spatial": {
+      "lon": {"min": -3.14159, "max": 3.14159, "grid_spacing": 1.0472},
+      "lat": {"min": -1.5708,  "max": 1.5708,  "grid_spacing": 0.5236}
+    } } } }
 ```
 
-### Path B needs `remake` for the initial condition
+`build_ode_problem` on that GDD returns a solvable `ODEProblem` whose
+state vector has one entry per cell (here `nlon=6 × nlat=6 = 36`), as
+exercised in `test/test_ode_problem_curvilinear.jl`.
 
-Path B always returns a problem whose initial condition is zero (there
-are no spatial BCs in the `PDESystem`). To run it, build your physical
-IC vector and swap it in with `SciMLBase.remake`, which preserves MTK's
-initialization data while replacing `u0`:
+### Path B and the initial condition
+
+The Path-B `PDESystem` pipeline produces a problem whose initial
+condition is **zero** (the spatial BCs are baked into the discretized
+operator, not the IC vector). To run it with a physical initial field,
+build your IC vector over the grid's cell centres and swap it in with
+`SciMLBase.remake`, which preserves MTK's initialization data while
+replacing `u0`:
 
 ```julia
-using EarthSciDiscretizations: build_ode_problem, CubedSphereGrid, cell_centers
-using OrdinaryDiffEqDefault: solve
 import SciMLBase
-
-prob_template, _ = build_ode_problem(esm; grid_ref = gdd)   # zero IC
-
-# Build the physical IC (e.g. a cosine bell over cell centres) …
-u0 = my_initial_condition(CubedSphereGrid(Nc; R = R))
-
-prob = SciMLBase.remake(prob_template; u0 = u0)             # inject the IC
+prob_template, var_map = build_ode_problem(esm; grid_ref = gdd)  # zero IC
+u0 = my_initial_condition(...)                                   # length == length(prob_template.u0)
+prob = SciMLBase.remake(prob_template; u0 = u0)                  # inject the IC
 sol  = solve(prob; reltol = 1e-6, abstol = 1e-8, save_everystep = false)
 ```
-
-The solid-body-rotation benchmark in
-`test/integration_cases/cubed_sphere_advection.jl` is the full worked
-Path-B example.
 
 ## Initial conditions
 
@@ -228,16 +231,20 @@ per-side block looks like:
 }
 ```
 
-!!! warning "Which BC kinds work today"
-    As of `origin/main`, **periodic** and **zero-value Dirichlet** BCs are
-    supported end-to-end (see the `bc_ic` goldens in
-    `test/test_bc_ic_goldens.jl`). **Nonzero-Neumann** and **Robin** BCs
-    are *not yet supported* — `build_ode_problem` raises
-    `EarthSciSerialization.RuleEngineError` (code `E_BC_UNSUPPORTED`) for
-    them. The analytic ghost formulas are documented in
-    `discretizations/finite_difference/{neumann_bc,robin_bc}.json` and the
-    goldens carry the expected `du` so the tests flip from
-    `@test_throws` to a numeric check once ESS gains support.
+<div class="callout callout-pending">
+<strong>Which BC kinds work today.</strong>
+As of the current trunk, <strong>periodic</strong> and
+<strong>zero-value Dirichlet</strong> BCs are supported end-to-end (see
+the <code>bc_ic</code> goldens in <code>test/test_bc_ic_goldens.jl</code>).
+<strong>Nonzero-Neumann</strong> and <strong>Robin</strong> BCs are
+<em>not yet supported</em> — <code>build_ode_problem</code> raises
+<code>EarthSciSerialization.RuleEngineError</code> (code
+<code>E_BC_UNSUPPORTED</code>) for them. The analytic ghost formulas are
+documented in
+<code>discretizations/finite_difference/{neumann_bc,robin_bc}.json</code>
+and the goldens carry the expected <code>du</code> so the tests flip from
+<code>@test_throws</code> to a numeric check once ESS gains support.
+</div>
 
 ## Integral / PIDE terms
 
@@ -258,7 +265,12 @@ for linear integrands. See the PIDE test in
 
 ## Where to go next
 
-- [Finite-Volume Method](@ref) — how a rule's pattern match + closed `arrayop` replacement encode an operator.
-- [Operators](@ref) — the closed §4.2 op vocabulary that every rule replacement uses.
-- [Tutorial: Authoring a rule](@ref) — write your own discretization rule.
-- [`GRIDS_API.md`](https://github.com/EarthSciML/EarthSciDiscretizations.jl/blob/main/docs/GRIDS_API.md) — the grid families and their constructor options.
+- [The finite-volume method]({{< ref "/guide/finite-volume-method" >}}) —
+  how a rule's pattern match + closed `arrayop` replacement encode an
+  operator.
+- [Operators]({{< ref "/guide/operators" >}}) — the closed §4.2 op
+  vocabulary that every rule replacement uses.
+- [Authoring a rule]({{< ref "/guide/authoring-a-rule" >}}) — write your
+  own discretization rule.
+- [`GRIDS_API.md`]({{< param repoURL >}}/blob/main/docs/GRIDS_API.md) — the
+  grid families and their constructor options.

@@ -104,17 +104,17 @@ The rule JSON has four pieces:
   one rule file per pattern (the catalog favors small, single-purpose
   rules).
 - **`grid_family`** — exactly one of `cartesian`, `vertical`, `latlon`,
-  `cubed_sphere`, `mpas`, `duo`. The selector `kind` inside `stencil`
-  entries is per-family; see
+  `arakawa`, `unstructured` (the MPAS/DUO Voronoi families). The selector
+  `kind` inside `stencil` entries is per-family; see
   [`discretizations/SELECTOR_KINDS.md`]({{< param repoURL >}}/blob/main/discretizations/SELECTOR_KINDS.md)
   decision #1 for why we did *not* go structural.
 - **`combine`** — how the per-neighbor contributions reduce to the
   discrete operator. Almost always `+`.
 - **`stencil[].selector`** — `{ kind, axis, offset }` for structured 1D
   rules. For MPAS use `kind: "indirect"` or `kind: "reduction"` (see
-  `SELECTOR_KINDS.md` decisions #6–#8). For 2D in-panel rules
-  (`covariant_laplacian_cubed_sphere`) each entry carries a `selectors`
-  array.
+  `SELECTOR_KINDS.md` decisions #6–#8). For 2D structured rules
+  (`weno5_advection_2d`) each entry carries a `selectors` array (one
+  selector per axis).
 - **`stencil[].coeff`** — an `ExpressionNode` AST. Available bindings
   depend on the grid family: cartesian binds `dx`/`h`, latlon binds
   `R`, `dlon`, `dlat`, `cos_lat`, etc. The full per-family symbol set is
@@ -315,9 +315,9 @@ If your rule ships a `monotonicity/` fixture (Layer B′), also add it to
 
 > **No catalog row to edit.** The rule manifest `docs/rule-catalog.md`
 > is **generated** from `discretizations/` by
-> `docs/generate_rule_catalog.jl` at doc-build time and is gitignored —
-> do not hand-edit or commit it. Adding your rule JSON is enough; the
-> generator picks it up automatically.
+> `docs/generate_rule_catalog.jl` and is gitignored — do not hand-edit or
+> commit it. Adding your rule JSON is enough; the generator picks it up
+> automatically.
 
 1. **Hugo page.** Add `docs/content/rules/<rule_name>.md`. Use
    [`docs/content/rules/centered_2nd_uniform.md`]({{< param repoURL >}}/blob/main/docs/content/rules/centered_2nd_uniform.md)

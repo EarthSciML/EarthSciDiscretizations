@@ -9,7 +9,10 @@ catalog, but for ESD's discretization rules and grid families.
 docs/
 ├── hugo.toml                    site config (theme-less; layouts inline)
 ├── content/
-│   ├── _index.md                home page
+│   ├── _index.md                home page (catalog browser)
+│   ├── guide/
+│   │   ├── _index.md            user + authoring guide index
+│   │   └── *.md                 getting-started, FV method, operators, authoring
 │   ├── grids/
 │   │   ├── _index.md            section index
 │   │   └── <family>.md          one page per grid family
@@ -26,9 +29,11 @@ docs/
         └── rules/<rule>-{stencil,convergence}.png
 ```
 
-The Documenter.jl site (under `src/` with `make.jl`) is a sibling — Hugo
-reads only `content/`, `layouts/`, `static/`, and `data/`, so the two
-docsets coexist without conflict.
+Hugo is the single source of truth for the doc site — it reads `content/`,
+`layouts/`, `static/`, and `data/`. (A legacy Documenter.jl site under
+`docs/src/` with `docs/make.jl` was retired; its user-guide content moved
+into `content/guide/`.) The rule manifest `docs/rule-catalog.md` is
+generated standalone by `docs/generate_rule_catalog.jl` and is gitignored.
 
 ## Build
 

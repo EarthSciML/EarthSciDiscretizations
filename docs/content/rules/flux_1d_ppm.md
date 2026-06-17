@@ -90,7 +90,7 @@ The full machine-readable AST lives in
 | Binding | Resolved by |
 |---|---|
 | `$q` | cell-averaged scalar field, ghost-extended by `Ng = 3` along the stencil axis |
-| `$c` | per-face Courant number `c_{i+1/2} = u_{i+1/2}·dt/dx` (uniform Cartesian) or via the cubed-sphere panel-boundary-aware accessor (`_get_courant_xi/_get_courant_eta`) |
+| `$c` | per-face Courant number `c_{i+1/2} = u_{i+1/2}·dt/dx` (uniform Cartesian) |
 | `$v` | per-face velocity `v_{i+1/2}` |
 
 The face-staggered `$c` and `$v` follow the same per-face binding contract
@@ -120,15 +120,13 @@ C-grid).
 
 ## Convergence
 
-Numeric coverage today lives in the canonical Julia tests
-[`test/test_transport_1d.jl`]({{< param repoURL >}}/blob/main/test/test_transport_1d.jl)
-and
-[`test/test_transport_2d.jl`]({{< param repoURL >}}/blob/main/test/test_transport_2d.jl)
-(constant-field, linearity, conservation, and cubed-sphere advection
-checks for the former `flux_1d_ppm!` and `flux_1d_ppm_arrayop` operators,
-now retired), and the
-DCMIP-style cubed-sphere advection integration case in
-[`test/integration_cases/cubed_sphere_advection.jl`]({{< param repoURL >}}/blob/main/test/integration_cases/cubed_sphere_advection.jl).
+Numeric coverage today lives in the rule's own test
+[`test/test_flux_1d_ppm_rule.jl`]({{< param repoURL >}}/blob/main/test/test_flux_1d_ppm_rule.jl),
+which exercises the closed-form face flux (positive- and negative-Courant
+cases, CW84 limiter inactive and active). The former imperative
+`flux_1d_ppm!` / `flux_1d_ppm_arrayop` operators and their cubed-sphere
+transport tests were retired (operator-porting campaign and the
+cubed-sphere grid retirement).
 
 The hand-pinned single-face fixture at
 [`fixtures/canonical/`]({{< param repoURL >}}/blob/main/discretizations/finite_volume/flux_1d_ppm/fixtures/canonical)
@@ -136,7 +134,7 @@ documents the closed-form face flux on a smooth sinusoidal profile
 (positive- and negative-Courant cases; CW84 limiter inactive); the same
 values are exercised inline in
 [`test/test_flux_1d_ppm_rule.jl`]({{< param repoURL >}}/blob/main/test/test_flux_1d_ppm_rule.jl)
-against `_ppm_limit_cw84_sym` + the closed-form Courant integral.
+against the closed-form CW84 limiter AST + the closed-form Courant integral.
 
 <div class="callout callout-pending">
 <strong>Convergence plot pending fixture activation.</strong>
@@ -164,6 +162,7 @@ plot is suppressed.
   (1996) MWR.
 - First-order sibling: [`lax_friedrichs_flux`]({{< ref "/rules/lax_friedrichs_flux" >}})
   (`F_{i+1/2} = max(c,0)·q_i + min(c,0)·q_{i+1}`).
-- 2D cubed-sphere PPM transport sibling pending separate beads
-  (catalog rows `fv3_lin_rood_advection` and
-  `cam5_fv_ppm_reconstruction`).
+- Shares its edge interpolation with
+  [`ppm_reconstruction`]({{< ref "/rules/ppm_reconstruction" >}}) and its
+  monotonicity limiter with
+  [`vertical_remap`]({{< ref "/rules/vertical_remap" >}}).

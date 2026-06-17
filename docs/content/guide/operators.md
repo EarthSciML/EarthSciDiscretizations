@@ -1,4 +1,8 @@
-# Operators
+---
+title: "Operators"
+slug: "operators"
+description: "The closed §4.2 op vocabulary that every discretization-rule replacement uses, and the off-spec ops that are forbidden."
+---
 
 ## The closed authoring vocabulary
 
@@ -99,15 +103,15 @@ tree-walk evaluator).
 The closed-AST lowerings produced by the catalog satisfy the same basic
 invariants any operator on arrays must. The catalog rules are evaluated
 through the ESS rule engine via `build_ode_problem` (see
-[Getting started: solve a PDE](@ref)) — there are
-no named Julia operator callables to invoke directly. The example below
-builds a real catalog rule (`centered_2nd_deriv_uniform`, the discrete
-Laplacian) into an `ODEProblem` and confirms the basic invariant that
-the discrete operator annihilates a constant field.
+[Getting started: solve a PDE]({{< ref "/guide/getting-started" >}})) —
+there are no named Julia operator callables to invoke directly. The
+example below builds a real catalog rule (`centered_2nd_deriv_uniform`,
+the discrete Laplacian) into an `ODEProblem` and confirms the basic
+invariant that the discrete operator annihilates a constant field.
 
 ### A constant field has zero discrete second derivative
 
-```@example ops
+```julia
 using EarthSciDiscretizations
 
 repo = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -126,9 +130,14 @@ println("  Size: $(size(du))")
 println("  Max absolute value: $(maximum(abs.(du)))")
 ```
 
+The discrete second derivative of a constant field is zero (to machine
+precision) — the centered Laplacian stencil sums to zero.
+
 ## Where to read more
 
-- [Finite-Volume Method](@ref) — how a rule's pattern match and closed
-  `arrayop` replacement encode an FV operator.
-- [Tutorial: Authoring a rule](@ref) — end-to-end walkthrough.
+- [The finite-volume method]({{< ref "/guide/finite-volume-method" >}}) —
+  how a rule's pattern match and closed `arrayop` replacement encode an
+  FV operator.
+- [Authoring a rule]({{< ref "/guide/authoring-a-rule" >}}) — end-to-end
+  walkthrough.
 - `esm-spec.md` §4.2 (operator vocabulary), §4.3 (array semantics).

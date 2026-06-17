@@ -11,7 +11,6 @@
 #
 # Usage:
 #   scripts/setup_polecat_env.sh                # resolves into ./Project.toml's env
-#   JULIA_PROJECT=docs scripts/setup_polecat_env.sh   # resolves into docs/Project.toml's env
 #   EARTHSCI_SERIALIZATION_REV=abc123 scripts/setup_polecat_env.sh   # pin URL fallback
 #
 # After this runs, `julia --project=$JULIA_PROJECT -e 'using EarthSciSerialization'` works.

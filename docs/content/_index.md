@@ -11,9 +11,9 @@ grid family sources under
 [`src/grids/`]({{< param repoURL >}}/tree/main/src/grids). It answers
 "what rules and grids exist." To learn **how to use ESD** — going from a
 PDE to a solved `ODEProblem` with `build_ode_problem`, the grid
-constructors, and the operator vocabulary — see the companion
-**[Julia package documentation](https://EarthSciML.github.io/EarthSciDiscretizations.jl/)**
-(start with its *Getting started: solve a PDE* page).
+constructors, and the operator vocabulary — see the
+**[Guide]({{< ref "/guide" >}})** (start with
+[Getting started: solve a PDE]({{< ref "/guide/getting-started" >}})).
 
 Each **grid family** page describes the topology of a supported grid
 (connectivity, coordinates, metric tensor) and shows a visualization of a

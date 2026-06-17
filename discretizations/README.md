@@ -39,7 +39,7 @@ See `../docs/REPO_LAYOUT.md` for the governing convention.
 
 **Do NOT:**
 - Commit `../docs/rule-catalog.md` — it is **generated** by `../docs/generate_rule_catalog.jl`
-  at doc-build time and is gitignored. Running `julia --project=docs docs/make.jl` regenerates
+  and is gitignored. Running `julia --project=. docs/generate_rule_catalog.jl` regenerates
   it; do not hand-edit or commit it.
 - Edit `../test/test_esd_walker.jl` — the walker discovers rules and fixture files
   **dynamically** via `load_rules`. Adding a rule JSON requires no walker edit.

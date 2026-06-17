@@ -1,12 +1,15 @@
-# Tutorial: Authoring a rule
+---
+title: "Authoring a rule"
+slug: "authoring-a-rule"
+description: "Conceptual closed-AST walkthrough for writing a new discretization rule: pattern-match a §4.2 PDE operator, lower it to a closed arrayop, delegate BCs to the domain, and validate with Layer-A/Layer-B fixtures."
+---
 
-This tutorial walks through writing a new discretization rule end-to-end
+This guide walks through writing a new discretization rule end-to-end
 in the closed-AST lowering pattern. The running example is
-`centered_2nd_uniform` (rule page: `docs/content/rules/centered_2nd_uniform.md`
-in the Hugo catalog site) — the
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) — the
 two-point centered finite difference for ∂u/∂x on a uniform Cartesian
 axis. It is the smallest rule in the catalog that exercises every step,
-and it is currently the canonical linear exemplar (commit `7b26ffd`).
+and it is the canonical linear exemplar.
 
 By the end you will have:
 
@@ -17,6 +20,12 @@ By the end you will have:
 4. Validated the rule with a Layer-A canonical-form fixture.
 5. Set up the Layer-B convergence sweep, which runs against the
    closed-AST lowering for supported topologies.
+
+For the full repository-infrastructure version of this workflow (paths,
+the three CI layers, walker registration, the staged
+`applicable: false → true` landing), see the
+[Add a new discretization rule]({{< ref "/tutorials/add-a-rule" >}})
+contributor tutorial.
 
 ## Step 1 — Match a §4.2 PDE operator
 
@@ -78,10 +87,10 @@ For the centered difference, the body is `(u[$x+1] - u[$x-1]) / (2·dx)`:
 A few authoring rules that follow from "stay in the §4.2 vocabulary":
 
 - **No scheme-specific kernels.** Every `op` in the body is one of the
-  §4.2 ops listed in [Operators](@ref). If you need a limiter, write
-  `min` / `max` / `ifelse`. If you need a polynomial reconstruction,
-  write `+` / `*` / `index`. Reviewers reject `fn` nodes that
-  re-implement a clamp under a custom name.
+  §4.2 ops listed under [Operators]({{< ref "/guide/operators" >}}). If
+  you need a limiter, write `min` / `max` / `ifelse`. If you need a
+  polynomial reconstruction, write `+` / `*` / `index`. Reviewers reject
+  `fn` nodes that re-implement a clamp under a custom name.
 - **No `bc:*` ops in the body.** The lowering is the *interior* closed
   form; boundaries come in at Step 3.
 - **No host-language code anywhere.** Rules ship JSON. The reference
@@ -91,8 +100,8 @@ Larger rules follow the same shape. A flux-form lowering uses an
 `arrayop` whose `output_idx` ranges over edges; a limiter is a
 `broadcast` of `min`/`max`/`ifelse` over operand arrays; a 5-point
 Laplacian is an `arrayop` summing five `index` nodes with the
-appropriate coefficients in the body. The full op alphabet is in
-[Operators](@ref).
+appropriate coefficients in the body. The full op alphabet is under
+[Operators]({{< ref "/guide/operators" >}}).
 
 ## Step 3 — Delegate boundary conditions to the domain
 
@@ -104,7 +113,7 @@ rewrites the index expressions at the boundary cells:
 
 | Domain BC | Index transformation applied to `$u[$x ± 1]` |
 |---|---|
-| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see the `periodic_bc` rule) |
+| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
 | `dirichlet` / `constant` | boundary cell reads the prescribed value |
 | `neumann` / `zero_gradient` | mirror the in-range neighbor (clamp the index) |
 | `robin` | mixed coefficient row at the boundary |
@@ -148,11 +157,9 @@ and fits a slope.
 Layer B is **active**: the walker (`test/walk_esd_tests.jl`) drives the
 sweep through the canonical `discretize → build_evaluator` pipeline for
 every topology with an implemented runner. The supported set is the
-walker's `_LAYER_B_SUPPORTED_TOPOLOGIES` — currently
-`1d_cartesian_periodic`, `1d_vertical_column`, `2d_latlon_sphere`, and
-`2d_arakawa_periodic`. The fixture declares a registered `mms_kind` so
-the runner can construct the manufactured solution; for our running
-example:
+walker's `_LAYER_B_SUPPORTED_TOPOLOGIES`. The fixture declares a
+registered `mms_kind` so the runner can construct the manufactured
+solution; for our running example:
 
 ```json
 {
@@ -181,14 +188,15 @@ blocker should not land.
 ## Step 6 — Document and link
 
 Each rule has a doc page under `docs/content/rules/<rule>.md`. Follow
-the structure of `docs/content/rules/centered_2nd_uniform.md` —
+the structure of
+[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) —
 overview, `applies_to` and `replacement` AST, BC handoff table,
 truncation derivation, convergence figure / status. Cross-link to
 related rules and to `esm-spec.md` §4.2 / §11.5 for the definitive
 operator and BC vocabulary.
 
 The catalog landing page at
-`docs/content/rules/_index.md` advertises the
+[`rules/_index.md`]({{< ref "/rules" >}}) advertises the
 closed-AST lowering pattern as the default. New rules should match its
 framing; rules predating the migration carry a "legacy form" note on
 their page until they are rewritten.
@@ -211,12 +219,5 @@ To author a different rule, swap each piece:
   blocks the sweep; otherwise the fixture must be `applicable: true`
   and the slope must match the declared accuracy.
 - Step 6 — write the doc page in the same shape as
-  `centered_2nd_uniform.md` and cross-link.
-
-For a contributor-oriented walk through the surrounding repository
-infrastructure (paths, CI layers, registration), see the
-*Add a new discretization rule* companion tutorial
-(`docs/content/tutorials/add-a-rule/` in the Hugo catalog site) — note
-that until that tutorial migrates to the new
-pedagogy it still describes the legacy stencil/coefficient form on some
-steps.
+  [`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) and
+  cross-link.

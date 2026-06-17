@@ -11,8 +11,8 @@ tags: ["grid", "staggered", "arakawa", "c-grid", "b-grid", "shallow-water"]
 ## Description
 
 The Arakawa family is *not* a standalone topology — it is a stagger wrapper
-around a base curvilinear grid (Cartesian or lat-lon today; cubed-sphere is
-on the roadmap). It assigns prognostic variables to one of four canonical
+around a base curvilinear grid (Cartesian or lat-lon). It assigns prognostic
+variables to one of four canonical
 locations per cell. The location enum (`VarLocation`, exported from the
 package) is `CellCenter`, `UEdge`, `VEdge`, `Corner`:
 
