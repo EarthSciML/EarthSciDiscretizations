@@ -1,35 +1,85 @@
 # EarthSciDiscretizations.jl
 
-**EarthSciDiscretizations.jl** provides finite-volume (FV) discretization of partial differential equations on the cubed-sphere grid. It is designed for global atmospheric and oceanic modeling, where the cubed-sphere avoids the polar singularities of latitude-longitude grids while providing quasi-uniform resolution.
+**EarthSciDiscretizations.jl (ESD)** is a *declarative catalog of PDE-discretization rules* over [EarthSciSerialization (ESS)](https://github.com/EarthSciML/EarthSciSerialization.jl), plus a multi-family grid runtime and a top-level `build_ode_problem` entry point that turns a PDE component (`.esm`) into a ready-to-`solve` `ODEProblem`.
 
-The transport algorithms are based on the Lin-Rood (1996) dimensionally-split scheme with Piecewise Parabolic Method (PPM) reconstruction (Colella & Woodward 1984), adapted to the cubed-sphere geometry following Putman & Lin (2007). Vertical remapping follows Lin (2004). See [Finite-Volume Method](@ref) for full references.
+ESD is three things, in priority order:
+
+1. **A catalog of declarative discretization-rule JSON files** under `discretizations/` (finite-difference and finite-volume stencils, reconstructions, flux forms, and boundary conditions). The rules are applied by the **ESS rule engine** via the canonical `discretize → ArrayOp → eval` pipeline; ESD carries no rule evaluator of its own.
+2. **A multi-family grid runtime** (`src/grids/`): `CartesianGrid`, `VerticalGrid`, `LatLonGrid`, `ArakawaGrid` (A/B/C/D/E staggers), `CubedSphereGrid`, `MpasGrid`, and `DuoGrid`, mirrored by Python/Rust/TypeScript bindings (see [`GRIDS_API.md`](https://github.com/EarthSciML/EarthSciDiscretizations.jl/blob/main/docs/GRIDS_API.md)).
+3. **A top-level ESM → ODEProblem constructor**, `build_ode_problem` (see below), which loads a PDE `.esm`, optionally merges a Grid Discretization Descriptor (`*.gdd.json`), runs the ESS pipeline, and returns `(prob::ODEProblem, var_map::Dict{String,Int})`.
+
+The mental model is: **declarative PDE (`.esm`) + grid descriptor (`*.gdd.json`) → `build_ode_problem` → `ODEProblem` → `solve`.**
+
+The finite-volume cubed-sphere transport algorithms in the catalog are based on the Lin-Rood (1996) dimensionally-split scheme with Piecewise Parabolic Method (PPM) reconstruction (Colella & Woodward 1984), following Putman & Lin (2007); vertical remapping follows Lin (2004). See [Finite-Volume Method](@ref) for full references.
 
 ## Features
 
-- **Cubed-sphere grid construction** with gnomonic equidistant projection, automatic metric tensor computation, and panel connectivity
-- **C-grid staggering** for scalar fields (cell centers), velocity components (U/V edges), and corner quantities
-- **Ghost cell management** for seamless inter-panel communication
-- **Finite-volume operators** implemented as symbolic `ArrayOp` expressions: Laplacian, PPM reconstruction, 1D flux, and 2D transport
-- **Discretization pipeline** built on the JSON rule catalog (`discretizations/`): rule loading (`load_rules`), stencil-form → replacement-form lowering (`lower_stencil_to_replacement`), AST coefficient evaluation (`eval_coeff`), and initial-condition projection (`project_initial_condition`)
+- **Declarative discretization rules** authored as closed `arrayop`/`makearray` ASTs in the §4.2 ESS op vocabulary (no scheme-specific Julia kernels). The catalog covers centered finite differences, upwind, flux limiters, PPM reconstruction, Lin-Rood transport, and grid-family-specific Laplacians. See [Operators](@ref) and [Finite-Volume Method](@ref).
+- **Seven grid families** with a keyword-constructor submodule `EarthSciDiscretizations.grids.<family>(; …)` (plus `CubedSphereGrid(Nc; …)`), automatic metric-tensor computation, ghost-cell management, and Arakawa staggering.
+- **`build_ode_problem` entry point** that routes a PDE through the ESS rule engine (Path A: cartesian/vertical/arakawa/mpas/duo) or the ESS `PDESystem` pipeline (Path B: latlon/cubed_sphere) and returns a `SciMLBase.ODEProblem`.
+- **Declarative boundary and initial conditions** carried on the model and applied by the ESS rule engine; expression initial conditions are rewritten to ESS IC-arrayop equations.
+- **Cross-binding grid API** (Julia/Python/Rust/TypeScript) defined normatively in [`GRIDS_API.md`](https://github.com/EarthSciML/EarthSciDiscretizations.jl/blob/main/docs/GRIDS_API.md).
 
 ## Quick Start
 
+`build_ode_problem` is the primary entry point: give it a PDE `.esm` and a grid
+descriptor and it returns an `ODEProblem` you can `solve`.
+
 ```@example quickstart
 using EarthSciDiscretizations
+using OrdinaryDiffEqDefault: solve
 
-# Create a C16 cubed-sphere grid (16x16 cells per panel, unit sphere)
-grid = CubedSphereGrid(16; R=1.0)
+repo = dirname(dirname(pathof(EarthSciDiscretizations)))
+esm  = joinpath(repo, "test", "fixtures", "diffusion_1d.esm")
+gdd  = joinpath(repo, "discretizations", "gdd", "cartesian_1d_periodic_n16.gdd.json")
 
-println("Grid: $(grid.Nc)x$(grid.Nc) cells per panel, 6 panels")
-println("Total cells: $(6 * grid.Nc^2)")
-println("Total area: $(total_area(grid))")
-println("Expected (4pi): $(4pi)")
-println("Relative error: $(abs(total_area(grid) - 4pi) / 4pi)")
+# .esm + GDD → ODEProblem + state-name → index map
+prob, var_map = build_ode_problem(esm; grid_ref = gdd)
+
+# Seed a nontrivial initial condition (16 cells, periodic [0,1]).
+N  = 16
+dx = 1.0 / N
+for i in 1:N
+    prob.u0[var_map["u[$i]"]] = sinpi(2 * (i - 0.5) * dx)
+end
+
+sol = solve(prob; saveat = [0.0, 0.05])
+println("retcode:  ", sol.retcode)
+println("u[1] @ t=0:    ", round(sol.u[1][var_map["u[1]"]];   digits = 6))
+println("u[1] @ t=0.05: ", round(sol.u[end][var_map["u[1]"]]; digits = 6))
 ```
+
+For a full walkthrough — including how to write the `.esm`, what a GDD
+contains, Path A vs Path B routing, and curvilinear (`remake`) cases — see
+[Getting started: solve a PDE](@ref).
+
+## The `build_ode_problem` entry point
+
+```julia
+build_ode_problem(esm_path; grid_ref="", reader_fn=nothing, extra_ics=Dict()) -> (prob, var_map)
+```
+
+Loads the PDE component `.esm`, optionally merges the GDD at `grid_ref`, runs
+the ESS discretization pipeline, and returns a `SciMLBase.ODEProblem` together
+with `var_map::Dict{String,Int}` mapping each scalar state name (e.g.
+`"u[1]"`) to its index in `prob.u0`. The constructor never invokes a solver —
+you `solve` it yourself, with `OrdinaryDiffEqDefault` as the intended solver
+dependency. See [Getting started: solve a PDE](@ref) for the kwargs and the
+two routing paths.
 
 ## Package Contents
 
-- [Finite-Volume Method](@ref) -- mathematical foundations and operator formulas
+- [Getting started: solve a PDE](@ref) -- end-to-end `.esm` + GDD → `build_ode_problem` → `solve` walkthrough (start here)
+- [Finite-Volume Method](@ref) -- mathematical foundations and how a rule encodes an FV operator
 - [Cubed-Sphere Grid](@ref) -- grid construction and geometry
-- [Operators](@ref) -- using FV operators on data
-- [Tutorial: Authoring a rule](@ref) -- end-to-end walkthrough for writing a new discretization rule in the closed-AST lowering pattern
+- [Operators](@ref) -- the closed §4.2 op vocabulary that rule replacements use
+- [Tutorial: Authoring a rule](@ref) -- end-to-end walkthrough for writing a new discretization rule in the closed-AST pattern
+
+!!! note "Two documentation sites"
+    This Documenter site covers the **Julia package API** (`build_ode_problem`,
+    grids, the operator vocabulary, and how to author a rule). A companion
+    **[catalog browser](https://EarthSciML.github.io/EarthSciDiscretizations.jl/catalog/)**
+    (auto-generated from `discretizations/` and `src/grids/`) renders a page
+    per rule and per grid family with stencil and convergence plots. Use this
+    site for "how do I use ESD"; use the catalog browser for "what rules and
+    grids exist."

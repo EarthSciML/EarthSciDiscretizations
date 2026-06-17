@@ -88,32 +88,42 @@ existing alphabet. If a scheme genuinely cannot be expressed — bring it
 to the spec authors before authoring the rule.
 
 The companion prohibition is on **scheme-specific kernels in any host
-language**. Rules ship JSON, not Julia or Python. The reference
-evaluator (`evaluate_arrayop` and the ESS walker) implements the §4.2
-vocabulary once; rules borrow that implementation by composition.
+language**. Rules ship JSON, not Julia or Python. The ESS rule engine's
+AST walker implements the §4.2 vocabulary once; rules borrow that
+implementation by composition. ESD carries no rule evaluator of its own
+(`src/rule_eval.jl::eval_coeff` is a thin passthrough to the ESS
+tree-walk evaluator).
 
-## Worked sanity checks
+## Worked sanity check
 
 The closed-AST lowerings produced by the catalog satisfy the same basic
-invariants any FV operator must — they are still operators on arrays,
-just authored differently. The following examples evaluate the AST that
-the rules emit, confirming each invariant holds.
+invariants any operator on arrays must. The catalog rules are evaluated
+through the ESS rule engine via `build_ode_problem` (see
+[Getting started: solve a PDE](@ref)) — there are
+no named Julia operator callables to invoke directly. The example below
+builds a real catalog rule (`centered_2nd_deriv_uniform`, the discrete
+Laplacian) into an `ODEProblem` and confirms the basic invariant that
+the discrete operator annihilates a constant field.
 
-### Transport of a constant field
-
-Advecting a constant field produces zero tendency regardless of the
-velocity field.
+### A constant field has zero discrete second derivative
 
 ```@example ops
-q_const = fill(5.0, 6, Nc, Nc)
-courant_xi = fill(0.3, 6, Nc, Nc)
-courant_eta = fill(-0.2, 6, Nc, Nc)
+using EarthSciDiscretizations
 
-ao = transport_2d(q_const, courant_xi, courant_eta, grid)
-tendency = evaluate_arrayop(ao)
-println("Transport tendency of constant field:")
-println("  Size: $(size(tendency))")
-println("  Max absolute value: $(maximum(abs.(tendency)))")
+repo = dirname(dirname(pathof(EarthSciDiscretizations)))
+esm  = joinpath(repo, "test", "fixtures", "diffusion_1d.esm")
+gdd  = joinpath(repo, "discretizations", "gdd", "cartesian_1d_periodic_n16.gdd.json")
+
+prob, var_map = build_ode_problem(esm; grid_ref = gdd)
+
+# Constant field over all 16 cells.
+u  = fill(5.0, length(prob.u0))
+du = similar(u)
+prob.f(du, u, prob.p, 0.0)
+
+println("Discrete ∂²u/∂x² of a constant field:")
+println("  Size: $(size(du))")
+println("  Max absolute value: $(maximum(abs.(du)))")
 ```
 
 ## Where to read more

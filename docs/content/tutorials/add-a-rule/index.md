@@ -41,7 +41,9 @@ and reconstructions — is expressed directly in the
 ESD does **not** carry a shadow Julia evaluator; the only supported entry
 point is
 [`EarthSciDiscretizations.eval_coeff`]({{< param repoURL >}}/blob/main/src/rule_eval.jl),
-a thin passthrough to `EarthSciSerialization.evaluate`. See
+a thin passthrough to `EarthSciSerialization.parse_expression` +
+`EarthSciSerialization.evaluate_expr` (the Julia tree-walk evaluator;
+`evaluate` is the Python/TS/spec name). See
 [`AGENTS.md`]({{< param repoURL >}}/blob/main/AGENTS.md) for the full
 authoring policy.
 
@@ -309,22 +311,22 @@ If your rule ships a `monotonicity/` fixture (Layer B′), also add it to
 `pass_layer_limiter`. Layer C (integration benchmarks) is gated on
 `ESD_RUN_INTEGRATION=1` and skipped by default.
 
-## Step 7 — Catalog row + doc page
+## Step 7 — Doc page
 
-1. **Catalog row.** Add a row for your rule in
-   [`docs/rule-catalog.md`]({{< param repoURL >}}/blob/main/docs/rule-catalog.md).
-   Match the column shape used by the surrounding rows in your section
-   (Section A for MOL parity, B for CAM5 FV core, etc.). Mark the
-   `audit_status` as `looks_ok` for green-field rules, `needs_review` if
-   you ported numerics from pre-Gas-Town `src/`.
-2. **Hugo page.** Add `docs/content/rules/<rule_name>.md`. Use
+> **No catalog row to edit.** The rule manifest `docs/rule-catalog.md`
+> is **generated** from `discretizations/` by
+> `docs/generate_rule_catalog.jl` at doc-build time and is gitignored —
+> do not hand-edit or commit it. Adding your rule JSON is enough; the
+> generator picks it up automatically.
+
+1. **Hugo page.** Add `docs/content/rules/<rule_name>.md`. Use
    [`docs/content/rules/centered_2nd_uniform.md`]({{< param repoURL >}}/blob/main/docs/content/rules/centered_2nd_uniform.md)
    as a template — the frontmatter taxonomies (`families`, `grid_families`,
    `rule_kinds`, `tags`) drive the faceted navigation. The body sections
    we use are: **Stencil** (with the auto-generated PNG), **Coefficients**
    (table), **Discrete operator** (KaTeX block), **Convergence** (with the
    auto-generated PNG, or a *pending* callout if Layer B is not applicable).
-3. **Plot artifacts.** Register your rule in
+2. **Plot artifacts.** Register your rule in
    [`tools/render_doc_plots.py`]({{< param repoURL >}}/blob/main/tools/render_doc_plots.py):
    add the name to `ALL_RULES` (always) and to `APPLICABLE` (only if
    Layer B passes). Then regenerate:
@@ -392,7 +394,8 @@ across all four layers.
   in the canonical fixture's `discretizations` block, with `outputs`
   listing each name and `primary` selecting the one carried in the
   model's observed equations. The Layer-A fixture follows the same
-  nine-step flow above; Layer-B drives each output independently via
-  `lower_stencil_to_scheme(rule; output=<name>)`. See
+  nine-step flow above; each named output is expressed as its own
+  `arrayop` output in the rule's `replacement`, and the ESS rule engine
+  materializes them together when it applies the rule. See
   [`discretizations/finite_volume/ppm_reconstruction/fixtures/canonical/`]({{< param repoURL >}}/tree/main/discretizations/finite_volume/ppm_reconstruction/fixtures/canonical)
   for the reference example (ess-7hb/ess-ebe).

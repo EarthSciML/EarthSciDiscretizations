@@ -5,10 +5,15 @@ description: "Catalog of declarative discretization rules and grid families used
 
 # EarthSciDiscretizations catalog
 
-This site is auto-generated from the rule files under
+This **catalog browser** is auto-generated from the rule files under
 [`discretizations/`]({{< param repoURL >}}/tree/main/discretizations) and the
 grid family sources under
-[`src/grids/`]({{< param repoURL >}}/tree/main/src/grids).
+[`src/grids/`]({{< param repoURL >}}/tree/main/src/grids). It answers
+"what rules and grids exist." To learn **how to use ESD** — going from a
+PDE to a solved `ODEProblem` with `build_ode_problem`, the grid
+constructors, and the operator vocabulary — see the companion
+**[Julia package documentation](https://EarthSciML.github.io/EarthSciDiscretizations.jl/)**
+(start with its *Getting started: solve a PDE* page).
 
 Each **grid family** page describes the topology of a supported grid
 (connectivity, coordinates, metric tensor) and shows a visualization of a

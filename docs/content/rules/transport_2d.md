@@ -81,17 +81,17 @@ same convention as
 
 ## Convergence
 
-Numeric coverage today lives in the canonical Julia tests
-[`test/test_transport_2d.jl`]({{< param repoURL >}}/blob/main/test/test_transport_2d.jl)
-(constant-field, linearity, and steady-state checks for the
-`transport_2d` ArrayOp) and the cubed-sphere advection integration case
-in
-[`test/integration_cases/cubed_sphere_advection.jl`]({{< param repoURL >}}/blob/main/test/integration_cases/cubed_sphere_advection.jl).
-The bit-equivalence canonical fixture at
+Numeric coverage today lives in the cubed-sphere advection integration
+case in
+[`test/integration_cases/cubed_sphere_advection.jl`]({{< param repoURL >}}/blob/main/test/integration_cases/cubed_sphere_advection.jl),
+which builds and solves this transport rule via Path B
+(`build_ode_problem` → ESS `discretize(sys, CubedSphereGrid)`). The
+canonical fixture at
 [`fixtures/canonical/`]({{< param repoURL >}}/blob/main/discretizations/finite_volume/transport_2d/fixtures/canonical)
-documents the equivalence contract against `transport_2d(q,
-courant_xi, courant_eta, CubedSphereGrid(24))` to within `1e-12`
-relative tolerance.
+pins the discretized output to within `1e-12` relative tolerance.
+(The former imperative `transport_2d(q, courant_xi, courant_eta, …)`
+callable that this fixture was originally compared against has been
+retired; the JSON rule is now the specification.)
 
 <div class="callout callout-pending">
 <strong>Convergence plot pending fixture activation.</strong>
@@ -110,7 +110,8 @@ plot is suppressed.
 - Former imperative reference: `transport_2d` in
   `src/operators/transport_2d.jl` (retired in the operator-porting campaign;
   commit dce15e6). The JSON rule is now the specification.
-- Higher-order siblings on the same grid: Lin-Rood (`transport_2d_linrood!`)
-  and unsplit-PPM (`transport_2d_ppm_arrayop`) — both pending separate
-  beads (catalog rows `fv3_lin_rood_advection` and
-  `cam5_fv_ppm_reconstruction`).
+- Higher-order siblings on the same grid are now catalog rules:
+  Lin-Rood (`fv3_lin_rood_advection`) and unsplit-PPM
+  (`cam5_fv_ppm_reconstruction`). Their former imperative references
+  (`transport_2d_linrood!`, `transport_2d_ppm_arrayop`) were retired with
+  the rest of `src/operators/`.

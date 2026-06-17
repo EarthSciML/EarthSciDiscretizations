@@ -3,7 +3,7 @@ title: "Arakawa staggered grid"
 slug: "arakawa"
 grid_families: "arakawa"
 rule_kinds: "grid"
-description: "Staggered grid wrapping a base curvilinear grid — A / B / C / D variants — with per-stagger location keys."
+description: "Staggered grid wrapping a base curvilinear grid — A / B / C / D / E variants — with per-stagger variable locations."
 source: "src/grids/arakawa.jl"
 tags: ["grid", "staggered", "arakawa", "c-grid", "b-grid", "shallow-water"]
 ---
@@ -13,24 +13,35 @@ tags: ["grid", "staggered", "arakawa", "c-grid", "b-grid", "shallow-water"]
 The Arakawa family is *not* a standalone topology — it is a stagger wrapper
 around a base curvilinear grid (Cartesian or lat-lon today; cubed-sphere is
 on the roadmap). It assigns prognostic variables to one of four canonical
-locations per cell:
+locations per cell. The location enum (`VarLocation`, exported from the
+package) is `CellCenter`, `UEdge`, `VEdge`, `Corner`:
 
-| Location | Variable held there | Used by |
-|---|---|---|
-| `cell_center` | scalars (mass `h`, pressure, tracers) | A, B, C, D |
-| `face_x` | u-component of velocity (C/D) | C |
-| `face_y` | v-component of velocity (C/D) | C |
-| `vertex` | u, v together (B) | B |
+| `VarLocation` | Accessor | Variable held there | Used by |
+|---|---|---|---|
+| `CellCenter` | `cell_centers(grid, i, j)` | scalars (mass `h`, pressure, tracers) | A, B, C, D, E |
+| `UEdge` | `u_face(grid, i, j)` | u-component of velocity | C, D, E |
+| `VEdge` | `v_face(grid, i, j)` | v-component of velocity | C, D, E |
+| `Corner` | `corners(grid, i, j)` | u, v together (B) | B |
 
-The Arakawa A/B/C/D distinction is just the choice of which subset of
-locations carries `u`, `v`, and `h`:
+The Arakawa A/B/C/D/E distinction is just the choice of which subset of
+locations carries `u`, `v`, and `h` (the per-stagger table lives in
+`arakawa_variable_locations` in `src/grids/arakawa.jl`):
 
-- **A-grid**: all variables co-located at cell centers (simple but
-  hosts checkerboard modes for the divergence operator)
-- **B-grid**: `h` at center, both `u` and `v` at vertices
-- **C-grid**: `h` at center, `u` at face_x, `v` at face_y (good for
-  wave equations and divergence-conservative discretizations)
-- **D-grid**: dual of C — `u` and `v` swapped between face_x and face_y
+- **A-grid** (`ArakawaA`): all variables co-located at cell centers (simple
+  but hosts checkerboard modes for the divergence operator)
+- **B-grid** (`ArakawaB`): `h` at center, both `u` and `v` at corners
+- **C-grid** (`ArakawaC`): `h` at center, `u` on the U-edge, `v` on the
+  V-edge (good for wave equations and divergence-conservative
+  discretizations)
+- **D-grid** (`ArakawaD`): dual of C — `u` and `v` swapped between the
+  U-edge and V-edge
+- **E-grid** (`ArakawaE`): rotated arrangement with `u` and `v` on edges
+  (the `stagger` parser accepts `:E`)
+
+A grid is constructed via
+`EarthSciDiscretizations.grids.arakawa(; base, stagger, ghosts, dtype)`,
+where `stagger` is one of `:A`, `:B`, `:C`, `:D`, `:E` and `base` is the
+underlying Cartesian or lat-lon grid.
 
 ESD currently seeds the C-grid via the
 [`divergence_arakawa_c`]({{< ref "/rules/divergence_arakawa_c" >}}) rule, which
@@ -51,8 +62,9 @@ schema.
 
 Registered against `AbstractStaggeredGrid` (which sits beneath
 `AbstractCurvilinearGrid`). The base-grid trait calls all delegate to the
-underlying Cartesian / lat-lon implementation; stagger-aware methods like
-`location_centers(grid, :face_x)` add the per-location offset.
+underlying Cartesian / lat-lon implementation; stagger-aware accessors —
+`cell_centers`, `u_face`, `v_face`, `corners` — return the coordinate at
+the location where each prognostic variable lives for the chosen stagger.
 
 ## See also
 

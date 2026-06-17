@@ -19,6 +19,7 @@ makedocs(
     repo = "https://github.com/EarthSciML/EarthSciDiscretizations.jl/blob/{commit}{path}#{line}",
     pages = [
         "Home" => "index.md",
+        "Getting started: solve a PDE" => "getting_started.md",
         "Finite-Volume Method" => "fv_method.md",
         "Cubed-Sphere Grid" => "grid.md",
         "Operators" => "operators.md",

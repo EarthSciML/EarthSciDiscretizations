@@ -11,10 +11,11 @@ tags: ["grid", "structured", "spherical", "lat-lon"]
 ## Description
 
 The lat-lon family is a regular mesh on the sphere of radius `R` indexed by
-longitude φ and latitude λ. Cells are bounded by meridians (constant φ) and
-parallels (constant λ); cell area shrinks toward the poles as `R² cos λ dλ dφ`.
-The metric tensor is diagonal with `g_{φφ} = R² cos² λ` and `g_{λλ} = R²`,
-so finite-difference rules carry a `cos λ` factor on the longitudinal stencil
+longitude λ and latitude φ (matching the code's metric convention in
+`src/grids/latlon.jl`). Cells are bounded by meridians (constant λ) and
+parallels (constant φ); cell area shrinks toward the poles as `R² cos φ dφ dλ`.
+The metric tensor is diagonal with `g_{λλ} = R² cos² φ` and `g_{φφ} = R²`,
+so finite-difference rules carry a `cos φ` factor on the longitudinal stencil
 (see [`centered_2nd_uniform_latlon`]({{< ref "/rules/centered_2nd_uniform_latlon" >}})).
 
 Pole handling is configurable via the `pole_policy` knob — `none` (the default)
@@ -26,8 +27,8 @@ accessor.
 <figure class="figure">
   <img src="/plots/grids/latlon.png" alt="Lat-lon mesh in equirectangular projection">
   <figcaption>Lat-lon 24×12 mesh shown in equirectangular projection.
-  Cell area is proportional to cos λ — visible in the spherical metric, not
-  in this flat projection.</figcaption>
+  Cell area is proportional to cos φ (latitude) — visible in the spherical
+  metric, not in this flat projection.</figcaption>
 </figure>
 
 ## Trait coverage

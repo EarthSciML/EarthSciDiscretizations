@@ -3,10 +3,13 @@
 EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 
 1. A Julia package at the repo root (`src/`, `test/`, `Project.toml`) that
-   implements grid runtimes, rule-form lowering, and transitional reference
-   operators. The discretization pipeline itself lives in
+   implements the grid runtimes, thin rule-coefficient passthroughs
+   (`src/rule_eval.jl`), and the `build_ode_problem` entry point
+   (`src/ode_problem.jl`). The discretization pipeline itself lives in
    EarthSciSerialization (`discretize → ArrayOp → eval`); the package side
-   is a thin passthrough per the single-pathway rule in `AGENTS.md`.
+   is a thin passthrough per the single-pathway rule in `AGENTS.md`. (The
+   former `src/operators/` reference operators and `src/stencil_lowering.jl`
+   have been retired.)
 2. Sibling package trees for the Python, Rust, and TypeScript bindings
    (`python/`, `rust/`, `typescript/`) that implement the cross-binding
    grid accessor runtime defined in [`GRIDS_API.md`](GRIDS_API.md).
@@ -38,10 +41,12 @@ EarthSciDiscretizations is a **multi-language monorepo**. It holds:
 │   └── tests/
 ├── docs/                 Documenter.jl docs + cross-binding specs (GRIDS_API.md, …)
 ├── discretizations/      Discretization rule JSON files (catalog)
-│   ├── finite_difference/
-│   ├── finite_volume/
+│   ├── finite_difference/  FD stencils + BC rules (dirichlet/neumann/periodic/robin_bc)
+│   ├── finite_volume/      FV reconstructions and flux forms
+│   ├── ic/                 Initial-condition rules
+│   ├── gdd/                Grid Discretization Descriptors (*.gdd.json) for build_ode_problem
 │   ├── grids/            Grid-family schemas + fixtures (cartesian, lat_lon, mpas, vertical, …)
-│   └── spectral/
+│   └── spectral/         (reserved — no rules yet)
 ├── tests/                Cross-binding conformance fixtures (grids, rules, discretization)
 ├── tools/                Doc plot / rule-matrix rendering scripts
 ├── .github/workflows/    CI workflows (Tests, Python, Rust, TypeScript, …)

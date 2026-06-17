@@ -52,19 +52,26 @@ Every binding must expose the same set of named grid families. Families are
 grouped into phases for implementation-bead scheduling, but the **API surface
 is a flat namespace** in every binding.
 
-| Phase | Family | Namespace leaf | Topology |
-|---|---|---|---|
-| 1 | Cartesian regular | `cartesian` | rectilinear box |
-| 2 | Lat-lon (regular) | `lat_lon` | rectilinear sphere surface |
-| 3 | Stretched lat-lon | `stretched_lat_lon` | rectilinear + pole/equator stretching |
-| 4 | Cubed sphere (gnomonic) | `cubed_sphere` | 6-panel block-structured |
-| 5 | Stretched cubed sphere (Schmidt / conformal) | `stretched_cubed_sphere` | 6-panel, non-uniform |
-| 6 | MPAS (SCVT, loader-backed) | `mpas` | unstructured Voronoi |
-| 7 | DUO / icosahedral triangulations | `duo` | unstructured triangular |
+| Phase | Family | Namespace leaf | Topology | Status |
+|---|---|---|---|---|
+| 1 | Cartesian regular | `cartesian` | rectilinear box | implemented |
+| 1 | Vertical column | `vertical` | 1D stacked levels | implemented |
+| 2 | Lat-lon (regular) | `lat_lon` | rectilinear sphere surface | implemented |
+| 2 | Arakawa stagger wrapper | `arakawa` | staggered (A/B/C/D/E) over a base grid | implemented |
+| 3 | Stretched lat-lon | `stretched_lat_lon` | rectilinear + pole/equator stretching | **not yet implemented** |
+| 4 | Cubed sphere (gnomonic) | `cubed_sphere` | 6-panel block-structured | implemented |
+| 5 | Stretched cubed sphere (Schmidt / conformal) | `stretched_cubed_sphere` | 6-panel, non-uniform | **not yet implemented** |
+| 6 | MPAS (SCVT, loader-backed) | `mpas` | unstructured Voronoi | implemented |
+| 7 | DUO / icosahedral triangulations | `duo` | unstructured triangular | implemented |
 
-Phase 8 (regridding) and per-family variants (e.g., height-coordinate vertical
-extensions) are out of scope for this document but will reuse §2's signature
-conventions.
+The `vertical` family is the 1D-column factor used in horizontal × vertical
+product grids and by box/column models. The `arakawa` family is a stagger
+wrapper (A/B/C/D/E) around a base Cartesian or lat-lon grid rather than a
+standalone topology. The `stretched_lat_lon` and `stretched_cubed_sphere`
+families are specified here but **not yet implemented** in any binding.
+
+Phase 8 (regridding) and further per-family variants are out of scope for this
+document but will reuse §2's signature conventions.
 
 ---
 
@@ -196,6 +203,11 @@ them verbatim; Rust converts to builder setters of the same name).
 | `extent` | 2×3 float array | cartesian | axis-aligned bounding box |
 | `ghosts` | int ≥ 0 | any | halo cell width |
 | `dtype` | enum | any | element precision |
+| `coordinate` | enum | vertical | vertical coordinate: `sigma`/`eta`/`z`/`theta`/`hybrid_sigma_theta`/`z_star` |
+| `levels` | float array | vertical | level edges (`nz+1` values) |
+| `ak`, `bk`, `p0`, `transition` | float / array | vertical | hybrid-coordinate coefficients and reference pressure |
+| `base` | grid | arakawa | underlying Cartesian or lat-lon grid being staggered |
+| `stagger` | enum | arakawa | Arakawa stagger: `A`/`B`/`C`/`D`/`E` |
 | `stretch` | struct | stretched_* families | per-family stretch config |
 | `loader` | struct | mpas, duo | see §10 |
 
@@ -339,7 +351,7 @@ thin passthrough to an ESS-binding official simulation runner:
 
 | Binding | ESS official runners (representative) |
 |---|---|
-| Julia | `EarthSciSerialization.evaluate` (Symbolics / MTK), `tree_walk.jl` (large-system runtime) |
+| Julia | `EarthSciSerialization.evaluate_expr` (tree-walk evaluator, the Julia binding ESD's `eval_coeff` delegates to), `EarthSciSerialization.discretize` / `build_evaluator` (large-system runtime) |
 | Python | `earthsci_serialization.numpy_interpreter`, `earthsci_toolkit.simulate` |
 | Rust | `earthsci_serialization::simulate`, `simulate_array` |
 | TypeScript | the official ESS-TS evaluator entry point |

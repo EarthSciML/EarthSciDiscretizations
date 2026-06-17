@@ -27,10 +27,14 @@ the domain drives the boundary rewrites.
 ## Migration status
 
 The catalog is mid-migration to this closed-AST authoring pattern.
-Roughly 14 of the 16 catalog rules still use the legacy
-stencil/coefficient form (an explicit `stencil` block plus per-offset
-`coefficients`) and are scheduled for rewrite. Their pages describe
-the legacy form until the rule itself migrates.
+These pages document a curated subset of ~16 rules; the full catalog
+under [`discretizations/`]({{< param repoURL >}}/tree/main/discretizations)
+holds roughly 57 rule JSON files (32 `finite_difference/` — including the
+boundary-condition rules — plus 24 `finite_volume/` and 1 `ic/`). Of the
+documented subset, most still describe the legacy stencil/coefficient
+form (an explicit `stencil` block plus per-offset `coefficients`) and are
+scheduled for rewrite to the closed-AST form. Their pages describe the
+legacy form until the rule itself migrates.
 
 - [`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}})
   is the **canonical linear exemplar** — a single `arrayop` whose body

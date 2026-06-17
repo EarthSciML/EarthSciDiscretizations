@@ -11,10 +11,11 @@ This repository has three roles:
    conditions), validated against the EarthSciSerialization (ESS) §7
    discretization schema and executed by the ESS rule engine via the
    canonical `discretize → ArrayOp → eval` pipeline. The package side
-   contributes structural lowering between rule forms
-   (`src/stencil_lowering.jl`) and thin coefficient-evaluation
-   passthroughs (`src/rule_eval.jl`). This catalog is the repository's
-   primary, durable role.
+   contributes only thin coefficient-evaluation passthroughs
+   (`src/rule_eval.jl`) and the `build_ode_problem` entry point
+   (`src/ode_problem.jl`) that drives the ESS pipeline; rules are applied
+   by ESS, not by an in-ESD lowering step. This catalog is the
+   repository's primary, durable role.
 2. **Grid runtimes and conformance machinery.** Grid constructors for
    cartesian, lat-lon, vertical, Arakawa-staggered, cubed-sphere, MPAS,
    and DUO topologies (`src/grids/`), mirrored by thin Python, Rust, and

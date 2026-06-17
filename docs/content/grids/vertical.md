@@ -3,7 +3,7 @@ title: "Vertical"
 slug: "vertical"
 grid_families: "vertical"
 rule_kinds: "grid"
-description: "1D vertical column with arbitrary level spacing — pressure / sigma / hybrid coordinates."
+description: "1D vertical column with arbitrary level spacing — sigma / eta / z / theta / hybrid / z_star coordinates."
 source: "src/grids/vertical.jl"
 tags: ["grid", "structured", "vertical", "column", "sigma", "hybrid"]
 ---
@@ -14,16 +14,20 @@ The `vertical` family is a stand-alone 1D column of stacked levels. It is the
 column factor in any 2D-horizontal × 1D-vertical product grid, and it is also
 used directly by box and column models.
 
-Level edges may be supplied in any of the standard atmospheric coordinates:
+The `coordinate` option selects the vertical coordinate. The accepted kinds
+(see `_VERTICAL_COORDINATES` in `src/grids/vertical.jl`) are:
 
-- **z** (altitude in metres)
-- **p** (pressure in Pa)
-- **σ = (p − pₜ) / (pₛ − pₜ)** (terrain-following)
-- **hybrid η = A(η) + B(η) (pₛ − pₜ)** (CAM/IFS-style)
+- **`:z`** — altitude in metres
+- **`:sigma`** — σ = (p − pₜ) / (pₛ − pₜ), terrain-following
+- **`:eta`** — η hybrid-coordinate parameter
+- **`:theta`** — potential-temperature (isentropic) coordinate
+- **`:hybrid_sigma_theta`** — hybrid σ–θ coordinate (`ak`/`bk` coefficients)
+- **`:z_star`** — height-based terrain-following (z\*) coordinate
 
-The accessor stores the per-level edge array directly; cell widths
-(`Δz`, `Δp`, `Δσ`, …) are derived. The trait registration is against
-`AbstractVerticalGrid`.
+(There is no `:pressure` coordinate — `pressure` is a *metric name*, derived
+from the levels, not a `coordinate` value.) The accessor stores the per-level
+edge array directly; cell widths are derived. The trait registration is
+against `AbstractVerticalGrid`.
 
 ## Visualization
 

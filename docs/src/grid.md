@@ -60,3 +60,31 @@ println("Std/Mean: $(std(cell_areas) / mean(cell_areas))")
 
 ## Projection Functions
 
+The gnomonic projection maps panel-local equiangular coordinates
+`(ξ, η)` to geographic and Cartesian coordinates and supplies the
+metric tensor used by curvilinear discretization rules. The exported
+helpers operate on a single point:
+
+- `gnomonic_to_lonlat(ξ, η, panel) -> (lon, lat)` — geographic coordinates (radians).
+- `gnomonic_to_cart(ξ, η, panel) -> [x, y, z]` — unit-sphere Cartesian coordinates.
+- `gnomonic_metric(ξ, η, R) -> (J, g_ξξ, g_ηη, g_ξη)` — Jacobian and metric-tensor components.
+
+```@example grid
+# Panel-centre point (ξ = η = 0) on panel 1.
+lon, lat = gnomonic_to_lonlat(0.0, 0.0, 1)
+J, gξξ, gηη, gξη = gnomonic_metric(0.0, 0.0, 1.0)
+
+println("Panel 1 centre → lon=$(round(lon; digits=6)), lat=$(round(lat; digits=6))")
+println("Cartesian:      ", round.(gnomonic_to_cart(0.0, 0.0, 1); digits=6))
+println("Metric J:       $(round(J; digits=6))  (g_ξξ=$(round(gξξ; digits=6)), g_ηη=$(round(gηη; digits=6)), g_ξη=$(round(gξη; digits=6)))")
+```
+
+!!! note "This page is the cubed-sphere family only"
+    ESD ships seven grid families; this page documents the cubed sphere.
+    For the cartesian, vertical, lat-lon, Arakawa, MPAS, and DUO families
+    and their constructor options, see
+    [`GRIDS_API.md`](https://github.com/EarthSciML/EarthSciDiscretizations.jl/blob/main/docs/GRIDS_API.md)
+    and the per-family pages in the
+    [catalog browser](https://EarthSciML.github.io/EarthSciDiscretizations.jl/catalog/).
+    To go from a PDE to a solved problem on any of them, see
+    [Getting started: solve a PDE](@ref).
