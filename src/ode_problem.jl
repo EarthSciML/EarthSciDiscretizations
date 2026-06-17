@@ -4,12 +4,11 @@ import SciMLBase
 import ModelingToolkit
 
 # Grid families whose discretize path goes through ESS PDESystem (Path B).
-const _CURVILINEAR_FAMILIES = Set{String}(["latlon", "cubed_sphere"])
+const _CURVILINEAR_FAMILIES = Set{String}(["latlon"])
 
 # Computational axis pair for each curvilinear family (xi_axis, eta_axis).
 const _CURVILINEAR_AXES = Dict{String, Tuple{Symbol, Symbol}}(
     "latlon" => (:lon, :lat),
-    "cubed_sphere" => (:xi, :eta),
 )
 
 """
@@ -21,8 +20,8 @@ Descriptor (GDD) from `grid_ref`, run the ESS canonical discretization
 pipeline, and return a ready-to-solve `SciMLBase.ODEProblem` together
 with the state-name → index `var_map::Dict{String,Int}`.
 
-When the GDD specifies a curvilinear grid family (`latlon` or `cubed_sphere`),
-the function routes through the ESS PDESystem pipeline (Path B): the `.esm`
+When the GDD specifies a curvilinear grid family (`latlon`), the function
+routes through the ESS PDESystem pipeline (Path B): the `.esm`
 is loaded via `EarthSciSerialization.load`, flattened to a `PDESystem`, and
 discretized by `EarthSciSerialization.discretize(sys, grid)`.  Otherwise the
 existing rule-engine pipeline (Path A) is used.  No solver is invoked inside
@@ -161,10 +160,6 @@ function _construct_curvilinear_grid(family::String, domain_spec::Dict{String, A
         nlon = round(Int, (Float64(get(lon_sp, "max", π)) - Float64(get(lon_sp, "min", -π))) / Float64(lon_sp["grid_spacing"]))
         nlat = round(Int, (Float64(get(lat_sp, "max", π / 2)) - Float64(get(lat_sp, "min", -π / 2))) / Float64(lat_sp["grid_spacing"]))
         return _latlon(; nlon = nlon, nlat = nlat, R = R)
-    elseif family == "cubed_sphere"
-        Nc = Int(get(domain_spec, "Nc", 4))
-        R = Float64(get(domain_spec, "R", 1.0))
-        return CubedSphereGrid(Nc; R = R)
     else
         error("_construct_curvilinear_grid: unsupported family '$family'")
     end

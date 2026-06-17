@@ -71,7 +71,6 @@ two routing paths.
 
 - [Getting started: solve a PDE](@ref) -- end-to-end `.esm` + GDD → `build_ode_problem` → `solve` walkthrough (start here)
 - [Finite-Volume Method](@ref) -- mathematical foundations and how a rule encodes an FV operator
-- [Cubed-Sphere Grid](@ref) -- grid construction and geometry
 - [Operators](@ref) -- the closed §4.2 op vocabulary that rule replacements use
 - [Tutorial: Authoring a rule](@ref) -- end-to-end walkthrough for writing a new discretization rule in the closed-AST pattern
 

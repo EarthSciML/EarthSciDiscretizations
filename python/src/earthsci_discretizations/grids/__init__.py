@@ -7,7 +7,6 @@ returning a `Grid` object per `docs/GRIDS_API.md` §2.4, §3.2.
 
 from .arakawa import ArakawaGrid, BaseGrid, CartesianBase, arakawa
 from .cartesian import CartesianGrid, cartesian
-from .cubed_sphere import CubedSphereGrid, cubed_sphere
 from .duo import DuoGrid, DuoLoader, duo
 from .lat_lon import LatLonGrid, lat_lon
 from .mpas import MpasGrid, MpasLoader, MpasMeshData, check_mesh, mpas, mpas_mesh_data
@@ -20,8 +19,6 @@ __all__ = [
     "CartesianBase",
     "cartesian",
     "CartesianGrid",
-    "cubed_sphere",
-    "CubedSphereGrid",
     "duo",
     "DuoGrid",
     "DuoLoader",

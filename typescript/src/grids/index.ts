@@ -14,14 +14,6 @@ export type {
   CartesianNeighborRef,
   AxisExtent,
 } from "./cartesian.js";
-export { cubed_sphere } from "./cubed_sphere.js";
-export type {
-  CubedSphereOpts,
-  CubedSphereGrid,
-  Edge,
-  NeighborRef,
-  MetricName,
-} from "./cubed_sphere.js";
 export { lat_lon } from "./lat_lon.js";
 export type {
   LatLonOpts,

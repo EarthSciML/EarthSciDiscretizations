@@ -68,19 +68,6 @@ using TestItems
     @test "weno5_advection" in names
     weno = first(filter(r -> r.name == "weno5_advection", results))
     @test weno.family == :finite_volume
-    # finite_difference/covariant_laplacian_cubed_sphere (esd-ecq) — full covariant
-    # Laplacian on the gnomonic cubed sphere; Layer-B active via the
-    # cubed_sphere_cross_metric runner (direct per-cell metric-binding evaluation).
-    @test "covariant_laplacian_cubed_sphere" in names
-    lap = first(filter(r -> r.name == "covariant_laplacian_cubed_sphere", results))
-    @test lap.family == :finite_difference
-    # finite_volume/transport_2d (dsc-hdk) — first 2D cubed-sphere FV rule
-    # whose coefficients depend on C-grid face-staggered Courant bindings;
-    # declares applicable:false on Layer B until ESS extends the harness for
-    # cubed_sphere staggered-velocity bindings (parallel to the laplacian).
-    @test "transport_2d" in names
-    tr2d = first(filter(r -> r.name == "transport_2d", results))
-    @test tr2d.family == :finite_volume
 
     # Layer A: passes for the rules that ship a canonical/ fixture
     # (centered_2nd_uniform, centered_2nd_uniform_vertical,
@@ -122,12 +109,6 @@ using TestItems
     # flux_1d_ppm canonical fixture is activated (applicable:true); Layer-A passes
     # via the inline pattern+replacement ESM document and is handled by the
     # explicit elseif below (Layer-A PASS, Layer-B SKIP).
-    # lax_friedrichs_flux_cubed_sphere_xi canonical fixture is applicable:true
-    # (esd-lmm: cubed_sphere dispatch landed in _inject_rules! + pattern+replacement
-    # rule form in input.esm), handled by explicit elseif below (Layer-A PASS,
-    # Layer-B SKIP). lax_friedrichs_flux_cubed_sphere_eta convergence fixture
-    # ships `applicable:false` (cubed_sphere ESS dispatch pending), so Layer-A
-    # SKIPs via the `_fixture_applicable_skip` honoring.
     not_applicable_layer_b = Set(
         [
             # centered_2nd_nonuniform_vertical: the 1d_vertical_column runner
@@ -138,9 +119,6 @@ using TestItems
             ("finite_volume", "flux_limiter_minmod"),
             ("finite_volume", "flux_limiter_superbee"),
             ("finite_volume", "lax_friedrichs_flux"),
-            ("finite_volume", "lax_friedrichs_flux_cubed_sphere_eta"),
-            ("finite_volume", "transport_2d"),
-            ("finite_volume", "ppm_edge_cubed_sphere"),
             ("finite_volume", "vertical_remap"),
         ]
     )
@@ -165,25 +143,11 @@ using TestItems
             ("finite_volume", "flux_limiter_minmod"),
         ]
     )
-    # The 8 FV3 rule ports (dsc-247) ship canonical-skip-only fixtures
-    # (dsc-lay1, audit dsc-ztvz / F5) declaring `applicable:false`
-    # pending the cubed_sphere selector + face-stagger emit / multi-axis
-    # / per-cell metric-binding / `kind:"constant"` source-row dispatch
-    # in ESS. Layer-A SKIPs via `_fixture_applicable_skip`; Layer-B
-    # SKIPs with "no convergence fixtures at..." because these ports
-    # carry no convergence fixture either. Once the ESS extensions
-    # land, these stubs can be promoted to hand-pinned canonical
-    # contracts (mirroring `lax_friedrichs_flux_cubed_sphere_xi`).
+    # Canonical-skip-only fixtures declaring `applicable:false` that also carry
+    # no convergence fixture, so Layer-A SKIPs via `_fixture_applicable_skip`
+    # and Layer-B SKIPs with "no convergence fixtures at...".
     canonical_skip_only_fv3 = Set(
         [
-            ("finite_volume", "fv3_absolute_vorticity_cellmean"),
-            ("finite_volume", "fv3_d_to_c_eta"),
-            ("finite_volume", "fv3_d_to_c_xi"),
-            ("finite_volume", "fv3_kinetic_energy_cell"),
-            ("finite_volume", "fv3_sinsg_flux_eta"),
-            ("finite_volume", "fv3_sinsg_flux_xi"),
-            ("finite_volume", "fv3_vorticity_cellmean"),
-            ("finite_volume", "fv3_vorticity_corner"),
             # dirichlet_bc / neumann_bc / robin_bc (esd-0eu, esd-m9v): rewrite
             # fixture ships `applicable:false` pending ESS support for kind/side
             # pattern matching on the bc OpExpr (layer-A SKIP) and carry no
@@ -418,18 +382,6 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
-        elseif r.family === :finite_difference && r.name == "covariant_laplacian_cubed_sphere"
-            # covariant_laplacian_cubed_sphere (esd-ecq) — canonical/ fixture declares
-            # applicable:false (Layer-A skips; ESS cubed_sphere selector dispatch
-            # pending). Layer-B now passes via the cubed_sphere_cross_metric runner:
-            # fixture declares mms_kind="cos2xi_cos2eta_cubed_sphere", topology key
-            # resolves to cubed_sphere_cross_metric, runner measures O(h²) for the
-            # full covariant Laplacian of cos(2ξ)cos(2η) on Nc ∈ {64,128,256}
-            # (coarser grids are pre-asymptotic due to gnomonic metric variation).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "divergence_arakawa_c"
             # divergence_arakawa_c (arakawa) ships a canonical/ fixture with
             # applicable:false (Layer-A skips). Layer-B now passes via the canonical
@@ -450,17 +402,6 @@ using TestItems
             # SKIPs because the convergence fixture ships applicable:false (face-
             # staggered Courant binding + ghost_width contract pending in ESS;
             # see flux_1d_ppm.json schema_gaps).
-            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
-            @test occursin("canonical-form match", r.layer_a.reason)
-            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
-            @test occursin("fixture-declared not applicable", r.layer_b.reason)
-        elseif r.family === :finite_volume && r.name == "lax_friedrichs_flux_cubed_sphere_xi"
-            # lax_friedrichs_flux_cubed_sphere_xi: Layer-A passes via its
-            # canonical byte contract (esd-lmm: cubed_sphere dispatch landed in
-            # _inject_rules! and the input.esm carries the rule in
-            # pattern+replacement form). Layer-B skips because the convergence
-            # fixture declares applicable:false (face-staggered Courant binding
-            # contract and cubed_sphere ESS dispatch pending).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
@@ -577,7 +518,6 @@ using TestItems
     # FD-WENO advective divergence), centered_2nd_deriv_uniform (O(h²)),
     # mixed_deriv_2nd_uniform (O(h²) cross stencil),
     # nonlinear_laplacian_uniform (O(h²) flux form),
-    # covariant_laplacian_cubed_sphere (O(h²) cubed-sphere covariant Laplacian),
     # nn_diffusion_mpas (O(h²) MPAS Voronoi sphere),
     # nn_diffusion_duo (O(h²) DUO icosahedral sphere),
     # centered_4th_uniform (O(h⁴)), centered_6th_uniform (O(h⁶)),
@@ -604,7 +544,7 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 19
+    @test layer_b_passes == 18
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays
@@ -621,12 +561,10 @@ using TestItems
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_vertical\"", xml)
     @test occursin("classname=\"finite_difference.centered_2nd_uniform_latlon\"", xml)
     @test occursin("classname=\"finite_difference.nonlinear_laplacian_uniform\"", xml)
-    @test occursin("classname=\"finite_difference.covariant_laplacian_cubed_sphere\"", xml)
     @test occursin("classname=\"finite_volume.ppm_reconstruction\"", xml)
     @test occursin("classname=\"finite_volume.weno5_advection\"", xml)
     @test occursin("classname=\"finite_volume.flux_limiter_minmod\"", xml)
     @test occursin("classname=\"finite_volume.flux_limiter_superbee\"", xml)
-    @test occursin("classname=\"finite_volume.transport_2d\"", xml)
     @test occursin("name=\"layer_A\"", xml)
     @test occursin("name=\"layer_limiter\"", xml)
     @test occursin("name=\"layer_D\"", xml)

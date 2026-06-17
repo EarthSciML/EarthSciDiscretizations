@@ -1,7 +1,7 @@
 module WalkESDTests
 
 using EarthSciDiscretizations: load_rules, RuleFile, eval_coeff,
-    CubedSphereGrid, extend_with_ghosts, gnomonic_metric, metric_eval,
+    metric_eval,
     build_ode_problem, build_duo_grid, build_mpas_grid
 import EarthSciSerialization
 using JSON
@@ -680,53 +680,6 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (lon, lat) -> sin(lon) * cos(lat),
         derivative = (lon, lat) -> -2.0 * sin(lon) * cos(lat),
     ),
-    # Cubed-sphere manufactured solution: φ(ξ,η) = cos(2ξ)·cos(2η) on all 6 panels.
-    # The analytic covariant Laplacian ∇²φ = (1/J)[∂_ξ(Jg^{ξξ}∂_ξφ + Jg^{ξη}∂_ηφ)
-    #                                              + ∂_η(Jg^{ξη}∂_ξφ + Jg^{ηη}∂_ηφ)]
-    # is computed at (ξ,η) via gnomonic_metric + finite-differenced Jg^{ab} derivatives
-    # (same approach as test/test_laplacian.jl, which served as the oracle for O(h²)
-    # verification at Nc ∈ {8,16,32}).
-    #
-    # `ic(ξ,η)` returns the scalar field value; `derivative(ξ,η)` returns the
-    # analytic covariant Laplacian — panel-independent because the gnomonic metric
-    # depends only on (ξ,η), not on the panel index. Used by
-    # `covariant_laplacian_cubed_sphere` convergence fixture
-    # (`mms_kind="cos2xi_cos2eta_cubed_sphere"`).
-    # NOTE: pre-asymptotic behavior for Nc<32 due to gnomonic metric variation
-    # near panel corners; fixture uses Nc ∈ {64,128,256} for min order ≥ 1.8.
-    "cos2xi_cos2eta_cubed_sphere" => (
-        ic = (ξ, η) -> cos(2ξ) * cos(2η),
-        derivative = (ξ, η) -> begin
-            h = 1.0e-6
-            df_dξ = -2 * sin(2ξ) * cos(2η)
-            df_dη = -2 * cos(2ξ) * sin(2η)
-            d2f_dξ2 = -4 * cos(2ξ) * cos(2η)
-            d2f_dη2 = -4 * cos(2ξ) * cos(2η)
-            d2f_dξdη = 4 * sin(2ξ) * sin(2η)
-            J, g_ξξ, g_ηη, g_ξη = gnomonic_metric(ξ, η, 1.0)
-            det_g = g_ξξ * g_ηη - g_ξη^2
-            ginv_ξξ = g_ηη / det_g
-            ginv_ηη = g_ξξ / det_g
-            ginv_ξη = -g_ξη / det_g
-            function Jginv_at(ξv, ηv)
-                Jv, gxx, gee, gxe = gnomonic_metric(ξv, ηv, 1.0)
-                d = gxx * gee - gxe^2
-                return (Jv * gee / d, Jv * gxx / d, Jv * (-gxe / d))
-            end
-            Jgxx_p, _, Jgxe_p = Jginv_at(ξ + h, η)
-            Jgxx_m, _, Jgxe_m = Jginv_at(ξ - h, η)
-            _, Jgyy_np, Jgxe_np = Jginv_at(ξ, η + h)
-            _, Jgyy_nm, Jgxe_nm = Jginv_at(ξ, η - h)
-            dJgxx_dξ = (Jgxx_p - Jgxx_m) / (2h)
-            dJgyy_dη = (Jgyy_np - Jgyy_nm) / (2h)
-            dJgxe_dξ = (Jgxe_p - Jgxe_m) / (2h)
-            dJgxe_dη = (Jgxe_np - Jgxe_nm) / (2h)
-            ginv_ξξ * d2f_dξ2 + ginv_ηη * d2f_dη2 +
-                (1 / J) * (dJgxx_dξ * df_dξ + dJgyy_dη * df_dη) +
-                2 * ginv_ξη * d2f_dξdη +
-                (1 / J) * (dJgxe_dξ * df_dη + dJgxe_dη * df_dξ)
-        end,
-    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -795,18 +748,6 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}(
         # carries stencil form (EINSUM-8 territory). Removed from supported
         # topologies — runner reports SKIP for stencil-form fv_cell_average_1d.
         # "fv_cell_average_1d",  ← retired in esd-agh
-        # `cubed_sphere_cross_metric` (esd-ecq) — direct-evaluation runner for
-        # cross_metric composite rules on the gnomonic cubed sphere. Evaluates
-        # each term of the cross_metric rule by binding per-cell metric arrays
-        # (ginv_xi_xi, ginv_eta_eta, ginv_xi_eta, J, dJgxx_dxi, dJgyy_deta,
-        # dJgxe_dxi, dJgxe_deta) from CubedSphereGrid.metric_eval and running
-        # eval_coeff on each stencil entry. Ghost cells are filled via
-        # extend_with_ghosts (panel connectivity aware). Analytic reference from
-        # gnomonic_metric + FD metric derivatives. Activated for
-        # `covariant_laplacian_cubed_sphere` (O(h²) full covariant Laplacian).
-        # The ESS canonical pipeline extension (discretize → build_evaluator with
-        # cubed_sphere selector dispatch) is tracked at ESS/ess-cubed-sphere-pipeline.
-        "cubed_sphere_cross_metric",
         # `unstructured_ode` (esd-cal) — ODE-pipeline runner for unstructured
         # sphere rules (grid_family=unstructured: nn_diffusion_mpas, nn_diffusion_duo).
         # Loads the MPAS Voronoi or DUO icosahedral mesh via builtin paths,
@@ -831,7 +772,6 @@ const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
     # families (not yet classified). Unstructured rules short-circuit to
     # "unstructured_ode" before reaching the lowering gate.
     "stencil_form_rule" => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
-    "cubed_sphere_cross_metric" => "ESD/esd-ecq",
     "unstructured_ode" => "ESD/esd-cal",
     "unsupported" => "no follow-up bead — out of Layer-B scope",
 )
@@ -1031,10 +971,6 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     n_args = length(args)
     sampling = String(get(input_json, "sampling", "cell_center"))
 
-    # Cubed-sphere cross_metric composite rules (esd-ecq): evaluated via a
-    # direct per-cell metric-binding runner (no ESS discretize needed).
-    grid_family == "cubed_sphere" && return "cubed_sphere_cross_metric"
-
     # Lat-lon sphere is its own topology family, regardless of arg count
     # (Y_l_m manufactured solutions need spherical geometry handling).
     grid_family == "latlon" && return "2d_latlon_sphere"
@@ -1143,7 +1079,6 @@ function _run_layer_b_canonical_grid(topology_key::AbstractString, rule::RuleFil
     topology_key == "1d_vertical_column"         && return _run_layer_b_1d_vertical_column(rule, mms, n)
     topology_key == "2d_latlon_sphere"           && return _run_layer_b_2d_latlon_sphere(rule, mms, n)
     topology_key == "2d_arakawa_periodic"        && return _run_layer_b_2d_arakawa_periodic(rule, mms, n)
-    topology_key == "cubed_sphere_cross_metric"  && return _run_layer_b_cubed_sphere_cross_metric(rule, mms, n)
     error(
         "Layer-B canonical-pipeline runner for topology=$(topology_key) not implemented; " *
             "tracked in a dsc-kswm follow-up bead. The dispatcher should not have been reached " *
@@ -1273,94 +1208,6 @@ function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::
         idx === nothing && error("var_map missing key 'u[$c]'")
         analytic = mms.derivative(lon_c[c], lat_c[c]) * inv_R2
         err = max(err, abs(du[idx] - analytic))
-    end
-    return err
-end
-
-"""
-    _run_layer_b_cubed_sphere_cross_metric(rule, mms, n) -> Float64
-
-Layer-B runner for `grid_family=cubed_sphere` cross_metric composite rules
-(esd-ecq). Directly evaluates the rule on a CubedSphereGrid of resolution `n`
-without routing through ESS `discretize → build_evaluator` (that pipeline
-extension for cubed_sphere selectors is tracked at ESS/ess-cubed-sphere-pipeline).
-
-Algorithm per interior cell (p, ic, jc) — physical cell index, not output index:
-1. For each `term` in `main_spec["terms"]`:
-   a. Load the named sub-stencil from `rule.discretizations[term["axis_stencil"]]`.
-   b. Evaluate each stencil entry's `coeff` via `eval_coeff` with bindings
-      `h = grid.dξ`, `J = grid.J[p,ic,jc]` (Jacobian at the center cell).
-   c. Multiply each coeff by the ghost-extended field value at the offset cell.
-   d. Sum across entries to get the stencil value.
-   e. Weight by `metric_eval(grid, term["metric_component"], p, ic, jc)` and `term["sign"]`.
-2. Sum all terms → discrete Laplacian at (p, ic, jc).
-3. Compare against `mms.derivative(ξ[ic], η[jc])` for the L_inf error.
-   The analytic Laplacian is panel-independent (gnomonic metric depends only on ξ,η).
-"""
-function _run_layer_b_cubed_sphere_cross_metric(rule::RuleFile, mms, n::Int)
-    rule_doc = JSON.parse(read(rule.path, String))
-    discretizations = get(rule_doc, "discretizations", Dict{String, Any}())
-    main_spec = get(discretizations, rule.name, nothing)
-    main_spec isa AbstractDict || error("rule spec missing for $(rule.name)")
-    get(main_spec, "kind", "") == "cross_metric" ||
-        error("cubed_sphere_cross_metric runner requires kind=\"cross_metric\"; got " * repr(get(main_spec, "kind", missing)))
-
-    Nc = n
-    grid = CubedSphereGrid(Nc; R = 1.0)
-    h = Float64(grid.dξ)
-
-    # Build test field on all (6, Nc, Nc) cells and extend with ghost cells.
-    phi = zeros(Float64, 6, Nc, Nc)
-    for p in 1:6, i in 1:Nc, j in 1:Nc
-        phi[p, i, j] = mms.ic(grid.ξ_centers[i], grid.η_centers[j])
-    end
-    phi_ext = extend_with_ghosts(phi, grid)  # (6, Nc+2*Ng, Nc+2*Ng)
-    Ng = grid.Ng
-
-    result = zeros(Float64, 6, Nc - 2, Nc - 2)
-
-    terms = get(main_spec, "terms", Any[])
-    for term in terms
-        axis_stencil = String(term["axis_stencil"])
-        metric_name = String(term["metric_component"])
-        sign_val = Float64(term["sign"])
-
-        stencil_spec = get(discretizations, axis_stencil, nothing)
-        stencil_spec isa AbstractDict ||
-            error("sub-stencil $(axis_stencil) not found in $(rule.name) rule doc")
-        entries = stencil_spec["stencil"]
-
-        for p in 1:6, ii in 1:(Nc - 2), jj in 1:(Nc - 2)
-            ic = ii + 1; jc = jj + 1
-            mc = metric_eval(grid, metric_name, p, ic, jc)
-            J_val = Float64(grid.J[p, ic, jc])
-            bindings = Dict{String, Float64}("h" => h, "J" => J_val)
-
-            stencil_sum = 0.0
-            for entry in entries
-                selectors = entry["selectors"]
-                coeff = eval_coeff(entry["coeff"], bindings)
-                xi_off = 0; eta_off = 0
-                for sel in selectors
-                    sel isa AbstractDict || continue
-                    ax = String(get(sel, "axis", ""))
-                    off = Int(get(sel, "offset", 0))
-                    ax == "xi"  && (xi_off = off)
-                    ax == "eta" && (eta_off = off)
-                end
-                phi_val = phi_ext[p, ic + Ng + xi_off, jc + Ng + eta_off]
-                stencil_sum += coeff * phi_val
-            end
-
-            result[p, ii, jj] += sign_val * mc * stencil_sum
-        end
-    end
-
-    err = 0.0
-    for p in 1:6, ii in 1:(Nc - 2), jj in 1:(Nc - 2)
-        ic = ii + 1; jc = jj + 1
-        ref = mms.derivative(grid.ξ_centers[ic], grid.η_centers[jc])
-        err = max(err, abs(result[p, ii, jj] - Float64(ref)))
     end
     return err
 end

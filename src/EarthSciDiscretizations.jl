@@ -8,10 +8,6 @@ import Symbolics
 
 # Grid infrastructure
 include("grids/abstract_grid.jl")
-include("grids/panel_connectivity.jl")
-include("grids/metric_tensors.jl")
-include("grids/super_grid.jl")
-include("grids/cubed_sphere.jl")
 include("grids/duo.jl")
 include("grids/mpas.jl")
 include("grids/cartesian.jl")
@@ -20,21 +16,9 @@ include("grids/latlon.jl")
 
 # Staggering and discrete space
 include("staggering.jl")
-include("discrete_space.jl")
-include("ghost_cells.jl")
 
 # Arakawa staggering runtime (depends on VarLocation from staggering.jl)
 include("grids/arakawa.jl")
-
-# FV3-specific operators
-# Wind-field operators (vorticity, kinetic energy, C↔D grid transformation +
-# sub-grid sin(α) flux) ported to JSON discretization rules under
-# `discretizations/finite_volume/fv3_*.json`. See dsc-247.
-# PPM edge reconstruction (`ppm_edge.jl`) ported to
-# `discretizations/finite_volume/ppm_edge_cubed_sphere.json`. See dsc-9yh.
-
-# Initial-condition projection
-include("bc_handler.jl")
 
 # Discretization rule catalog (parser delegator; ESS integration pending)
 include("rules.jl")
@@ -48,7 +32,7 @@ include("rule_eval.jl")
 include("ode_problem.jl")
 
 # Exports: Grid types
-export AbstractGrid, AbstractCubedSphereGrid, CubedSphereGrid
+export AbstractGrid
 export AbstractCurvilinearGrid, AbstractStaggeredGrid,
     AbstractVerticalGrid, AbstractUnstructuredGrid
 export GridTraitError
@@ -81,33 +65,9 @@ export VerticalGrid
 # Exports: Lat-lon grid family (GRIDS_API.md §2.3; rectilinear sphere surface)
 export LatLonGrid, nlon, nlon_uniform, row_offset, lon_edges, lon_centers, cell_area
 
-# Exports: Connectivity
-export EdgeDirection, West, East, South, North
-export PanelNeighbor, PANEL_CONNECTIVITY
-export transform_indices, verify_connectivity
-
-# Exports: Metrics
-export gnomonic_to_lonlat, gnomonic_to_cart
-export gnomonic_metric, compute_cell_area, compute_edge_length
-export compute_coord_jacobian, compute_forward_jacobian, compute_second_coord_jacobian
-export tangent_vectors_3d, compute_edge_rotation_matrix
-
 # Exports: Staggering
 export VarLocation, CellCenter, UEdge, VEdge, Corner
 export grid_size, full_array_size, ghost_array_size
-
-# Exports: Discrete space and ghost cells
-export CubedSphereDiscreteSpace, allocate_variable
-export fill_ghost_cells!, extend_with_ghosts
-export fill_ghost_cells_vector!, extend_with_ghosts_vector
-export ghost_fill_indices, ghost_fill_arrayop
-
-# Exports: FV3 super-grid
-export compute_super_grid, compute_super_grid!, compute_angle_at_point
-
-
-# Exports: Initial-condition projection
-export project_initial_condition
 
 # Exports: Rule catalog
 export RuleFile, load_rules
@@ -128,8 +88,8 @@ export to_esm
 # `EarthSciDiscretizations.grids.<family>` generator namespace (GRIDS_API.md §2.3).
 #
 # Each family is exposed as a keyword-only function; the arakawa family is the
-# first to land here. Future families (cartesian, lat_lon, cubed_sphere, …)
-# add siblings in this submodule as their phase beads complete.
+# first to land here. Future families add siblings in this submodule as their
+# phase beads complete.
 # -----------------------------------------------------------------------------
 module grids
 

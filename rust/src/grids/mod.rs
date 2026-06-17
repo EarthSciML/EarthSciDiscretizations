@@ -7,7 +7,6 @@
 
 pub mod arakawa;
 pub mod cartesian;
-pub mod cubed_sphere;
 pub mod duo;
 pub mod lat_lon;
 pub mod mpas;

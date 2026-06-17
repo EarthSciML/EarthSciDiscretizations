@@ -6,10 +6,6 @@ ESS `src/abstract_grid.jl`). ESD re-exports the trait root + tier subtypes
 and registers concrete grid families against them. Tier-C / Tier-M trait
 methods (and the `GridTraitError` exception) come from ESS as well; concrete
 families override them on the bulk-array contract.
-
-The legacy supertype `AbstractCubedSphereGrid` is kept here so existing ESD
-code that dispatches on it (panel connectivity, ghost-cell utilities) keeps
-working — it now sits beneath the ESS curvilinear root.
 """
 
 using EarthSciSerialization:
@@ -34,8 +30,6 @@ import EarthSciSerialization:
     metric_dgij_dxk,
     coord_jacobian,
     coord_jacobian_second
-
-abstract type AbstractCubedSphereGrid <: AbstractCurvilinearGrid end
 
 # ---------------------------------------------------------------------------
 # Per-grid lazy materialization cache (RFC §1: don't recompute bulk arrays
