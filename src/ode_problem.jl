@@ -13,7 +13,8 @@ const _CURVILINEAR_AXES = Dict{String, Tuple{Symbol, Symbol}}(
 )
 
 """
-    build_ode_problem(esm_path; grid_ref="") -> (ODEProblem, var_map)
+    build_ode_problem(esm_path; grid_ref="", reader_fn=nothing,
+                      extra_ics=Dict{String,Float64}()) -> (ODEProblem, var_map)
 
 Load a PDE component `.esm` file, optionally merge a Grid Discretization
 Descriptor (GDD) from `grid_ref`, run the ESS canonical discretization
@@ -27,15 +28,32 @@ discretized by `EarthSciSerialization.discretize(sys, grid)`.  Otherwise the
 existing rule-engine pipeline (Path A) is used.  No solver is invoked inside
 this constructor.
 
-`grid_ref` may be an absolute path or a path relative to `esm_path`'s
-directory.
+# Arguments
+- `grid_ref`: absolute path, or a path relative to `esm_path`'s directory, to
+  the GDD to merge before discretizing.
+- `reader_fn`: optional mesh reader callback forwarded to the unstructured grid
+  loaders (`build_mpas_grid`) for non-builtin MPAS meshes.
+- `extra_ics`: additional per-cell numeric initial conditions (keyed
+  `"var[i]"` / `"var[i,j]"`) merged into the ICs after expression ICs are
+  lowered — used e.g. to inject manufactured-solution fields per cell.
 
-If any model in the ESM declares `initial_conditions.type == "expression"`,
-the expression is evaluated at each cell using physical cell-centre
-coordinates `(index - 0.5) * spacing` for each spatial dimension.  The
-resulting per-cell values are passed to `build_evaluator` via its
-`initial_conditions` keyword, so `prob.u0` carries the spatially-varying
-field without any post-construction mutation by the caller.
+# Expression initial conditions
+If a model declares `initial_conditions.type == "expression"`,
+`_prepare_expression_ics!` rewrites each entry under `values` into an
+`initialization_equation` (`lhs = var`, `rhs = the IC expression`) on the ESM,
+and ESS's IC-arrayop engine materializes it: `discretize` turns the `ic` node
+into an `arrayop` that evaluates the RHS at every cell, substituting each
+spatial-dim symbol with an `index(coord_<dim>, <loop-idx>)` lookup, and
+`build_evaluator` evaluates those arrayops into `prob.u0` (explicit numeric ICs
+still win).  The `coord_<dim>` arrays are injected here as `const_arrays`.
+
+Sampling honours each variable's staggered `location`: a `cell_center`
+variable is sampled at cell centres `(index - 0.5) * spacing`, while a
+face-staggered component (`face_x`, `face_y`, `vertex`; e.g. Arakawa C-grid
+velocities) has its faced axis sampled at the cell face `(index - 1) * spacing`
+via a per-variable `coord_<var>_<dim>` array (nonuniform axes use the per-cell
+widths analogously).  Sampling a staggered field at the cell centre would
+degrade an otherwise O(h²) operator to O(h).
 """
 function build_ode_problem(esm_path::AbstractString;
                            grid_ref::AbstractString = "",
@@ -151,8 +169,10 @@ end
 # Mutates esm: converts InitialConditions type:expression to initialization_equations
 # for the ESS IC-arrayop engine (ess-tt6). Returns:
 #   numeric_ics   — Dict{String,Float64} of per-cell numeric ICs (e.g. "dz[k]")
-#   coord_arrays  — Dict{String,Vector{Float64}} of "coord_<dim>" cell-centre arrays
-#                   passed to build_evaluator as const_arrays.
+#   coord_arrays  — Dict{String,Vector{Float64}} of coordinate const_arrays
+#                   passed to build_evaluator: shared cell-centre "coord_<dim>"
+#                   plus per-variable "coord_<var>_<dim>" for face-staggered
+#                   components (sampled at their own location, not cell centres).
 function _prepare_expression_ics!(esm::Dict{String,Any})
     numeric_ics  = Dict{String,Float64}()
     coord_arrays = Dict{String,Vector{Float64}}()
@@ -197,10 +217,9 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
             haskey(dim_spacing, dname) || (dim_spacing[dname] = 1.0 / N)
         end
 
-        # Build coord_<dim> const_arrays (cell centres; nonuniform uses per-cell widths).
+        # Per-dim cell widths (nonuniform) or `nothing` (uniform, use dim_spacing).
+        dim_widths = Dict{String,Union{Vector{Float64},Nothing}}()
         for (dname, N) in dim_size
-            coord_name = "coord_$dname"
-            haskey(coord_arrays, coord_name) && continue
             pname = "d$(dname)"
             widths = Float64[]
             for k in 1:N
@@ -208,13 +227,17 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
                 val isa Real || (empty!(widths); break)
                 push!(widths, Float64(val))
             end
-            if length(widths) == N
-                cumwidths = cumsum(widths)
-                coord_arrays[coord_name] = [cumwidths[k] - widths[k] / 2.0 for k in 1:N]
-            else
-                h = dim_spacing[dname]
-                coord_arrays[coord_name] = [(i - 0.5) * h for i in 1:N]
-            end
+            dim_widths[dname] = length(widths) == N ? widths : nothing
+        end
+
+        # Build shared coord_<dim> cell-centre const_arrays. These back the
+        # cell-centred (and non-staggered) variables, whose IC RHS keeps its
+        # bare spatial symbols for ESS to substitute as index(coord_<dim>, idx).
+        for (dname, N) in dim_size
+            coord_name = "coord_$dname"
+            haskey(coord_arrays, coord_name) && continue
+            coord_arrays[coord_name] =
+                _coord_axis_array(dim_widths[dname], dim_spacing[dname], N, false)
         end
 
         # Move expression ICs to initialization_equations for ESS IC-arrayop engine.
@@ -224,13 +247,95 @@ function _prepare_expression_ics!(esm::Dict{String,Any})
             mspec["initialization_equations"] = init_eqs
         end
         for (var_name, expr_json) in get(ic_spec, "values", Dict{String,Any}())
-            push!(init_eqs, Dict{String,Any}("lhs" => String(var_name), "rhs" => expr_json))
+            vstr  = String(var_name)
+            vspec = get(vars, vstr, nothing)
+            shape = vspec === nothing ? nothing : get(vspec, "shape", nothing)
+            loc   = vspec === nothing ? "" : String(get(vspec, "location", ""))
+            faced = _faced_dims(loc)
+
+            rhs = expr_json
+            if !isempty(faced) && shape isa AbstractVector
+                # Staggered variable: sample each spatial-dim symbol at this
+                # variable's own physical location (face vs cell centre per axis),
+                # not the shared cell-centre coord_<dim>. ESS materializes the IC
+                # arrayop with loop index `_ARRAYOP_INDEX_NAMES[d]` = (i,j,k,…) by
+                # shape position, so the per-variable coord array we inject and the
+                # index node we splice must use that same letter.
+                idx_letters = ("i", "j", "k", "l", "m", "n")
+                coord_subst = Dict{String,Any}()
+                for (d, dim_any) in enumerate(shape)
+                    d <= length(idx_letters) || break
+                    dname = String(dim_any)
+                    N = get(dim_size, dname, nothing)
+                    N === nothing && continue
+                    is_face    = dname in faced
+                    coord_name = is_face ? "coord_$(vstr)_$dname" : "coord_$dname"
+                    if is_face
+                        coord_arrays[coord_name] = _coord_axis_array(
+                            dim_widths[dname], get(dim_spacing, dname, 1.0 / N), N, true)
+                    end
+                    coord_subst[dname] = Dict{String,Any}(
+                        "op" => "index", "args" => Any[coord_name, idx_letters[d]])
+                end
+                rhs = _subst_ic_coords(expr_json, coord_subst)
+            end
+
+            push!(init_eqs, Dict{String,Any}("lhs" => vstr, "rhs" => rhs))
         end
         delete!(ic_spec, "type")
         delete!(ic_spec, "values")
     end
 
     return numeric_ics, coord_arrays
+end
+
+# Coordinate samples for one spatial axis of length `N`.
+# `widths` non-nothing ⇒ nonuniform (per-cell widths); else uniform spacing `h`.
+# `face=true` returns the lower (west/south) cell-face positions; `face=false`
+# returns cell centres. Mirrors the (idx-0.5)*h / (idx-1)*h Arakawa convention
+# in src/grids/arakawa.jl (no domain-min offset, matching the shared coord_<dim>).
+function _coord_axis_array(widths::Union{Vector{Float64},Nothing}, h::Float64,
+                           N::Int, face::Bool)
+    if widths !== nothing
+        edges = cumsum(widths)            # edges[k] = upper face of cell k
+        return face ? [edges[k] - widths[k] for k in 1:N] :
+            [edges[k] - widths[k] / 2.0 for k in 1:N]
+    else
+        return face ? [(k - 1) * h for k in 1:N] : [(k - 0.5) * h for k in 1:N]
+    end
+end
+
+# Spatial dims that a variable's `location` places on a cell face rather than at
+# the cell centre. Arakawa C/D-grid locations: "face_<dim>" stages axis <dim>;
+# "vertex" stages every horizontal axis. "cell_center" (or unset) ⇒ none.
+function _faced_dims(location::AbstractString)::Set{String}
+    loc = String(location)
+    startswith(loc, "face_") && return Set{String}([loc[length("face_")+1:end]])
+    loc == "vertex" && return Set{String}(["x", "y"])
+    return Set{String}()
+end
+
+# Replace bare spatial-dim leaf strings in `args` positions with their per-cell
+# coord-index nodes (the same rewrite ESS's _substitute_coord_syms performs, but
+# done here so a staggered variable resolves its own coord array). op/wrt/key
+# names are untouched; once rewritten, ESS finds no bare symbol left to swap.
+function _subst_ic_coords(node, subst::Dict{String,Any})
+    node isa AbstractString && return get(subst, String(node), node)
+    node isa AbstractDict || return node
+    out = Dict{String,Any}()
+    for (k, v) in node
+        key = String(k)
+        if key == "args" && v isa AbstractVector
+            out[key] = Any[_subst_ic_coords(a, subst) for a in v]
+        elseif v isa AbstractDict
+            out[key] = _subst_ic_coords(v, subst)
+        elseif v isa AbstractVector
+            out[key] = Any[a isa AbstractDict ? _subst_ic_coords(a, subst) : a for a in v]
+        else
+            out[key] = v
+        end
+    end
+    return out
 end
 
 # ---------------------------------------------------------------------------
