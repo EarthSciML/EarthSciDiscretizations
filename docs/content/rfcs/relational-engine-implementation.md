@@ -188,7 +188,78 @@ were produced during the research pass and should live next to each binding's
   consolidating patterns (`performance.rs`/`canonicalize.rs`, `graph.jl`) that
   already exist; Python is greenfield but NumPy covers it directly.
 
-## 8. References
+## 8. Case study: conservative regridding (`ConservativeRegridding.jl` / `EarthSciData.jl`)
+
+First-order conservative (area-weighted) regridding is a clean fourth specialization
+of the IR — the same formal object as the FVM stencil and the ESI emissions
+contraction, with the index space being *cell-overlap pairs between two grids*. The
+mapping below is **verified against the actual `JuliaGeo/ConservativeRegridding.jl`
+and `EarthSciML/EarthSciData.jl` source**, not just the abstract formula.
+
+**The operation.** `F_target[j] = (1/A_j)·Σ_i A_ij·F_source[i]`, with
+`A_ij = area(src_i ∩ tgt_j)` and `A_j = Σ_i A_ij`. In `ConservativeRegridding.jl`
+this is a `Regridder` built once — a `SparseArrays` matrix of **raw overlap areas
+`A_ij`** with row-sums stored as `dst_areas` — and applied by
+`mul!(dst, intersections, src); dst ./= dst_areas`: a sparse matrix-vector product
+plus a normalization divide. Build-once / apply-many is explicit in the API.
+
+**FAQ decomposition (verified piece by piece):**
+
+| Piece | `ConservativeRegridding.jl` reality | IR mapping | Partition |
+|---|---|---|---|
+| overlap pairs `{(i,j):A_ij>0}` | STR-tree dual depth-first search (`dual_depth_first_search`) — not O(n·m) | data-derived index set via a **spatial (theta) join**, executed by a spatial-index physical operator | static |
+| `A_ij` | `GeometryOps.intersection` (Foster–Hormann planar / Sutherland–Hodgman spherical) + `GeometryOps.area`, `Manifold`-selectable | the **`intersection_area` kernel-factor** (RFC §8.1) | static |
+| `A_j = Σ_i A_ij` | sparse row-sums → `dst_areas` | **group-by-`j` `sum_product` FAQ** | static |
+| apply `Σ_i A_ij·F_src[i]` | `LinearAlgebra.mul!(dst, intersections, src)` | **`sum_product` FAQ** over the overlap set (sparse mat-vec) | dynamic (if `F_src` is time-varying) |
+| `/A_j` | `dst ./= dst_areas` (or folded into the matrix at build, `normalize=true`) | elementwise; foldable to build time | static fold or dynamic |
+
+Four of the five pieces are native FAQs; the fifth — `A_ij` — is the kernel-factor
+leaf, which is exactly why RFC §8.1 makes `intersection_area` a required op. The
+build-once/apply-many split the package already enforces *is* the static/dynamic
+partition (RFC §6.1).
+
+**The two boundaries, confirmed by the source:**
+
+1. **Spatial join ≠ equi-join.** The overlap set is built with an **STR-tree dual
+   DFS** — a spatial-index-accelerated theta-join — confirming the IR's equi-only
+   `join.on` does not cover it. The declarative form is either the
+   bin-Skolem-equi-join idiom or a first-class spatial-join kind backed by an
+   STR/R-tree physical operator (a planner concern). The IR expresses *that* there
+   is an overlap join; the spatial index is the operator that executes it.
+2. **`intersection_area` is an opaque kernel.** It delegates to `GeometryOps.jl`
+   (Foster–Hormann / Sutherland–Hodgman clipping + planar/spherical area). The IR
+   calls it as a factor leaf and does not express polygon clipping in semiring ops.
+   Its cross-binding conformance is tolerance-based (floating-point area) and it
+   carries a planar-vs-spherical `Manifold` flag — matching ConservativeRegridding's
+   design. Implementation options for this kernel across the three bindings are the
+   subject of the companion report
+   [*Implementing the `intersection_area` kernel across ESS bindings*](intersection-area-kernel-implementation.md).
+
+**`EarthSciData.jl` (verified):**
+- **Non-staggered grids** use `ConservativeRegridding.jl` directly — the regridder is
+  built once at `DataSetInterpolator` init and reused every step → the decomposition
+  above.
+- **Temporal interpolation** is a multilinear-in-time blend of cached slices
+  (`DataSetInterpolator`/`TemporalCache`, temporal-first then spatial) → another
+  `sum_product` FAQ (weighted sum of two time-slice factors). Its NetCDF loading /
+  slice caching is data-source plumbing, **outside** the formalism (analogous to ESI
+  table loading).
+- **Staggered grids** use a separate `InterpolatingRegridder` (B-spline
+  interpolation), *not* conservative regridding — a different operator. It is also a
+  `sum_product` interpolation FAQ, but over a B-spline stencil with its own
+  interpolation-weight factor rather than `intersection_area`. A second EarthSciData
+  operator with its own kernel.
+
+**Net:** conservative regridding's numeric core (overlap-area `sum_product` apply +
+normalization group-by + temporal-interp blend) is native to the IR and inherits the
+differentiability / XLA-tracing properties discussed for any `sum_product` FAQ (the
+apply is a sparse mat-vec / `segment_sum` over precomputed indices). Its two non-FAQ
+pieces — the spatial-index join operator and the `intersection_area` geometry kernel
+— are exactly what the IR *coordinates* rather than subsumes. ConservativeRegridding's
+`Regridder` is, in effect, a hand-built materialization of this static partition;
+emitting it as ESS IR would unify it with ESM/ESD/ESI under one evaluator.
+
+## 9. References
 
 - ESS repo (inspected `main`): `packages/EarthSciSerialization.jl/{Project.toml,src/tree_walk.jl,src/graph.jl}`,
   `packages/earthsci-toolkit-rs/{Cargo.toml,src/performance.rs,src/canonicalize.rs}`,
