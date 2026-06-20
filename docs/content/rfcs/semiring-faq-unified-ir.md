@@ -272,7 +272,11 @@ The one net-new surface this implies: because topology FAQs (`distinct`, `join`,
 `skolem`) live in the static partition, the **setup-time** evaluator must host a
 small relational engine (hash/sort) that ESS does not have today (it currently does
 only the numeric tree-walk + Tullio). This runs off the hot path, but it is real
-new code — see §9 for the v1 scoping decision.
+new code — see §9 for the v1 scoping decision, and the companion note
+[*Implementing the build-time relational engine across ESS bindings*](relational-engine-implementation.md)
+for the per-language library choices (Julia stdlib, Rust `indexmap`, Python NumPy —
+all already depended-on) and the cross-binding determinism spec the conformance
+suite requires.
 
 ## 7. Worked examples
 
