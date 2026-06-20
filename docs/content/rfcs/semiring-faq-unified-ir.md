@@ -272,8 +272,8 @@ The one net-new surface this implies: because topology FAQs (`distinct`, `join`,
 `skolem`) live in the static partition, the **setup-time** evaluator must host a
 small relational engine (hash/sort) that ESS does not have today (it currently does
 only the numeric tree-walk + Tullio). This runs off the hot path, but it is real
-new code — see §9 for the v1 scoping decision, and the companion note
-[*Implementing the build-time relational engine across ESS bindings*](relational-engine-implementation.md)
+new code — see §9 for the v1 scoping decision, and **Appendix A**
+([*the relational-engine note*](relational-engine-implementation.md))
 for the per-language library choices (Julia stdlib, Rust `indexmap`, Python NumPy —
 all already depended-on) and the cross-binding determinism spec the conformance
 suite requires.
@@ -332,31 +332,46 @@ Additive only (Draft 2020-12). On the `AggregateQuery` object (`op` ∈
 New Expression ops: `skolem` (variadic), `rank` (unary over an index set), `true`.
 Index sets gain a registry entry mirroring ESM `domain` dims and ESI `index_sets`.
 
-### 8.1 Required kernel-factor op: `intersection_area`
+### 8.1 Required geometry op: `intersect_polygon` (leaf) + `polygon_area` (FAQ)
 
-A small number of factors are **geometric kernels** — opaque scalar functions of an
-index tuple's geometry that are not decomposable into semiring operations (the same
-way `acos`/`sqrt` are evaluator-provided leaf primitives, not `arrayop`
-expressions). The IR *orchestrates* them as factor leaves; the evaluator *provides*
-the implementation.
+Conservative regridding's overlap-area factor `A_ij = area(cell_i ∩ cell_j)`
+decomposes into a **kernel leaf** and an **in-formalism aggregate**, drawn at the same
+boundary that makes `acos` a leaf but `Σ coeff·acos(…)` a FAQ:
 
-`intersection_area` is **required** (not optional) because first-order conservative
-regridding — a `sum_product` FAQ over a data-derived cell-overlap index set (see the
-conservative-regridding case study in
-[`relational-engine-implementation.md`](relational-engine-implementation.md)) —
-cannot be expressed without it:
+- **`intersect_polygon` — required kernel-factor leaf.**
+  `{"op": "intersect_polygon", "args": [poly_a, poly_b]}` returns the vertex ring of
+  the geometric intersection `A ∩ B`. This is the part that genuinely *cannot* be
+  expressed as a semiring aggregate: polygon clipping (Sutherland–Hodgman /
+  great-circle overlay) is an iterative, control-flow-heavy transformation producing
+  an ordered ring of **data-dependent length**, with robustness (exact predicates /
+  snap-rounding) that lives in *how* the floating point is evaluated. The IR
+  orchestrates it; the evaluator provides the implementation (the same status as
+  `acos`/`sqrt`). It carries a `manifold` flag (planar / spherical / geodesic), and
+  its cross-binding conformance is **tolerance-based**, not bit-for-bit.
+- **`polygon_area` — an ordinary `sum_product` FAQ, not a new op.** The area of a
+  vertex ring is `½ Σ_k (x_k·y_{k+1} − x_{k+1}·y_k)` (planar shoelace / Gauss–Green)
+  or the spherical-excess sum `Σ angles − (n−2)π`, i.e. a `sum_product` aggregate over
+  the ring index set — structurally identical to the DUO `area_eff` example (§7.3).
+  It needs only the existing scalar leaf primitives (`acos`/`atan2`/`sqrt`) for the
+  spherical case, no new op.
 
-- `{"op": "intersection_area", "args": [poly_a, poly_b]}` — the area of the
-  geometric intersection of two cell polygons `A ∩ B`. Returns a non-negative
-  scalar. Its arguments are geometry factors (per-cell vertex coordinates) keyed by
-  the index variables of the overlap pair `(i, j)`.
+This split mirrors `GeometryOps.jl`'s own `intersection` / `area` separation, and it
+**shrinks the opaque surface to the clip alone**. The payoff: because `polygon_area`
+is a FAQ, the regridding weight's dependence on mesh **vertex coordinates is
+differentiable and XLA-traceable in-formalism** (§2–§3 of Appendix A's companion
+analysis). The clip's combinatorial structure is piecewise-constant in the
+coordinates — it changes only at degenerate configurations — so holding it fixed and
+differentiating the area FAQ is exactly the correct adjoint: differentiable
+conservative-regridding weights w.r.t. geometry fall out of the existing FAQ AD, with
+`intersect_polygon` as a non-differentiated structural leaf.
 
-Because the result is a floating-point area from polygon clipping, its cross-binding
-conformance is **tolerance-based**, not bit-for-bit (unlike the integer relational
-ops); the geometry must declare planar vs spherical interpretation. The companion
-report
-[*Implementing the `intersection_area` kernel across ESS bindings*](intersection-area-kernel-implementation.md)
-covers the library and shared-engine options and the conformance tolerance.
+So the **required** new op is just `intersect_polygon`; `polygon_area` rides the
+existing aggregate machinery. Library and shared-engine options for the leaf, and the
+tolerance-based conformance design, are in **Appendix B**
+([*Implementing the `intersect_polygon` kernel across ESS bindings*](intersection-area-kernel-implementation.md)).
+Why the clip cannot be pushed further into the formalism, and the worked
+conservative-regridding decomposition, are in **Appendix A**
+([*the relational-engine note*](relational-engine-implementation.md), §8).
 
 ## 9. Backward compatibility & migration
 
@@ -429,3 +444,22 @@ covers the library and shared-engine options and the conformance tolerance.
   `discretizations/finite_difference/nn_diffusion_{mpas,duo}.json` and
   `src/ode_problem.jl` (`_unstructured_*`, the machinery this would retire);
   EarthSciInventory `esi-spec.md` (the relational AST and `pack` Skolem precedent).
+
+## 12. Appendices
+
+These companion research notes are part of this RFC; they are kept as separate
+documents because of their length and their implementation (rather than
+specification) focus.
+
+- **Appendix A — [*Implementing the build-time relational engine across ESS bindings*](relational-engine-implementation.md).**
+  The setup-time engine for `distinct`/`join`/`skolem`/`rank`/group-by (§5.5, §6.1):
+  rejects a shared embedded engine in favour of per-binding native primitives (Julia
+  stdlib, Rust `indexmap`, Python NumPy — all already depended-on), pins a
+  cross-binding sort-based determinism spec, and includes (§8) the **verified
+  conservative-regridding case study** and (§§2–3) the differentiability / query-planning
+  / XLA-tracing analysis the formalism inherits.
+- **Appendix B — [*Implementing the `intersect_polygon` kernel across ESS bindings*](intersection-area-kernel-implementation.md).**
+  The geometry-leaf survey behind §8.1: planar-vs-spherical polygon clipping libraries
+  per language, the shared-engine (GEOS / S2) analysis, why floating-point clipping
+  forces **tolerance-based** conformance, and the recommendation to compute regridding
+  weights once with a reference implementation and share the serialized artifact.

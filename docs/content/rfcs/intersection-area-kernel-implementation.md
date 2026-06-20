@@ -1,26 +1,37 @@
 ---
-title: "Implementing the intersection_area kernel across ESS bindings"
-description: "Research note and implementation recommendation for the intersection_area geometric kernel-factor (RFC §8.1) across the Julia, Rust, and Python implementations of earthsci-toolkit. Surveys planar vs spherical polygon-clipping libraries and shared C++ engines, and resolves the cross-binding conformance problem that floating-point geometry makes unavoidable."
+title: "Implementing the intersect_polygon kernel across ESS bindings"
+description: "Research note and implementation recommendation for the intersect_polygon geometric kernel-factor (RFC §8.1) — the polygon-clipping leaf of conservative regridding — across the Julia, Rust, and Python implementations of earthsci-toolkit. Surveys planar vs spherical polygon-clipping libraries and shared C++ engines, and resolves the cross-binding conformance problem that floating-point geometry makes unavoidable."
 ---
 
-> **Status:** Research note / implementation recommendation. Companion to
+> **Status:** Research note / implementation recommendation. This is **Appendix B** of
 > [*A semiring-parameterized FAQ IR for ESS arrayops*](semiring-faq-unified-ir.md)
-> (§8.1, the required `intersection_area` op) and to
-> [*Implementing the build-time relational engine across ESS bindings*](relational-engine-implementation.md)
-> (§8, the conservative-regridding case study). **Target repo:** EarthSciSerialization.
+> (§8.1, the required `intersect_polygon` op); see also **Appendix A**
+> ([*the relational-engine note*](relational-engine-implementation.md), §8, the
+> conservative-regridding case study). **Target repo:** EarthSciSerialization.
 
 ---
 
 ## 1. Scope and the constraint that flips the calculus
 
-`intersection_area(poly_a, poly_b)` returns the area of the geometric intersection of
-two grid cells (RFC §8.1). It is a **kernel-factor leaf** — an opaque geometric
-primitive the evaluator provides, not a semiring expression — used at **setup time**
-to build first-order conservative regridding weights (`A_ij`, the
-relational-engine note §8). Earth-science grids are on the **sphere** (lat-lon,
-cubed-sphere), so the kernel must in general do **spherical** polygon clipping
-(great-circle / parallel-meridian edges); treating lat-lon as a flat plane is wrong
-near the poles and the antimeridian.
+Conservative regridding's overlap-area factor `A_ij = area(cell_i ∩ cell_j)` splits
+(RFC §8.1) into a **kernel leaf** — `intersect_polygon(a, b)`, which clips two cell
+polygons and returns the intersection vertex ring — and an **in-formalism aggregate**,
+`polygon_area`, which is an ordinary `sum_product` FAQ over that ring (shoelace /
+Gauss–Green / spherical excess). **This report concerns the leaf**, `intersect_polygon`:
+the iterative, robustness-critical polygon clipping that genuinely cannot be expressed
+as a semiring aggregate and so must be an evaluator-provided primitive (the same status
+as `acos`/`sqrt`). It runs at **setup time** to build the regridding weights.
+
+(The split has a payoff noted in §8.1: because `polygon_area` is a FAQ, the weight's
+dependence on mesh vertex coordinates is differentiable/traceable in-formalism, with
+the clip — piecewise-constant in the coordinates — as a non-differentiated structural
+leaf. Nothing in this report changes if you keep the two fused as a single
+`intersection_area`; the library and conformance analysis below is about the clipping
+either way.)
+
+Earth-science grids are on the **sphere** (lat-lon, cubed-sphere), so the kernel must
+in general do **spherical** polygon clipping (great-circle / parallel-meridian edges);
+treating lat-lon as a flat plane is wrong near the poles and the antimeridian.
 
 **The decisive difference from the relational engine.** The relational engine's
 cross-binding determinism was *solvable bit-for-bit* by sorting integer tuples. This

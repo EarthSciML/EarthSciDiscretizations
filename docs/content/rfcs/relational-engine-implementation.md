@@ -208,7 +208,7 @@ plus a normalization divide. Build-once / apply-many is explicit in the API.
 | Piece | `ConservativeRegridding.jl` reality | IR mapping | Partition |
 |---|---|---|---|
 | overlap pairs `{(i,j):A_ij>0}` | STR-tree dual depth-first search (`dual_depth_first_search`) — not O(n·m) | data-derived index set via a **spatial (theta) join**, executed by a spatial-index physical operator | static |
-| `A_ij` | `GeometryOps.intersection` (Foster–Hormann planar / Sutherland–Hodgman spherical) + `GeometryOps.area`, `Manifold`-selectable | the **`intersection_area` kernel-factor** (RFC §8.1) | static |
+| `A_ij` | `GeometryOps.intersection` (Foster–Hormann planar / Sutherland–Hodgman spherical) + `GeometryOps.area`, `Manifold`-selectable | the **`intersect_polygon` kernel leaf** + **`polygon_area` FAQ** (RFC §8.1) — mirroring the `intersection`/`area` split | static |
 | `A_j = Σ_i A_ij` | sparse row-sums → `dst_areas` | **group-by-`j` `sum_product` FAQ** | static |
 | apply `Σ_i A_ij·F_src[i]` | `LinearAlgebra.mul!(dst, intersections, src)` | **`sum_product` FAQ** over the overlap set (sparse mat-vec) | dynamic (if `F_src` is time-varying) |
 | `/A_j` | `dst ./= dst_areas` (or folded into the matrix at build, `normalize=true`) | elementwise; foldable to build time | static fold or dynamic |
@@ -226,14 +226,16 @@ partition (RFC §6.1).
    bin-Skolem-equi-join idiom or a first-class spatial-join kind backed by an
    STR/R-tree physical operator (a planner concern). The IR expresses *that* there
    is an overlap join; the spatial index is the operator that executes it.
-2. **`intersection_area` is an opaque kernel.** It delegates to `GeometryOps.jl`
-   (Foster–Hormann / Sutherland–Hodgman clipping + planar/spherical area). The IR
-   calls it as a factor leaf and does not express polygon clipping in semiring ops.
-   Its cross-binding conformance is tolerance-based (floating-point area) and it
-   carries a planar-vs-spherical `Manifold` flag — matching ConservativeRegridding's
-   design. Implementation options for this kernel across the three bindings are the
-   subject of the companion report
-   [*Implementing the `intersection_area` kernel across ESS bindings*](intersection-area-kernel-implementation.md).
+2. **The clip is an opaque kernel; the area is not.** `GeometryOps.jl` already
+   separates `intersection` (the polygon clip) from `area`. The IR mirrors this:
+   `intersect_polygon` is the kernel leaf (iterative clipping, robustness-critical,
+   not expressible as a semiring aggregate), while `polygon_area` is an ordinary
+   `sum_product` FAQ over the clipped ring (shoelace / Gauss–Green / spherical excess)
+   — which makes the weight differentiable w.r.t. geometry in-formalism (RFC §8.1).
+   Only the clip's conformance is tolerance-based (floating-point), and it carries the
+   planar-vs-spherical `Manifold` flag. Implementation options for the clipping leaf
+   across the three bindings are the subject of the companion report
+   [*Implementing the `intersect_polygon` kernel across ESS bindings*](intersection-area-kernel-implementation.md).
 
 **`EarthSciData.jl` (verified):**
 - **Non-staggered grids** use `ConservativeRegridding.jl` directly — the regridder is
