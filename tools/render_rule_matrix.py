@@ -6,6 +6,10 @@ file (``docs/data/rule_matrix.json``).
 Inputs:
   * ``discretizations/<family>/*.json`` — rule metadata (declared
     ``grid_family``, ``applies_to.op`` per rule).
+  * ``discretizations/<family>/<rule>/fixtures/**/*.gdd.json`` — grid
+    descriptors a rule binds (``grids.<name>.family``). Used to resolve the
+    concrete column(s) for a *topology-class* rule (e.g. ``unstructured``,
+    which dispatches at runtime on the concrete MpasGrid / DuoGrid type).
   * ``discretizations/<family>/<rule>/fixtures/convergence/expected.esm`` —
     convergence fixture; ``expected_min_order`` is the order shown in the
     cell. ``applicable: false`` marks a structurally-skipped fixture.
@@ -47,9 +51,21 @@ GRID_FAMILIES: tuple[str, ...] = (
 
 # Synonyms used inside rule metadata that should map to a column above.
 GRID_FAMILY_ALIASES: dict[str, str] = {
-    "unstructured": "mpas",  # nn_diffusion_mpas declares grid_family=unstructured
     "lat_lon": "latlon",
 }
+
+# Topology classes that are *not* themselves a grid-family column: a rule may
+# declare one of these and apply to several concrete grids. ``unstructured``
+# (nn_diffusion_mpas / nn_diffusion_duo) is the only such class today; both
+# rules dispatch at runtime on the concrete grid type (MpasGrid / DuoGrid)
+# supplied by the GDD, so the matrix resolves their column(s) from the grid
+# families their GDD fixtures bind rather than from the declared class. (The
+# retired ``unstructured -> mpas`` alias collapsed DUO onto the mpas column.)
+TOPOLOGY_CLASSES: frozenset[str] = frozenset({"unstructured"})
+
+# Fallback column for a topology-class rule that ships no GDD fixtures to
+# disambiguate (preserves the historical unstructured -> mpas placement).
+TOPOLOGY_CLASS_FALLBACK: dict[str, str] = {"unstructured": "mpas"}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -59,6 +75,26 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _normalize_family(name: str) -> str:
     return GRID_FAMILY_ALIASES.get(name, name)
+
+
+def _fixture_grid_families(family: str, rule: str) -> set[str]:
+    """Grid families a rule's GDD fixtures actually bind.
+
+    Scans ``discretizations/<family>/<rule>/fixtures/**/*.gdd.json`` and
+    collects each descriptor's ``grids.<name>.family`` (normalized). Used to
+    resolve the concrete column(s) for a topology-class rule (e.g.
+    ``unstructured``), matching what the runtime dispatches on."""
+    fixtures_dir = REPO_ROOT / "discretizations" / family / rule / "fixtures"
+    families: set[str] = set()
+    for gdd in fixtures_dir.glob("**/*.gdd.json"):
+        try:
+            doc = _load_json(gdd)
+        except (OSError, json.JSONDecodeError):
+            continue
+        for grid in (doc.get("grids") or {}).values():
+            if isinstance(grid, dict) and grid.get("family"):
+                families.add(_normalize_family(grid["family"]))
+    return families
 
 
 def _walk_rules() -> list[dict[str, Any]]:
@@ -82,6 +118,17 @@ def _walk_rules() -> list[dict[str, Any]]:
                     # are not part of rule × grid dispatch, so omit them from
                     # the matrix.
                     continue
+                if grid_family in TOPOLOGY_CLASSES:
+                    # Topology-class rule: resolve the concrete grid column(s)
+                    # from the GDD fixtures the rule binds (what the runtime
+                    # dispatches on), falling back to the historical column
+                    # when no fixtures disambiguate.
+                    applicable_grids = sorted(
+                        _fixture_grid_families(family_dir.name, name)
+                        or {TOPOLOGY_CLASS_FALLBACK.get(grid_family, grid_family)}
+                    )
+                else:
+                    applicable_grids = [grid_family]
                 applies_to = body.get("applies_to") or {}
                 rules.append(
                     {
@@ -89,6 +136,7 @@ def _walk_rules() -> list[dict[str, Any]]:
                         "family": family_dir.name,
                         "rule_path": str(rule_path.relative_to(REPO_ROOT)),
                         "grid_family": grid_family,
+                        "applicable_grids": applicable_grids,
                         "applies_to_op": applies_to.get("op"),
                         "accuracy": body.get("accuracy"),
                     }
@@ -139,7 +187,7 @@ def _has_canonical_fixture(rule: str, grid: str) -> bool:
 
 def _build_cell(rule: dict[str, Any], grid: str, conv: dict[str, Any]) -> dict[str, Any]:
     """Return the matrix cell for one ``rule × grid`` combination."""
-    applicable = rule["grid_family"] == grid
+    applicable = grid in rule["applicable_grids"]
     if not applicable:
         return {
             "applicable": False,
