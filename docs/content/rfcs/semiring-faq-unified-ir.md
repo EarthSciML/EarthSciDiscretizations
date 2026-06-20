@@ -20,6 +20,12 @@ fixed **sum-product contraction over dense, name-matched index sets** into a
 additive capabilities: data-dependent index sets, value-equality joins, and
 content-addressed (Skolem) key construction.
 
+Because the generalized node is no longer "an array operation" (its Boolean
+specialization produces an *index set*, not an array), the concept is renamed
+**`AggregateQuery`** — a semiring FAQ — with the serialized tag becoming
+`"op": "aggregate"` and `"op": "arrayop"` retained as a **deprecated alias** so
+existing files keep parsing (§5.6).
+
 The payoff: a single IR whose specializations are (a) today's tensor/stencil
 discretization (ESM/ESD), (b) relational select-multiply-aggregate
 (EarthSciInventory's `aggregate(derive(join…))`), and (c) the mesh-topology
@@ -118,7 +124,7 @@ field reproduces today's semantics exactly.
 
 ```json
 {
-  "op": "arrayop",
+  "op": "aggregate",                  // canonical; "arrayop" still parses (deprecated alias, §5.6)
   "semiring": "sum_product",          // NEW: named (⊕, ⊗). Default = today.
   "output_idx": ["i"],
   "ranges": {
@@ -181,6 +187,30 @@ by a Skolem key, and expose the result as an index set that a geometric FAQ
 (§5.2) consumes. An optional `{"op": "rank"}` assigns dense integers for the
 array backend.
 
+### 5.6 Node name (`op` tag) and concept name
+"ArrayOp" describes only the dense sum-product specialization; the generalized
+node also expresses categorical joins, dedup, Skolem key minting, and — in its
+Boolean specialization — produces an *index set* rather than an array. The name is
+therefore updated, with the **serialized tag** and the **concept name** treated as
+two separate concerns:
+
+- **Concept / type name:** `AggregateQuery` (documented as "a semiring FAQ"). Used
+  in prose, schema titles, and any new evaluator type. `faq` is deliberately *not*
+  used as an identifier — it reads as "frequently asked questions" to anyone who
+  hasn't read the FAQ literature — though FAQ is cited as the formal pedigree.
+- **Serialized `op` tag:** canonical value becomes `"aggregate"`, chosen because it
+  is a readable word (matching this IR's node-tag convention — `index`, `skolem`,
+  `rank` — not the terse expression-operator symbols `+`/`*`) and because it
+  **reuses ESI's existing `aggregate` op**, so the cross-format unification is
+  legible at the tag level (ESI's `aggregate(derive(join…))` collapses into one
+  `aggregate` node).
+- **`arrayop` as a deprecated alias:** the evaluator and schema continue to accept
+  `"op": "arrayop"` as an exact synonym for `"op": "aggregate"`. Existing files are
+  unaffected (preserving the §9 strict-superset promise); the alias is marked
+  deprecated and files migrate on their own schedule. No deprecation window is
+  forced — the alias may live indefinitely, since a serialization tag is an
+  identifier, not a description.
+
 ## 6. Evaluator changes
 
 Most of this already exists; the deltas are bounded.
@@ -194,6 +224,7 @@ Most of this already exists; the deltas are bounded.
 | Value-equality joins | absent | resolve `join.on` at build time → gather/merge |
 | Named / data-derived index sets | partial (dense + dynamic bound) | index-set registry + materialization |
 | Skolem keys / `distinct` / `rank` | absent | new resolve passes (build-time) |
+| Node `op` tag | `arrayop` only | accept `aggregate` (canonical) + `arrayop` (deprecated alias) at dispatch |
 
 Crucially, the existing model — **build-time unroll → compiled `_Node` tree, with
 constants inlined as literals** — is preserved. Joins, Skolem keys, and
@@ -252,7 +283,7 @@ becomes unnecessary because the gathered weight evaluates symbolically.
 
 ### 7.2 ESI-style `aggregate(derive(join…))`
 ```json
-{ "op": "arrayop", "semiring": "sum_product",
+{ "op": "aggregate", "semiring": "sum_product",
   "output_idx": ["county", "pollutant"],
   "ranges": { "county": {"from": "county"}, "pollutant": {"from": "pollutant"},
               "src": {"from": "sourceType"}, "fuel": {"from": "fuelType"} },
@@ -266,7 +297,7 @@ ESI expressed in the ESS IR, no new evaluator concepts.
 
 ### 7.3 Mesh-edge enumeration (the operation einsum can't do)
 ```json
-{ "op": "arrayop", "semiring": "bool_and_or", "distinct": true,
+{ "op": "aggregate", "semiring": "bool_and_or", "distinct": true,
   "output_idx": ["edge"],
   "ranges": { "f": {"from": "faces"}, "a": {"from": "face_vertices", "of": ["f"]},
               "b": {"from": "face_vertices", "of": ["f"]} },
@@ -282,13 +313,16 @@ than imperative Julia.
 
 ## 8. Schema deltas
 
-Additive only (Draft 2020-12). On the `arrayop` object:
+Additive only (Draft 2020-12). On the `AggregateQuery` object (`op` ∈
+`{"aggregate", "arrayop"}`, the latter a deprecated alias — §5.6):
+- `op`: the `op` enum gains `"aggregate"` as the canonical value and **retains**
+  `"arrayop"` as an accepted synonym; both resolve to the same node.
 - `semiring`: `string` (enum of registered names). Optional; default `sum_product`.
 - `ranges[*]`: allow `{ "from": string, "of"?: string[] }` **in addition to**
   the existing `[lo, hi]` tuple.
 - `join`: optional array of `{ "on": [[string, string], …] }`.
 - `distinct`: optional `boolean`.
-- `key`: optional Expression (Skolem term) for index-set-producing arrayops.
+- `key`: optional Expression (Skolem term) for index-set-producing nodes.
 - `filter`: optional Expression predicate (already meaningful for ESI parity).
 
 New Expression ops: `skolem` (variadic), `rank` (unary over an index set), `true`.
@@ -315,6 +349,11 @@ Index sets gain a registry entry mirroring ESM `domain` dims and ESI `index_sets
   *not* the engine but the **caching/incrementality** of materialized static sets
   (shared, incrementally-rebuilt index sets to bound setup cost on large meshes) —
   the `structural_simplify`-grade refinement of the §6.1 partition.
+- **Node rename (alias, not a break):** the canonical tag becomes
+  `"op": "aggregate"` (concept/type `AggregateQuery`), with `"op": "arrayop"`
+  retained as a deprecated synonym at both the schema and evaluator-dispatch level
+  (§5.6). Existing files need no edit; rule emitters switch to `"aggregate"` going
+  forward. No deprecation window is forced.
 - **Cross-format:** this is the concrete shape of the "future `earthsci-core`
   shared AST" ESI's spec anticipates — ESM/ESD/ESI would import one IR + one
   evaluator.
