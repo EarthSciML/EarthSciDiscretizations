@@ -6,8 +6,8 @@ description: "Concrete proposal to generalize the ESS arrayop node into a Functi
 > **Status:** Draft proposal (concrete IR). **Bead:** unassigned.
 > **Target repo:** EarthSciSerialization (`packages/EarthSciSerialization.jl`, the
 > `arrayop` IR and `tree_walk.jl` evaluator). **Staged in:** EarthSciDiscretizations
-> `docs/content/rfcs/` because the authoring session could not push to ESS; relocate
-> to `EarthSciSerialization/docs/content/rfcs/` before review.
+> `docs/content/rfcs/`; relocate to `EarthSciSerialization/docs/content/rfcs/` before
+> review.
 
 ---
 
@@ -264,7 +264,7 @@ tree already contains only state-dependent operations. The static partition is t
 principled generalization of that fold to the new relational/topology ops, so the
 build-time blowup risk applies only to the static partition — which runs once at
 setup, paying a `structural_simplify`-style one-time cost, never per step. Unlike
-full MTK tearing, our static partition is **pure feed-forward** (topology →
+full MTK tearing, the static partition is **pure feed-forward** (topology →
 geometry → coeff, no algebraic loops), so it needs partial evaluation by
 dependency class, not equation tearing — strictly simpler.
 
@@ -272,11 +272,9 @@ The one net-new surface this implies: because topology FAQs (`distinct`, `join`,
 `skolem`) live in the static partition, the **setup-time** evaluator must host a
 small relational engine (hash/sort) that ESS does not have today (it currently does
 only the numeric tree-walk + Tullio). This runs off the hot path, but it is real
-new code — see §9 for the v1 scoping decision, and **Appendix A**
-([*the relational-engine note*](relational-engine-implementation.md))
-for the per-language library choices (Julia stdlib, Rust `indexmap`, Python NumPy —
-all already depended-on) and the cross-binding determinism spec the conformance
-suite requires.
+new code — see §9 for the v1 scoping decision, and **Appendix A** for the per-language
+library choices (Julia stdlib, Rust `indexmap`, Python NumPy — all already
+depended-on) and the cross-binding determinism spec the conformance suite requires.
 
 ## 7. Worked examples
 
@@ -357,21 +355,18 @@ boundary that makes `acos` a leaf but `Σ coeff·acos(…)` a FAQ:
 
 This split mirrors `GeometryOps.jl`'s own `intersection` / `area` separation, and it
 **shrinks the opaque surface to the clip alone**. The payoff: because `polygon_area`
-is a FAQ, the regridding weight's dependence on mesh **vertex coordinates is
-differentiable and XLA-traceable in-formalism** (§2–§3 of Appendix A's companion
-analysis). The clip's combinatorial structure is piecewise-constant in the
-coordinates — it changes only at degenerate configurations — so holding it fixed and
-differentiating the area FAQ is exactly the correct adjoint: differentiable
-conservative-regridding weights w.r.t. geometry fall out of the existing FAQ AD, with
-`intersect_polygon` as a non-differentiated structural leaf.
+is an ordinary FAQ, the regridding weight's dependence on mesh **vertex coordinates is
+differentiable and XLA-traceable in-formalism**. The clip's combinatorial structure is
+piecewise-constant in the coordinates — it changes only at degenerate configurations —
+so holding it fixed and differentiating the area FAQ is exactly the correct adjoint:
+differentiable conservative-regridding weights w.r.t. geometry fall out of the existing
+FAQ AD, with `intersect_polygon` as a non-differentiated structural leaf.
 
 So the **required** new op is just `intersect_polygon`; `polygon_area` rides the
 existing aggregate machinery. Library and shared-engine options for the leaf, and the
-tolerance-based conformance design, are in **Appendix B**
-([*Implementing the `intersect_polygon` kernel across ESS bindings*](intersection-area-kernel-implementation.md)).
-Why the clip cannot be pushed further into the formalism, and the worked
-conservative-regridding decomposition, are in **Appendix A**
-([*the relational-engine note*](relational-engine-implementation.md), §8).
+tolerance-based conformance design, are in **Appendix B**; why the clip cannot be
+pushed further into the formalism, and the worked conservative-regridding
+decomposition, are in **Appendix A** (§A.8).
 
 ## 9. Backward compatibility & migration
 
@@ -447,19 +442,551 @@ conservative-regridding decomposition, are in **Appendix A**
 
 ## 12. Appendices
 
-These companion research notes are part of this RFC; they are kept as separate
-documents because of their length and their implementation (rather than
-specification) focus.
+The two appendices below are implementation studies supporting the specification
+above: Appendix A covers the build-time relational engine (§§5.5, 6.1) and Appendix B
+the `intersect_polygon` kernel (§8.1), across the Julia, Rust, and Python
+implementations of `earthsci-toolkit`. They are grounded in inspection of the
+`earthsci-toolkit`, `ConservativeRegridding.jl`, and `GeometryOps.jl` source.
 
-- **Appendix A — [*Implementing the build-time relational engine across ESS bindings*](relational-engine-implementation.md).**
-  The setup-time engine for `distinct`/`join`/`skolem`/`rank`/group-by (§5.5, §6.1):
-  rejects a shared embedded engine in favour of per-binding native primitives (Julia
-  stdlib, Rust `indexmap`, Python NumPy — all already depended-on), pins a
-  cross-binding sort-based determinism spec, and includes (§8) the **verified
-  conservative-regridding case study** and (§§2–3) the differentiability / query-planning
-  / XLA-tracing analysis the formalism inherits.
-- **Appendix B — [*Implementing the `intersect_polygon` kernel across ESS bindings*](intersection-area-kernel-implementation.md).**
-  The geometry-leaf survey behind §8.1: planar-vs-spherical polygon clipping libraries
-  per language, the shared-engine (GEOS / S2) analysis, why floating-point clipping
-  forces **tolerance-based** conformance, and the recommendation to compute regridding
-  weights once with a reference implementation and share the serialized artifact.
+> **Note on source-level claims.** The appendices cite specifics (dependency lists,
+> file and symbol names, version numbers) from repositories outside this RFC's host
+> repo. These are well-cited but secondary; spot-check them before treating them as
+> authoritative.
+
+---
+
+## Appendix A — The build-time relational engine across ESS bindings
+
+*Setup-time `distinct` / `join` / `skolem` / `rank` / group-by, the cross-binding
+determinism spec, and the conservative-regridding case study.*
+
+### A.1 What this engine is, and the constraint that shapes it
+
+The unified IR makes mesh topology first-class: `distinct` (edge enumeration),
+`join` (connectivity inversion), `skolem` (content-addressed keys), and `rank`
+(dense renumbering) become declarable operations (§5.5). The static/dynamic
+partition (§6.1) runs these **once at setup**, off the per-timestep hot path,
+to materialize index sets that the numeric stencil then consumes. The engine needs
+exactly five primitives over integer-keyed tuples (vertex/cell IDs, scale
+10⁴–10⁷, one-time):
+
+1. **`distinct`** — deduplicate tuples (unique mesh edges from face→vertex lists).
+2. **`join`** — value-equality equi-join (connectivity inversion, *edges of cell i*).
+3. **`skolem`** — deterministic content-addressed key from a tuple.
+4. **`rank`** — dense integer renumbering of a distinct set (assign IDs to deduped tuples).
+5. **group-by + semiring aggregate** (sum/min/max) over those sets.
+
+**The decisive constraint comes from the ESS architecture.** `earthsci-toolkit` is
+**not one core with FFI bindings** — it is *parallel native implementations* per
+language (`EarthSciSerialization.jl`, `earthsci-toolkit-rs`, `earthsci_toolkit`
+(Python), plus TS/Go), each conforming to a shared contract and verified by a
+cross-binding conformance suite (`scripts/test-conformance.sh` against
+`CONFORMANCE_SPEC.md`). Therefore the hard problem is **bit-for-bit determinism
+across three independent implementations**: identical deduped sets, identical dense
+IDs, identical skolem keys. That, not raw speed, governs every choice below.
+
+### A.2 Recommendation in one line
+
+**Do not adopt a heavy relational library or a shared embedded engine. In each
+binding, hand-roll the five primitives on the data structure that language already
+depends on, and enforce a single cross-binding *determinism spec* (canonical
+sort-based ordering + canonical-tuple skolem keys).** The relational logic is
+~100 lines per language; the value is in the spec, which no library provides for
+free.
+
+This also matches what the ESS codebase already does: the primitives exist
+informally in two of the three bindings and only need to be unified and made
+deterministic (§A.4).
+
+### A.3 Why not a shared engine (DuckDB / Polars / Arrow)
+
+A shared engine is the obvious "identical semantics for free" idea. It is rejected
+here, for the reasons in the table.
+
+| Engine | Julia | Python | Rust | Same core? | Weight | Verdict |
+|---|---|---|---|---|---|---|
+| **DuckDB** (1.5.2, 2026) | `DuckDB.jl` ✅ | `duckdb` ✅ | `duckdb-rs` ✅ | **Yes** (one C++ engine via C API) | Heavy: native `libduckdb` ~25–60 MB/platform | **Rejected** — only true 3-language same-core option, but contradicts the parallel-native architecture, adds a heavy native dep to all three packages, and *still requires* `ORDER BY`-everything discipline + conformance tests. Buys less than it appears. |
+| **Polars** | `Polars.jl` ✗ (~30★, unmaintained since ~2023) | `polars` ✅ | `polars` crate ✅ | Shared Rust core in **2 of 3** | Medium–heavy | **Rejected** — no mature Julia binding; can't anchor 3-way conformance. (`maintain_order` has also had optimizer escapes.) |
+| **Arrow / Acero** | `Arrow.jl` ✗ (format/IO only, no Acero) | `pyarrow` ✅ (Acero) | `arrow-rs` ✗ (uses DataFusion) | **No** (three different execution stacks) | Medium | **Rejected** — not uniform across the three. |
+
+DuckDB remains worth keeping as a **throwaway oracle** during conformance-test
+development (`SELECT DISTINCT … ORDER BY …`, `dense_rank() OVER (ORDER BY …)`) to
+cross-check the hand-rolled output — but not as a shipped dependency.
+
+### A.4 Per-binding recommendation (and what already exists)
+
+Each binding should add a small `relational` module using the structure it
+*already* depends on. The cross-binding agreement comes from §A.5, not the library.
+
+#### Julia — stdlib `Dict`/`Set`/`sort` (+ `OrderedCollections`, already a dep)
+`EarthSciSerialization.jl` (v0.6.0, Julia ≥1.10) deps are lean — `JSON3`,
+`OrderedCollections`, `Tullio`, `Unitful`; **no DataFrames/DuckDB**. The evaluator
+is two-phase: build-time `_compile` / `build_evaluator` and hot-path `_eval_node`;
+the engine slots in as a build-time topology pre-pass beside `_compile`. **`src/graph.jl`
+already hand-rolls distinct (`Set{String}`), joins (composite-key strings), and
+group-by (`Dict` node-maps) — but with no `rank` and no ordering guarantees.** The
+work is to formalize that and pin the order. `sort` is stable by default since
+Julia 1.9. *Reject* DataFrames.jl (multi-second TTFX, "undefined" join/group order)
+and DuckDB.jl (native binary) for production.
+
+#### Rust — `indexmap` (already a dep) + canonical sort
+`earthsci-toolkit-rs` (v0.6.0, edition 2024) already depends on
+`indexmap = "2"`, `ndarray`, `smallvec`; **no polars/datafusion/arrow**. It already
+encodes the exact discipline needed: `src/performance.rs` does sort-then-enumerate
+for reproducible dense indices (**that is `rank`**), and `src/canonicalize.rs`
+sorts args on a stable key and has `format_canonical_float` (**that is
+`skolem`/`distinct`**). Add `src/relational.rs` using `IndexSet`/`IndexMap` (whose
+iteration order is insertion order, *independent of the hasher*) and
+`sort_unstable` on the full tuple. *Reject* `polars`/`datafusion`/`arrow` (heavy,
+out of proportion) and never let a non-portable fast hasher (`ahash`,
+`rustc-hash`/FxHash) drive emitted order or keys.
+
+#### Python — NumPy (already a dep) `lexsort`/`unique`/`searchsorted`
+`earthsci_toolkit` already hard-depends on NumPy/SciPy/xarray; **no
+pandas/polars/duckdb/pyarrow**. The evaluator is a NumPy AST interpreter
+(`numpy_interpreter.py`); spatial/mesh ops are contractually lowered at setup
+(`UnreachableSpatialOperatorError`) — exactly this engine's slot. Relational code is
+**greenfield** here. Build the five primitives on `np.unique(axis=0)` (lexicographically
+sorted unique rows), `np.lexsort`, and `searchsorted`-based joins; reuse the
+existing `canonicalize.py` total order. *Reject* pandas (dtype coercion, shifting
+sort defaults) and bare `set`/`hash()` (PYTHONHASHSEED-sensitive).
+
+### A.5 The cross-binding determinism spec (the normative deliverable)
+
+This is the normative deliverable: a spec all three implementations must
+honor so their outputs are byte-identical. **Governing principle: every emitted set
+is a pure function of a defined total order over tuples; no observable output ever
+depends on hash-table iteration order or a language-native hash value.**
+
+1. **Total order.** Lexicographic over tuple fields, documented per type: integers
+   by value; **strings by Unicode code-point (UTF-8 byte) order**, not locale
+   collation; floats *forbidden in keys* (keep keys integer IDs) — if unavoidable,
+   reuse `canonicalize`'s float formatting and reject NaN, normalize `-0.0`→`0.0`.
+2. **`distinct`** = sort by the total order, drop adjacent duplicates. Output order
+   is the sorted order — **never insertion / first-seen order** (not portable: Rust
+   `HashSet` is randomly seeded, Julia `Dict` order is unspecified, Python `set`
+   order is PYTHONHASHSEED-sensitive).
+3. **`rank`** = dense IDs by position in the sorted distinct sequence. **Pin the
+   base in `CONFORMANCE_SPEC.md`** (Julia is 1-based, Rust/Python 0-based): assert
+   on the canonical numbering and convert at the binding boundary.
+4. **`skolem`** = a **canonical tuple**, not a hash. For an undirected edge use
+   `(min(u,v), max(u,v))`; generalize to "sort components for symmetric relations,
+   preserve order for directed." The dense ID then comes from `rank`. This keeps
+   hashing out of the determinism-critical path entirely.
+   - *If* a fixed-width fingerprint is genuinely required, specify a **portable,
+     seed-pinned, non-cryptographic hash** (XXH3-64, seed 0 — native impls in all
+     three: `xxhash-rust`, `xxhash`, `XXhash.jl`; or BLAKE2/SHA via `hashlib`) over
+     a **canonical byte serialization** (fixed field order, little-endian ints,
+     UTF-8 strings, length-prefixed). **Never** a language-native `hash()` /
+     `Base.hash` / `DefaultHasher`.
+5. **`join` / group-by aggregate.** Use hashing only to *bucket*; **sort the
+   emitted result by the canonical key**. Semiring combines must be associative +
+   commutative (sum, min, max, count, boolean-or) so input/parallel order can't
+   change results. Beware floating-point parallel reduction (last-ULP drift): keep
+   exact/integer semirings, or do the final reduce sequentially in canonical order.
+
+#### The randomization footguns this neutralizes
+- **Rust:** `HashMap`/`HashSet` default to SipHash-1-3 with a per-instance random
+  seed → "arbitrary" iteration order.
+- **Python:** `hash()` of str/bytes is SipHash with per-process `PYTHONHASHSEED`.
+- **Julia:** `Dict`/`Set` iteration order is an unspecified implementation detail;
+  `Base.hash` is process-seeded and not cross-version/cross-language stable.
+
+Each footgun affects *only* hash-table iteration order and runtime hash values.
+Sorting the output and using content-defined keys makes every primitive a pure
+function of its input multiset, immune to all three.
+
+#### Conformance-suite additions
+`CONFORMANCE_SPEC.md` currently asserts *semantic* equivalence for graphs and
+tolerates "minor formatting differences"; the bit-for-bit guarantee for relational
+index sets is **new spec to add**. Tests should feed identical mesh inputs to all
+three implementations and assert **byte-identical serialized index sets and
+identical dense-ID arrays**, including adversarial inputs: duplicate edges, reversed
+edge orientation, and permuted input order (to prove order-independence).
+
+### A.6 Reference API shape (canonical-sort convention)
+
+Identical semantics in all three languages; only syntax differs. Hash structures
+are used purely to bucket/dedup; the emitted order always comes from a sort on the
+full tuple.
+
+```
+skolem_edge(a, b)      = (a <= b) ? (a, b) : (b, a)        # canonical tuple, no hash
+distinct(tuples)       = sort(unique(tuples))               # total order, dedup
+rank(distinct_sorted)  = { t -> i (+1 if 1-based) for i, t in enumerate(sorted) }
+join(left, right, key) = bucket right by key; probe; emit sorted by canonical key
+group_agg(rows, ⊕)     = bucket by group key; ⊕ within bucket; emit sorted by key
+```
+
+Concrete sketches per language (`indexmap::IndexSet` + `sort_unstable` in Rust;
+`Set`+`sort!` in Julia; `np.unique(axis=0)`/`np.lexsort`/`searchsorted` in Python)
+should live next to each binding's `relational` module.
+
+### A.7 Net recommendation
+
+- **Architecture:** parallel native implementations, mirroring the toolkit. No
+  shared engine, no heavy DataFrame/SQL dependency.
+- **Libraries (all already depended-on):** Julia stdlib `Dict`/`Set`/`sort`
+  (+`OrderedCollections`); Rust `indexmap`; Python NumPy.
+- **The real work:** write §A.5 into `CONFORMANCE_SPEC.md` and back it with
+  adversarial cross-binding tests. The five primitives are small and stable; the
+  determinism spec is the durable artifact.
+- **Effort:** ~100 lines per binding plus the spec; in Rust and Julia much of it is
+  consolidating patterns (`performance.rs`/`canonicalize.rs`, `graph.jl`) that
+  already exist; Python is greenfield but NumPy covers it directly.
+
+### A.8 Case study: conservative regridding (`ConservativeRegridding.jl` / `EarthSciData.jl`)
+
+First-order conservative (area-weighted) regridding is a clean fourth specialization
+of the IR — the same formal object as the FVM stencil and the ESI emissions
+contraction, with the index space being *cell-overlap pairs between two grids*. The
+mapping below is **verified against the `JuliaGeo/ConservativeRegridding.jl`
+and `EarthSciML/EarthSciData.jl` source**, not just the abstract formula.
+
+**The operation.** `F_target[j] = (1/A_j)·Σ_i A_ij·F_source[i]`, with
+`A_ij = area(src_i ∩ tgt_j)` and `A_j = Σ_i A_ij`. In `ConservativeRegridding.jl`
+this is a `Regridder` built once — a `SparseArrays` matrix of **raw overlap areas
+`A_ij`** with row-sums stored as `dst_areas` — and applied by
+`mul!(dst, intersections, src); dst ./= dst_areas`: a sparse matrix-vector product
+plus a normalization divide. Build-once / apply-many is explicit in the API.
+
+**FAQ decomposition (verified piece by piece):**
+
+| Piece | `ConservativeRegridding.jl` reality | IR mapping | Partition |
+|---|---|---|---|
+| overlap pairs `{(i,j):A_ij>0}` | STR-tree dual depth-first search (`dual_depth_first_search`) — not O(n·m) | data-derived index set via a **spatial (theta) join**, executed by a spatial-index physical operator | static |
+| `A_ij` | `GeometryOps.intersection` (Foster–Hormann planar / Sutherland–Hodgman spherical) + `GeometryOps.area`, `Manifold`-selectable | the **`intersect_polygon` kernel leaf** + **`polygon_area` FAQ** (§8.1) — mirroring the `intersection`/`area` split | static |
+| `A_j = Σ_i A_ij` | sparse row-sums → `dst_areas` | **group-by-`j` `sum_product` FAQ** | static |
+| apply `Σ_i A_ij·F_src[i]` | `LinearAlgebra.mul!(dst, intersections, src)` | **`sum_product` FAQ** over the overlap set (sparse mat-vec) | dynamic (if `F_src` is time-varying) |
+| `/A_j` | `dst ./= dst_areas` (or folded into the matrix at build, `normalize=true`) | elementwise; foldable to build time | static fold or dynamic |
+
+Four of the five pieces are native FAQs; the fifth — `A_ij` — splits into the
+`intersect_polygon` kernel leaf and the `polygon_area` FAQ, which is exactly why §8.1
+makes `intersect_polygon` a required op. The build-once/apply-many split the package
+already enforces *is* the static/dynamic partition (§6.1).
+
+**The two boundaries, confirmed by the source:**
+
+1. **Spatial join ≠ equi-join.** The overlap set is built with an **STR-tree dual
+   DFS** — a spatial-index-accelerated theta-join — confirming the IR's equi-only
+   `join.on` does not cover it. The declarative form is either the
+   bin-Skolem-equi-join idiom or a first-class spatial-join kind backed by an
+   STR/R-tree physical operator (a planner concern). The IR expresses *that* there
+   is an overlap join; the spatial index is the operator that executes it.
+2. **The clip is an opaque kernel; the area is not.** `GeometryOps.jl` already
+   separates `intersection` (the polygon clip) from `area`. The IR mirrors this:
+   `intersect_polygon` is the kernel leaf (iterative clipping, robustness-critical,
+   not expressible as a semiring aggregate), while `polygon_area` is an ordinary
+   `sum_product` FAQ over the clipped ring (shoelace / Gauss–Green / spherical excess)
+   — which makes the weight differentiable w.r.t. geometry in-formalism (§8.1).
+   Only the clip's conformance is tolerance-based (floating-point), and it carries the
+   planar-vs-spherical `Manifold` flag. Implementation options for the clipping leaf
+   across the three bindings are the subject of **Appendix B**.
+
+**`EarthSciData.jl` (verified):**
+- **Non-staggered grids** use `ConservativeRegridding.jl` directly — the regridder is
+  built once at `DataSetInterpolator` init and reused every step → the decomposition
+  above.
+- **Temporal interpolation** is a multilinear-in-time blend of cached slices
+  (`DataSetInterpolator`/`TemporalCache`, temporal-first then spatial) → another
+  `sum_product` FAQ (weighted sum of two time-slice factors). Its NetCDF loading /
+  slice caching is data-source plumbing, **outside** the formalism (analogous to ESI
+  table loading).
+- **Staggered grids** use a separate `InterpolatingRegridder` (B-spline
+  interpolation), *not* conservative regridding — a different operator. It is also a
+  `sum_product` interpolation FAQ, but over a B-spline stencil with its own
+  interpolation-weight factor rather than `intersect_polygon`. A second EarthSciData
+  operator with its own kernel.
+
+**Net:** conservative regridding's numeric core (overlap-area `sum_product` apply +
+normalization group-by + temporal-interp blend) is native to the IR and inherits the
+differentiability / XLA-tracing properties of any `sum_product` FAQ (the
+apply is a sparse mat-vec / `segment_sum` over precomputed indices). Its two non-FAQ
+pieces — the spatial-index join operator and the `intersect_polygon` geometry kernel
+— are exactly what the IR *coordinates* rather than subsumes. ConservativeRegridding's
+`Regridder` is, in effect, a hand-built materialization of this static partition;
+emitting it as ESS IR would unify it with ESM/ESD/ESI under one evaluator.
+
+### A.9 References
+
+- ESS repo (`main`): `packages/EarthSciSerialization.jl/{Project.toml,src/tree_walk.jl,src/graph.jl}`,
+  `packages/earthsci-toolkit-rs/{Cargo.toml,src/performance.rs,src/canonicalize.rs}`,
+  `packages/earthsci_toolkit/{pyproject.toml,src/earthsci_toolkit/numpy_interpreter.py,canonicalize.py}`,
+  `CONFORMANCE_SPEC.md` — <https://github.com/EarthSciML/EarthSciSerialization>.
+- Determinism: Rust `HashMap` SipHash randomization (`std::collections::HashMap`
+  docs); PEP 456 (Python SipHash / hash randomization); `indexmap` hasher-independent
+  order (docs.rs/indexmap); Julia `sort` stability (≥1.9).
+- Cross-language hashing: xxHash / XXH3 (`xxhash-rust`, `xxhash` PyPI, `XXhash.jl`).
+- Engines surveyed: DuckDB 1.5.2 (`DuckDB.jl`, `duckdb`, `duckdb-rs`); Polars
+  (`polars` crate + PyPI; `Polars.jl` unmaintained); Apache Arrow / Acero
+  (`pyarrow` only; `Arrow.jl` format-only; Rust DataFusion).
+- Cross-references: §6.1 (static/dynamic partition), §9 (v1 topology engine).
+
+---
+
+## Appendix B — The `intersect_polygon` kernel across ESS bindings
+
+*Planar-vs-spherical polygon-clipping libraries, the shared-engine (GEOS / S2)
+analysis, and the tolerance-based conformance design.*
+
+### B.1 Scope and the constraint that flips the calculus
+
+Conservative regridding's overlap-area factor `A_ij = area(cell_i ∩ cell_j)` splits
+(§8.1) into a **kernel leaf** — `intersect_polygon(a, b)`, which clips two cell
+polygons and returns the intersection vertex ring — and an **in-formalism aggregate**,
+`polygon_area`, which is an ordinary `sum_product` FAQ over that ring (shoelace /
+Gauss–Green / spherical excess). **This appendix concerns the leaf**, `intersect_polygon`:
+the iterative, robustness-critical polygon clipping that genuinely cannot be expressed
+as a semiring aggregate and so must be an evaluator-provided primitive (the same status
+as `acos`/`sqrt`). It runs at **setup time** to build the regridding weights.
+
+Earth-science grids are on the **sphere** (lat-lon, cubed-sphere), so the kernel must
+in general do **spherical** polygon clipping (great-circle / parallel-meridian edges);
+treating lat-lon as a flat plane is wrong near the poles and the antimeridian.
+
+**The decisive difference from the relational engine.** The relational engine's
+cross-binding determinism is *solvable bit-for-bit* by sorting integer tuples
+(Appendix A). This kernel is the opposite: it produces a **floating-point area from
+polygon clipping**, and FP clipping is irreducibly implementation-dependent —
+different libraries (or a C++ engine vs. a pure-language port) differ in intersection
+ordering, area summation order, robust-predicate strategy, and snapping. So:
+
+> **Bit-for-bit identity across *independent* geometry implementations is
+> unachievable. Conformance for the clip kernel must be tolerance-based.**
+
+This inverts the shared-engine calculus. In Appendix A a shared engine (DuckDB) is
+rejected because parallel-native + sort already gives bit-identity for free; here,
+parallel-native *cannot* give bit-identity, so a **shared C++ core becomes genuinely
+attractive** — it collapses the problem from "three algorithms" to "one algorithm,
+three builds," the only route to near-exact agreement.
+
+### B.2 The architectural move that mostly dissolves the problem
+
+The clip kernel lives in the **static partition** (§6.1), and its output feeds a
+**serializable sparse weight matrix** (`ConservativeRegridding.jl`'s `Regridder` is
+exactly this — §A.8). That means the cross-binding question can be sidestepped:
+
+> **Compute regridding weights *once*, with a single reference geometry
+> implementation, serialize the sparse `A_ij` (+ `dst_areas`) artifact, and have the
+> other bindings *load and apply* it.** The apply is the integer-indexed
+> `sum_product` FAQ — bit-identical across bindings by the Appendix A determinism spec.
+> No binding except the reference needs a geometry kernel at all.
+
+This is the "materialize + cache the static partition" decision applied to
+geometry. It is the **primary recommendation**: the hard, non-portable floating-point
+work is done in one place; conformance then applies to the *apply* (bit-identical)
+plus a one-time tolerance check on the serialized weights. Three independent
+bit-identical geometry kernels are needed **only** if every binding must build
+weights from raw grids with no shared artifact — a requirement worth avoiding.
+
+The natural reference implementation is **Julia + GeometryOps.jl**, because
+`ConservativeRegridding.jl` already uses exactly that stack for native spherical
+regridding (§A.8). ESS would emit/consume its serialized weights rather than
+re-deriving them three times.
+
+### B.3 Per-binding libraries (when an independent build *is* required)
+
+If a binding must build weights itself (e.g. dynamic/online meshes with no
+precompute step), here is the best available tool per language. Rust is the weak
+point.
+
+#### Julia — GeometryOps.jl (native spherical; the reference)
+`GeometryOps.jl` (0.1.x line, JuliaGeo) is the only mature Julia library doing
+**native, non-approximate spherical** polygon intersection + area: `Spherical()`
+manifold, `ConvexConvexSutherlandHodgman` clipping, `area(Spherical(), …)` via
+Girard's theorem; `Planar()` and `Geodesic()` (WGS84, via Proj) also available. Pure
+Julia, no C++ binary. It is what `ConservativeRegridding.jl` calls internally.
+**Use as the reference geometry implementation.** LibGEOS.jl
+(GEOS, planar-only) and Meshes.jl (planar/convex-oriented clipping) are not the right
+tools for the spherical case.
+
+#### Python — spherely (S2) primary; shapely/GEOS + projection fallback
+- **`spherely`** (0.1.1, April 2026) — vectorized NumPy bindings to **Google S2** via
+  `s2geography`; true spherical: `spherely.area(spherely.intersection(a, b), radius=R)`.
+  The closest spherical mirror of the shapely API. **Caveat: pre-1.0, explicitly
+  "early stage."**
+- **`shapely`** (2.1.2, GEOS 3.13.1) — mature but **planar only**; usable as a
+  spherical approximation by reprojecting each cell pair to a **local equal-area
+  projection** (`pyproj`) and clipping in the plane.
+- Precedent: the dominant Python conservative-regridding stack is **xESMF/ESMF**
+  (SCRIP algorithm), which does true spherical overlap in **3D Cartesian** on the
+  sphere and emits a sparse weight matrix — i.e. it already follows the
+  "compute-weights-once, apply-many" pattern of §B.2.
+
+#### Rust — the forcing function: no native spherical clipper exists
+There is **no robust native-Rust spherical polygon-clipping + area** library in 2026:
+- `geo` (0.33) / `i_overlay` (7.x) — robust **planar** Boolean ops; `geo` *does* ship
+  spherical/geodesic **area** traits (`ChamberlainDuquetteArea`, `GeodesicArea`/Karney),
+  but its **intersection is planar only**. So you can measure a spherical polygon you
+  already have, not clip two on the sphere.
+- `georust/geos` (`geos` 11 / `geos-sys` 2, GEOS 3.14) — **planar**, same C++ core as
+  shapely/LibGEOS; spherical only via per-cell local projection.
+- `s2` (yjh0502, pure-Rust port of Go S2) — **polygon boolean ops are unimplemented**
+  (`loop`/`polygon`/`shapeindex` pending); stalled at 0.0.x.
+- `sphersgeo` (STScI) — has `.intersection()` + spherical area, but its docs warn it
+  is **explicitly non-rigorous** (degenerate/touching cases unhandled); 0.1.x.
+
+This is decisive: the "three independent native libraries" model **cannot work for
+Rust at all**. A Rust binding that must build weights independently has only two real
+options — **FFI to a shared spherical C++ core (S2)** (§B.4) or **consume the
+serialized weights** (§B.2). Rust is therefore the strongest argument *both* for the
+§B.2 artifact-sharing approach *and*, where that's impossible, for a vendored shared
+S2 core rather than per-language libraries.
+
+### B.4 Shared C++ engine options
+
+| Engine | Julia | Python | Rust | Same core ×3? | Geometry | Verdict |
+|---|---|---|---|---|---|---|
+| **GEOS** (3.14) | LibGEOS.jl | shapely | `georust/geos` | **Yes** (one `libgeos` C API) | **Planar** | Only true 3-language same-core option; planar ⇒ needs per-cell local projection for the sphere; deterministic (OverlayNG, robust predicates) and near-bit-identical *if the same GEOS version/build is pinned across all three* |
+| **S2geometry** | ✗ (JSoC proposal only) | spherely / `s2geometry` (SWIG) | pure-Rust port (≠ core) | **No** (2026) | **Spherical** (correct) | Right math, but not one shared core across the three; real binding only in Python (+ R) |
+| **Clipper2** | ✗ (no binding) | `pyclipr` | `clipper2` (FFI) + port | No | Planar (int64, most deterministic) | No Julia binding; area not a direct output |
+| **CGAL** | ✗ | CGALPY (heavy) | ✗ | No | Planar, exact | Impractical to bind across three |
+
+**Reading of the table:** the only engine that is genuinely one-core-across-three
+*off the shelf* is **GEOS**, and it is **planar**. The only correct-spherical engine,
+**S2**, is *not* an off-the-shelf 3-language shared core in 2026 (Python-only real
+binding via spherely/s2geography; Julia uses GeometryOps' native re-implementation of
+S2-quality logic; Rust has only an incomplete pure port). So no single *off-the-shelf*
+engine is both shared across all three and natively spherical.
+
+But the constraint is "off the shelf," not "possible." **S2geometry can be made the
+shared core by vendoring the C++ and writing thin FFI bindings** — Julia via
+CxxWrap/`ccall`, Python via pybind11 (or just reuse spherely), Rust via FFI to
+`s2geography`. This is the *only* path that is simultaneously (a) natively spherical,
+(b) capable of bit-identity, and (c) viable in Rust (which has no native spherical
+clipper at all, §B.3). It costs binding work up front but resolves both the geometry
+and the determinism axes at once. So the real choice is: **§B.2 (compute once, share
+the artifact — give up nothing)** or, if independent per-binding builds are required,
+**a vendored S2 shared core** — *not* three independent native libraries, which fail
+on Rust and force tolerance-based conformance regardless.
+
+### B.5 Spherical vs planar — the accuracy axis
+
+This is a correctness question independent of determinism, and the established
+earth-science regridders are unanimous: **do the clip on the sphere, never on a flat
+lat-lon plane** (poles and the antimeridian break the plane). Two equivalent
+paradigms are in production use — **line-integral via Green/divergence theorem**
+(SCRIP/Jones 1999; TempestRemap, with Gauss–Green) and **spherical polygon clipping +
+spherical-triangle (excess) summation** (YAC/CDO; ESMF effectively). They agree at the
+core (a triangle's spherical excess *is* the contour integral of its boundary).
+`ConservativeRegridding.jl`'s `GeometryOps` path is the second paradigm (spherical
+Sutherland–Hodgman + Girard area). ESMF/TempestRemap/YAC operate in **3D Cartesian on
+the unit sphere**, which is what removes the pole singularity and antimeridian seam.
+
+**The dominant error source is the edge model, and it is a real design decision here.**
+A lat-lon cell edge running along a parallel is a *small circle*, **not a great
+circle** — but S2, GeometryOps, ESMF (`GREAT_CIRCLE`) and TempestRemap all treat every
+edge as a geodesic. Per the GMD 2024 "Truly conserving…" analysis, assuming
+great-circle edges for a 30° lat-lon cell adjacent to the pole gives a **~4% area
+error** (≈17% at 60° width, ≈1% at 15°); the fractional error scales with the **square
+of the cell's longitude width**, so it is severe only for coarse polar cells and
+**2+ orders of magnitude smaller at typical few-degree climate resolution**. Only
+**YAC** natively distinguishes great-circle vs latitude-parallel edges per grid; the
+standard mitigation elsewhere (XIOS) is to **densify** a parallel edge into many short
+great-circle segments. So the clip op's `manifold`/edge contract should
+state the great-circle-edge assumption explicitly, and ESS should offer densification
+for coarse lat-lon grids if polar accuracy matters.
+
+The planar route — reproject each cell pair to a **local equal-area or gnomonic**
+projection, clip in the plane (this is what a GEOS shared core would require) — is the
+SCRIP-near-pole trick and is accurate only in the small-cell limit. For global meshes,
+**prefer native spherical**; reserve planar-with-local-projection for the
+GEOS-shared-core path or small-cell regional grids.
+
+### B.6 Conformance: tolerance-based, with a conservation invariant
+
+Since exact cross-binding equality is unachievable (§B.1), the conformance suite for
+the clip kernel (and the weights built from it) must be **tolerance-based**:
+
+1. **Combined relative + absolute tolerance per area:**
+   `|a_x − a_ref| ≤ atol + rtol·a_ref`. Same shared core + pinned version/build →
+   tight (`rtol ≈ 1e-9`). Independent spherical implementations (GeometryOps vs
+   spherely) → an **empirically calibrated** `rtol`, plus a real `atol ≈ 1e-15·R²` to
+   absorb **slivers**: near-tangent overlaps where the two clippers legitimately
+   disagree on whether a tiny intersection even exists. Treat sub-`atol` areas as
+   equal-to-zero ("present-but-tiny" and "absent" both pass) — that regime is where
+   snapping/tie-breaking diverges and it does not affect weights.
+2. **The physically meaningful gate is conservation, not per-cell agreement.**
+   Make the primary conformance test the invariants — global mass conservation
+   `Σ_j A_j·F_target[j] = Σ_i A_i·F_source[i]` and partition-of-unity `Σ_i W_ij = 1` —
+   to a tight tolerance; per-pair `A_ij` equality is secondary, since it is the
+   unstable sliver regime. A subtlety the precedent surfaces: first-order
+   conservation is exact *only if computed cell areas equal true areas*, which edge
+   approximations violate; established tools restore exact conservation with a
+   **post-hoc global-mean/area correction** rather than perfect geometry, and the
+   residual shrinks with resolution. `ConservativeRegridding.jl` sidesteps the
+   normalization half of this by dividing by `dst_areas = Σ_i A_ij` (the row-sum of
+   *computed* overlap areas), not the true target-cell area — so `Σ_i W_ij = 1` holds
+   **by construction** regardless of edge error. ESS should follow that
+   construction; conservation tolerance is then application-set and
+   resolution-dependent, not a fixed epsilon.
+3. **Declare the manifold.** The geometry interpretation (`Planar` / `Spherical` /
+   `Geodesic`) is part of the op's contract (matching `ConservativeRegridding.jl`'s
+   `Manifold`); two bindings can only be compared under the same manifold.
+4. **GEOS as a cross-check oracle.** Even where it isn't the production kernel, a
+   pinned GEOS (planar, local projection) is a useful third-party oracle for
+   regression-testing the spherical kernels on small cells where planar ≈ spherical.
+
+### B.7 Recommendation
+
+1. **Primary — single reference geometry impl + serialized weights (§B.2).** Compute
+   `A_ij`/`dst_areas` once with **Julia + GeometryOps.jl** (native spherical; already
+   the `ConservativeRegridding.jl` stack), serialize the sparse artifact, and have
+   Rust/Python **load and apply** it. The apply is the bit-identical `sum_product`
+   FAQ; no second/third geometry kernel needed. This makes Rust's lack of a spherical
+   clipper a non-issue and reduces conformance to the apply + a one-time weight check.
+2. **If a binding must build weights independently — vendor a shared S2 core, not
+   three native libraries.** Rust has no native spherical clipper (§B.3), so the
+   "three native libs" model is not even achievable; and independent FP clippers
+   can't be bit-identical anyway. A **vendored S2geometry/s2geography C++ core with
+   thin FFI bindings** (Julia CxxWrap, Python pybind11/spherely, Rust FFI) is the one
+   route that is simultaneously spherical, bit-identity-capable, and Rust-viable. A
+   lighter, tolerance-based fallback is acceptable on the Julia/Python side only —
+   Julia → GeometryOps (`Spherical()`, the incumbent), Python → `spherely` — but
+   **Rust still needs the shared/FFI core regardless**, which is why the shared S2
+   core is the consistent choice once any independent build is required.
+3. **Avoid the GEOS-planar route for global grids.** Pinning GEOS 3.14.x across all
+   three (the only off-the-shelf shared core) gives bit-identity but only planar
+   geometry + per-cell local projection — wrong for coarse/polar cells, and it
+   diverges from the native-spherical regridder the Julia ecosystem already uses.
+   Keep it only as a small-cell/regional fallback or a cross-check oracle.
+4. **Op contract:** `intersect_polygon` carries a `manifold` flag; its conformance is
+   declared tolerance-based (not bit-for-bit) in `CONFORMANCE_SPEC.md`, with the
+   conservation/partition-of-unity invariants as the primary cross-binding tests.
+
+The throughline: because the kernel is a static-partition, serializable factor, the
+right design computes it **once** with the best spherical tool and shares the
+artifact — turning an unsolvable three-way bit-identity problem into a solved
+one-implementation problem, and leaving only the (bit-identical) apply to conform.
+
+### B.8 References
+
+- Verified source: `JuliaGeo/ConservativeRegridding.jl` (GeometryOps-based,
+  `Manifold`-selectable spherical/planar; STR-tree overlap; sparse `A_ij`),
+  `JuliaGeo/GeometryOps.jl` (`Spherical()`/`Planar()`/`Geodesic()`, Girard area),
+  `EarthSciML/EarthSciData.jl` (uses ConservativeRegridding for non-staggered grids).
+- Julia: GeometryOps.jl <https://github.com/JuliaGeo/GeometryOps.jl>; LibGEOS.jl
+  (GEOS 3.14, planar); Meshes.jl. No viable S2.jl (JSoC proposal only).
+- Python: shapely 2.1.2 / GEOS 3.13.1 <https://github.com/shapely/shapely>;
+  spherely 0.1.1 (S2 via s2geography) <https://github.com/benbovy/spherely>;
+  s2geometry 0.14.0 (SWIG); xESMF/ESMF (SCRIP, 3D-Cartesian spherical, sparse weights)
+  <https://xesmf.readthedocs.io/>.
+- Rust: `geo` 0.33 (planar Boolean ops; ships geodesic *area* —
+  `ChamberlainDuquetteArea`/`GeodesicArea` — but planar *intersection*) /
+  `i_overlay` 7.x (planar engine behind `geo`); `georust/geos` 11 + `geos-sys` 2
+  (GEOS, planar); `s2` (yjh0502, pure-Rust port — polygon boolean ops unimplemented);
+  `sphersgeo` (STScI, spherical but explicitly non-rigorous intersection).
+- Shared engines: GEOS 3.14.1 <https://github.com/libgeos/geos> (bindings:
+  <https://libgeos.org/usage/bindings/>; OverlayNG determinism); S2geometry
+  <https://github.com/google/s2geometry> + s2geography
+  <https://github.com/paleolimbot/s2geography>; Clipper2
+  <https://github.com/AngusJohnson/Clipper2>; CGAL 2D Boolean Set Operations.
+- Spherical-regridding precedent: SCRIP/Jones 1999 (line integral, Lambert near
+  poles); TempestRemap / Ullrich & Taylor 2015 (great-circle edges, Gauss–Green,
+  overlap mesh) <https://github.com/ClimateGlobalChange/tempestremap>; ESMF
+  (`GREAT_CIRCLE` vs `CART`, 3D-Cartesian) <https://earthsystemmodeling.org/regrid/>;
+  YAC/Hanke et al. 2016 (search-and-clip, great-circle *and* latitude edges per grid);
+  xESMF + sparselt (sparse-weight apply); "Truly conserving…" GMD 17:415 (2024) — edge
+  model & 4–17% polar area error, post-hoc conservation correction; "Accurate and
+  Robust Geometric Algorithms for Regridding on the Sphere" (EGUsphere 2026-636).
+- Cross-references: §8.1 (the op); §A.8 (the case study).
