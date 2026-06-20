@@ -134,10 +134,16 @@ field reproduces today's semantics exactly.
 
 ### 5.1 Semiring
 A named `(⊕, ⊗)` pair. Initial registry: `sum_product` (default, = today),
-`max_product`, `min_sum` (tropical), `bool_and_or` (relational), plus the
+`max_product`, `min_sum` (tropical), `bool_and_or` (relational). The
 non-semiring statistical reducers ESI needs (`count`, `mean`, `weighted_mean`)
-admitted as recognized aggregate forms. `reduce` stays as a shorthand for `⊕` when
-`semiring` is omitted, preserving existing files.
+are **derived sugar**, not core: they desugar to a small fixed combination of
+semiring-primitive FAQs (`count` = `sum_product` of `1`; `mean` = `sum / count`;
+`weighted_mean` = `Σ wx / Σ w`) emitted by the front end before the IR is
+evaluated. This keeps the evaluator's algebraic core closed under exactly the
+semiring laws — the optimizer, type-checker, and partition pass (§6.1) reason
+about a handful of true semirings, never a growing set of special-cased
+reducers — while ESI still gets its statistics. `reduce` stays as a shorthand for
+`⊕` when `semiring` is omitted, preserving existing files.
 
 ### 5.2 Index sets (`from`)
 A range value may be a dense interval `[lo, hi]` (today), **or** a reference to a
@@ -193,6 +199,49 @@ Crucially, the existing model — **build-time unroll → compiled `_Node` tree,
 constants inlined as literals** — is preserved. Joins, Skolem keys, and
 data-derived sets are all resolved at build time, producing the same compiled
 artifact. Performance characteristics for existing rules are unchanged.
+
+### 6.1 Static/dynamic partition (the structural-simplify analogue)
+
+Making value-invention and topology *first-class in the IR* (rather than a
+hand-factored preprocessing stage) raises one fair objection: relational work over
+a large mesh — enumerating edges, inverting connectivity, deduplicating with
+`distinct` — must never run inside the per-timestep RHS. The resolution is a
+**dependency partition** of the FAQ graph that is the direct analogue of
+ModelingToolkit's `structural_simplify`/observed-variable elimination:
+
+| ModelingToolkit | This IR |
+|---|---|
+| states `u` (integrated) | the field variable `u` (dynamic) |
+| parameters (time-invariant) | grid geometry + topology |
+| observed (parameter-only ⇒ constant-folded) | `coeff`, `area_eff`, the discovered index sets |
+| the reduced `f!` the integrator sees | the stencil `⊕_k coeff ⊗ (u[nbr] − u[i])` |
+
+Each FAQ node is tagged with its transitive **dependency class** — `∅`,
+`{grid params}`, or `{state u, t}`. Nodes that do **not** depend on `u`/`t` form
+the **static partition**; they are evaluated **once at setup** and memoized
+(§5.5 materialized index sets, geometric factors). Only the **dynamic partition**
+— the subgraph transitively touching `u`/`t` — is compiled into the hot `_Node`
+tree. The boundary is therefore *derived by the compiler from the data-dependency
+DAG*, not declared by the rule author, and it falls exactly where a hand-factored
+"topology stage" would have drawn it — without the author having to know which
+side of it they are on.
+
+This is **not** a from-scratch mechanism. ESS's `build_evaluator` already performs
+a degenerate version: it constant-folds every non-state-dependent gather
+(`const_arrays`, mesh metrics) to a literal via `_resolve_indices`, so the compiled
+tree already contains only state-dependent operations. The static partition is the
+principled generalization of that fold to the new relational/topology ops, so the
+build-time blowup risk applies only to the static partition — which runs once at
+setup, paying a `structural_simplify`-style one-time cost, never per step. Unlike
+full MTK tearing, our static partition is **pure feed-forward** (topology →
+geometry → coeff, no algebraic loops), so it needs partial evaluation by
+dependency class, not equation tearing — strictly simpler.
+
+The one net-new surface this implies: because topology FAQs (`distinct`, `join`,
+`skolem`) live in the static partition, the **setup-time** evaluator must host a
+small relational engine (hash/sort) that ESS does not have today (it currently does
+only the numeric tree-walk + Tullio). This runs off the hot path, but it is real
+new code — see §9 for the v1 scoping decision.
 
 ## 7. Worked examples
 
@@ -250,10 +299,23 @@ Index sets gain a registry entry mirroring ESM `domain` dims and ESI `index_sets
 - **Strict superset.** Every current `arrayop` is the `sum_product` / dense /
   no-join / no-key case. Files without the new fields are unaffected; the schema
   changes are additive; the evaluator's existing paths are untouched.
-- **Staged rollout:** (1) land `semiring` parameter + index-set registry (pure
-  refactor of existing reducers); (2) add `join.on` resolution; (3) add `distinct`
-  + `skolem` + `rank`. ESD can drop `_rewrite_unstructured_arrayop!` once (1)–(2)
-  land and rules reference mesh primitives directly (see §2a).
+- **v1 scope — all three capabilities, including topology.** v1 lands (1) the
+  `semiring` parameter + index-set registry (pure refactor of existing reducers),
+  (2) `join.on` resolution, **and** (3) `distinct` + `skolem` + `rank`
+  value-invention — i.e. data-dependent index sets, value-equality joins, and
+  topology construction all ship together. The static/dynamic partition (§6.1) is
+  v1, not deferred: with topology first-class, a basic partition is *required* so
+  topology FAQs fold into the static partition and never reach the hot path.
+- **v1 topology engine — full (path a).** v1 implements the build-time relational
+  engine (hash/sort execution of `distinct`/`join`/`skolem`) so topology FAQs are
+  evaluated natively by the setup-time partition rather than backed by the existing
+  imperative grid runtime. This is the larger v1, but it makes the unified IR
+  self-hosting on day one: ESD drops `_rewrite_unstructured_arrayop!`
+  **and** the imperative edge/connectivity construction once v1 lands and rules
+  reference mesh primitives directly (see §2a, §7.3). The later sophistication is
+  *not* the engine but the **caching/incrementality** of materialized static sets
+  (shared, incrementally-rebuilt index sets to bound setup cost on large meshes) —
+  the `structural_simplify`-grade refinement of the §6.1 partition.
 - **Cross-format:** this is the concrete shape of the "future `earthsci-core`
   shared AST" ESI's spec anticipates — ESM/ESD/ESI would import one IR + one
   evaluator.
@@ -262,16 +324,26 @@ Index sets gain a registry entry mirroring ESM `domain` dims and ESI `index_sets
 
 - **Non-goal:** a query optimizer. FAQ admits worst-case-optimal join planning;
   this RFC proposes the *IR*, not a planner. Build-time unroll is retained.
-- **Risk — build-time blowup:** data-derived sets over large meshes unrolled
-  eagerly could be slow to *compile*. Mitigation: materialize index sets once and
-  cache; consider a streaming (Finch/indexed-streams-style) backend later.
+- **Risk — build-time blowup (resolved by §6.1):** data-derived sets over large
+  meshes unrolled eagerly could be slow to *compile*. This is now scoped to the
+  **static partition only**, which runs once at setup (a `structural_simplify`-style
+  one-time cost), never per step. Mitigation: materialize index sets eagerly and
+  **cache** them (the static partition is precisely the memoizable unit); the later
+  refinement is incremental/shared index sets, and a streaming
+  (Finch/indexed-streams-style) backend remains a possible further step.
 - **Risk — surface bikeshedding:** the JSON keys above are illustrative; the
   semantic generalization is the proposal, not the spelling.
-- **Open:** registry and identities of admissible semirings (esp. `mean` /
-  `weighted_mean`, which are not semirings — admit as recognized aggregate forms?).
-- **Open:** does `distinct`/value-invention belong in the evaluator or in a
-  separate mesh/topology preprocessing pass that merely *emits* an ESS index set?
-  (The pragmatic factoring most of the field uses.)
+- **Resolved — statistical aggregators:** `count`/`mean`/`weighted_mean` are **not**
+  admitted as core reducers; they are **derived sugar** that desugars to
+  semiring-primitive FAQs before evaluation (§5.1). The evaluator's algebraic core
+  stays closed under exactly the semiring laws.
+- **Resolved — where value-invention lives:** `distinct`/`skolem`/`rank` are
+  **first-class in the IR**, not a separate hand-factored preprocessing stage. The
+  hot-path concern that motivates a separate stage is instead handled by the
+  compiler-derived **static/dynamic partition** (§6.1, the MTK observed-variable
+  analogue), which keeps the per-step `f!` exactly as lean as a hand-factored stage
+  would — generalizing a constant-fold ESS already performs — without forcing the
+  author to draw the boundary.
 
 ## 11. References
 
