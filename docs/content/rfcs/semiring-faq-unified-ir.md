@@ -306,13 +306,12 @@ Index sets gain a registry entry mirroring ESM `domain` dims and ESI `index_sets
   topology construction all ship together. The static/dynamic partition (§6.1) is
   v1, not deferred: with topology first-class, a basic partition is *required* so
   topology FAQs fold into the static partition and never reach the hot path.
-- **v1 topology engine — full (path a).** v1 implements the build-time relational
-  engine (hash/sort execution of `distinct`/`join`/`skolem`) so topology FAQs are
-  evaluated natively by the setup-time partition rather than backed by the existing
-  imperative grid runtime. This is the larger v1, but it makes the unified IR
-  self-hosting on day one: ESD drops `_rewrite_unstructured_arrayop!`
-  **and** the imperative edge/connectivity construction once v1 lands and rules
-  reference mesh primitives directly (see §2a, §7.3). The later sophistication is
+- **v1 topology engine.** v1 implements the build-time relational engine (hash/sort
+  execution of `distinct`/`join`/`skolem`) so topology FAQs are evaluated natively
+  by the setup-time partition. This makes the unified IR self-hosting on day one:
+  ESD drops `_rewrite_unstructured_arrayop!` **and** the imperative
+  edge/connectivity construction once v1 lands and rules reference mesh primitives
+  directly (see §2a, §7.3). The later sophistication is
   *not* the engine but the **caching/incrementality** of materialized static sets
   (shared, incrementally-rebuilt index sets to bound setup cost on large meshes) —
   the `structural_simplify`-grade refinement of the §6.1 partition.
