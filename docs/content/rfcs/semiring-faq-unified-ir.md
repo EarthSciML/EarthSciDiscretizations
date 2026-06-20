@@ -363,10 +363,11 @@ differentiable conservative-regridding weights w.r.t. geometry fall out of the e
 FAQ AD, with `intersect_polygon` as a non-differentiated structural leaf.
 
 So the **required** new op is just `intersect_polygon`; `polygon_area` rides the
-existing aggregate machinery. Library and shared-engine options for the leaf, and the
-tolerance-based conformance design, are in **Appendix B**; why the clip cannot be
-pushed further into the formalism, and the worked conservative-regridding
-decomposition, are in **Appendix A** (§A.8).
+existing aggregate machinery. Per-language library choices for the leaf
+(GeometryOps / spherely / a new Rust S2 binding) and the tolerance-based conformance
+design are in **Appendix B**; why the clip cannot be pushed further into the
+formalism, and the worked conservative-regridding decomposition, are in **Appendix A**
+(§A.8).
 
 ## 9. Backward compatibility & migration
 
@@ -726,152 +727,119 @@ emitting it as ESS IR would unify it with ESM/ESD/ESI under one evaluator.
 
 ## Appendix B — The `intersect_polygon` kernel across ESS bindings
 
-*Planar-vs-spherical polygon-clipping libraries, the shared-engine (GEOS / S2)
-analysis, and the tolerance-based conformance design.*
+*Per-language spherical polygon-clipping implementations and the tolerance-based
+cross-binding conformance design.*
 
-### B.1 Scope and the constraint that flips the calculus
+### B.1 Scope and the constraint that shapes it
 
 Conservative regridding's overlap-area factor `A_ij = area(cell_i ∩ cell_j)` splits
 (§8.1) into a **kernel leaf** — `intersect_polygon(a, b)`, which clips two cell
 polygons and returns the intersection vertex ring — and an **in-formalism aggregate**,
-`polygon_area`, which is an ordinary `sum_product` FAQ over that ring (shoelace /
-Gauss–Green / spherical excess). **This appendix concerns the leaf**, `intersect_polygon`:
-the iterative, robustness-critical polygon clipping that genuinely cannot be expressed
-as a semiring aggregate and so must be an evaluator-provided primitive (the same status
-as `acos`/`sqrt`). It runs at **setup time** to build the regridding weights.
+`polygon_area`, an ordinary `sum_product` FAQ over that ring (shoelace / Gauss–Green /
+spherical excess). **This appendix concerns the leaf**, `intersect_polygon`: the
+iterative, robustness-critical polygon clipping that cannot be expressed as a semiring
+aggregate and so must be an evaluator-provided primitive (the same status as
+`acos`/`sqrt`). It runs at **setup time** to build the regridding weights.
 
 Earth-science grids are on the **sphere** (lat-lon, cubed-sphere), so the kernel must
 in general do **spherical** polygon clipping (great-circle / parallel-meridian edges);
 treating lat-lon as a flat plane is wrong near the poles and the antimeridian.
 
-**The decisive difference from the relational engine.** The relational engine's
-cross-binding determinism is *solvable bit-for-bit* by sorting integer tuples
-(Appendix A). This kernel is the opposite: it produces a **floating-point area from
-polygon clipping**, and FP clipping is irreducibly implementation-dependent —
-different libraries (or a C++ engine vs. a pure-language port) differ in intersection
-ordering, area summation order, robust-predicate strategy, and snapping. So:
+**Geometry forces tolerance-based conformance.** The relational engine (Appendix A) is
+made bit-for-bit identical across bindings by sorting integer tuples. This kernel
+cannot be: it produces a **floating-point area from polygon clipping**, and FP
+clipping is irreducibly implementation-dependent — intersection ordering, area
+summation order, robust-predicate strategy, and snapping all differ between
+implementations. Bit-for-bit identity across independent geometry implementations is
+**unachievable**, and it is **not pursued**: each binding uses its language's best
+native spherical-geometry stack, and cross-binding conformance is **tolerance-based**
+(§B.5). This deliberately rules out chasing bit-identity through a single shared C++
+core or through computing weights once and serializing them.
 
-> **Bit-for-bit identity across *independent* geometry implementations is
-> unachievable. Conformance for the clip kernel must be tolerance-based.**
+### B.2 Per-binding implementation
 
-This inverts the shared-engine calculus. In Appendix A a shared engine (DuckDB) is
-rejected because parallel-native + sort already gives bit-identity for free; here,
-parallel-native *cannot* give bit-identity, so a **shared C++ core becomes genuinely
-attractive** — it collapses the problem from "three algorithms" to "one algorithm,
-three builds," the only route to near-exact agreement.
+Each binding builds the clip with the best spherical-geometry tool available in its
+ecosystem.
 
-### B.2 The architectural move that mostly dissolves the problem
+#### Julia — GeometryOps.jl
+`GeometryOps.jl` (0.1.x line, JuliaGeo) does **native, non-approximate spherical**
+polygon intersection + area: `Spherical()` manifold, `ConvexConvexSutherlandHodgman`
+clipping, `area(Spherical(), …)` via Girard's theorem (`Planar()` and `Geodesic()`
+also available). Pure Julia, no C++ binary. It is what `ConservativeRegridding.jl`
+calls internally, so the Julia binding reuses the stack its ecosystem already trusts.
 
-The clip kernel lives in the **static partition** (§6.1), and its output feeds a
-**serializable sparse weight matrix** (`ConservativeRegridding.jl`'s `Regridder` is
-exactly this — §A.8). That means the cross-binding question can be sidestepped:
+```julia
+import GeometryOps as GO
+using GeoInterface
+function intersect_polygon(a, b)               # a, b :: spherical polygons (lon/lat)
+    GO.intersection(GO.ConvexConvexSutherlandHodgman(GO.Spherical()), a, b;
+                    target = GeoInterface.PolygonTrait())
+end
+```
 
-> **Compute regridding weights *once*, with a single reference geometry
-> implementation, serialize the sparse `A_ij` (+ `dst_areas`) artifact, and have the
-> other bindings *load and apply* it.** The apply is the integer-indexed
-> `sum_product` FAQ — bit-identical across bindings by the Appendix A determinism spec.
-> No binding except the reference needs a geometry kernel at all.
+#### Python — spherely
+`spherely` provides vectorized NumPy bindings to **Google S2** via `s2geography`: true
+spherical clipping and area with a shapely-style API.
 
-This is the "materialize + cache the static partition" decision applied to
-geometry. It is the **primary recommendation**: the hard, non-portable floating-point
-work is done in one place; conformance then applies to the *apply* (bit-identical)
-plus a one-time tolerance check on the serialized weights. Three independent
-bit-identical geometry kernels are needed **only** if every binding must build
-weights from raw grids with no shared artifact — a requirement worth avoiding.
+```python
+import spherely
+def intersect_polygon(a, b):                   # a, b :: spherely geographies
+    return spherely.intersection(a, b)
+```
 
-The natural reference implementation is **Julia + GeometryOps.jl**, because
-`ConservativeRegridding.jl` already uses exactly that stack for native spherical
-regridding (§A.8). ESS would emit/consume its serialized weights rather than
-re-deriving them three times.
+`spherely` is pre-1.0, so pin the version and track its releases; the underlying
+`s2geography`/`s2geometry` C++ API is the stable surface beneath it.
 
-### B.3 Per-binding libraries (when an independent build *is* required)
+#### Rust — a new S2 binding library (to be developed)
+Rust has **no usable spherical polygon clipper today**: `geo`/`i_overlay` are planar;
+`georust/geos` is planar (GEOS); the pure-Rust `s2` port has polygon boolean ops
+unimplemented; `sphersgeo` is explicitly non-rigorous (§B.3). The recommendation is to
+**develop a new Rust binding to the S2 C++ core** — FFI to `s2geography` /
+`s2geometry`, the same engine `spherely` wraps — exposing `intersect_polygon` and the
+spherical area. This is net-new work, justified because:
 
-If a binding must build weights itself (e.g. dynamic/online meshes with no
-precompute step), here is the best available tool per language. Rust is the weak
-point.
+- it is the only route to a correct spherical clip in Rust;
+- binding `s2geography` (a GEOS-like C++ API over S2) is the lowest-effort path, and it
+  puts the Rust and Python bindings on the **same S2 core**, so those two agree closely
+  by construction (GeometryOps in Julia is the looser-tolerance comparison — §B.5);
+- it is reusable beyond ESS — the Rust geospatial ecosystem currently lacks exactly
+  this, so the binding has standalone value.
 
-#### Julia — GeometryOps.jl (native spherical; the reference)
-`GeometryOps.jl` (0.1.x line, JuliaGeo) is the only mature Julia library doing
-**native, non-approximate spherical** polygon intersection + area: `Spherical()`
-manifold, `ConvexConvexSutherlandHodgman` clipping, `area(Spherical(), …)` via
-Girard's theorem; `Planar()` and `Geodesic()` (WGS84, via Proj) also available. Pure
-Julia, no C++ binary. It is what `ConservativeRegridding.jl` calls internally.
-**Use as the reference geometry implementation.** LibGEOS.jl
-(GEOS, planar-only) and Meshes.jl (planar/convex-oriented clipping) are not the right
-tools for the spherical case.
+```rust
+// new crate (e.g. `s2geography-rs`): thin FFI over the s2geography C++ API
+pub fn intersect_polygon(a: &S2Geog, b: &S2Geog) -> S2Geog { /* FFI: InitToIntersection */ }
+```
 
-#### Python — spherely (S2) primary; shapely/GEOS + projection fallback
-- **`spherely`** (0.1.1, April 2026) — vectorized NumPy bindings to **Google S2** via
-  `s2geography`; true spherical: `spherely.area(spherely.intersection(a, b), radius=R)`.
-  The closest spherical mirror of the shapely API. **Caveat: pre-1.0, explicitly
-  "early stage."**
-- **`shapely`** (2.1.2, GEOS 3.13.1) — mature but **planar only**; usable as a
-  spherical approximation by reprojecting each cell pair to a **local equal-area
-  projection** (`pyproj`) and clipping in the plane.
-- Precedent: the dominant Python conservative-regridding stack is **xESMF/ESMF**
-  (SCRIP algorithm), which does true spherical overlap in **3D Cartesian** on the
-  sphere and emits a sparse weight matrix — i.e. it already follows the
-  "compute-weights-once, apply-many" pattern of §B.2.
+### B.3 The library landscape (why Rust needs new work)
 
-#### Rust — the forcing function: no native spherical clipper exists
-There is **no robust native-Rust spherical polygon-clipping + area** library in 2026:
-- `geo` (0.33) / `i_overlay` (7.x) — robust **planar** Boolean ops; `geo` *does* ship
-  spherical/geodesic **area** traits (`ChamberlainDuquetteArea`, `GeodesicArea`/Karney),
-  but its **intersection is planar only**. So you can measure a spherical polygon you
-  already have, not clip two on the sphere.
-- `georust/geos` (`geos` 11 / `geos-sys` 2, GEOS 3.14) — **planar**, same C++ core as
-  shapely/LibGEOS; spherical only via per-cell local projection.
-- `s2` (yjh0502, pure-Rust port of Go S2) — **polygon boolean ops are unimplemented**
-  (`loop`/`polygon`/`shapeindex` pending); stalled at 0.0.x.
-- `sphersgeo` (STScI) — has `.intersection()` + spherical area, but its docs warn it
-  is **explicitly non-rigorous** (degenerate/touching cases unhandled); 0.1.x.
+No existing library is both natively spherical *and* available across all three
+languages — which is why Julia and Python have off-the-shelf choices while Rust
+requires a new binding.
 
-This is decisive: the "three independent native libraries" model **cannot work for
-Rust at all**. A Rust binding that must build weights independently has only two real
-options — **FFI to a shared spherical C++ core (S2)** (§B.4) or **consume the
-serialized weights** (§B.2). Rust is therefore the strongest argument *both* for the
-§B.2 artifact-sharing approach *and*, where that's impossible, for a vendored shared
-S2 core rather than per-language libraries.
+| Option | Julia | Python | Rust | Geometry | Role |
+|---|---|---|---|---|---|
+| **GeometryOps.jl** | ✅ native | — | — | Spherical (Girard) | **Julia choice** |
+| **S2 (via s2geography)** | ✗ (JSoC proposal only) | ✅ `spherely` | ✗ → **new binding** | Spherical (exact) | **Python choice; Rust binding to be built** |
+| GEOS | LibGEOS.jl | shapely | `georust/geos` | **Planar** | Not used (planar ⇒ wrong for the sphere) |
+| `geo` / `i_overlay` | — | — | ✅ | **Planar** | Not used (planar; intersection planar-only) |
+| pure-Rust `s2` port | — | — | ⚠ | Spherical | Unusable (polygon boolean ops unimplemented) |
+| `sphersgeo` | — | — | ⚠ | Spherical | Unusable (explicitly non-rigorous) |
 
-### B.4 Shared C++ engine options
+GEOS is the only engine with bindings in all three languages, but it is **planar** and
+so is not used; the pure-Rust S2 port and `sphersgeo` are incomplete. Hence the plan:
+**Julia → GeometryOps, Python → spherely, Rust → a new `s2geography` FFI binding.**
 
-| Engine | Julia | Python | Rust | Same core ×3? | Geometry | Verdict |
-|---|---|---|---|---|---|---|
-| **GEOS** (3.14) | LibGEOS.jl | shapely | `georust/geos` | **Yes** (one `libgeos` C API) | **Planar** | Only true 3-language same-core option; planar ⇒ needs per-cell local projection for the sphere; deterministic (OverlayNG, robust predicates) and near-bit-identical *if the same GEOS version/build is pinned across all three* |
-| **S2geometry** | ✗ (JSoC proposal only) | spherely / `s2geometry` (SWIG) | pure-Rust port (≠ core) | **No** (2026) | **Spherical** (correct) | Right math, but not one shared core across the three; real binding only in Python (+ R) |
-| **Clipper2** | ✗ (no binding) | `pyclipr` | `clipper2` (FFI) + port | No | Planar (int64, most deterministic) | No Julia binding; area not a direct output |
-| **CGAL** | ✗ | CGALPY (heavy) | ✗ | No | Planar, exact | Impractical to bind across three |
+### B.4 Spherical vs planar — the accuracy axis
 
-**Reading of the table:** the only engine that is genuinely one-core-across-three
-*off the shelf* is **GEOS**, and it is **planar**. The only correct-spherical engine,
-**S2**, is *not* an off-the-shelf 3-language shared core in 2026 (Python-only real
-binding via spherely/s2geography; Julia uses GeometryOps' native re-implementation of
-S2-quality logic; Rust has only an incomplete pure port). So no single *off-the-shelf*
-engine is both shared across all three and natively spherical.
-
-But the constraint is "off the shelf," not "possible." **S2geometry can be made the
-shared core by vendoring the C++ and writing thin FFI bindings** — Julia via
-CxxWrap/`ccall`, Python via pybind11 (or just reuse spherely), Rust via FFI to
-`s2geography`. This is the *only* path that is simultaneously (a) natively spherical,
-(b) capable of bit-identity, and (c) viable in Rust (which has no native spherical
-clipper at all, §B.3). It costs binding work up front but resolves both the geometry
-and the determinism axes at once. So the real choice is: **§B.2 (compute once, share
-the artifact — give up nothing)** or, if independent per-binding builds are required,
-**a vendored S2 shared core** — *not* three independent native libraries, which fail
-on Rust and force tolerance-based conformance regardless.
-
-### B.5 Spherical vs planar — the accuracy axis
-
-This is a correctness question independent of determinism, and the established
-earth-science regridders are unanimous: **do the clip on the sphere, never on a flat
-lat-lon plane** (poles and the antimeridian break the plane). Two equivalent
-paradigms are in production use — **line-integral via Green/divergence theorem**
+The clip must be done on the sphere, never on a flat lat-lon plane (poles and the
+antimeridian break the plane). The established earth-science regridders confirm this
+with two equivalent paradigms: **line-integral via Green/divergence theorem**
 (SCRIP/Jones 1999; TempestRemap, with Gauss–Green) and **spherical polygon clipping +
 spherical-triangle (excess) summation** (YAC/CDO; ESMF effectively). They agree at the
 core (a triangle's spherical excess *is* the contour integral of its boundary).
-`ConservativeRegridding.jl`'s `GeometryOps` path is the second paradigm (spherical
-Sutherland–Hodgman + Girard area). ESMF/TempestRemap/YAC operate in **3D Cartesian on
-the unit sphere**, which is what removes the pole singularity and antimeridian seam.
+GeometryOps and S2 both follow the second paradigm; ESMF/TempestRemap/YAC operate in
+**3D Cartesian on the unit sphere**, which removes the pole singularity and antimeridian
+seam.
 
 **The dominant error source is the edge model, and it is a real design decision here.**
 A lat-lon cell edge running along a parallel is a *small circle*, **not a great
@@ -883,29 +851,27 @@ of the cell's longitude width**, so it is severe only for coarse polar cells and
 **2+ orders of magnitude smaller at typical few-degree climate resolution**. Only
 **YAC** natively distinguishes great-circle vs latitude-parallel edges per grid; the
 standard mitigation elsewhere (XIOS) is to **densify** a parallel edge into many short
-great-circle segments. So the clip op's `manifold`/edge contract should
-state the great-circle-edge assumption explicitly, and ESS should offer densification
-for coarse lat-lon grids if polar accuracy matters.
+great-circle segments. So the clip op's `manifold`/edge contract should state the
+great-circle-edge assumption explicitly, and ESS should offer densification for coarse
+lat-lon grids if polar accuracy matters. Because GeometryOps (Julia) and S2 (Python,
+Rust) both make the great-circle-edge assumption, the three bindings share the *same
+geometric model* — their differences are floating-point, not modelling, which keeps the
+§B.5 tolerances small.
 
-The planar route — reproject each cell pair to a **local equal-area or gnomonic**
-projection, clip in the plane (this is what a GEOS shared core would require) — is the
-SCRIP-near-pole trick and is accurate only in the small-cell limit. For global meshes,
-**prefer native spherical**; reserve planar-with-local-projection for the
-GEOS-shared-core path or small-cell regional grids.
-
-### B.6 Conformance: tolerance-based, with a conservation invariant
+### B.5 Conformance: tolerance-based, with a conservation invariant
 
 Since exact cross-binding equality is unachievable (§B.1), the conformance suite for
-the clip kernel (and the weights built from it) must be **tolerance-based**:
+the clip kernel (and the weights built from it) is **tolerance-based**:
 
 1. **Combined relative + absolute tolerance per area:**
-   `|a_x − a_ref| ≤ atol + rtol·a_ref`. Same shared core + pinned version/build →
-   tight (`rtol ≈ 1e-9`). Independent spherical implementations (GeometryOps vs
-   spherely) → an **empirically calibrated** `rtol`, plus a real `atol ≈ 1e-15·R²` to
-   absorb **slivers**: near-tangent overlaps where the two clippers legitimately
-   disagree on whether a tiny intersection even exists. Treat sub-`atol` areas as
-   equal-to-zero ("present-but-tiny" and "absent" both pass) — that regime is where
-   snapping/tie-breaking diverges and it does not affect weights.
+   `|a_x − a_ref| ≤ atol + rtol·a_ref`, with an **empirically calibrated** `rtol` and a
+   real `atol ≈ 1e-15·R²` to absorb **slivers** — near-tangent overlaps where two
+   clippers legitimately disagree on whether a tiny intersection even exists. Treat
+   sub-`atol` areas as equal-to-zero ("present-but-tiny" and "absent" both pass); that
+   regime is where snapping/tie-breaking diverges and it does not affect weights. Note
+   the Python and Rust bindings share the **same S2 core** and will agree to a much
+   tighter `rtol` than either agrees with Julia/GeometryOps; the spec tolerance must
+   accommodate the loosest pair (a GeometryOps-vs-S2 comparison).
 2. **The physically meaningful gate is conservation, not per-cell agreement.**
    Make the primary conformance test the invariants — global mass conservation
    `Σ_j A_j·F_target[j] = Σ_i A_i·F_source[i]` and partition-of-unity `Σ_i W_ij = 1` —
@@ -923,64 +889,41 @@ the clip kernel (and the weights built from it) must be **tolerance-based**:
 3. **Declare the manifold.** The geometry interpretation (`Planar` / `Spherical` /
    `Geodesic`) is part of the op's contract (matching `ConservativeRegridding.jl`'s
    `Manifold`); two bindings can only be compared under the same manifold.
-4. **GEOS as a cross-check oracle.** Even where it isn't the production kernel, a
-   pinned GEOS (planar, local projection) is a useful third-party oracle for
-   regression-testing the spherical kernels on small cells where planar ≈ spherical.
 
-### B.7 Recommendation
+### B.6 Recommendation
 
-1. **Primary — single reference geometry impl + serialized weights (§B.2).** Compute
-   `A_ij`/`dst_areas` once with **Julia + GeometryOps.jl** (native spherical; already
-   the `ConservativeRegridding.jl` stack), serialize the sparse artifact, and have
-   Rust/Python **load and apply** it. The apply is the bit-identical `sum_product`
-   FAQ; no second/third geometry kernel needed. This makes Rust's lack of a spherical
-   clipper a non-issue and reduces conformance to the apply + a one-time weight check.
-2. **If a binding must build weights independently — vendor a shared S2 core, not
-   three native libraries.** Rust has no native spherical clipper (§B.3), so the
-   "three native libs" model is not even achievable; and independent FP clippers
-   can't be bit-identical anyway. A **vendored S2geometry/s2geography C++ core with
-   thin FFI bindings** (Julia CxxWrap, Python pybind11/spherely, Rust FFI) is the one
-   route that is simultaneously spherical, bit-identity-capable, and Rust-viable. A
-   lighter, tolerance-based fallback is acceptable on the Julia/Python side only —
-   Julia → GeometryOps (`Spherical()`, the incumbent), Python → `spherely` — but
-   **Rust still needs the shared/FFI core regardless**, which is why the shared S2
-   core is the consistent choice once any independent build is required.
-3. **Avoid the GEOS-planar route for global grids.** Pinning GEOS 3.14.x across all
-   three (the only off-the-shelf shared core) gives bit-identity but only planar
-   geometry + per-cell local projection — wrong for coarse/polar cells, and it
-   diverges from the native-spherical regridder the Julia ecosystem already uses.
-   Keep it only as a small-cell/regional fallback or a cross-check oracle.
-4. **Op contract:** `intersect_polygon` carries a `manifold` flag; its conformance is
+1. **Conformance is tolerance-based, not bit-for-bit.** Floating-point clipping cannot
+   be made bit-identical across independent implementations; do not pursue a shared C++
+   core or single-reference serialized weights to force it. Use the combined
+   relative/absolute tolerance with a sliver floor, and gate primarily on the
+   conservation / partition-of-unity invariants (§B.5).
+2. **Julia → GeometryOps.jl** (`Spherical()` manifold; native spherical, the
+   `ConservativeRegridding.jl` stack).
+3. **Python → spherely** (S2 via `s2geography`; pin the pre-1.0 version).
+4. **Rust → a new S2 binding library** (FFI to `s2geography`/`s2geometry`). No native
+   Rust spherical clipper exists, the pure-Rust S2 port is incomplete, and binding the
+   C++ S2 core also puts Rust on the same engine as Python — so this is both the only
+   correct option and the one that tightens cross-binding agreement. Treat it as
+   net-new work with standalone value to the Rust geospatial ecosystem.
+5. **Op contract:** `intersect_polygon` carries a `manifold` flag; its conformance is
    declared tolerance-based (not bit-for-bit) in `CONFORMANCE_SPEC.md`, with the
-   conservation/partition-of-unity invariants as the primary cross-binding tests.
+   conservation / partition-of-unity invariants as the primary cross-binding tests.
 
-The throughline: because the kernel is a static-partition, serializable factor, the
-right design computes it **once** with the best spherical tool and shares the
-artifact — turning an unsolvable three-way bit-identity problem into a solved
-one-implementation problem, and leaving only the (bit-identical) apply to conform.
-
-### B.8 References
+### B.7 References
 
 - Verified source: `JuliaGeo/ConservativeRegridding.jl` (GeometryOps-based,
   `Manifold`-selectable spherical/planar; STR-tree overlap; sparse `A_ij`),
   `JuliaGeo/GeometryOps.jl` (`Spherical()`/`Planar()`/`Geodesic()`, Girard area),
   `EarthSciML/EarthSciData.jl` (uses ConservativeRegridding for non-staggered grids).
-- Julia: GeometryOps.jl <https://github.com/JuliaGeo/GeometryOps.jl>; LibGEOS.jl
-  (GEOS 3.14, planar); Meshes.jl. No viable S2.jl (JSoC proposal only).
-- Python: shapely 2.1.2 / GEOS 3.13.1 <https://github.com/shapely/shapely>;
-  spherely 0.1.1 (S2 via s2geography) <https://github.com/benbovy/spherely>;
-  s2geometry 0.14.0 (SWIG); xESMF/ESMF (SCRIP, 3D-Cartesian spherical, sparse weights)
-  <https://xesmf.readthedocs.io/>.
-- Rust: `geo` 0.33 (planar Boolean ops; ships geodesic *area* —
-  `ChamberlainDuquetteArea`/`GeodesicArea` — but planar *intersection*) /
-  `i_overlay` 7.x (planar engine behind `geo`); `georust/geos` 11 + `geos-sys` 2
-  (GEOS, planar); `s2` (yjh0502, pure-Rust port — polygon boolean ops unimplemented);
-  `sphersgeo` (STScI, spherical but explicitly non-rigorous intersection).
-- Shared engines: GEOS 3.14.1 <https://github.com/libgeos/geos> (bindings:
-  <https://libgeos.org/usage/bindings/>; OverlayNG determinism); S2geometry
-  <https://github.com/google/s2geometry> + s2geography
-  <https://github.com/paleolimbot/s2geography>; Clipper2
-  <https://github.com/AngusJohnson/Clipper2>; CGAL 2D Boolean Set Operations.
+- Julia: GeometryOps.jl <https://github.com/JuliaGeo/GeometryOps.jl> (native spherical
+  clip + Girard area).
+- Python: spherely (S2 via s2geography) <https://github.com/benbovy/spherely>;
+  s2geography <https://github.com/paleolimbot/s2geography>; s2geometry
+  <https://github.com/google/s2geometry>.
+- Rust (current, all inadequate for the spherical clip): `geo` 0.33 / `i_overlay` 7.x
+  (planar; geodesic *area* only); `georust/geos` (GEOS, planar); `s2` (yjh0502,
+  pure-Rust port — polygon boolean ops unimplemented); `sphersgeo` (STScI, non-rigorous).
+  The recommendation is a new FFI binding to s2geography.
 - Spherical-regridding precedent: SCRIP/Jones 1999 (line integral, Lambert near
   poles); TempestRemap / Ullrich & Taylor 2015 (great-circle edges, Gauss–Green,
   overlap mesh) <https://github.com/ClimateGlobalChange/tempestremap>; ESMF
