@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "interface_bc_xmax": {
+      "description": "Interface value-continuity coupling at xmax (esm-spec §11.5): u(x*) = v(x*) at the shared boundary point. The high-side ghost of `$var` reads the first interior cell of the coupled variable, u[N+1] -> v[1] (1-based). ESS's `_discretize_bc!` lowers the BC's `coupled_variable` field to the second pattern arg `$coupled`, encodes kind->fn and side->dim, then runs the rule engine. The xmax ghost maps to the constant low-end interior index 1, so no dim-size binding is needed. Mirrors the ESS conformance golden tests/conformance/discretize/golden/interface_bc_lowering.json.",
+      "pattern": { "op": "bc", "fn": "interface", "dim": "xmax", "args": ["$var", "$coupled"] },
+      "replacement": { "op": "index", "args": ["$coupled", 1] }
+    },
+    "interface_bc_xmin": {
+      "description": "Interface value-continuity coupling at xmin (esm-spec §11.5): the low-side ghost of `$var` reads the last interior cell of the coupled variable, v[0] -> u[N] (1-based), with N bound from the grid via `bind_side_dim_size` (ess-bps). `var_has_grid` binds the variable's grid so the dim size resolves. Mirrors the ESS conformance golden interface_bc_lowering.json (v_interface_xmin -> index(u, 4) on a size-4 dimension).",
+      "pattern": { "op": "bc", "fn": "interface", "dim": "xmin", "args": ["$var", "$coupled"] },
+      "where": [
+        { "guard": "var_has_grid", "pvar": "$var", "grid": "$g" },
+        { "guard": "bind_side_dim_size", "pvar": "$N", "grid": "$g", "side": "xmin" }
+      ],
+      "replacement": { "op": "index", "args": ["$coupled", "$N"] }
+    }
+  }
+}

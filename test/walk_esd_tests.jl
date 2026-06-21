@@ -377,8 +377,15 @@ end
 # Lift a JSON-decoded subtree (Dict/Number/String) to the corresponding
 # `EarthSciSerialization.Expr` node. Mirrors ESS's private `_parse_expr`,
 # but only the fields used by index-rewrite fixtures (`op`, `args`, plus
-# `wrt`/`dim` for symmetry with the rule engine's pattern shape) — fancy
+# `wrt`/`dim`/`fn` for symmetry with the rule engine's pattern shape) — fancy
 # `arrayop`/`makearray` fields are out of scope until a fixture needs them.
+#
+# `fn` is the sibling field ESS's `_discretize_bc!` uses to carry a boundary
+# condition's `kind` (e.g. `zero_gradient`, `interface`) onto the synthetic
+# `bc` OpExpr (kind->fn, side->dim; ess-bps). It is matched by the rule
+# engine's `_match_sibling_name`, so a BC-kind rewrite fixture whose `bc`
+# expression sets `fn`/`dim` must preserve them here or the kind/side
+# discrimination is silently lost (the rule would match any `bc` node).
 function _expr_from_json(v)
     if v isa Bool
         # Bool <: Integer in Julia; reject explicitly so a stray `true` in a
@@ -396,7 +403,8 @@ function _expr_from_json(v)
         args = EarthSciSerialization.Expr[_expr_from_json(a) for a in args_raw]
         wrt = haskey(v, "wrt") && v["wrt"] !== nothing ? String(v["wrt"]) : nothing
         dim = haskey(v, "dim") && v["dim"] !== nothing ? String(v["dim"]) : nothing
-        return EarthSciSerialization.OpExpr(op, args; wrt = wrt, dim = dim)
+        fn = haskey(v, "fn") && v["fn"] !== nothing ? String(v["fn"]) : nothing
+        return EarthSciSerialization.OpExpr(op, args; wrt = wrt, dim = dim, fn = fn)
     end
     throw(ArgumentError("cannot parse expression node of type $(typeof(v))"))
 end

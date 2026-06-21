@@ -546,6 +546,19 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "zero_gradient_bc"
+            # zero_gradient_bc (esd-6g4.7 / G7): the homogeneous-Neumann
+            # (du/dn=0) BC kind, now firing through the ESS rule engine via the
+            # fn/dim BC-kind matcher landed in ess-bps (G8). The rewrite fixture
+            # lifts a synthetic `bc` node with fn="zero_gradient", dim="xmin"
+            # and rewrites it to index(u, 1) — the nearest interior cell, giving
+            # a zero one-sided difference at the boundary face. Layer-A PASSes
+            # via the rewrite canonical-form byte match; Layer-B SKIPs (a
+            # ghost-cell rewrite carries no MMS convergence fixture).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
         elseif key in pass_layer_a_canonical_only_g14
             # esd-6g4.13 (G14): vertical / latlon high-order grad + upwind.
             # Layer-A passes via the canonical byte contract; Layer-B SKIPs (no
@@ -564,6 +577,22 @@ using TestItems
             # differential-operator's algebraic order, which is N/A for a quadrature
             # (midpoint is O(h²) in *quadrature* error; the rule ships no convergence
             # fixture, so the runner SKIPs with "no convergence fixtures").
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "interface_bc"
+            # interface_bc (esd-6g4.7 / G7): the value-continuity coupling BC
+            # kind (u(x*) = v(x*)). The rewrite fixture lifts a `bc` node with
+            # fn="interface", dim="xmin" and the coupled variable as the second
+            # arg, then rewrites to index(u, N) where N is bound from the grid
+            # via the `bind_side_dim_size` guard — byte-identical to ESS's own
+            # conformance golden interface_bc_lowering (index(u, 4) on a size-4
+            # dim). Layer-A PASSes via the rewrite canonical-form byte match;
+            # Layer-B SKIPs (ghost-cell rewrite, no convergence fixture). The
+            # `flux_match` interface modifier (esm-spec §11.5) is a DECLARATIVE
+            # GAP — see discretizations/finite_difference/interface_bc/
+            # FLUX_MATCH_DECLARATIVE_GAP.md.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
@@ -761,6 +790,73 @@ end
         @test result.outcome == WalkESDTests.LAYER_PASS
         @test occursin("rewrite canonical-form match", result.reason)
     end
+end
+
+@testitem "walker: BC-kind rules (zero_gradient/interface) fire + discriminate via fn/dim" begin
+    # esd-6g4.7 / G7: exercises BOTH sides of the real zero_gradient_bc and
+    # interface_bc rule files through the ESS engine, and — the whole point of
+    # the fn/dim BC-kind matcher (G8, ess-bps) — proves kind DISCRIMINATION:
+    # a `bc` node tagged fn="interface" is NOT rewritten by the zero_gradient
+    # rules and vice versa. The walker's per-rule rewrite/ fixture only covers
+    # one side per rule; this covers the guarded ($N-binding) and guard-free
+    # sides of each, plus the negative cases.
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations
+    import EarthSciSerialization
+    import JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    fd = joinpath(repo_root, "discretizations", "finite_difference")
+
+    # Rewrite `expr_dict` (lifted exactly as a rewrite/ fixture would be, via
+    # the fn-aware `_expr_from_json`) with the rules in `rule_path` under
+    # `ctx_dict`, returning the canonical JSON of the result.
+    rw = function (rule_path, expr_dict, ctx_dict)
+        rule_doc = JSON.parse(read(rule_path, String))
+        rules = EarthSciSerialization.parse_rules(rule_doc["rules"])
+        ctx = WalkESDTests._build_rule_context(ctx_dict)
+        e = WalkESDTests._expr_from_json(expr_dict)
+        out = EarthSciSerialization.rewrite(e, rules, ctx)
+        return EarthSciSerialization.canonical_json(out)
+    end
+
+    zg = joinpath(fd, "zero_gradient_bc.json")
+    itf = joinpath(fd, "interface_bc.json")
+    ctx8 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
+                    "dim_sizes" => Dict("x" => 8))),
+                "variables" => Dict("u" => Dict("grid" => "g1")))
+    ctx5 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
+                    "dim_sizes" => Dict("x" => 5))),
+                "variables" => Dict("p" => Dict("grid" => "g1"),
+                    "q" => Dict("grid" => "g1")))
+
+    # zero_gradient: ghost = nearest interior cell. xmin -> index(u,1) (guard
+    # free); xmax -> index(u,N) with N bound from the grid (here 8).
+    @test rw(zg, Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+                      "args" => ["u"]), ctx8) == "{\"args\":[\"u\",1],\"op\":\"index\"}"
+    @test rw(zg, Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmax",
+                      "args" => ["u"]), ctx8) == "{\"args\":[\"u\",8],\"op\":\"index\"}"
+
+    # interface: ghost reads the coupled variable's far interior cell. xmax ->
+    # index(coupled,1) (guard free); xmin -> index(coupled,N) (N=5 here).
+    @test rw(itf, Dict("op" => "bc", "fn" => "interface", "dim" => "xmax",
+                       "args" => ["p", "q"]), ctx5) == "{\"args\":[\"q\",1],\"op\":\"index\"}"
+    @test rw(itf, Dict("op" => "bc", "fn" => "interface", "dim" => "xmin",
+                       "args" => ["p", "q"]), ctx5) == "{\"args\":[\"q\",5],\"op\":\"index\"}"
+
+    # Discrimination: the zero_gradient rules must NOT touch an interface bc
+    # node, and the interface rules must NOT touch a zero_gradient bc node.
+    # An unmatched `bc` node passes through unchanged (still op=="bc").
+    itf_node = Dict("op" => "bc", "fn" => "interface", "dim" => "xmin",
+                    "args" => ["p", "q"])
+    zg_node = Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+                   "args" => ["u"])
+    @test occursin("\"op\":\"bc\"", rw(zg, itf_node, ctx5))
+    @test occursin("\"op\":\"bc\"", rw(itf, zg_node, ctx8))
+    # Sanity: the cross-application really did nothing (no index rewrite).
+    @test !occursin("\"op\":\"index\"", rw(zg, itf_node, ctx5))
+    @test !occursin("\"op\":\"index\"", rw(itf, zg_node, ctx8))
 end
 
 @testitem "walker: layer A flags missing rewrite fixture files as failure" begin
