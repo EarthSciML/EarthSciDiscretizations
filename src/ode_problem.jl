@@ -844,3 +844,40 @@ function _grid_primitive_arrays(grid::MpasGrid)
         "dc_edge" => scalar_arrs["dc_edge"],
     )
 end
+
+# LatLon: the covariant FV Laplacian/gradient rules
+# (discretizations/finite_volume/covariant_fv_{laplacian,gradient}_latlon.json)
+# reference the per-cell curvilinear metric directly, exactly as the MPAS/DUO
+# rules reference primitive mesh arrays. The inverse metric g^{ij}, the Jacobian
+# J = √det(g) = R²|cos φ|, the J·g^{ij} products (whose centered differences are
+# the connection-term corrections), and the coordinate-Jacobian components
+# ∂(comp)/∂(target) are all build-time-constant grid data, so the host emits them
+# as `const_arrays` keyed by the rule-symbol names. ESS gathers them via
+# `index(name, lat, lon)` and const-folds the coefficient; the per-step hot tree
+# sees only the state stencil. This is a pure host-side binding hook — no AST
+# node, no arrayop footprint, no scheme handler (esd-zk9.2 §6.1). The flat
+# per-cell layout (lon-fastest within each lat row) is exactly the order the
+# rule's `index(name, lat, lon)` → cell resolution expects, and matches the
+# oracle goldens' `c = i + (j-1)·Nx` indexing.
+function _grid_primitive_arrays(grid::LatLonGrid)
+    ginv = metric_ginv(grid)                # (nc,2,2): [:,1,1]=g^{lonlon}, [:,2,2]=g^{latlat}, [:,1,2]=g^{lonlat}
+    jac = metric_jacobian(grid)             # (nc,):    R²|cos φ|
+    cj = coord_jacobian(grid, :lon_lat)     # (nc,2,2): ∂(computational)/∂(target)
+    nc = n_cells(grid)
+    g_xx = Float64[ginv[k, 1, 1] for k in 1:nc]
+    g_yy = Float64[ginv[k, 2, 2] for k in 1:nc]
+    g_xe = Float64[ginv[k, 1, 2] for k in 1:nc]
+    return Dict{String, AbstractArray{Float64}}(
+        "g_xx" => g_xx,
+        "g_yy" => g_yy,
+        "g_xe" => g_xe,
+        "invJ" => Float64[1.0 / jac[k] for k in 1:nc],
+        "Jg_xx" => Float64[jac[k] * g_xx[k] for k in 1:nc],
+        "Jg_yy" => Float64[jac[k] * g_yy[k] for k in 1:nc],
+        "Jg_xe" => Float64[jac[k] * g_xe[k] for k in 1:nc],
+        "dxi_dt1" => Float64[cj[k, 1, 1] for k in 1:nc],
+        "deta_dt1" => Float64[cj[k, 2, 1] for k in 1:nc],
+        "dxi_dt2" => Float64[cj[k, 1, 2] for k in 1:nc],
+        "deta_dt2" => Float64[cj[k, 2, 2] for k in 1:nc],
+    )
+end

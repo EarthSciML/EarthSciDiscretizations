@@ -958,3 +958,80 @@ end
     @test occursin("\"ghost_width\"", content)
     @test occursin("0", content)
 end
+
+@testitem "covariant_fv_laplacian_latlon scheme is discoverable and well-formed (esd-zk9.2)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "covariant_fv_laplacian_latlon", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    # Scheme identified by the laplacian op on a latlon grid.
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"latlon\"", content)
+    @test occursin("\"op\": \"laplacian\"", content)
+    @test occursin("\"\$u\"", content)
+    # Declarative arrayop-einsum replacement form — NOT stencil, NOT a call escape.
+    @test occursin("\"replacement\"", content)
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+    # 9-point gather incl. the NE/NW/SE/SW corner cross-derivative: ±1 offsets on
+    # both the lat and lon axes via op:index (the mixed_deriv corner precedent).
+    @test occursin("\"op\": \"index\"", content)
+    @test occursin("\"lat\"", content)
+    @test occursin("\"lon\"", content)
+    # Per-cell inverse-metric coefficient arrays g^{ij} (xi=lon, eta=lat).
+    @test occursin("\"g_xx\"", content)
+    @test occursin("\"g_yy\"", content)
+    @test occursin("\"g_xe\"", content)
+    # Jacobian reciprocal + the J·g^{ij} products whose centered differences are
+    # the connection-term (metric-derivative) corrections.
+    @test occursin("\"invJ\"", content)
+    @test occursin("\"Jg_xx\"", content)
+    @test occursin("\"Jg_yy\"", content)
+    @test occursin("\"Jg_xe\"", content)
+    # Angular spacings as scalar model parameters.
+    @test occursin("\"dlon\"", content)
+    @test occursin("\"dlat\"", content)
+end
+
+@testitem "covariant_fv_gradient_latlon scheme is discoverable and well-formed (esd-zk9.2)" begin
+    using EarthSciDiscretizations: load_rules
+    using JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "covariant_fv_gradient_latlon", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :finite_volume
+    @test isfile(rule.path)
+
+    content = read(rule.path, String)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"latlon\"", content)
+    @test occursin("\"op\": \"grad\"", content)
+    @test occursin("\"replacement\"", content)
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"op\": \"call\"", content)
+    @test occursin("\"op\": \"index\"", content)
+    # Two physical components t1, t2 via the chain rule to the target frame.
+    doc = JSON.parse(content)["discretizations"]
+    @test haskey(doc, "covariant_fv_gradient_latlon_t1")
+    @test haskey(doc, "covariant_fv_gradient_latlon_t2")
+    # coord_jacobian components ∂(comp)/∂(target) bound as per-cell arrays.
+    @test occursin("\"dxi_dt1\"", content)
+    @test occursin("\"deta_dt1\"", content)
+    @test occursin("\"dxi_dt2\"", content)
+    @test occursin("\"deta_dt2\"", content)
+    @test occursin("\"dlon\"", content)
+    @test occursin("\"dlat\"", content)
+end
