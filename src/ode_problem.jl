@@ -68,7 +68,15 @@ function build_ode_problem(
         gdd_path = isabspath(grid_ref) ? grid_ref :
             joinpath(dirname(abspath(esm_path)), grid_ref)
         gdd = _load_json_mutable(gdd_path)
-        if _has_curvilinear_domain(gdd)
+        # Route a curvilinear (latlon) GDD through Path B (PDESystem FD chain-rule)
+        # ONLY when it brings no declarative discretization rules. A latlon GDD that
+        # DOES declare discretizations — e.g. the authored covariant-FV Laplacian /
+        # gradient rules — is routed through Path A (esd-6g4.10/G11): the rules run
+        # in production and the LatLonGrid curvilinear metric is bound as
+        # const_arrays with a per-dimension boundary policy (lon periodic, lat
+        # clamp) so the connection-term offset gathers resolve through the ESS
+        # engine (ess-gj4). No imperative covariant operator is involved.
+        if _has_curvilinear_domain(gdd) && !_gdd_has_discretizations(gdd)
             return _build_path_b(esm_path, gdd)
         end
         loaded_grids = _merge_gdd!(esm, gdd_path; reader_fn = reader_fn)
@@ -93,14 +101,23 @@ function build_ode_problem(
     # coefficient const-fold and NO arrayop rewrite (the retired Route-B
     # _unstructured_const_arrays / _rewrite_unstructured_arrayop!).
     const_arrays = Dict{String, AbstractArray{Float64}}(coord_arrays)
+    # Per-const-array, per-dimension boundary policy (ess-gj4). Empty for
+    # MPAS/DUO (connectivity/stencil factors keep the throw-on-OOB default so
+    # genuine bugs stay caught); a LatLonGrid contributes (:clamp, :periodic) for
+    # its metric arrays so the covariant Laplacian connection-term gathers at
+    # lat±1 / lon±1 resolve as edge-extend (non-periodic pole) / mod1-wrap
+    # (periodic lon) instead of aborting at the grid edges.
+    const_array_boundaries = Dict{String, Any}()
     if !isempty(loaded_grids)
         merge!(const_arrays, _unstructured_grid_const_arrays(loaded_grids))
+        merge!(const_array_boundaries, _grid_const_array_boundaries(loaded_grids))
     end
 
     f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(
         disc;
         initial_conditions = numeric_ics,
-        const_arrays = const_arrays
+        const_arrays = const_arrays,
+        const_array_boundaries = const_array_boundaries
     )
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
@@ -117,6 +134,16 @@ function _has_curvilinear_domain(gdd::Dict{String, Any})::Bool
         family in _CURVILINEAR_FAMILIES && return true
     end
     return false
+end
+
+# A GDD that declares its own `discretizations` opts into the declarative rule
+# engine (Path A). For a curvilinear family this overrides the default Path-B
+# routing so the authored rules (e.g. the covariant-FV latlon Laplacian /
+# gradient) run in production and the grid geometry is bound as const_arrays
+# (esd-6g4.10). A bare-grid latlon GDD (no discretizations) keeps Path B.
+function _gdd_has_discretizations(gdd::Dict{String, Any})::Bool
+    discs = get(gdd, "discretizations", nothing)
+    return discs !== nothing && !isempty(discs)
 end
 
 function _build_path_b(esm_path::AbstractString, gdd::Dict{String, Any})
@@ -403,6 +430,19 @@ function _inject_grids!(
             dims, spacing_vals, grid = _inject_grids_duo(domain_spec, gdd_path)
             grid !== nothing && (loaded[domain_name] = grid)
             cell_widths_by_axis = Dict{String, Vector{Float64}}()
+        elseif family == "latlon"
+            # Path-A covariant-FV (esd-6g4.10): emit the structured (lon, lat)
+            # dimensions and uniform dlon/dlat parameter defaults exactly as the
+            # generic spatial path, AND construct the LatLonGrid so
+            # _unstructured_grid_const_arrays can bind its curvilinear metric as
+            # const_arrays for the authored covariant rules. Reached only on the
+            # Path-A branch — a bare-grid latlon GDD (no discretizations) returns
+            # early via _build_path_b before _merge_gdd! is called.
+            dims, spacing_vals, cell_widths_by_axis = _inject_grids_spatial(domain_spec)
+            loaded[domain_name] = _construct_curvilinear_grid(
+                "latlon",
+                Dict{String, Any}(String(k) => v for (k, v) in domain_spec),
+            )
         else
             dims, spacing_vals, cell_widths_by_axis = _inject_grids_spatial(domain_spec)
         end
@@ -786,14 +826,41 @@ end
 # trailing 0-sentinel padding column. Holds for both closed (MPAS-global, DUO
 # icosahedral) and open meshes.
 
-# Emit, for every loaded MPAS/DUO grid, the primitive mesh arrays the authored
-# nn_diffusion rule references, keyed by their rule-symbol names. The result is
+# Emit, for every loaded grid that binds geometry declaratively, the primitive
+# arrays the authored rules reference, keyed by their rule-symbol names: the
+# MPAS/DUO mesh connectivity/geometry the nn_diffusion/divergence rules use, and
+# the LatLonGrid curvilinear metric the covariant-FV rules use. The result is
 # merged into the `const_arrays` passed to `build_evaluator`.
 function _unstructured_grid_const_arrays(loaded_grids::Dict{String, Any})
     out = Dict{String, AbstractArray{Float64}}()
     for (_, grid) in loaded_grids
-        (grid isa DuoGrid || grid isa MpasGrid) || continue
+        (grid isa DuoGrid || grid isa MpasGrid || grid isa LatLonGrid) || continue
         merge!(out, _grid_primitive_arrays(grid))
+    end
+    return out
+end
+
+# Per-const-array, per-dimension boundary policy (ess-gj4) for the declaratively
+# bound grid geometry. MPAS/DUO contribute none — their connectivity / stencil
+# factors must keep the throw-on-OOB default so genuine bugs stay caught. A
+# LatLonGrid contributes (:clamp, :periodic) for every metric array: dim 1 is the
+# lat / η axis (lat → i), a non-periodic pole that edge-extends (:clamp ≡ the
+# oracle sentinel→self for ±1 offsets, ORACLE_CHARACTERIZATION §6.2); dim 2 is the
+# lon / ξ axis (lon → j), periodic with a mod1 wrap. Only Jg_xx/Jg_yy/Jg_xe are
+# gathered at OFFSET indices (the Laplacian connection terms); tagging the
+# centre-only factors too is inert (in-range gathers pass through) and keeps the
+# binding uniform.
+function _grid_const_array_boundaries(loaded_grids::Dict{String, Any})
+    out = Dict{String, Any}()
+    for (_, grid) in loaded_grids
+        grid isa LatLonGrid || continue
+        b = (:clamp, :periodic)   # (dim1 = lat/η, dim2 = lon/ξ)
+        for name in (
+                "g_xx", "g_yy", "g_xe", "invJ", "Jg_xx", "Jg_yy", "Jg_xe",
+                "dxi_dt1", "deta_dt1", "dxi_dt2", "deta_dt2",
+            )
+            out[name] = b
+        end
     end
     return out
 end
@@ -954,32 +1021,52 @@ end
 # J = √det(g) = R²|cos φ|, the J·g^{ij} products (whose centered differences are
 # the connection-term corrections), and the coordinate-Jacobian components
 # ∂(comp)/∂(target) are all build-time-constant grid data, so the host emits them
-# as `const_arrays` keyed by the rule-symbol names. ESS gathers them via
-# `index(name, lat, lon)` and const-folds the coefficient; the per-step hot tree
-# sees only the state stencil. This is a pure host-side binding hook — no AST
-# node, no arrayop footprint, no scheme handler (esd-zk9.2 §6.1). The flat
-# per-cell layout (lon-fastest within each lat row) is exactly the order the
-# rule's `index(name, lat, lon)` → cell resolution expects, and matches the
-# oracle goldens' `c = i + (j-1)·Nx` indexing.
+# as `const_arrays` keyed by the rule-symbol names.
+#
+# The rules gather the metric with TWO indices, `index(name, lat, lon)`, so ESS
+# requires the arrays to be 2-D (`length(index args) == ndims`, else
+# E_TREEWALK_CONSTARRAY_NDIM). After the lat→i / lon→j axis substitution the
+# gather is `index(name, i, j)` ⇒ `name[lat, lon]`, so each array is bound as a
+# `(nlat, nlon)` matrix `M[lat, lon]`. The grid's flat per-cell arrays are
+# lon-fastest within each lat row (cell_centers / metric_* order:
+# k = lon + (lat-1)·nlon), so `reshape(v, nlon, nlat)` gives `[lon, lat]` and a
+# `permutedims` transposes it to `[lat, lon]`. The connection-term offset gathers
+# (Jg_* at lat±1 / lon±1) resolve through the per-dim boundary policy emitted by
+# `_grid_const_array_boundaries` (lon periodic, lat clamp; ess-gj4). This is a
+# pure host-side binding hook — no AST node, no arrayop footprint, no scheme
+# handler (esd-zk9.2 §6.1).
+#
+# Requires a REGULAR lon-lat grid (constant nlon per row): a reduced/ragged grid
+# has no rectangular metric matrix, and the covariant rules' rectangular index
+# arithmetic does not apply to it.
 function _grid_primitive_arrays(grid::LatLonGrid)
+    all(==(grid.nlon_per_row[1]), grid.nlon_per_row) || error(
+        "_grid_primitive_arrays(::LatLonGrid): Path-A covariant binding requires a " *
+            "regular lon-lat grid (constant nlon_per_row); got reduced/ragged " *
+            "nlon_per_row=$(grid.nlon_per_row)."
+    )
+    nlat = grid.nlat
+    nlon = grid.nlon_per_row[1]
     ginv = metric_ginv(grid)                # (nc,2,2): [:,1,1]=g^{lonlon}, [:,2,2]=g^{latlat}, [:,1,2]=g^{lonlat}
     jac = metric_jacobian(grid)             # (nc,):    R²|cos φ|
     cj = coord_jacobian(grid, :lon_lat)     # (nc,2,2): ∂(computational)/∂(target)
     nc = n_cells(grid)
+    # Flat (lon-fastest) per-cell vector → (nlat, nlon) matrix M[lat, lon].
+    mat(v) = permutedims(reshape(Float64.(v), nlon, nlat), (2, 1))
     g_xx = Float64[ginv[k, 1, 1] for k in 1:nc]
     g_yy = Float64[ginv[k, 2, 2] for k in 1:nc]
     g_xe = Float64[ginv[k, 1, 2] for k in 1:nc]
     return Dict{String, AbstractArray{Float64}}(
-        "g_xx" => g_xx,
-        "g_yy" => g_yy,
-        "g_xe" => g_xe,
-        "invJ" => Float64[1.0 / jac[k] for k in 1:nc],
-        "Jg_xx" => Float64[jac[k] * g_xx[k] for k in 1:nc],
-        "Jg_yy" => Float64[jac[k] * g_yy[k] for k in 1:nc],
-        "Jg_xe" => Float64[jac[k] * g_xe[k] for k in 1:nc],
-        "dxi_dt1" => Float64[cj[k, 1, 1] for k in 1:nc],
-        "deta_dt1" => Float64[cj[k, 2, 1] for k in 1:nc],
-        "dxi_dt2" => Float64[cj[k, 1, 2] for k in 1:nc],
-        "deta_dt2" => Float64[cj[k, 2, 2] for k in 1:nc],
+        "g_xx" => mat(g_xx),
+        "g_yy" => mat(g_yy),
+        "g_xe" => mat(g_xe),
+        "invJ" => mat(Float64[1.0 / jac[k] for k in 1:nc]),
+        "Jg_xx" => mat(Float64[jac[k] * g_xx[k] for k in 1:nc]),
+        "Jg_yy" => mat(Float64[jac[k] * g_yy[k] for k in 1:nc]),
+        "Jg_xe" => mat(Float64[jac[k] * g_xe[k] for k in 1:nc]),
+        "dxi_dt1" => mat(Float64[cj[k, 1, 1] for k in 1:nc]),
+        "deta_dt1" => mat(Float64[cj[k, 2, 1] for k in 1:nc]),
+        "dxi_dt2" => mat(Float64[cj[k, 1, 2] for k in 1:nc]),
+        "deta_dt2" => mat(Float64[cj[k, 2, 2] for k in 1:nc]),
     )
 end

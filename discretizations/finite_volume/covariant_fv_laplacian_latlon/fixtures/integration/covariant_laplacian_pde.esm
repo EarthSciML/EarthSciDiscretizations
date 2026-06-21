@@ -1,0 +1,29 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "covariant_laplacian_latlon_pde",
+    "description": "Laplace-Beltrami diffusion D(u)/dt = laplacian(u) on a regular global lon-lat sphere, discretized by the authored covariant-FV rule via Path A (esd-6g4.10/G11). The IC is the degree-1 spherical eigenfunction sin(latitude); under the discrete Laplace-Beltrami it decays as e^{-2t/R^2} on the interior. NOTE the IC is written sin(lat - pi/2): the expression-IC engine samples 'lat' at the no-offset cell-centre coord (i-0.5)*dlat in [0,pi] (it does not apply the domain min), so sin(lat - pi/2) materializes sin(true_latitude) = sin(-pi/2 + (i-0.5)*dlat), matching the LatLonGrid metric (built from the true cell-centre latitudes) and the catalog reference lat_c = lat_lo + (i-0.5)*h."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "u":    {"type": "state",     "shape": ["lat", "lon"], "location": "cell_center", "default": 0.0},
+        "dlon": {"type": "parameter", "default": 1.0},
+        "dlat": {"type": "parameter", "default": 1.0}
+      },
+      "equations": [
+        {
+          "lhs": {"op": "D", "args": ["u"], "wrt": "t"},
+          "rhs": {"op": "laplacian", "args": ["u"]}
+        }
+      ],
+      "initial_conditions": {
+        "type": "expression",
+        "values": {
+          "u": {"op": "sin", "args": [{"op": "+", "args": ["lat", -1.5707963267948966]}]}
+        }
+      }
+    }
+  }
+}

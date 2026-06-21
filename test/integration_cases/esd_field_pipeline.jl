@@ -200,6 +200,39 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
         err
     end,
 
+    # 2-D covariant-FV Laplace-Beltrami diffusion on a regular global lon-lat
+    # sphere (Path A, esd-6g4.10). ESM shape ["lat","lon"] → var_map key
+    # "u[i_lat,j_lon]"; axes sorted alphabetically: axes[1]=lat, axes[2]=lon.
+    # IC: the degree-1 eigenfunction sin(latitude) (the ESM writes sin(lat-π/2) so
+    # the no-offset coord sampling materializes sin(true latitude)); under the
+    # discrete Laplace-Beltrami it decays as exp(−2t/R²). Exact: sin(lat)·e^{−2t/R²}
+    # with lat = lat_ax.lo + (i−0.5)·h (lo = −π/2 ⇒ true latitude, matching the
+    # LatLonGrid metric). Pole rows perturb the interior via the zero-ghost
+    # boundary, so `boundary_skip` (default 1) interior lat rows are dropped at
+    # each pole; the manifest's small t_final keeps the eigen-decay's spatial
+    # truncation O(h²)-dominated (cf. sin_pi_z_dirichlet_interior).
+    "sin_lat_latlon_laplacian_interior" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+        lat_ax = axes[findfirst(a -> a.name == "lat", axes)]
+        lon_ax = axes[findfirst(a -> a.name == "lon", axes)]
+        N_lat = lat_ax.N
+        N_lon = lon_ax.N
+        R = Float64(get(manifest, "R", 1.0))
+        n_skip = Int(get(manifest, "boundary_skip", 1))
+        factor = exp(-2.0 * t / R^2)
+        err = 0.0
+        for i in (n_skip + 1):(N_lat - n_skip)
+            lat_c = lat_ax.lo + (i - 0.5) * lat_ax.h
+            exact = sin(lat_c) * factor
+            for j in 1:N_lon
+                idx = get(var_map, "u[$i,$j]", nothing)
+                idx === nothing && continue
+                err = max(err, abs(u_vec[idx] - exact))
+            end
+        end
+        err
+    end,
+
     # 2-D Arakawa C-grid divergence via vec_sincos_2d_periodic MMS.
     # F(x,y) = (sin(2πx)cos(2πy), cos(2πx)sin(2πy))  →  ∇·F = 4π cos(2πx)cos(2πy).
     # State variable `div` starts at 0 and accumulates RHS = ∇·F over time t.

@@ -1,11 +1,47 @@
 # Covariant-FV (latlon) Path-A production wiring — VERDICT
 
 **Bead:** `esd-6g4.10` (G11: covariant-FV (latlon) production wiring + integration)
-**Author:** polecat `gastown.slit`
+**Author:** polecat `gastown.slit` (verdict); polecat `gastown.nux` (resolution)
 **Date:** 2026-06-21
-**Engine under test:** `EarthSciSerialization` v0.6.0 (tree_hash `f2b411a6617fdb85539f2abddec7bb4523149d19`)
+**Engine under test:** `EarthSciSerialization` v0.6.0 (`f2b411a6…`, verdict); ESS `origin/main` `78b6a577` (resolution)
 
-## Verdict: ❌ INFEASIBLE AS AUTHORED — escalated for re-scope
+## ✅ RESOLUTION — SHIPPED via Option C (ess-gj4)
+
+The mayor adopted **Option C** below. `ess-gj4` ("generic const_array gather
+boundary policy") landed on ESS `origin/main` (`78b6a577`) and closed: it adds a
+declarative per-const-array, per-dimension boundary policy —
+`:periodic` → `mod1(i,N)` wrap, `:clamp` → edge-extend, `:error` → throw
+(default) — exposed as a `const_array_boundaries` kwarg on `build_evaluator`. With
+it the authored covariant **Laplacian** rule runs **unmodified** through the real
+engine; no rule was reformulated and no imperative operator was written.
+
+Path-A production wiring landed in `src/ode_problem.jl` (esd-6g4.10):
+
+1. **Routing.** A latlon GDD that declares `discretizations` (the covariant rules)
+   routes through Path A (`_gdd_has_discretizations`); a bare-grid latlon GDD still
+   takes Path B. Path selection stays per-family-consistent.
+2. **Blocker 1 (rank).** `_grid_primitive_arrays(::LatLonGrid)` now binds every
+   metric factor as a `(nlat, nlon)` matrix `M[lat, lon]` (regular grids only),
+   gathered `index(name, lat, lon)`. `_unstructured_grid_const_arrays` includes
+   `LatLonGrid`; `_inject_grids!` constructs the grid into `loaded`.
+3. **Blocker 2 (boundary).** `_grid_const_array_boundaries` emits
+   `(:clamp, :periodic)` (lat pole edge-extend; lon periodic wrap) for the metric
+   arrays, threaded into `build_evaluator(...; const_array_boundaries=...)`.
+
+**Empirical (real engine, `build_ode_problem` → `build_evaluator`):** build no
+longer throws `E_TREEWALK_CONSTARRAY_OOB` at any pole/seam cell; the discrete
+Laplace-Beltrami applied to `sin(lat)` converges O(h²) to `−2 sin(lat)/R²` on the
+interior — L∞ = 0.0153 / 0.00397 / 0.00100 at N = 16/32/64 (ratios 3.86, 3.96).
+Unit coverage: `test/test_ode_problem_covariant_latlon.jl`. Integration solve:
+`discretizations/finite_volume/covariant_fv_laplacian_latlon/fixtures/integration/`
+(`mms_kind = sin_lat_latlon_laplacian_interior`). The esd-zk9.1 "DECLARATIVE-FEASIBLE"
+verdict is upheld **with** Option C engine support (not in the as-authored form
+without it — see below). Pole rows carry the documented zero-ghost vs sentinel→self
+divergence (§6.2) and are excluded from interior norms.
+
+---
+
+## Verdict (as-authored, pre-ess-gj4): ❌ INFEASIBLE AS AUTHORED — escalated for re-scope
 
 The esd-zk9.2 covariant **Laplacian** rule
 (`discretizations/finite_volume/covariant_fv_laplacian_latlon.json`) **cannot be

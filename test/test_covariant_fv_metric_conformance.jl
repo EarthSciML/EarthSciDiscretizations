@@ -203,7 +203,13 @@ end
     function interior_linf(nlon::Int, nlat::Int)
         grid = ESD._latlon(; nlon = nlon, nlat = nlat, R = R)
         nc = n_cells(grid)
+        # The binding hook now returns (nlat, nlon) metric MATRICES (esd-6g4.10):
+        # ESS gathers index(name, lat, lon) as a 2-D const_array. This test-local
+        # interpreter resolves gathers against a lon-fastest FLAT layout
+        # (c = lon + (lat-1)*nlon), so flatten each matrix back to that order
+        # (inverse of the production reshape permutedims(reshape(v,nlon,nlat),(2,1))).
         prim = ESD._grid_primitive_arrays(grid)   # the binding hook under test
+        _flat_lonfastest(M) = vec(permutedims(M, (2, 1)))
         cc = cell_centers(grid)
         lat = cc.lat
         lats = sort(unique(lat))
@@ -215,7 +221,7 @@ end
 
         arrays = Dict{String, Vector{Float64}}("\$u" => Float64[sin(lat[c]) for c in 1:nc])
         for k in ("g_xx", "g_yy", "g_xe", "invJ", "Jg_xx", "Jg_yy", "Jg_xe")
-            arrays[k] = Float64.(prim[k])
+            arrays[k] = _flat_lonfastest(Float64.(prim[k]))
         end
         bindings = Dict{String, Float64}("dlon" => dlon, "dlat" => dlat)
 
