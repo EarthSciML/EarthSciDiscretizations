@@ -1,0 +1,943 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "authors": [
+      "EarthSciDiscretizations/gastown.slit"
+    ],
+    "description": "DUO icosahedral primal-cell geometry expressed as a semiring-FAQ value-invention pass (RFC semiring-faq-unified-ir §8.1 geometry FAQ; bead esd-heg.6), the declarative replacement for the per-cell geometry loop in build_duo_grid (src/grids/duo.jl) and its per-binding equivalents. Inputs (CONST): face_vert (cell->corner-vertex connectivity) and vert_coord (unit-sphere vertex coordinates) supplied by the topology/subdivision passes (esd-heg.1 / esd-heg.3); R is the sphere radius. Outputs, all sum_product FAQs over the cell set: (1-4) cell_cart — the centroid as the normalized mean of the three corner unit vectors (cent_sum reduces over corners, cent_nrm2 over space, cent_unit normalizes, cell_cart scales by R); (5-6) lon/lat — geographic coordinates via atan2/asin of the unit centroid; (7-10) area — the spherical-triangle area by L'Huilier's theorem on the three great-circle arcs (acos of the corner dot products), spherical-excess form 4*atan(sqrt(tan(s/2) tan((s-a)/2) tan((s-b)/2) tan((s-c)/2))) scaled by R^2. Squares are products (not ^) and reductions/products are folded in corner/space order so the FAQ reproduces the imperative float ops bit-for-bit; deterministic formulas with NO clipping (clamp/max), per the acceptance contract. Value-free structural spec (connectivity/coords are parameter shapes; concrete data fed by the conformance harness), mirroring discretizations/grids/duo/faq/subdivide_refine.esm and tests/valid/geometry/intersect_polygon_clip_area.esm in ESS. Index sizes are the canonical level-0 instance (Nc=20, Nv=12); the pass shape is identical at any level. Byte/numeric equivalence to build_duo_grid is proven across the level ladder by test/test_duo_primal_geometry_faq.jl.",
+    "name": "duo_primal_geometry",
+    "tags": [
+      "duo",
+      "icosahedral",
+      "geometry",
+      "spherical-excess",
+      "lhuilier",
+      "centroid",
+      "faq",
+      "esd-heg.6"
+    ]
+  },
+  "models": {
+    "IcosahedralPrimalGeometry": {
+      "equations": [
+        {
+          "_comment": "(1) cent_sum[c,d] = sum over the 3 corners of vert_coord[face_vert[c,corner], d] — the un-normalized centroid (the bead's sum_product FAQ over the 3 vertices). Reduces over corners in ascending order to match the imperative ax+bx+cx.",
+          "lhs": {
+            "args": [
+              "cent_sum",
+              "c",
+              "d"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                "vert_coord",
+                {
+                  "args": [
+                    "face_vert",
+                    "c",
+                    "k"
+                  ],
+                  "op": "index"
+                },
+                "d"
+              ],
+              "op": "index"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              },
+              "k": {
+                "from": "corners"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(2) cent_nrm2[c] = sum_d cent_sum[c,d]^2 — squared norm (square as a product, not ^, to match the imperative mx*mx float op).",
+          "lhs": {
+            "args": [
+              "cent_nrm2",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "cent_sum",
+                    "c",
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "cent_sum",
+                    "c",
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(3) cent_unit[c,d] = cent_sum[c,d] / sqrt(cent_nrm2[c]) — normalized vertex-mean direction on the unit sphere.",
+          "lhs": {
+            "args": [
+              "cent_unit",
+              "c",
+              "d"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "cent_sum",
+                    "c",
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "cent_nrm2",
+                        "c"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "sqrt"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(4) cell_cart[c,d] = R * cent_unit[c,d] — cell-center cartesian coordinate scaled to radius R.",
+          "lhs": {
+            "args": [
+              "cell_cart",
+              "c",
+              "d"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                "R",
+                {
+                  "args": [
+                    "cent_unit",
+                    "c",
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(5) lon[c] = atan2(cent_unit_y, cent_unit_x) — geographic longitude (space index 2 = y, 1 = x).",
+          "lhs": {
+            "args": [
+              "lon",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "cent_unit",
+                    "c",
+                    2
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "cent_unit",
+                    "c",
+                    1
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "atan2"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6) lat[c] = asin(cent_unit_z) — geographic latitude (space index 3 = z); no clipping (the unit vector keeps z in [-1,1] on a valid mesh).",
+          "lhs": {
+            "args": [
+              "lat",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "cent_unit",
+                    "c",
+                    3
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "asin"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7a) dot_a[c] = sum_d vert_coord[corner2,d]*vert_coord[corner3,d] — cosine of the arc opposite corner 1.",
+          "lhs": {
+            "args": [
+              "dot_a",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        3
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7b) dot_b[c] = sum_d vert_coord[corner3,d]*vert_coord[corner1,d] — cosine of the arc opposite corner 2.",
+          "lhs": {
+            "args": [
+              "dot_b",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        3
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7c) dot_c[c] = sum_d vert_coord[corner1,d]*vert_coord[corner2,d] — cosine of the arc opposite corner 3.",
+          "lhs": {
+            "args": [
+              "dot_c",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "face_vert",
+                        "c",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(8a) arc_a[c] = acos(dot_a[c]) — great-circle arc opposite corner 1 (no clipping).",
+          "lhs": {
+            "args": [
+              "arc_a",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "dot_a",
+                    "c"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(8b) arc_b[c] = acos(dot_b[c]).",
+          "lhs": {
+            "args": [
+              "arc_b",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "dot_b",
+                    "c"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(8c) arc_c[c] = acos(dot_c[c]).",
+          "lhs": {
+            "args": [
+              "arc_c",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "dot_c",
+                    "c"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(9) semi[c] = 0.5*(arc_a+arc_b+arc_c) — half-perimeter (sum in a,b,c order to match the imperative 0.5*(da+db+dc)).",
+          "lhs": {
+            "args": [
+              "semi",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "arc_a",
+                        "c"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "arc_b",
+                        "c"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "arc_c",
+                        "c"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(10) area[c] = 4*atan(sqrt(tan(s/2) tan((s-a)/2) tan((s-b)/2) tan((s-c)/2))) * R*R — L'Huilier spherical excess scaled by R^2. tan-product is left-folded to match the imperative associativity; no max() guard (t>=0 on a valid triangle).",
+          "lhs": {
+            "args": [
+              "area",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    4.0,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            "semi",
+                                            "c"
+                                          ],
+                                          "op": "index"
+                                        },
+                                        2.0
+                                      ],
+                                      "op": "/"
+                                    }
+                                  ],
+                                  "op": "tan"
+                                },
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            {
+                                              "args": [
+                                                "semi",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            },
+                                            {
+                                              "args": [
+                                                "arc_a",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            }
+                                          ],
+                                          "op": "-"
+                                        },
+                                        2.0
+                                      ],
+                                      "op": "/"
+                                    }
+                                  ],
+                                  "op": "tan"
+                                },
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            {
+                                              "args": [
+                                                "semi",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            },
+                                            {
+                                              "args": [
+                                                "arc_b",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            }
+                                          ],
+                                          "op": "-"
+                                        },
+                                        2.0
+                                      ],
+                                      "op": "/"
+                                    }
+                                  ],
+                                  "op": "tan"
+                                },
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            {
+                                              "args": [
+                                                "semi",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            },
+                                            {
+                                              "args": [
+                                                "arc_c",
+                                                "c"
+                                              ],
+                                              "op": "index"
+                                            }
+                                          ],
+                                          "op": "-"
+                                        },
+                                        2.0
+                                      ],
+                                      "op": "/"
+                                    }
+                                  ],
+                                  "op": "tan"
+                                }
+                              ],
+                              "op": "*"
+                            }
+                          ],
+                          "op": "sqrt"
+                        }
+                      ],
+                      "op": "atan"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    "R",
+                    "R"
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        }
+      ],
+      "index_sets": {
+        "cells": {
+          "kind": "interval",
+          "size": 20
+        },
+        "corners": {
+          "kind": "interval",
+          "size": 3
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        },
+        "verts": {
+          "kind": "interval",
+          "size": 12
+        }
+      },
+      "variables": {
+        "R": {
+          "description": "Sphere radius; geographic outputs scale by R (cartesian) and R^2 (area).",
+          "shape": [],
+          "type": "parameter"
+        },
+        "arc_a": {
+          "description": "Great-circle arc opposite corner 1 = acos(dot_a) (no clipping).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "arc_b": {
+          "description": "Great-circle arc opposite corner 2 = acos(dot_b) (no clipping).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "arc_c": {
+          "description": "Great-circle arc opposite corner 3 = acos(dot_c) (no clipping).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "area": {
+          "description": "Spherical-triangle cell area via L'Huilier: 4*atan(sqrt(tan(s/2) tan((s-a)/2) tan((s-b)/2) tan((s-c)/2))) * R^2.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "cell_cart": {
+          "description": "Cell-center cartesian coordinates = R * cent_unit (the centroid scaled to the sphere of radius R).",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "type": "state"
+        },
+        "cent_nrm2": {
+          "description": "Squared norm of cent_sum, reduced over space (sum_product FAQ).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "cent_sum": {
+          "description": "Un-normalized cell centroid = sum over the 3 corner vertices of their coordinates (sum_product FAQ over corners).",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "type": "state"
+        },
+        "cent_unit": {
+          "description": "Unit cell-center direction = cent_sum / sqrt(cent_nrm2) (normalized vertex mean, on the unit sphere).",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "type": "state"
+        },
+        "dot_a": {
+          "description": "Dot product of corner-2 and corner-3 unit vectors (cosine of the arc opposite corner 1), reduced over space.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "dot_b": {
+          "description": "Dot product of corner-3 and corner-1 unit vectors (cosine of the arc opposite corner 2), reduced over space.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "dot_c": {
+          "description": "Dot product of corner-1 and corner-2 unit vectors (cosine of the arc opposite corner 3), reduced over space.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "face_vert": {
+          "description": "Vertex id (1-based) of each cell's three corners (the primal face->vertex connectivity, CONST).",
+          "shape": [
+            "cells",
+            "corners"
+          ],
+          "type": "parameter"
+        },
+        "lat": {
+          "description": "Cell-center geographic latitude = asin(cent_unit_z) (rad; no clipping).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "lon": {
+          "description": "Cell-center geographic longitude = atan2(cent_unit_y, cent_unit_x) (rad).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "semi": {
+          "description": "Half-perimeter of the spherical triangle, s = (arc_a + arc_b + arc_c) / 2.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "vert_coord": {
+          "description": "Cartesian unit-sphere coordinates of the mesh vertices (CONST).",
+          "shape": [
+            "verts",
+            "space"
+          ],
+          "type": "parameter"
+        }
+      }
+    }
+  }
+}
