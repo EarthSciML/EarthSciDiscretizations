@@ -549,6 +549,20 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :integral && r.name == "midpoint_1d"
+            # midpoint_1d (esd-6g4.14): full-domain 1-D midpoint quadrature shipped
+            # as a `reduce` sum_product arrayop. Layer-A passes via its canonical
+            # byte contract — the `integral` op rewrites to `dx · Σ_j u[j]` with the
+            # reduction bound `index(size_x, 1)` tracking the grid size as a
+            # const_array (the GAP-A bypass; see discretizations/integral/
+            # INTEGRAL_FEASIBILITY.md). Layer-B SKIPs: MMS convergence measures a
+            # differential-operator's algebraic order, which is N/A for a quadrature
+            # (midpoint is O(h²) in *quadrature* error; the rule ships no convergence
+            # fixture, so the runner SKIPs with "no convergence fixtures").
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)

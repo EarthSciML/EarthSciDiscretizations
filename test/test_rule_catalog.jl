@@ -42,6 +42,36 @@ using TestItems
     @test !occursin("\"offset\"", content)
 end
 
+@testitem "midpoint_1d integral rule is discoverable and well-formed (esd-6g4.14)" begin
+    using EarthSciDiscretizations: load_rules
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    catalog = joinpath(repo_root, "discretizations")
+    rules = load_rules(catalog)
+    idx = findfirst(r -> r.name == "midpoint_1d", rules)
+    @test idx !== nothing
+    rule = rules[idx]
+    @test rule.family == :integral
+    @test isfile(rule.path)
+
+    # esd-6g4.14: the domain integral as a declarative weighted sum_product.
+    # The rule rewrites the `integral` op to `dx · Σ_j u[j]`, a reduce:"+"
+    # arrayop whose reduction bound `index(size_x, 1)` tracks the grid size via a
+    # host-supplied const_array (the GAP-A bypass; see INTEGRAL_FEASIBILITY.md).
+    content = read(rule.path, String)
+    @test occursin("\"applies_to\"", content)
+    @test occursin("\"op\": \"integral\"", content)
+    @test occursin("\"grid_family\"", content)
+    @test occursin("\"cartesian\"", content)
+    @test occursin("\"replacement\"", content)
+    @test occursin("\"arrayop\"", content)
+    @test occursin("\"reduce\": \"+\"", content)
+    @test occursin("size_x", content)
+    # Declarative AST only — no imperative stencil/selector blobs.
+    @test !occursin("\"stencil\"", content)
+    @test !occursin("\"selector\"", content)
+end
+
 @testitem "upwind_1st scheme is discoverable and well-formed" begin
     using EarthSciDiscretizations: load_rules
 

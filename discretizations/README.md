@@ -32,6 +32,16 @@ only when the ESS `esm-spec.md` §9.2 decision tree says so.
   AST-expressible and proven to machine precision but blocked from being a
   general rule by an ESS reduction-range-sizing gap; spherical harmonics are
   fundamentally infeasible). See that verdict before adding spectral rules.
+- `integral/` — quadrature operators (domain integrals / PIDE reduction terms,
+  integral operators). Ships `midpoint_1d.json` (full-domain 1-D midpoint
+  quadrature as a `reduce` sum_product arrayop). The family's declarative
+  feasibility is characterized in `integral/INTEGRAL_FEASIBILITY.md`: the
+  reduction tracks the grid size via a host-supplied `size_x` const_array
+  (`index(size_x, 1)`), bypassing the reduction-range-sizing gap ("GAP A") that
+  blocked the spectral family — the same host-supplied-grid-data pattern
+  `nn_diffusion` uses. Proven to machine precision (`integral/feasibility_probe/`).
+  The bypass is operator-agnostic, so it also unblocks the spectral family. See
+  that verdict before adding integral rules.
 
 The per-family split is a starting convention and may evolve as content lands.
 See `../docs/REPO_LAYOUT.md` for the governing convention.

@@ -1,0 +1,72 @@
+{
+  "esm": "0.2.0",
+  "metadata": {
+    "name": "midpoint_1d_canonical"
+  },
+  "grids": {
+    "gx": {
+      "family": "cartesian",
+      "dimensions": [
+        { "name": "x", "size": 8, "periodic": true, "spacing": "uniform" }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "midpoint_1d",
+      "pattern": {
+        "op": "integral",
+        "args": ["$u"],
+        "var": "x",
+        "lower": { "op": "const", "value": 0.0 },
+        "upper": { "op": "const", "value": 1.0 }
+      },
+      "replacement": {
+        "op": "*",
+        "args": [
+          "dx",
+          {
+            "op": "arrayop",
+            "reduce": "+",
+            "ranges": {
+              "j": [1, { "op": "index", "args": ["size_x", 1] }]
+            },
+            "expr": { "op": "index", "args": ["$u", "j"] },
+            "args": ["size_x"]
+          }
+        ]
+      }
+    }
+  ],
+  "models": {
+    "M": {
+      "grid": "gx",
+      "variables": {
+        "u": {
+          "type": "state",
+          "default": 0.0,
+          "units": "1",
+          "shape": ["x"],
+          "location": "cell_center"
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "neg",
+            "args": [
+              {
+                "op": "integral",
+                "args": ["u"],
+                "var": "x",
+                "lower": { "op": "const", "value": 0.0 },
+                "upper": { "op": "const", "value": 1.0 }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
