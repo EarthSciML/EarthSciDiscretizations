@@ -148,12 +148,17 @@ using TestItems
     # and Layer-B SKIPs with "no convergence fixtures at...".
     canonical_skip_only_fv3 = Set(
         [
-            # dirichlet_bc / neumann_bc / robin_bc (esd-0eu, esd-m9v): rewrite
-            # fixture ships `applicable:false` pending ESS support for kind/side
-            # pattern matching on the bc OpExpr (layer-A SKIP) and carry no
-            # convergence fixture (layer-B SKIP "no convergence fixtures").
+            # dirichlet_bc (esd-0eu): rewrite fixture ships `applicable:false`
+            # pending the kind/side discrimination flip (layer-A SKIP) and carries
+            # no convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
-            ("finite_difference", "neumann_bc"),
+            # neumann_bc (esd-6g4.9 / G10): PROMOTED out of this set. The ESS
+            # fn/dim BC-kind matcher (ess-bps/ess-tox, G8) landed, so the rewrite
+            # fixture is now applicable:true — bc(neumann, xmin, [u, g]) fires the
+            # neumann_bc_xmin rule (bind_side_spacing binds $h = 1/N). Layer-A
+            # PASSes; see the explicit elseif below. The numeric INTEGRATION path
+            # stays blocked on the same imperative shadow as robin (ess-lhi) —
+            # discretizations/finite_difference/neumann_bc/INTEGRATION_GAP.md.
             # robin_bc (esd-m9v, esd-6g4.8/G9): rewrite fixture ships
             # `applicable:false` — DECLARATIVE-INFEASIBLE over the existing ESS
             # engine. G8 (ess-tox) landed kind/side discrimination, but Robin
@@ -604,6 +609,25 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "neumann_bc"
+            # neumann_bc (esd-6g4.9 / G10): the nonzero-flux generalization of
+            # zero_gradient_bc, firing through the same ESS fn/dim BC-kind matcher
+            # (ess-bps/ess-tox, G8). The rewrite fixture lifts a `bc` node with
+            # fn="neumann", dim="xmin" and the flux value as the second arg, then
+            # rewrites to index(u, 1) + h*value — the nearest interior cell plus
+            # the grid-spacing-scaled flux, with $h = 1/N bound by
+            # `bind_side_spacing` (N=4 -> 0.25*g). At value=0 it collapses to
+            # zero_gradient_bc_xmin's index(u, 1). Layer-A PASSes via the rewrite
+            # canonical-form byte match; Layer-B SKIPs (a ghost-cell rewrite
+            # carries no MMS convergence fixture). The numeric INTEGRATION path
+            # (build_ode_problem) is DECLARATIVE-INFEASIBLE here: it throws
+            # E_BC_UNSUPPORTED via the imperative _apply_nonperiodic_bcs! shadow,
+            # whose retirement is mayor-sequenced ESS work (makearray-bc-lowering,
+            # ess-lhi) — see neumann_bc/INTEGRATION_GAP.md.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("rewrite canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
         elseif key in pass_layer_a_canonical_only_g14
             # esd-6g4.13 (G14): vertical / latlon high-order grad + upwind.
             # Layer-A passes via the canonical byte contract; Layer-B SKIPs (no
@@ -905,6 +929,59 @@ end
     # Sanity: the cross-application really did nothing (no index rewrite).
     @test !occursin("\"op\":\"index\"", rw(zg, itf_node, ctx5))
     @test !occursin("\"op\":\"index\"", rw(itf, zg_node, ctx8))
+end
+
+@testitem "walker: neumann_bc nonzero-flux rule fires both sides + discriminates via fn/dim" begin
+    # esd-6g4.9 / G10: exercises BOTH sides of the real neumann_bc rule file
+    # through the ESS engine. The walker's rewrite/ fixture only covers xmin;
+    # this also pins xmax (the guarded side, which binds N via bind_side_dim_size
+    # AND h via bind_side_spacing), and — the point of the fn/dim matcher (G8) —
+    # proves the neumann rules do NOT touch a dirichlet or zero_gradient bc node.
+    include(joinpath(@__DIR__, "walk_esd_tests.jl"))
+    using .WalkESDTests
+    using EarthSciDiscretizations
+    import EarthSciSerialization
+    import JSON
+
+    repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
+    fd = joinpath(repo_root, "discretizations", "finite_difference")
+
+    rw = function (rule_path, expr_dict, ctx_dict)
+        rule_doc = JSON.parse(read(rule_path, String))
+        rules = EarthSciSerialization.parse_rules(rule_doc["rules"])
+        ctx = WalkESDTests._build_rule_context(ctx_dict)
+        e = WalkESDTests._expr_from_json(expr_dict)
+        out = EarthSciSerialization.rewrite(e, rules, ctx)
+        return EarthSciSerialization.canonical_json(out)
+    end
+
+    nm = joinpath(fd, "neumann_bc.json")
+    # N=4 grid -> h = 1/N = 0.25; flux carried symbolically as `g`.
+    ctx4 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
+                    "dim_sizes" => Dict("x" => 4))),
+                "variables" => Dict("u" => Dict("grid" => "g1")))
+
+    # nonzero-Neumann ghost = nearest interior cell + h*flux. xmin -> index(u,1)
+    # (nearest is the constant 1); xmax -> index(u,N) with N bound from the grid
+    # (here 4). Both carry the grid-spacing-scaled flux 0.25*g (h = 1/4). At
+    # value=0 each collapses to zero_gradient_bc's homogeneous-Neumann ghost.
+    @test rw(nm, Dict("op" => "bc", "fn" => "neumann", "dim" => "xmin",
+                      "args" => ["u", "g"]), ctx4) ==
+          "{\"args\":[{\"args\":[\"u\",1],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+    @test rw(nm, Dict("op" => "bc", "fn" => "neumann", "dim" => "xmax",
+                      "args" => ["u", "g"]), ctx4) ==
+          "{\"args\":[{\"args\":[\"u\",4],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+
+    # Discrimination: the neumann rules must NOT touch a dirichlet or a
+    # zero_gradient bc node (different fn). Each passes through unchanged.
+    dir_node = Dict("op" => "bc", "fn" => "dirichlet", "dim" => "xmin",
+                    "args" => ["u", "g"])
+    zg_node = Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+                   "args" => ["u"])
+    @test occursin("\"op\":\"bc\"", rw(nm, dir_node, ctx4))
+    @test occursin("\"op\":\"bc\"", rw(nm, zg_node, ctx4))
+    @test !occursin("\"op\":\"index\"", rw(nm, dir_node, ctx4))
+    @test !occursin("\"op\":\"index\"", rw(nm, zg_node, ctx4))
 end
 
 @testitem "walker: layer A flags missing rewrite fixture files as failure" begin

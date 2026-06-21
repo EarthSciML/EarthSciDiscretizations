@@ -196,27 +196,30 @@ end
     @test isfile(rule.path)
 
     content = read(rule.path, String)
-    # Neumann BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
-    # `kind:"neumann"` and `side:"$side"` (generalized from xmin — esd-klj),
-    # `replacement` giving the ghost-cell value u[0] + $h*value (where value is
-    # du/dn, the outward normal derivative, and $h is the grid spacing for the
-    # side's axis, bound via ESS bind_side_spacing), and `produces` per §9.4.
+    # Neumann BC is a rewrite rule (§5.2 / §9.2), rebuilt as two side-split
+    # rules `neumann_bc_xmin` / `neumann_bc_xmax` (esd-6g4.9 / G10) mirroring the
+    # zero_gradient_bc template. Each `pattern` matches the synthetic `bc` node
+    # by the G8 fn/dim encoding (`fn:"neumann"`, `dim:"xmin"`/`"xmax"` — NOT the
+    # raw kind/side keys the OpExpr parser drops), and the `replacement` gives
+    # the ghost-cell value index(u, nearest) + $h*value (value = du/dn; $h = 1/N
+    # bound via ESS bind_side_spacing; N via bind_side_dim_size for xmax).
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
-    @test occursin("\"kind\": \"neumann\"", content)
-    @test occursin("\"side\": \"\$side\"", content)
+    @test occursin("\"neumann_bc_xmin\"", content)
+    @test occursin("\"neumann_bc_xmax\"", content)
+    @test occursin("\"fn\": \"neumann\"", content)
+    @test occursin("\"dim\": \"xmin\"", content)
+    @test occursin("\"dim\": \"xmax\"", content)
     @test occursin("\"op\": \"bc\"", content)
-    # Ghost-cell formula: u_ghost = u[0] + $h*value.
+    # Ghost-cell formula: u_ghost = index(u, nearest) + $h*value.
     @test occursin("\"op\": \"+\"", content)
     @test occursin("\"op\": \"*\"", content)
     @test occursin("\"op\": \"index\"", content)
     @test occursin("\"\$h\"", content)
-    # §9.4 ghost_var produces declaration.
-    @test occursin("\"produces\"", content)
-    @test occursin("\"ghost_var\"", content)
-    # Ghost variable named per §9.4 scheme__logical__side convention.
-    @test occursin("neumann_bc__", content)
-    @test occursin("__\$side", content)
+    # The `where` clause binds the grid, spacing, and (xmax) dim size.
+    @test occursin("\"var_has_grid\"", content)
+    @test occursin("\"bind_side_spacing\"", content)
+    @test occursin("\"bind_side_dim_size\"", content)
 end
 
 @testitem "robin_bc rule is discoverable and well-formed (esd-m9v, generalized esd-klj)" begin

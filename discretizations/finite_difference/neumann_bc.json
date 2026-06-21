@@ -1,33 +1,35 @@
 {
   "rules": {
-    "neumann_bc": {
-      "description": "Neumann ghost-cell prescription for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). The `value` is the outward normal derivative du/dn at the boundary; using a centered-difference approximation across the boundary face: (u[0] - u_ghost) / h = -value, giving u_ghost = u[0] + h * value. Pattern matches the synthetic `bc` node (§9.2) with `$side` bound to the boundary side (xmin, xmax, ymin, ymax, …) and `$h` bound to the grid spacing for that side's axis (e.g. dx for xmin/xmax, dy for ymin/ymax) via ESS bind_side_spacing guard; ESS kind/side pattern matching and bind_side_spacing wire this when available. `produces` declares the ghost variable per §9.4. Analytic check: (u[0] - u_ghost) / h = (u[0] - (u[0] + h*value)) / h = -value = du/dn.",
-      "pattern": {
-        "op": "bc",
-        "kind": "neumann",
-        "side": "$side",
-        "args": ["$u", "$value"]
-      },
+    "neumann_bc_xmin": {
+      "description": "Nonzero-Neumann ghost-cell prescription at xmin for cell-centered uniform Cartesian grids (esm-spec §9.2 / §11.5; ESS BC kind/side matcher via the fn/dim encoding landed in ess-bps/ess-tox, G8). The `value` is the outward normal derivative du/dn at the boundary. ESS's `_discretize_bc!` builds the synthetic `bc` wrapper encoding kind->fn, side->dim, variable->arg, value->arg, then runs the rule engine; the fn/dim sibling fields are matched by `_match_sibling_name`. At xmin the outward normal is -x, so the one-sided difference across the boundary face gives u_ghost = u[1] + h*value (1-based first interior cell u[1]; reduces to the homogeneous-Neumann ghost u[1] of zero_gradient_bc_xmin when value=0). `$h = 1/N` is bound for the side's spatial dim by `bind_side_spacing` (`var_has_grid` first resolves the variable's grid). Analytic check: (u_ghost - u[1])/h = value = du/dn (outward, -x face).",
+      "pattern": { "op": "bc", "fn": "neumann", "dim": "xmin", "args": ["$u", "$value"] },
+      "where": [
+        { "guard": "var_has_grid", "pvar": "$u", "grid": "$g" },
+        { "guard": "bind_side_spacing", "pvar": "$h", "side": "xmin", "grid": "$g" }
+      ],
       "replacement": {
         "op": "+",
         "args": [
-          { "op": "index", "args": ["$u", 0] },
+          { "op": "index", "args": ["$u", 1] },
           { "op": "*", "args": ["$h", "$value"] }
         ]
-      },
-      "produces": [
-        {
-          "kind": "ghost_var",
-          "name": "neumann_bc__$u__$side",
-          "emit": {
-            "op": "+",
-            "args": [
-              { "op": "index", "args": ["$u", 0] },
-              { "op": "*", "args": ["$h", "$value"] }
-            ]
-          }
-        }
-      ]
+      }
+    },
+    "neumann_bc_xmax": {
+      "description": "Nonzero-Neumann ghost-cell prescription at xmax: the high-side ghost reflects the last interior cell plus the prescribed flux, u_ghost = u[N] + h*value (1-based, N bound from the grid via `bind_side_dim_size`; reduces to the homogeneous-Neumann ghost u[N] of zero_gradient_bc_xmax when value=0). At xmax the outward normal is +x, so du/dn = (u_ghost - u[N])/h = value. `var_has_grid` binds the variable's grid so `bind_side_dim_size` resolves N and `bind_side_spacing` resolves $h = 1/N for the xmax axis.",
+      "pattern": { "op": "bc", "fn": "neumann", "dim": "xmax", "args": ["$u", "$value"] },
+      "where": [
+        { "guard": "var_has_grid", "pvar": "$u", "grid": "$g" },
+        { "guard": "bind_side_dim_size", "pvar": "$N", "grid": "$g", "side": "xmax" },
+        { "guard": "bind_side_spacing", "pvar": "$h", "side": "xmax", "grid": "$g" }
+      ],
+      "replacement": {
+        "op": "+",
+        "args": [
+          { "op": "index", "args": ["$u", "$N"] },
+          { "op": "*", "args": ["$h", "$value"] }
+        ]
+      }
     }
   }
 }
