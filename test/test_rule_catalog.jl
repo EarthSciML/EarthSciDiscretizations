@@ -312,7 +312,7 @@ end
     # Operator class: scalar Laplacian acting at cell centers.
     @test occursin("\"op\": \"laplacian\"", content)
     @test occursin("\"emits_location\": \"cell_center\"", content)
-    # Replacement: reduce-arrayop with constant k∈[0,2] (DUO always has 3 neighbors).
+    # Replacement: reduce-arrayop with constant 1-based k∈[1,3] (DUO always has 3 neighbors).
     @test occursin("\"reduce\": \"+\"", content)
     @test occursin("\"ranges\"", content)
     # Coefficient/connectivity symbols: dc_edge, dv_edge, area, edges_on_face, cell_neighbors.
@@ -345,7 +345,7 @@ end
     # Operator class: scalar Laplacian acting at cell centers.
     @test occursin("\"op\": \"laplacian\"", content)
     @test occursin("\"emits_location\": \"cell_center\"", content)
-    # Replacement: reduce-arrayop with variable range k∈[0, n_edges_on_cell[i]-1].
+    # Replacement: reduce-arrayop with variable 1-based range k∈[1, n_edges_on_cell[i]].
     @test occursin("\"reduce\": \"+\"", content)
     @test occursin("\"ranges\"", content)
     @test occursin("\"arrayop\"", content)

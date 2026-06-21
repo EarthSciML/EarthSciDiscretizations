@@ -83,15 +83,18 @@ function build_ode_problem(
 
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
 
-    # Bind unstructured (MPAS/DUO) grid geometry declaratively (Route B):
-    # rewrite the rule's variable-valence reduction arrayop into a padded
-    # constant-`max_k` reduction whose per-(cell,slot) FVM weight and neighbour
-    # table arrive as `const_arrays` (zeroed padding slot ⇒ no spurious boundary
-    # term). The disc reduction arrayop stays a single arrayop — ESS's
-    # constant-bound einsum path (ess-6ny) materializes it with zero ESS change.
+    # Bind unstructured (MPAS/DUO) grid geometry declaratively: the authored
+    # nn_diffusion rule references the PRIMITIVE mesh arrays directly, and its
+    # FVM-coefficient sub-expression num/(den*area) is a CONST-cadence static
+    # partition (RFC semiring-faq-unified-ir §6.1, §9) — every input is a
+    # build-time-constant grid array, so ESS folds the coefficient at build time
+    # and only the state difference (u[nbr] − u[i]) reaches the per-step hot
+    # tree. The host supplies the primitive arrays as `const_arrays`; it does NO
+    # coefficient const-fold and NO arrayop rewrite (the retired Route-B
+    # _unstructured_const_arrays / _rewrite_unstructured_arrayop!).
     const_arrays = Dict{String, AbstractArray{Float64}}(coord_arrays)
     if !isempty(loaded_grids)
-        merge!(const_arrays, _bind_unstructured!(disc, loaded_grids))
+        merge!(const_arrays, _unstructured_grid_const_arrays(loaded_grids))
     end
 
     f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(
@@ -510,7 +513,7 @@ end
 # GDD domain_spec must carry "n_cells" (integer). Optional "n_edges" is
 # stored but not yet consumed by ESS discretize (pends ESS/esm-bpr).
 # When reader_fn is provided, loads MpasGrid from loader.path and returns
-# it as a third value so _bind_unstructured! can build its const_arrays.
+# it as a third value so _unstructured_grid_const_arrays can emit its const_arrays.
 function _inject_grids_mpas(
         domain_spec, gdd_path::AbstractString;
         reader_fn = nothing
@@ -589,7 +592,7 @@ end
 # Build dims for DUO icosahedral triangular grids.
 # GDD domain_spec must carry "n_cells" (integer = 20 * 4^level). When a
 # "loader" block is present, loads DuoGrid via build_duo_grid and returns it
-# as a third value so _bind_unstructured! can build its const_arrays.
+# as a third value so _unstructured_grid_const_arrays can emit its const_arrays.
 function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
     n_cells_raw = get(domain_spec, "n_cells", nothing)
     n_cells_raw === nothing && throw(
@@ -767,304 +770,77 @@ function _extract_connectivity(grid::MpasGrid)
     return ctables, scalar_arrs
 end
 
-_grid_n_cells(g::DuoGrid) = length(g.area)
-_grid_n_cells(g::MpasGrid) = g.mesh.n_cells
-
 # ---------------------------------------------------------------------------
-# Declarative unstructured binding (Route B): the rule's variable-valence
-# reduction arrayop is materialized by ESS's constant-bound einsum path
-# (ess-6ny) without any ESS change. We do two host-side things:
+# Declarative unstructured binding: the authored nn_diffusion rule (DUO + MPAS)
+# references the PRIMITIVE mesh arrays directly — the incident-edge metrics
+# dc_edge/dv_edge, the per-cell normalisation area, the incident-edge table, and
+# the neighbour table. Its FVM-coefficient sub-expression num/(den*area) is a
+# CONST-cadence static partition (RFC semiring-faq-unified-ir §6.1, §9): every
+# input is a build-time-constant grid array, so ESS folds the coefficient at
+# build time and only the state difference (u[nbr] − u[i]) reaches the per-step
+# hot tree. The host performs NO coefficient const-fold and NO arrayop rewrite —
+# the DEFERRED FAQ-IR cleanup, now whole-grid (retiring the prior Route-B
+# _unstructured_const_arrays + _rewrite_unstructured_arrayop!).
 #
-#   1. _unstructured_const_arrays(grid): build, from the grid's connectivity
-#      traits, two padded `(n_cells, max_k)` const_arrays — a neighbour table
-#      and a precomputed per-(cell,slot) FVM-weight `coeff`. Padding slots
-#      (`slot > valence(cell)`) carry a 0 neighbour sentinel AND a ZEROED
-#      coeff, so a padded term contributes coeff·(u[ghost 0] − u[cell]) =
-#      0·(…) = 0 — i.e. no spurious boundary (Dirichlet-0) contribution.
+# Two host-side shaping steps remain — pure index logic, the structured-grid FAQ
+# convention of `cartesian_faq.jl` / `arakawa_faq.jl` (geometry rides ESS's
+# determinism contract; only the array layout is local):
 #
-#   2. _rewrite_unstructured_arrayop!(disc, grid): rewrite the rule's inner
-#      reduction arrayop in place so its `k`-range is the *constant* [1, max_k]
-#      and its coefficient subtree (dv_edge/dc_edge/area FVM weight built from
-#      a per-cell *dynamic* valence) is replaced by a single `index(coeff, i, k)`
-#      lookup against the precomputed const_array. The operator stays one
-#      arrayop; only the coefficient becomes a grid-derived table, exactly like
-#      Fornberg weights or coord_<dim>. The disc is otherwise untouched — no
-#      fake state variables, no per-cell equation unrolling.
+#   1. Connectivity tables are transposed from the grid's (slot, cell) storage
+#      to the (cell, slot) layout ESS gathers as `index(table, i, k)` (i = cell,
+#      k = slot), and stored as Float64 (ESS resolves an integer gather by
+#      rounding the looked-up value).
+#   2. Each array is keyed by the symbol its family's authored rule references.
 #
-# This retires the imperative _prebind_unstructured! residue (and its ~15
-# host-side unroll helpers) entirely.
+# No padding/compaction is needed: the authored reduction's per-cell upper bound
+# is the cell's true valence — the constant 3 of the closed triangular DUO mesh,
+# or `index(n_edges_on_cell, i)` for MPAS — so the gather iterates exactly the
+# real neighbours, which occupy the leading slots `1..valence`, and never reads a
+# trailing 0-sentinel padding column. Holds for both closed (MPAS-global, DUO
+# icosahedral) and open meshes.
 
-# Per-family descriptor: how to read the connectivity/edge/area tables that
-# _extract_connectivity returns, and how to assemble the FVM weight from them.
-struct _UnstructuredBinding
-    neighbor_table::String  # ctables key: (max_k, n_cells) 1-based neighbour cell idx, 0 = pad
-    edge_table::String      # ctables key: (max_k, n_cells) 1-based incident-edge idx, 0 = pad
-    valence_table::String   # ctables key: (n_cells,) per-cell valence, or "" if constant
-    area_arr::String        # scalar_arrs key: (n_cells,) per-cell normalisation area
-    num_edge_arr::String    # scalar_arrs key: edge metric in the weight numerator
-    den_edge_arr::String    # scalar_arrs key: edge metric in the weight denominator
-    max_k::Int              # constant padded slot count
-end
-
-# MPAS: coeff = dv_edge[e] / (dc_edge[e] * area_cell[c]); valence varies (5/6),
-# read per cell from n_edges_on_cell. max_k = mesh.max_edges is only the column
-# allocation; the per-cell dynamic bound (Route A) stops at the real-neighbour
-# valence, so trailing columns are never iterated. Tables are (max_edges, n_cells).
-function _unstructured_binding(grid::MpasGrid)
-    return _UnstructuredBinding(
-        "cells_on_cell", "edges_on_cell", "n_edges_on_cell",
-        "area_cell", "dv_edge", "dc_edge", grid.mesh.max_edges
-    )
-end
-
-# DUO: coeff = dc_edge[e] / (dv_edge[e] * area_eff[c]); valence ≡ 3 (closed
-# icosahedral mesh). The emitted n_edges_on_cell is the (uniform) real-neighbour
-# count 3. Neighbour/edge tables are (3, n_cells).
-function _unstructured_binding(::DuoGrid)
-    return _UnstructuredBinding(
-        "cell_neighbors", "edges_on_face", "",
-        "area", "dc_edge", "dv_edge", 3
-    )
-end
-
-# Build the (n_cells, max_k) neighbour + coeff const_arrays for a grid, PLUS a
-# per-cell real-neighbour valence vector (Route A). Returns
-#   Dict("cells_on_cell" => nbr, "coeff" => coeff, "n_edges_on_cell" => valence)
-# the names the rewritten arrayop references.
-#
-# Route A drops the host-side constant-max-edges PADDING that Route B relied on:
-# the rewritten reduction's upper bound is the per-cell `index(n_edges_on_cell,i)`
-# (ESS evaluates it lazily per output cell), so a cell iterates ONLY its real
-# neighbours. To make that bound a simple `[1, valence]` range, the real
-# neighbours are COMPACTED into the leading slots `1..valence[c]`: any 0-sentinel
-# slot (open boundary edge with no neighbour, or a trailing padding column) is
-# skipped during the build, so it never occupies an iterated slot and can never
-# inject a spurious ghost `(u[0]-u[c])` Dirichlet-0 term. For closed meshes
-# (MPAS-global, DUO icosahedral) every slot is real and valence == the raw edge
-# count; for an open mesh valence is the genuine real-neighbour count.
-# The arrays are still allocated (n_cells, max_k); trailing columns beyond a
-# cell's valence remain zero but are NEVER read (the dynamic bound stops short).
-function _unstructured_const_arrays(grid)
-    bind = _unstructured_binding(grid)
-    ctables, scalar_arrs = _extract_connectivity(grid)
-    n_cells = _grid_n_cells(grid)
-    max_k = bind.max_k
-
-    nbr_src = ctables[bind.neighbor_table]::Matrix{Int}   # (rows≥max_k, n_cells)
-    edge_src = ctables[bind.edge_table]::Matrix{Int}      # (rows≥max_k, n_cells)
-    area = scalar_arrs[bind.area_arr]::Vector{Float64}
-    num_edge = scalar_arrs[bind.num_edge_arr]::Vector{Float64}
-    den_edge = scalar_arrs[bind.den_edge_arr]::Vector{Float64}
-    raw_valence = isempty(bind.valence_table) ? nothing :
-        ctables[bind.valence_table]::Vector{Int}
-
-    nbr = zeros(Float64, n_cells, max_k)
-    coeff = zeros(Float64, n_cells, max_k)
-    valence = zeros(Float64, n_cells)   # real-neighbour count = the dynamic bound
-    for c in 1:n_cells
-        kc = raw_valence === nothing ? max_k : min(raw_valence[c], max_k)
-        slot_out = 0
-        for slot in 1:kc
-            nb = nbr_src[slot, c]
-            e = edge_src[slot, c]
-            # A real slot must reference a real neighbour and a real edge; any
-            # 0-sentinel (open boundary, or padding) is dropped — compacted out
-            # so it never occupies an iterated leading slot.
-            (nb >= 1 && e >= 1) || continue
-            slot_out += 1
-            nbr[c, slot_out] = Float64(nb)
-            coeff[c, slot_out] = num_edge[e] / (den_edge[e] * area[c])
-        end
-        valence[c] = Float64(slot_out)
-    end
-    return Dict{String, AbstractArray{Float64}}(
-        "cells_on_cell" => nbr,
-        "coeff" => coeff,
-        "n_edges_on_cell" => valence,
-    )
-end
-
-# True iff `node` is the inner reduction arrayop (op=="arrayop" with a "reduce").
-_is_reduction_arrayop(node) =
-    node isa AbstractDict && String(get(node, "op", "")) == "arrayop" &&
-    get(node, "reduce", nothing) !== nothing
-
-# Find the inner reduction arrayop (depth-first) inside a disc expression dict.
-function _find_reduction_arrayop(node)
-    _is_reduction_arrayop(node) && return node
-    node isa AbstractDict || return nothing
-    inner = get(node, "expr", nothing)
-    inner !== nothing && (r = _find_reduction_arrayop(inner); r !== nothing && return r)
-    for v in get(node, "args", Any[])
-        r = _find_reduction_arrayop(v)
-        r !== nothing && return r
-    end
-    return nothing
-end
-
-# In the reduction body `coeff_subtree * (u[nbr] - u[i])`, return the index
-# `("i","k")` loop-variable names from the neighbour gather `index(nbr_table,i,k)`,
-# and the two body factors. The body is the rule's `op:"*"` with two args; the
-# factor that contains the `op:"-"` difference is the operand factor, the other
-# is the coefficient subtree we replace.
-function _split_reduction_body(body, neighbor_table::String)
-    body isa AbstractDict && String(get(body, "op", "")) == "*" || return nothing
-    args = get(body, "args", Any[])
-    length(args) == 2 || return nothing
-    # Identify which arg is the operand difference (contains the neighbour gather).
-    coeff_arg = nothing
-    operand_arg = nothing
-    for a in args
-        if _contains_index_table(a, neighbor_table)
-            operand_arg = a
-        else
-            coeff_arg = a
-        end
-    end
-    (coeff_arg === nothing || operand_arg === nothing) && return nothing
-    # Read the loop-var names from the neighbour gather index(nbr_table, i, k).
-    ik = _neighbor_gather_indices(operand_arg, neighbor_table)
-    ik === nothing && return (coeff_arg, operand_arg, nothing, nothing)
-    return (coeff_arg, operand_arg, ik[1], ik[2])
-end
-
-# True iff node contains an `index(table, …)` anywhere.
-function _contains_index_table(node, table::String)::Bool
-    node isa AbstractVector && return any(_contains_index_table(x, table) for x in node)
-    node isa AbstractDict || return false
-    if String(get(node, "op", "")) == "index"
-        a = get(node, "args", Any[])
-        !isempty(a) && a[1] isa AbstractString && String(a[1]) == table && return true
-    end
-    for (_, v) in node
-        _contains_index_table(v, table) && return true
-    end
-    return false
-end
-
-# Find the first `index(table, i, k)` and return (i_name, k_name) as Strings.
-function _neighbor_gather_indices(node, table::String)
-    node isa AbstractVector && (
-        for x in node
-            r = _neighbor_gather_indices(x, table); r !== nothing && return r
-        end; return nothing
-    )
-    node isa AbstractDict || return nothing
-    if String(get(node, "op", "")) == "index"
-        a = get(node, "args", Any[])
-        if length(a) == 3 && a[1] isa AbstractString && String(a[1]) == table &&
-                a[2] isa AbstractString && a[3] isa AbstractString
-            return (String(a[2]), String(a[3]))
-        end
-    end
-    for (_, v) in node
-        r = _neighbor_gather_indices(v, table); r !== nothing && return r
-    end
-    return nothing
-end
-
-# Rewrite the inner reduction arrayop of `disc` for `grid` (Route B):
-#   • coefficient subtree → index(coeff, i, k)
-#   • neighbour gather table renamed to "cells_on_cell" (the const_array name)
-#   • k-range → constant [1, max_k]   (0-based [0, valence-1] → 1-based [1,max_k])
-#   • inner arrayop args → ["coeff", "cells_on_cell"]
-# Mutates the equation dicts in place. Returns true if a reduction was rewritten.
-function _rewrite_unstructured_arrayop!(mdisc::AbstractDict, grid)
-    bind = _unstructured_binding(grid)
-    eqs = get(mdisc, "equations", nothing)
-    eqs isa AbstractVector || return false
-    rewrote = false
-    for eq in eqs
-        eq isa AbstractDict || continue
-        rhs = get(eq, "rhs", nothing)
-        red = _find_reduction_arrayop(rhs)
-        red === nothing && continue
-        body = get(red, "expr", nothing)
-        split = _split_reduction_body(body, bind.neighbor_table)
-        split === nothing && continue
-        coeff_arg, operand_arg, i_name, k_name = split
-        (i_name === nothing || k_name === nothing) && continue
-
-        # Replace the coefficient factor with index(coeff, i, k); rename the
-        # neighbour table inside the operand difference to the const_array name.
-        coeff_idx = Dict{String, Any}(
-            "op" => "index", "args" => Any["coeff", i_name, k_name]
-        )
-        operand_renamed = _rename_index_table(operand_arg, bind.neighbor_table, "cells_on_cell")
-        red["expr"] = Dict{String, Any}(
-            "op" => "*", "args" => Any[coeff_idx, operand_renamed]
-        )
-
-        # Per-cell DYNAMIC k-range [1, index(n_edges_on_cell, i)] (Route A): ESS
-        # evaluates the upper bound lazily per output cell from the
-        # `n_edges_on_cell` const_array (the cell's real-neighbour valence), so
-        # the reduction iterates ONLY real neighbours — NO host-side
-        # constant-max-edges padding. (Rule had 0-based [0, valence-1]; the
-        # const_arrays are compacted 1-based [cell, slot=1..valence].)
-        ranges = get(red, "ranges", nothing)
-        ranges isa AbstractDict || (ranges = Dict{String, Any}(); red["ranges"] = ranges)
-        ranges[k_name] = Any[
-            1,
-            Dict{String, Any}(
-                "op" => "index",
-                "args" => Any["n_edges_on_cell", i_name]
-            ),
-        ]
-
-        # The inner arrayop now references only the three const_arrays.
-        red["args"] = Any["coeff", "cells_on_cell", "n_edges_on_cell"]
-        rewrote = true
-    end
-    return rewrote
-end
-
-# Rename every `index(old_table, …)` first-arg to `new_table` in a dict AST.
-function _rename_index_table(node, old_table::String, new_table::String)
-    node isa AbstractVector &&
-        return Any[_rename_index_table(x, old_table, new_table) for x in node]
-    node isa AbstractDict || return node
-    out = Dict{String, Any}()
-    for (k, v) in node
-        ks = String(k)
-        if ks == "args" && v isa AbstractVector
-            new_args = Any[]
-            for (j, a) in enumerate(v)
-                if j == 1 && a isa AbstractString && String(a) == old_table &&
-                        String(get(node, "op", "")) == "index"
-                    push!(new_args, new_table)
-                else
-                    push!(new_args, _rename_index_table(a, old_table, new_table))
-                end
-            end
-            out[ks] = new_args
-        elseif v isa AbstractDict
-            out[ks] = _rename_index_table(v, old_table, new_table)
-        else
-            out[ks] = v
-        end
-    end
-    return out
-end
-
-# Bind every model in `disc` whose grid is a loaded MpasGrid/DuoGrid (Route B).
-# Rewrites each model's reduction arrayop to the padded constant-`max_k` form and
-# returns the merged neighbour/coeff const_arrays for build_evaluator.
-function _bind_unstructured!(disc::Dict{String, Any}, loaded_grids::Dict{String, Any})
+# Emit, for every loaded MPAS/DUO grid, the primitive mesh arrays the authored
+# nn_diffusion rule references, keyed by their rule-symbol names. The result is
+# merged into the `const_arrays` passed to `build_evaluator`.
+function _unstructured_grid_const_arrays(loaded_grids::Dict{String, Any})
     out = Dict{String, AbstractArray{Float64}}()
-    models_disc = get(disc, "models", nothing)
-    models_disc isa AbstractDict || return out
-    for (_, mdisc_any) in models_disc
-        mdisc_any isa AbstractDict || continue
-        mdisc = mdisc_any
-        grid_name = String(get(mdisc, "grid", ""))
-        grid = get(loaded_grids, grid_name, nothing)
-        grid === nothing && continue
-        # Only emit the const_arrays the rewrite actually wired in. If no
-        # reduction arrayop was rewritten (model has no nn_diffusion operator on
-        # this grid), there is nothing for build_evaluator to resolve.
-        if _rewrite_unstructured_arrayop!(mdisc, grid)
-            merge!(out, _unstructured_const_arrays(grid))
-        end
+    for (_, grid) in loaded_grids
+        (grid isa DuoGrid || grid isa MpasGrid) || continue
+        merge!(out, _grid_primitive_arrays(grid))
     end
     return out
+end
+
+# (slot, cell) integer connectivity → (cell, slot) Float64, the layout ESS
+# gathers as `index(table, i = cell, k = slot)`.
+_cell_slot_table(m::AbstractMatrix) = Float64.(permutedims(m, (2, 1)))
+
+# DUO: the authored rule's coefficient is dc_edge[e] / (dv_edge[e] * area_eff[c])
+# and its reduction bound is the constant 3 — the closed icosahedral mesh is
+# valence-3, so every slot of cell_neighbors/edges_on_face is a real neighbour.
+function _grid_primitive_arrays(grid::DuoGrid)
+    ctables, scalar_arrs = _extract_connectivity(grid)
+    return Dict{String, AbstractArray{Float64}}(
+        "cell_neighbors" => _cell_slot_table(ctables["cell_neighbors"]::Matrix{Int}),
+        "edges_on_face" => _cell_slot_table(ctables["edges_on_face"]::Matrix{Int}),
+        "area" => scalar_arrs["area"],
+        "dv_edge" => scalar_arrs["dv_edge"],
+        "dc_edge" => scalar_arrs["dc_edge"],
+    )
+end
+
+# MPAS: the authored rule's coefficient is dv_edge[e] / (dc_edge[e] *
+# area_cell[c]); valence varies (5/6), so its reduction bound is
+# `index(n_edges_on_cell, i)` and the gather stops at the cell's real-neighbour
+# count, never reading the trailing padding columns of cells_on_cell/edges_on_cell.
+function _grid_primitive_arrays(grid::MpasGrid)
+    ctables, scalar_arrs = _extract_connectivity(grid)
+    return Dict{String, AbstractArray{Float64}}(
+        "cells_on_cell" => _cell_slot_table(ctables["cells_on_cell"]::Matrix{Int}),
+        "edges_on_cell" => _cell_slot_table(ctables["edges_on_cell"]::Matrix{Int}),
+        "n_edges_on_cell" => Float64.(ctables["n_edges_on_cell"]::Vector{Int}),
+        "area_cell" => scalar_arrs["area_cell"],
+        "dv_edge" => scalar_arrs["dv_edge"],
+        "dc_edge" => scalar_arrs["dc_edge"],
+    )
 end
