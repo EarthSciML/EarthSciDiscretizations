@@ -26,6 +26,12 @@ include("rules.jl")
 # AST coefficient evaluator (thin passthrough to EarthSciSerialization)
 include("rule_eval.jl")
 
+# DUO primal topology as value-invention FAQ — thin bridge routing edge
+# enumeration / dedup / rank / inversion-join through the landed ESS M3 engine
+# (EarthSciSerialization.Relational). Declarative companion:
+# discretizations/grids/duo/primal_topology.esm.
+include("topology_faq.jl")
+
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -72,6 +78,9 @@ export grid_size, full_array_size, ghost_array_size
 # Exports: Rule catalog
 export RuleFile, load_rules
 export eval_coeff
+
+# Exports: DUO primal topology value-invention FAQ bridge (esd-heg.1 / D1a)
+export primal_topology_faq
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
