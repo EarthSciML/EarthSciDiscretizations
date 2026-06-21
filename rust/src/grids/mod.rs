@@ -26,6 +26,7 @@ pub(crate) mod duo_topology_faq;
 // `tests/conformance/grids/<family>/construction/golden.json`. Public because
 // they are a parallel construction oracle (imperative stays the front-door until
 // the S5 reroute, esd-3we.5); exercised by `rust/tests/*_construction_*.rs`.
+pub mod arakawa_faq;
 pub mod cartesian_faq;
 pub mod lat_lon_faq;
 pub mod vertical_faq;
