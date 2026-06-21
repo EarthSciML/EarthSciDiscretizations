@@ -113,8 +113,11 @@ function primal_topology_faq(faces::AbstractMatrix{<:Integer}, n_vertices::Integ
         c2 = r[2]
         c1 == c2 && continue
         if cell_neighbors[k1, c1] != 0 && cell_neighbors[k1, c1] != c2
-            throw(AssertionError(
-                "primal_topology_faq: non-manifold edge — cell $c1 slot $k1 shares an edge with >2 cells"))
+            throw(
+                AssertionError(
+                    "primal_topology_faq: non-manifold edge — cell $c1 slot $k1 shares an edge with >2 cells"
+                )
+            )
         end
         cell_neighbors[k1, c1] = c2
     end
@@ -199,14 +202,26 @@ function voronoi_dual_topology_faq(
         R::Real = 6.371e6,
     )
     Rel = _ESS_RELATIONAL
-    size(vertices, 1) == 3 || throw(ArgumentError(
-        "voronoi_dual_topology_faq: vertices must be (3, Nv); got $(size(vertices))"))
-    size(faces, 1) == 3 || throw(ArgumentError(
-        "voronoi_dual_topology_faq: faces must be (3, Nc) triangular; got $(size(faces))"))
-    size(cell_cart, 1) == 3 || throw(ArgumentError(
-        "voronoi_dual_topology_faq: cell_cart must be (3, Nc); got $(size(cell_cart))"))
-    size(cell_cart, 2) == size(faces, 2) || throw(ArgumentError(
-        "voronoi_dual_topology_faq: cell_cart $(size(cell_cart)) and faces $(size(faces)) must share Nc"))
+    size(vertices, 1) == 3 || throw(
+        ArgumentError(
+            "voronoi_dual_topology_faq: vertices must be (3, Nv); got $(size(vertices))"
+        )
+    )
+    size(faces, 1) == 3 || throw(
+        ArgumentError(
+            "voronoi_dual_topology_faq: faces must be (3, Nc) triangular; got $(size(faces))"
+        )
+    )
+    size(cell_cart, 1) == 3 || throw(
+        ArgumentError(
+            "voronoi_dual_topology_faq: cell_cart must be (3, Nc); got $(size(cell_cart))"
+        )
+    )
+    size(cell_cart, 2) == size(faces, 2) || throw(
+        ArgumentError(
+            "voronoi_dual_topology_faq: cell_cart $(size(cell_cart)) and faces $(size(faces)) must share Nc"
+        )
+    )
     (R > 0 && isfinite(R)) ||
         throw(DomainError(R, "voronoi_dual_topology_faq: R must be a positive finite number"))
 
@@ -273,7 +288,8 @@ function voronoi_dual_topology_faq(
             end
             nbridge == 1 || error(
                 "voronoi_dual_topology_faq: vertex $v: expected 1 bridge vertex between " *
-                    "consecutive faces $fi/$fnext, got $nbridge")
+                    "consecutive faces $fi/$fnext, got $nbridge"
+            )
             cells_on_cell[i, v] = w
             edges_on_cell[i, v] = edge_id[v < w ? (v, w) : (w, v)]
         end

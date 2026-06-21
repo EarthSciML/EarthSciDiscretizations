@@ -36,25 +36,25 @@ struct MockGrid <: AbstractCurvilinearGrid
     etas::Vector{Float64}       # cell-center eta per flat cell (N,)
     dxi::Float64
     deta::Float64
-    ginv::Array{Float64,3}      # (N,2,2) inverse metric g^{ij}
+    ginv::Array{Float64, 3}      # (N,2,2) inverse metric g^{ij}
     Jac::Vector{Float64}        # (N,) jacobian sqrt(g)
-    cj::Array{Float64,3}        # (N,2,2) coord_jacobian d(xi_k)/d(t_l)
+    cj::Array{Float64, 3}        # (N,2,2) coord_jacobian d(xi_k)/d(t_l)
 end
 
 _flat(g::MockGrid, i, j) = i + (j - 1) * g.Nx
 _wrap(idx, n) = mod(idx - 1, n) + 1
 
-EarthSciSerialization.n_cells(g::MockGrid)  = g.Nx * g.Ny
-EarthSciSerialization.n_dims(g::MockGrid)   = 2
+EarthSciSerialization.n_cells(g::MockGrid) = g.Nx * g.Ny
+EarthSciSerialization.n_dims(g::MockGrid) = 2
 EarthSciSerialization.axis_names(g::MockGrid) = (:xi, :eta)
 
 EarthSciSerialization.cell_centers(g::MockGrid, axis::Symbol) =
     axis === :xi ? copy(g.xis) : axis === :eta ? copy(g.etas) :
-        throw(ArgumentError("unknown axis $axis"))
+    throw(ArgumentError("unknown axis $axis"))
 
 EarthSciSerialization.cell_widths(g::MockGrid, axis::Symbol) =
     axis === :xi ? fill(g.dxi, n_cells(g)) : axis === :eta ? fill(g.deta, n_cells(g)) :
-        throw(ArgumentError("unknown axis $axis"))
+    throw(ArgumentError("unknown axis $axis"))
 
 EarthSciSerialization.cell_volume(g::MockGrid) = g.Jac .* (g.dxi * g.deta)
 
@@ -89,10 +89,10 @@ EarthSciSerialization.metric_jacobian(g::MockGrid) = g.Jac
 function EarthSciSerialization.metric_g(g::MockGrid)
     N = n_cells(g); out = zeros(N, 2, 2)
     @inbounds for c in 1:N
-        a = g.ginv[c,1,1]; b = g.ginv[c,1,2]; d = g.ginv[c,2,2]
-        det = a*d - b*b
-        out[c,1,1] =  d/det; out[c,2,2] = a/det
-        out[c,1,2] = -b/det; out[c,2,1] = -b/det
+        a = g.ginv[c, 1, 1]; b = g.ginv[c, 1, 2]; d = g.ginv[c, 2, 2]
+        det = a * d - b * b
+        out[c, 1, 1] = d / det; out[c, 2, 2] = a / det
+        out[c, 1, 2] = -b / det; out[c, 2, 1] = -b / det
     end
     return out
 end
@@ -106,48 +106,61 @@ EarthSciSerialization.coord_jacobian_second(g::MockGrid, ::Symbol) = zeros(n_cel
 function apply_stencil(weights, neighbors, u)
     N, K = size(neighbors); du = zeros(N)
     @inbounds for c in 1:N, k in 1:K
-        du[c] += weights[c,k] * u[neighbors[c,k]]
+        du[c] += weights[c, k] * u[neighbors[c, k]]
     end
     return du
 end
 
-rows(M) = [collect(@view M[c, :]) for c in 1:size(M,1)]                 # (N,K) -> Vector of length-K rows
-ginv_cols(G) = (gxx = [G[c,1,1] for c in 1:size(G,1)],
-                gxe = [G[c,1,2] for c in 1:size(G,1)],
-                gyy = [G[c,2,2] for c in 1:size(G,1)])
-cj_cols(C) = (dxi_dt1 = [C[c,1,1] for c in 1:size(C,1)], deta_dt1 = [C[c,2,1] for c in 1:size(C,1)],
-              dxi_dt2 = [C[c,1,2] for c in 1:size(C,1)], deta_dt2 = [C[c,2,2] for c in 1:size(C,1)])
+rows(M) = [collect(@view M[c, :]) for c in 1:size(M, 1)]                 # (N,K) -> Vector of length-K rows
+ginv_cols(G) = (
+    gxx = [G[c, 1, 1] for c in 1:size(G, 1)],
+    gxe = [G[c, 1, 2] for c in 1:size(G, 1)],
+    gyy = [G[c, 2, 2] for c in 1:size(G, 1)],
+)
+cj_cols(C) = (
+    dxi_dt1 = [C[c, 1, 1] for c in 1:size(C, 1)], deta_dt1 = [C[c, 2, 1] for c in 1:size(C, 1)],
+    dxi_dt2 = [C[c, 1, 2] for c in 1:size(C, 1)], deta_dt2 = [C[c, 2, 2] for c in 1:size(C, 1)],
+)
 
 function run_case(g::MockGrid, phi::Vector{Float64}, target::Symbol)
-    lap = precompute_laplacian_stencil(g; xi_axis=:xi, eta_axis=:eta)
-    grad = precompute_gradient_stencil(g, target; xi_axis=:xi, eta_axis=:eta)
+    lap = precompute_laplacian_stencil(g; xi_axis = :xi, eta_axis = :eta)
+    grad = precompute_gradient_stencil(g, target; xi_axis = :xi, eta_axis = :eta)
     du_lap = apply_stencil(lap.weights, lap.neighbors, phi)
     gt1 = apply_stencil(grad.weights_t1, grad.neighbors, phi)
     gt2 = apply_stencil(grad.weights_t2, grad.neighbors, phi)
     gi = ginv_cols(g.ginv); cjc = cj_cols(g.cj)
     return Dict(
-        "grid" => Dict("Nx"=>g.Nx, "Ny"=>g.Ny, "periodic_xi"=>g.periodic_x,
-            "periodic_eta"=>g.periodic_y, "dxi"=>g.dxi, "deta"=>g.deta,
-            "flat_index"=>"c = i + (j-1)*Nx, i in 1:Nx, j in 1:Ny",
-            "xi_centers"=>g.xis, "eta_centers"=>g.etas),
-        "metric" => Dict("ginv_xixi"=>gi.gxx, "ginv_xieta"=>gi.gxe, "ginv_etaeta"=>gi.gyy,
-            "jacobian_J"=>g.Jac),
+        "grid" => Dict(
+            "Nx" => g.Nx, "Ny" => g.Ny, "periodic_xi" => g.periodic_x,
+            "periodic_eta" => g.periodic_y, "dxi" => g.dxi, "deta" => g.deta,
+            "flat_index" => "c = i + (j-1)*Nx, i in 1:Nx, j in 1:Ny",
+            "xi_centers" => g.xis, "eta_centers" => g.etas
+        ),
+        "metric" => Dict(
+            "ginv_xixi" => gi.gxx, "ginv_xieta" => gi.gxe, "ginv_etaeta" => gi.gyy,
+            "jacobian_J" => g.Jac
+        ),
         "gradient_target" => String(target),
-        "coord_jacobian" => Dict("dxi_dt1"=>cjc.dxi_dt1, "deta_dt1"=>cjc.deta_dt1,
-            "dxi_dt2"=>cjc.dxi_dt2, "deta_dt2"=>cjc.deta_dt2),
+        "coord_jacobian" => Dict(
+            "dxi_dt1" => cjc.dxi_dt1, "deta_dt1" => cjc.deta_dt1,
+            "dxi_dt2" => cjc.dxi_dt2, "deta_dt2" => cjc.deta_dt2
+        ),
         "field_phi" => phi,
         "laplacian" => Dict(
-            "stencil_columns"=>["C","E(+xi)","W(-xi)","N(+eta)","S(-eta)","NE","NW","SE","SW"],
-            "weights"=>rows(lap.weights), "neighbors"=>rows(lap.neighbors),
-            "applied_result"=>du_lap),
+            "stencil_columns" => ["C", "E(+xi)", "W(-xi)", "N(+eta)", "S(-eta)", "NE", "NW", "SE", "SW"],
+            "weights" => rows(lap.weights), "neighbors" => rows(lap.neighbors),
+            "applied_result" => du_lap
+        ),
         "gradient" => Dict(
-            "stencil_columns"=>["C","E(+xi)","W(-xi)","N(+eta)","S(-eta)"],
-            "weights_t1"=>rows(grad.weights_t1), "weights_t2"=>rows(grad.weights_t2),
-            "neighbors"=>rows(grad.neighbors),
-            "applied_result_t1"=>gt1, "applied_result_t2"=>gt2),
+            "stencil_columns" => ["C", "E(+xi)", "W(-xi)", "N(+eta)", "S(-eta)"],
+            "weights_t1" => rows(grad.weights_t1), "weights_t2" => rows(grad.weights_t2),
+            "neighbors" => rows(grad.neighbors),
+            "applied_result_t1" => gt1, "applied_result_t2" => gt2
+        ),
         "checksums" => Dict(
-            "sum_du_lap"=>sum(du_lap), "sumabs_du_lap"=>sum(abs, du_lap), "maxabs_du_lap"=>maximum(abs, du_lap),
-            "sumabs_grad_t1"=>sum(abs, gt1), "sumabs_grad_t2"=>sum(abs, gt2)),
+            "sum_du_lap" => sum(du_lap), "sumabs_du_lap" => sum(abs, du_lap), "maxabs_du_lap" => maximum(abs, du_lap),
+            "sumabs_grad_t1" => sum(abs, gt1), "sumabs_grad_t2" => sum(abs, gt2)
+        ),
     )
 end
 
@@ -157,23 +170,23 @@ end
 # g^{lonlon}=1/(R^2 cos^2 phi), g^{latlat}=1/R^2, g^{lonlat}=0, J=R^2 cos phi.
 # coord_jacobian(:lon_lat) = identity (matches ESD LatLonGrid).
 # ---------------------------------------------------------------------------
-function build_latlon(; Nx=8, Ny=6, R=1.0)
-    dxi = 2pi/Nx; deta = pi/Ny
-    N = Nx*Ny
+function build_latlon(; Nx = 8, Ny = 6, R = 1.0)
+    dxi = 2pi / Nx; deta = pi / Ny
+    N = Nx * Ny
     xis = zeros(N); etas = zeros(N)
-    ginv = zeros(N,2,2); Jac = zeros(N); cj = zeros(N,2,2)
+    ginv = zeros(N, 2, 2); Jac = zeros(N); cj = zeros(N, 2, 2)
     for j in 1:Ny, i in 1:Nx
-        c = i + (j-1)*Nx
-        lon = (i-0.5)*dxi                      # [0,2pi)
-        lat = -pi/2 + (j-0.5)*deta             # interior, avoids exact poles
-        xis[c]=lon; etas[c]=lat
+        c = i + (j - 1) * Nx
+        lon = (i - 0.5) * dxi                      # [0,2pi)
+        lat = -pi / 2 + (j - 0.5) * deta             # interior, avoids exact poles
+        xis[c] = lon; etas[c] = lat
         cphi = cos(lat)
-        ginv[c,1,1] = 1/(R^2*cphi^2); ginv[c,2,2] = 1/R^2; ginv[c,1,2]=0.0; ginv[c,2,1]=0.0
-        Jac[c] = R^2*cphi
-        cj[c,1,1]=1.0; cj[c,2,2]=1.0           # identity
+        ginv[c, 1, 1] = 1 / (R^2 * cphi^2); ginv[c, 2, 2] = 1 / R^2; ginv[c, 1, 2] = 0.0; ginv[c, 2, 1] = 0.0
+        Jac[c] = R^2 * cphi
+        cj[c, 1, 1] = 1.0; cj[c, 2, 2] = 1.0           # identity
     end
-    g = MockGrid(Nx,Ny,true,false,xis,etas,dxi,deta,ginv,Jac,cj)
-    phi = [sin(xis[c])*cos(etas[c]) for c in 1:N]
+    g = MockGrid(Nx, Ny, true, false, xis, etas, dxi, deta, ginv, Jac, cj)
+    phi = [sin(xis[c]) * cos(etas[c]) for c in 1:N]
     return g, phi
 end
 
@@ -185,27 +198,27 @@ end
 # J = 1/sqrt(det(g^inv))  (physically consistent: J=sqrt(det g)).
 # coord_jacobian: a smooth non-identity map so the gradient chain rule is exercised.
 # ---------------------------------------------------------------------------
-function build_nonorthogonal(; Nx=8, Ny=8)
-    dxi = 2pi/Nx; deta = 2pi/Ny
-    N = Nx*Ny
+function build_nonorthogonal(; Nx = 8, Ny = 8)
+    dxi = 2pi / Nx; deta = 2pi / Ny
+    N = Nx * Ny
     xis = zeros(N); etas = zeros(N)
-    ginv = zeros(N,2,2); Jac = zeros(N); cj = zeros(N,2,2)
+    ginv = zeros(N, 2, 2); Jac = zeros(N); cj = zeros(N, 2, 2)
     for j in 1:Ny, i in 1:Nx
-        c = i + (j-1)*Nx
-        xi = (i-0.5)*dxi; eta = (j-0.5)*deta
-        xis[c]=xi; etas[c]=eta
-        gxx = 1.0 + 0.2*cos(xi)
-        gyy = 1.0 + 0.2*sin(eta)
-        gxe = 0.25*sin(xi+eta)
-        ginv[c,1,1]=gxx; ginv[c,2,2]=gyy; ginv[c,1,2]=gxe; ginv[c,2,1]=gxe
-        det = gxx*gyy - gxe^2                  # > 0 (checked: >= ~0.57)
-        Jac[c] = 1/sqrt(det)
+        c = i + (j - 1) * Nx
+        xi = (i - 0.5) * dxi; eta = (j - 0.5) * deta
+        xis[c] = xi; etas[c] = eta
+        gxx = 1.0 + 0.2 * cos(xi)
+        gyy = 1.0 + 0.2 * sin(eta)
+        gxe = 0.25 * sin(xi + eta)
+        ginv[c, 1, 1] = gxx; ginv[c, 2, 2] = gyy; ginv[c, 1, 2] = gxe; ginv[c, 2, 1] = gxe
+        det = gxx * gyy - gxe^2                  # > 0 (checked: >= ~0.57)
+        Jac[c] = 1 / sqrt(det)
         # smooth non-identity coord_jacobian d(xi_k)/d(t_l)
-        cj[c,1,1]=1.0+0.1*cos(eta); cj[c,2,1]=0.15*sin(xi)
-        cj[c,1,2]=0.15*sin(eta);    cj[c,2,2]=1.0+0.1*cos(xi)
+        cj[c, 1, 1] = 1.0 + 0.1 * cos(eta); cj[c, 2, 1] = 0.15 * sin(xi)
+        cj[c, 1, 2] = 0.15 * sin(eta);    cj[c, 2, 2] = 1.0 + 0.1 * cos(xi)
     end
-    g = MockGrid(Nx,Ny,true,true,xis,etas,dxi,deta,ginv,Jac,cj)
-    phi = [sin(xis[c])*sin(etas[c]) for c in 1:N]
+    g = MockGrid(Nx, Ny, true, true, xis, etas, dxi, deta, ginv, Jac, cj)
+    phi = [sin(xis[c]) * sin(etas[c]) for c in 1:N]
     return g, phi
 end
 
@@ -215,17 +228,21 @@ mkpath(outdir)
 
 g_ll, phi_ll = build_latlon()
 caseA = run_case(g_ll, phi_ll, :lon_lat)
-caseA["meta"] = Dict("name"=>"covariant_fv_oracle_latlon_small",
-    "ess_commit"=>ESS_COMMIT, "oracle"=>"precompute_laplacian_stencil / precompute_gradient_stencil (ESS src/grid_assembly.jl)",
-    "grid_kind"=>"latlon (orthogonal spherical, R=1)", "R"=>1.0,
-    "note"=>"Orthogonal: g^{xieta}=0 so the 4 corner weights are exactly 0 (documents that lat-lon needs no corner terms; the eta metric-derivative correction IS exercised). Boundary: lon periodic, lat poles -> sentinel -> self.")
+caseA["meta"] = Dict(
+    "name" => "covariant_fv_oracle_latlon_small",
+    "ess_commit" => ESS_COMMIT, "oracle" => "precompute_laplacian_stencil / precompute_gradient_stencil (ESS src/grid_assembly.jl)",
+    "grid_kind" => "latlon (orthogonal spherical, R=1)", "R" => 1.0,
+    "note" => "Orthogonal: g^{xieta}=0 so the 4 corner weights are exactly 0 (documents that lat-lon needs no corner terms; the eta metric-derivative correction IS exercised). Boundary: lon periodic, lat poles -> sentinel -> self."
+)
 
 g_no, phi_no = build_nonorthogonal()
 caseB = run_case(g_no, phi_no, :physical)
-caseB["meta"] = Dict("name"=>"covariant_fv_oracle_nonorthogonal_small",
-    "ess_commit"=>ESS_COMMIT, "oracle"=>"precompute_laplacian_stencil / precompute_gradient_stencil (ESS src/grid_assembly.jl)",
-    "grid_kind"=>"non-orthogonal curvilinear (synthetic smooth SPD metric, g^{xieta}!=0)",
-    "note"=>"Exercises the full 9-point covariant stencil incl. the 4 NE/NW/SE/SW corner cross-derivative weights and the cross/orthogonal metric-derivative corrections. Periodic in both axes.")
+caseB["meta"] = Dict(
+    "name" => "covariant_fv_oracle_nonorthogonal_small",
+    "ess_commit" => ESS_COMMIT, "oracle" => "precompute_laplacian_stencil / precompute_gradient_stencil (ESS src/grid_assembly.jl)",
+    "grid_kind" => "non-orthogonal curvilinear (synthetic smooth SPD metric, g^{xieta}!=0)",
+    "note" => "Exercises the full 9-point covariant stencil incl. the 4 NE/NW/SE/SW corner cross-derivative weights and the cross/orthogonal metric-derivative corrections. Periodic in both axes."
+)
 
 open(joinpath(outdir, "latlon_small.json"), "w") do io
     JSON.print(io, caseA, 2)
@@ -238,10 +255,12 @@ end
 function summary(tag, c)
     lapw = c["laplacian"]["weights"]
     corners = [abs(lapw[r][k]) for r in 1:length(lapw), k in 6:9]
-    println("[$tag] N=$(c["grid"]["Nx"]*c["grid"]["Ny"]) maxabs|corner weight|=",
+    return println(
+        "[$tag] N=$(c["grid"]["Nx"] * c["grid"]["Ny"]) maxabs|corner weight|=",
         maximum(corners), "  sum_du_lap=", c["checksums"]["sum_du_lap"],
-        "  maxabs_du_lap=", c["checksums"]["maxabs_du_lap"])
+        "  maxabs_du_lap=", c["checksums"]["maxabs_du_lap"]
+    )
 end
 summary("latlon", caseA)
 summary("nonorthogonal", caseB)
-println("WROTE: ", joinpath(outdir,"latlon_small.json"), " and nonorthogonal_small.json")
+println("WROTE: ", joinpath(outdir, "latlon_small.json"), " and nonorthogonal_small.json")

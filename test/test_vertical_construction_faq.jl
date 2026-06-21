@@ -30,8 +30,10 @@
     # Bit-exact equality on float vectors ("match imperative to ULP").
     _vert_biteq(a::AbstractVector, b::AbstractVector) =
         length(a) == length(b) &&
-            all(reinterpret(UInt64, Float64(a[i])) == reinterpret(UInt64, Float64(b[i]))
-                for i in eachindex(a))
+        all(
+        reinterpret(UInt64, Float64(a[i])) == reinterpret(UInt64, Float64(b[i]))
+            for i in eachindex(a)
+    )
 end
 
 @testitem "Vertical construction FAQ — matches imperative vertical.jl (ULP) + byte golden" setup = [VerticalConstructionFAQSetup] tags = [:conformance, :grid, :vertical, :construction, :faq] begin
@@ -109,7 +111,8 @@ end
         end
         @test all(
             min(faq.levels[k], faq.levels[k + 1]) < faq.centers[k] <
-                max(faq.levels[k], faq.levels[k + 1]) for k in 1:nz)      # center strictly inside
+                max(faq.levels[k], faq.levels[k + 1]) for k in 1:nz
+        )      # center strictly inside
 
         # --- neighbor 0-sentinel + symmetry ---
         for k in 1:nz

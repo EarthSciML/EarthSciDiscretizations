@@ -42,7 +42,7 @@
     # imperative builder, not merely close — this is "match imperative to ULP").
     _cart_biteq(a::AbstractArray, b::AbstractArray) =
         size(a) == size(b) &&
-            all(reinterpret(UInt64, collect(Float64.(a))) .== reinterpret(UInt64, collect(Float64.(b))))
+        all(reinterpret(UInt64, collect(Float64.(a))) .== reinterpret(UInt64, collect(Float64.(b))))
 end
 
 @testitem "Cartesian construction FAQ — matches imperative cartesian.jl (ULP) + byte golden" setup = [CartesianConstructionFAQSetup] tags = [:conformance, :grid, :cartesian, :construction, :faq] begin

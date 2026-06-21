@@ -701,8 +701,8 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (lon, lat) -> 0.0,
         derivative = (lon, lat) -> -2.0 * (
             1.0 * cos(lat) * cos(lon) +
-            0.37 * cos(lat) * sin(lon) +
-            (-0.6) * sin(lat)
+                0.37 * cos(lat) * sin(lon) +
+                (-0.6) * sin(lat)
         ),
     ),
     # MPAS edge-normal gradient MMS (gradient_mpas, esd-6g4.2). The input is a
@@ -720,8 +720,8 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
     "grad_linear_field_sphere" => (
         ic = (lon, lat) -> (
             1.0 * cos(lat) * cos(lon) +
-            0.37 * cos(lat) * sin(lon) +
-            (-0.6) * sin(lat)
+                0.37 * cos(lat) * sin(lon) +
+                (-0.6) * sin(lat)
         ),
         derivative = (lon, lat) -> 0.0,
     ),
@@ -738,7 +738,7 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
     # `_LAYER_B_MMS_AUX["grad_const_field_sphere"]`.
     "grad_const_field_sphere" => (
         ic = (lon, lat) ->
-            1.0 * cos(lat) * cos(lon) +
+        1.0 * cos(lat) * cos(lon) +
             0.37 * cos(lat) * sin(lon) +
             (-0.6) * sin(lat),
         derivative = (lon, lat) -> 0.0,
@@ -1086,7 +1086,7 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
         end
         reqlocs = get(spec, "requires_locations", Any[])
         if reqlocs isa AbstractVector &&
-           any(l -> occursin("edge", lowercase(String(l))), reqlocs)
+                any(l -> occursin("edge", lowercase(String(l))), reqlocs)
             return "unstructured_divergence"
         end
         return "unstructured_ode"

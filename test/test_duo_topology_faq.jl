@@ -22,10 +22,12 @@
     end
     function _cn_ser(faq)
         Nc = size(faq.cell_neighbors, 2)
-        return _compact([
-            [faq.cell_neighbors[k, c] == 0 ? -1 : faq.cell_neighbors[k, c] - 1 for k in 1:3]
-            for c in 1:Nc
-        ])
+        return _compact(
+            [
+                [faq.cell_neighbors[k, c] == 0 ? -1 : faq.cell_neighbors[k, c] - 1 for k in 1:3]
+                    for c in 1:Nc
+            ]
+        )
     end
     function _vf_ser(faq)
         return _compact([[f - 1 for f in faq.vertex_faces[v]] for v in 1:length(faq.vertex_faces)])

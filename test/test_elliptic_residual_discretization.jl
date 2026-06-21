@@ -18,7 +18,8 @@
 
     const LAPLACIAN_CANONICAL_INPUT = joinpath(
         @__DIR__, "..", "discretizations", "finite_difference",
-        "laplacian_2nd_uniform_cartesian", "fixtures", "canonical", "input.esm")
+        "laplacian_2nd_uniform_cartesian", "fixtures", "canonical", "input.esm"
+    )
 
     # Steady Poisson model from the Laplacian canonical template: add a forcing
     # field `f` and replace `∂u/∂t = ∇²u` with the algebraic `f = ∇²u`
@@ -28,10 +29,14 @@
         input["metadata"]["name"] = "elliptic_residual_steady_poisson"
         input["models"]["M"]["variables"]["f"] = Dict(
             "default" => 0.0, "type" => "parameter", "units" => "1",
-            "shape" => ["x", "y"], "location" => "cell_center")
-        input["models"]["M"]["equations"] = [Dict(
-            "lhs" => "f",
-            "rhs" => Dict("op" => "laplacian", "args" => ["u"]))]
+            "shape" => ["x", "y"], "location" => "cell_center"
+        )
+        input["models"]["M"]["equations"] = [
+            Dict(
+                "lhs" => "f",
+                "rhs" => Dict("op" => "laplacian", "args" => ["u"])
+            ),
+        ]
         return input
     end
 
@@ -75,7 +80,8 @@ end
     # The unmodified template (∂u/∂t = ∇²u) discretizes through the SAME rule but
     # classifies as an ODE — the rule encodes no solve mode; the equation does.
     out = EarthSciSerialization.discretize(
-        JSON.parsefile(LAPLACIAN_CANONICAL_INPUT); dae_support = true)
+        JSON.parsefile(LAPLACIAN_CANONICAL_INPUT); dae_support = true
+    )
     @test out["metadata"]["system_class"] == "ode"
     @test out["metadata"]["dae_info"]["algebraic_equation_count"] == 0
     s = eq_json(out["models"]["M"]["equations"][1])

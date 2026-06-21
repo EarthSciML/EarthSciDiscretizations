@@ -33,8 +33,11 @@
 end
 
 @testitem "MPAS-SCVT topology leaf — octahedron: exact connectivity + byte golden" setup = [ScvtTopologyLeafSetup] tags = [:conformance, :grid, :mpas, :scvt, :topology, :leaf] begin
-    GOLDEN = JSON.parsefile(joinpath(
-        @__DIR__, "..", "tests", "conformance", "grids", "mpas", "scvt", "topology_leaf", "golden.json"))
+    GOLDEN = JSON.parsefile(
+        joinpath(
+            @__DIR__, "..", "tests", "conformance", "grids", "mpas", "scvt", "topology_leaf", "golden.json"
+        )
+    )
     seed = first(s for s in GOLDEN["seeds"] if s["name"] == "octahedron")
     gl = seed["serialized"]
 
@@ -114,7 +117,7 @@ end
         # sphere of radius R (the geometry tolerance contract, NOT byte-pinned).
         for t in 1:conn.n_triangles
             nrm = sqrt(conn.circumcenters[1, t]^2 + conn.circumcenters[2, t]^2 + conn.circumcenters[3, t]^2)
-            @test isapprox(nrm, 6.371e6; rtol = 1e-12, atol = 1e-3)
+            @test isapprox(nrm, 6.371e6; rtol = 1.0e-12, atol = 1.0e-3)
         end
     end
 end
@@ -138,7 +141,7 @@ end
         # triple, and compare the SET to the original triangulation's face set.
         mapped = Set(
             Tuple(sort([perm[pconn.faces[1, t]], perm[pconn.faces[2, t]], perm[pconn.faces[3, t]]]))
-            for t in 1:pconn.n_triangles
+                for t in 1:pconn.n_triangles
         )
         @test mapped == _face_set(base)
 
@@ -148,13 +151,17 @@ end
 end
 
 @testitem "MPAS-SCVT topology leaf — icosahedral rho≡1 regression vs imperative _duo_voronoi_dual" setup = [ScvtTopologyLeafSetup] tags = [:conformance, :grid, :mpas, :scvt, :topology, :leaf, :regression] begin
-    GOLDEN = JSON.parsefile(joinpath(
-        @__DIR__, "..", "tests", "conformance", "grids", "mpas", "scvt", "topology_leaf", "golden.json"))
+    GOLDEN = JSON.parsefile(
+        joinpath(
+            @__DIR__, "..", "tests", "conformance", "grids", "mpas", "scvt", "topology_leaf", "golden.json"
+        )
+    )
     seed = first(s for s in GOLDEN["seeds"] if s["name"] == "icosahedral_level1")
     gl = seed["serialized"]
 
     g = build_duo_grid(
-        loader = (path = "builtin://icosahedral/1", reader = "builtin_icosahedral", check = "strict"))
+        loader = (path = "builtin://icosahedral/1", reader = "builtin_icosahedral", check = "strict")
+    )
     R = 6.371e6
     conn = scvt_voronoi_connectivity(g.vertices; R = R)
     imp = ESD._duo_voronoi_dual(1; R = R)

@@ -966,35 +966,69 @@ end
 
     zg = joinpath(fd, "zero_gradient_bc.json")
     itf = joinpath(fd, "interface_bc.json")
-    ctx8 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
-                    "dim_sizes" => Dict("x" => 8))),
-                "variables" => Dict("u" => Dict("grid" => "g1")))
-    ctx5 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
-                    "dim_sizes" => Dict("x" => 5))),
-                "variables" => Dict("p" => Dict("grid" => "g1"),
-                    "q" => Dict("grid" => "g1")))
+    ctx8 = Dict(
+        "grids" => Dict(
+            "g1" => Dict(
+                "spatial_dims" => ["x"],
+                "dim_sizes" => Dict("x" => 8)
+            )
+        ),
+        "variables" => Dict("u" => Dict("grid" => "g1"))
+    )
+    ctx5 = Dict(
+        "grids" => Dict(
+            "g1" => Dict(
+                "spatial_dims" => ["x"],
+                "dim_sizes" => Dict("x" => 5)
+            )
+        ),
+        "variables" => Dict(
+            "p" => Dict("grid" => "g1"),
+            "q" => Dict("grid" => "g1")
+        )
+    )
 
     # zero_gradient: ghost = nearest interior cell. xmin -> index(u,1) (guard
     # free); xmax -> index(u,N) with N bound from the grid (here 8).
-    @test rw(zg, Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
-                      "args" => ["u"]), ctx8) == "{\"args\":[\"u\",1],\"op\":\"index\"}"
-    @test rw(zg, Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmax",
-                      "args" => ["u"]), ctx8) == "{\"args\":[\"u\",8],\"op\":\"index\"}"
+    @test rw(
+        zg, Dict(
+            "op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+            "args" => ["u"]
+        ), ctx8
+    ) == "{\"args\":[\"u\",1],\"op\":\"index\"}"
+    @test rw(
+        zg, Dict(
+            "op" => "bc", "fn" => "zero_gradient", "dim" => "xmax",
+            "args" => ["u"]
+        ), ctx8
+    ) == "{\"args\":[\"u\",8],\"op\":\"index\"}"
 
     # interface: ghost reads the coupled variable's far interior cell. xmax ->
     # index(coupled,1) (guard free); xmin -> index(coupled,N) (N=5 here).
-    @test rw(itf, Dict("op" => "bc", "fn" => "interface", "dim" => "xmax",
-                       "args" => ["p", "q"]), ctx5) == "{\"args\":[\"q\",1],\"op\":\"index\"}"
-    @test rw(itf, Dict("op" => "bc", "fn" => "interface", "dim" => "xmin",
-                       "args" => ["p", "q"]), ctx5) == "{\"args\":[\"q\",5],\"op\":\"index\"}"
+    @test rw(
+        itf, Dict(
+            "op" => "bc", "fn" => "interface", "dim" => "xmax",
+            "args" => ["p", "q"]
+        ), ctx5
+    ) == "{\"args\":[\"q\",1],\"op\":\"index\"}"
+    @test rw(
+        itf, Dict(
+            "op" => "bc", "fn" => "interface", "dim" => "xmin",
+            "args" => ["p", "q"]
+        ), ctx5
+    ) == "{\"args\":[\"q\",5],\"op\":\"index\"}"
 
     # Discrimination: the zero_gradient rules must NOT touch an interface bc
     # node, and the interface rules must NOT touch a zero_gradient bc node.
     # An unmatched `bc` node passes through unchanged (still op=="bc").
-    itf_node = Dict("op" => "bc", "fn" => "interface", "dim" => "xmin",
-                    "args" => ["p", "q"])
-    zg_node = Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
-                   "args" => ["u"])
+    itf_node = Dict(
+        "op" => "bc", "fn" => "interface", "dim" => "xmin",
+        "args" => ["p", "q"]
+    )
+    zg_node = Dict(
+        "op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+        "args" => ["u"]
+    )
     @test occursin("\"op\":\"bc\"", rw(zg, itf_node, ctx5))
     @test occursin("\"op\":\"bc\"", rw(itf, zg_node, ctx8))
     # Sanity: the cross-application really did nothing (no index rewrite).
@@ -1028,27 +1062,45 @@ end
 
     nm = joinpath(fd, "neumann_bc.json")
     # N=4 grid -> h = 1/N = 0.25; flux carried symbolically as `g`.
-    ctx4 = Dict("grids" => Dict("g1" => Dict("spatial_dims" => ["x"],
-                    "dim_sizes" => Dict("x" => 4))),
-                "variables" => Dict("u" => Dict("grid" => "g1")))
+    ctx4 = Dict(
+        "grids" => Dict(
+            "g1" => Dict(
+                "spatial_dims" => ["x"],
+                "dim_sizes" => Dict("x" => 4)
+            )
+        ),
+        "variables" => Dict("u" => Dict("grid" => "g1"))
+    )
 
     # nonzero-Neumann ghost = nearest interior cell + h*flux. xmin -> index(u,1)
     # (nearest is the constant 1); xmax -> index(u,N) with N bound from the grid
     # (here 4). Both carry the grid-spacing-scaled flux 0.25*g (h = 1/4). At
     # value=0 each collapses to zero_gradient_bc's homogeneous-Neumann ghost.
-    @test rw(nm, Dict("op" => "bc", "fn" => "neumann", "dim" => "xmin",
-                      "args" => ["u", "g"]), ctx4) ==
-          "{\"args\":[{\"args\":[\"u\",1],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
-    @test rw(nm, Dict("op" => "bc", "fn" => "neumann", "dim" => "xmax",
-                      "args" => ["u", "g"]), ctx4) ==
-          "{\"args\":[{\"args\":[\"u\",4],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+    @test rw(
+        nm, Dict(
+            "op" => "bc", "fn" => "neumann", "dim" => "xmin",
+            "args" => ["u", "g"]
+        ), ctx4
+    ) ==
+        "{\"args\":[{\"args\":[\"u\",1],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+    @test rw(
+        nm, Dict(
+            "op" => "bc", "fn" => "neumann", "dim" => "xmax",
+            "args" => ["u", "g"]
+        ), ctx4
+    ) ==
+        "{\"args\":[{\"args\":[\"u\",4],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
 
     # Discrimination: the neumann rules must NOT touch a dirichlet or a
     # zero_gradient bc node (different fn). Each passes through unchanged.
-    dir_node = Dict("op" => "bc", "fn" => "dirichlet", "dim" => "xmin",
-                    "args" => ["u", "g"])
-    zg_node = Dict("op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
-                   "args" => ["u"])
+    dir_node = Dict(
+        "op" => "bc", "fn" => "dirichlet", "dim" => "xmin",
+        "args" => ["u", "g"]
+    )
+    zg_node = Dict(
+        "op" => "bc", "fn" => "zero_gradient", "dim" => "xmin",
+        "args" => ["u"]
+    )
     @test occursin("\"op\":\"bc\"", rw(nm, dir_node, ctx4))
     @test occursin("\"op\":\"bc\"", rw(nm, zg_node, ctx4))
     @test !occursin("\"op\":\"index\"", rw(nm, dir_node, ctx4))

@@ -91,7 +91,7 @@ function main()
     open(EXPECTED, "w") do io
         println(io, actual)
     end
-    println("wrote ", EXPECTED, " (", length(actual), " bytes)")
+    return println("wrote ", EXPECTED, " (", length(actual), " bytes)")
 end
 
 main()

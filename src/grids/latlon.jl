@@ -589,8 +589,8 @@ end
 # linearization + masks stay host-side below, as the FAQ convention sanctions.
 _construction_faq(g::LatLonGrid) =
     _grid_memo!(g, :_construction_faq) do
-        latlon_construction_faq(g)
-    end
+    latlon_construction_faq(g)
+end
 
 function cell_centers(g::LatLonGrid{T}, axis::Symbol) where {T}
     _latlon_axis_check(g, axis)

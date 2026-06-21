@@ -101,7 +101,7 @@
         # (C) The quadrature weights tile the sphere: sum of the rho==1 measure is
         #     the full sphere area 4 pi R^2 (and every weight is positive).
         @test all(>(0), mass1)
-        @test sum(mass1) ≈ 4π * R^2 rtol = 1e-12
+        @test sum(mass1) ≈ 4π * R^2 rtol = 1.0e-12
 
         # (D) The density-weighted centroid (the quantity the step divides to get c_g):
         #     uniform density -> sphere centre (origin); the rho = 2 + z density ->
@@ -110,10 +110,10 @@
         cen(mass, mom) = [sum(@view mom[d, :]) / sum(mass) for d in 1:3]
         c_uniform = cen(mass1, mom1)
         c_sampled = cen(masss, moms)
-        @test norm(c_uniform) < 1e-9   # ~0 (origin) by icosahedral symmetry
+        @test norm(c_uniform) < 1.0e-9   # ~0 (origin) by icosahedral symmetry
         @test c_sampled[3] > 0.1             # shifted north toward the dense hemisphere
-        @test c_sampled[3] ≈ 1 / 6 atol = 2e-2
-        @test abs(c_sampled[1]) < 1e-9 && abs(c_sampled[2]) < 1e-9
+        @test c_sampled[3] ≈ 1 / 6 atol = 2.0e-2
+        @test abs(c_sampled[1]) < 1.0e-9 && abs(c_sampled[2]) < 1.0e-9
     end
 end
 

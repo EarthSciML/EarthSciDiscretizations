@@ -191,8 +191,10 @@ function latlon_construction_faq(g::LatLonGrid{T}) where {T}
         lat_w = eval_coeff(_LL_LAT_WIDTH_NODE, Dict("e_hi" => lat_n, "e_lo" => lat_s))
 
         # Spherical-rectangle cell area (ESS; sin routed through the evaluator).
-        area = eval_coeff(_LL_AREA_NODE,
-            Dict("R" => Rf, "dlon" => dlon, "lat_n" => lat_n, "lat_s" => lat_s))
+        area = eval_coeff(
+            _LL_AREA_NODE,
+            Dict("R" => Rf, "dlon" => dlon, "lat_n" => lat_n, "lat_s" => lat_s)
+        )
 
         # Closed-form curvilinear metric — row-constant (depends only on φ, R).
         lat_cf = Float64(lat_c)
@@ -206,8 +208,10 @@ function latlon_construction_faq(g::LatLonGrid{T}) where {T}
 
         for i in 1:n_i
             k = base + i
-            lon = eval_coeff(_LL_LON_CENTER_NODE,
-                Dict("lon_start" => lon_start_f, "i" => Float64(i), "dlon" => dlon))
+            lon = eval_coeff(
+                _LL_LON_CENTER_NODE,
+                Dict("lon_start" => lon_start_f, "i" => Float64(i), "dlon" => dlon)
+            )
             cc_lon[k] = T(lon)
             cc_lat[k] = lat_c           # supplied/derived row-center data, gathered as-is
             cw_lon[k] = T(dlon)

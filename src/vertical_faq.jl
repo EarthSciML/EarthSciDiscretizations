@@ -73,10 +73,14 @@ const _VERT_PRESSURE_NODE = Dict{String, Any}(
         Dict{String, Any}(
             "op" => "+",
             "args" => Any[
-                Dict{String, Any}("op" => "+",
-                    "args" => Any["ak_lo", Dict{String, Any}("op" => "*", "args" => Any["bk_lo", "p0"])]),
-                Dict{String, Any}("op" => "+",
-                    "args" => Any["ak_hi", Dict{String, Any}("op" => "*", "args" => Any["bk_hi", "p0"])]),
+                Dict{String, Any}(
+                    "op" => "+",
+                    "args" => Any["ak_lo", Dict{String, Any}("op" => "*", "args" => Any["bk_lo", "p0"])]
+                ),
+                Dict{String, Any}(
+                    "op" => "+",
+                    "args" => Any["ak_hi", Dict{String, Any}("op" => "*", "args" => Any["bk_hi", "p0"])]
+                ),
             ],
         ),
         2,
@@ -108,13 +112,25 @@ function _faq_levels(grid::VerticalGrid{T}) where {T}
     nz = n_cells(grid)
     if coord === :eta
         p0 = Float64(grid.p0)
-        return T[T(eval_coeff(_VERT_ETA_LEVEL_NODE,
-            Dict("ak" => Float64(grid.ak[k]), "p0" => p0, "bk" => Float64(grid.bk[k]))))
-                 for k in 1:(nz + 1)]
+        return T[
+            T(
+                    eval_coeff(
+                        _VERT_ETA_LEVEL_NODE,
+                        Dict("ak" => Float64(grid.ak[k]), "p0" => p0, "bk" => Float64(grid.bk[k]))
+                    )
+                )
+                for k in 1:(nz + 1)
+        ]
     elseif coord === :sigma || coord === :hybrid_sigma_theta
-        cand = T[T(eval_coeff(_VERT_SIGMA_LEVEL_NODE,
-            Dict("k" => Float64(k - 1), "nz" => Float64(nz))))
-                 for k in 1:(nz + 1)]
+        cand = T[
+            T(
+                    eval_coeff(
+                        _VERT_SIGMA_LEVEL_NODE,
+                        Dict("k" => Float64(k - 1), "nz" => Float64(nz))
+                    )
+                )
+                for k in 1:(nz + 1)
+        ]
         return _vert_bitequal(cand, grid.levels) ? cand : copy(grid.levels)
     else  # :z, :theta, :z_star — supplied verbatim as DATA
         return copy(grid.levels)
@@ -193,20 +209,39 @@ function vertical_construction_faq(grid::VerticalGrid{T}) where {T}
     p0 = Float64(grid.p0)
 
     metric_pressure = if has_ak && has_bk
-        T[T(eval_coeff(_VERT_PRESSURE_NODE, Dict(
-            "ak_lo" => Float64(grid.ak[k]), "bk_lo" => Float64(grid.bk[k]),
-            "ak_hi" => Float64(grid.ak[k + 1]), "bk_hi" => Float64(grid.bk[k + 1]),
-            "p0" => p0))) for k in 1:n]
+        T[
+            T(
+                    eval_coeff(
+                        _VERT_PRESSURE_NODE, Dict(
+                            "ak_lo" => Float64(grid.ak[k]), "bk_lo" => Float64(grid.bk[k]),
+                            "ak_hi" => Float64(grid.ak[k + 1]), "bk_hi" => Float64(grid.bk[k + 1]),
+                            "p0" => p0
+                        )
+                    )
+                ) for k in 1:n
+        ]
     else
         nothing
     end
     metric_ak = has_ak ?
-        T[T(eval_coeff(_VERT_AVG2_NODE,
-            Dict("a" => Float64(grid.ak[k]), "b" => Float64(grid.ak[k + 1])))) for k in 1:n] :
+        T[
+            T(
+                eval_coeff(
+                    _VERT_AVG2_NODE,
+                    Dict("a" => Float64(grid.ak[k]), "b" => Float64(grid.ak[k + 1]))
+                )
+            ) for k in 1:n
+        ] :
         nothing
     metric_bk = has_bk ?
-        T[T(eval_coeff(_VERT_AVG2_NODE,
-            Dict("a" => Float64(grid.bk[k]), "b" => Float64(grid.bk[k + 1])))) for k in 1:n] :
+        T[
+            T(
+                eval_coeff(
+                    _VERT_AVG2_NODE,
+                    Dict("a" => Float64(grid.bk[k]), "b" => Float64(grid.bk[k + 1]))
+                )
+            ) for k in 1:n
+        ] :
         nothing
 
     # --- structural arrays (0-sentinel neighbor maps, boundary masks) -----------

@@ -410,8 +410,8 @@ end
 # linearization stays host-side below, as the FAQ convention sanctions).
 _construction_faq(g::CartesianGrid) =
     _grid_memo!(g, :_construction_faq) do
-        cartesian_construction_faq(g)
-    end
+    cartesian_construction_faq(g)
+end
 
 function cell_centers(g::CartesianGrid{T, N}, axis::Symbol) where {T, N}
     d = _cartesian_axis_idx(g, axis)

@@ -85,7 +85,7 @@ end
 
 function main()
     spec = JSON.parsefile(FIXTURES)
-    tol = get(spec, "tolerance", Dict("relative" => 1e-14))
+    tol = get(spec, "tolerance", Dict("relative" => 1.0e-14))
     out = Dict(
         "description" =>
             "Cartesian construction value-FAQ conformance golden (bead esd-3we.1 / S1). " *
@@ -109,7 +109,7 @@ function main()
         JSON.print(io, out, 2)
         write(io, "\n")
     end
-    println("wrote ", path)
+    return println("wrote ", path)
 end
 
 main()

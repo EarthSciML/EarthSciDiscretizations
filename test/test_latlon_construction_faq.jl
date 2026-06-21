@@ -38,7 +38,7 @@
     # imperative builder, not merely close — this is "match imperative to ULP").
     _ll_biteq(a::AbstractArray, b::AbstractArray) =
         size(a) == size(b) &&
-            all(reinterpret(UInt64, collect(Float64.(a))) .== reinterpret(UInt64, collect(Float64.(b))))
+        all(reinterpret(UInt64, collect(Float64.(a))) .== reinterpret(UInt64, collect(Float64.(b))))
 end
 
 @testitem "Lat-lon construction FAQ — matches imperative latlon.jl (ULP) + byte golden" setup = [LatLonConstructionFAQSetup] tags = [:conformance, :grid, :latlon, :construction, :faq] begin
@@ -94,12 +94,16 @@ end
         R2 = Float64(g.R)^2
         @test all(faq.metric_g[k, 1, 2] == 0.0 && faq.metric_g[k, 2, 1] == 0.0 for k in 1:nc)
         @test all(faq.metric_g[k, 2, 2] == R2 for k in 1:nc)
-        @test all(isapprox(faq.metric_g[k, 1, 1] * faq.metric_ginv[k, 1, 1], 1.0; rtol = 1e-12)
-                  for k in 1:nc)
+        @test all(
+            isapprox(faq.metric_g[k, 1, 1] * faq.metric_ginv[k, 1, 1], 1.0; rtol = 1.0e-12)
+                for k in 1:nc
+        )
         @test all(faq.metric_jacobian[k] ≥ 0 for k in 1:nc)
         @test all(iszero, faq.coord_jacobian_second)
-        @test all(faq.coord_jacobian[k, 1, 1] == 1.0 && faq.coord_jacobian[k, 2, 2] == 1.0
-                  for k in 1:nc)
+        @test all(
+            faq.coord_jacobian[k, 1, 1] == 1.0 && faq.coord_jacobian[k, 2, 2] == 1.0
+                for k in 1:nc
+        )
         # longitude wraps → no lon boundary cells
         @test !any(faq.boundary_lon_lower)
         @test !any(faq.boundary_lon_upper)
@@ -178,7 +182,7 @@ end
     end
     # north/south symmetry: equal-angle rows j and nlat+1-j have ±φ ⇒ equal cos² metric
     # (isapprox, not bit-equal: -π/2 + k·dlat accumulates a sub-ULP asymmetry).
-    @test faq.metric_g[1, 1, 1] ≈ faq.metric_g[(g.nlat - 1) * 4 + 1, 1, 1] rtol = 1e-12
+    @test faq.metric_g[1, 1, 1] ≈ faq.metric_g[(g.nlat - 1) * 4 + 1, 1, 1] rtol = 1.0e-12
 end
 
 @testitem "Lat-lon construction FAQ reduced-Gaussian remap matches imperative" setup = [LatLonConstructionFAQSetup] tags = [:conformance, :grid, :latlon, :construction, :faq] begin

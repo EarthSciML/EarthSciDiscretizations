@@ -53,8 +53,10 @@
     # c = i + (j-1)*Nx. Periodic axes wrap; a non-periodic axis stepped
     # off-domain maps the WHOLE neighbour to self (sentinel→self), exactly as
     # the grid_assembly oracle does at the lat poles.
-    function _nb_flat_cov(i::Int, j::Int, di::Int, dj::Int,
-            Nx::Int, Ny::Int, pxi::Bool, peta::Bool)::Int
+    function _nb_flat_cov(
+            i::Int, j::Int, di::Int, dj::Int,
+            Nx::Int, Ny::Int, pxi::Bool, peta::Bool
+        )::Int
         self = i + (j - 1) * Nx
         jp = j + dj
         if jp < 1 || jp > Ny
@@ -70,9 +72,11 @@
     # Evaluate a rule `replacement` node at cell (i,j). `arrays` maps each field
     # / metric symbol ("$u", "g_xx", "Jg_xe", "dxi_dt1", …) to its flat per-cell
     # Vector; `bindings` carries the scalar params (dlon, dlat).
-    function _eval_cov(node, arrays::Dict{String, Vector{Float64}},
+    function _eval_cov(
+            node, arrays::Dict{String, Vector{Float64}},
             i::Int, j::Int, Nx::Int, Ny::Int, pxi::Bool, peta::Bool,
-            bindings::Dict{String, Float64})::Float64
+            bindings::Dict{String, Float64}
+        )::Float64
         node isa Number && return Float64(node)
         if node isa AbstractString
             s = String(node)
@@ -101,9 +105,11 @@
     end
 
     function _load_repl_cov(repo_root, file, name)
-        body = JSON.parsefile(joinpath(
-            repo_root, "discretizations", "finite_volume", file
-        ))["discretizations"][name]
+        body = JSON.parsefile(
+            joinpath(
+                repo_root, "discretizations", "finite_volume", file
+            )
+        )["discretizations"][name]
         r = body["replacement"]
         return (r isa AbstractDict && get(r, "op", nothing) == "arrayop") ? r["expr"] : r
     end

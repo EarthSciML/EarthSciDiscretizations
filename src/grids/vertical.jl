@@ -81,8 +81,14 @@ function _vertical_uniform_sigma(nz::Int, ::Type{T}) where {T}
     # Affine sigma map `1 - k/nz` routed through ESS (`_VERT_SIGMA_LEVEL_NODE`,
     # src/vertical_faq.jl) — the single-pathway FAQ arithmetic. S5 (esd-3we.5)
     # deleted the host-side `one(T) - T(k)/T(nz)` loop here.
-    return T[T(eval_coeff(_VERT_SIGMA_LEVEL_NODE,
-        Dict("k" => Float64(k), "nz" => Float64(nz)))) for k in 0:nz]
+    return T[
+        T(
+                eval_coeff(
+                    _VERT_SIGMA_LEVEL_NODE,
+                    Dict("k" => Float64(k), "nz" => Float64(nz))
+                )
+            ) for k in 0:nz
+    ]
 end
 
 function _vertical_coerce_levels(
@@ -253,9 +259,15 @@ function _vertical(;
         bk_arr = _vertical_coerce_hybrid(bk, T, nz_eff + 1, "bk")
         # Eta hybrid level `ak[k]/p0 + bk[k]` routed through ESS
         # (`_VERT_ETA_LEVEL_NODE`, src/vertical_faq.jl); S5 deleted the host `./ .+`.
-        sigma = T[T(eval_coeff(_VERT_ETA_LEVEL_NODE,
-            Dict("ak" => Float64(ak_arr[k]), "p0" => Float64(p0_T), "bk" => Float64(bk_arr[k]))))
-                  for k in 1:length(ak_arr)]
+        sigma = T[
+            T(
+                    eval_coeff(
+                        _VERT_ETA_LEVEL_NODE,
+                        Dict("ak" => Float64(ak_arr[k]), "p0" => Float64(p0_T), "bk" => Float64(bk_arr[k]))
+                    )
+                )
+                for k in 1:length(ak_arr)
+        ]
         for k in 1:(length(sigma) - 1)
             sigma[k + 1] < sigma[k] ||
                 throw(

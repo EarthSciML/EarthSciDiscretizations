@@ -39,31 +39,43 @@ _edg_mk(op, args...) = Dict{String, Any}("op" => op, "args" => collect(Any, args
 #     exact (t1)+(t2)+(t3) order of build_duo_grid. Corner leaves: a=corner1,
 #     b=corner2, c=corner3; component k: 1=x,2=y,3=z. The orientation flip is applied
 #     CONDITIONALLY in Julia (not baked into the AST) to match the imperative path.
-const _EDG_CCX = _edg_mk("+",
+const _EDG_CCX = _edg_mk(
+    "+",
     _edg_mk("-", _edg_mk("*", "a2", "b3"), _edg_mk("*", "a3", "b2")),
     _edg_mk("-", _edg_mk("*", "b2", "c3"), _edg_mk("*", "b3", "c2")),
-    _edg_mk("-", _edg_mk("*", "c2", "a3"), _edg_mk("*", "c3", "a2")))
-const _EDG_CCY = _edg_mk("+",
+    _edg_mk("-", _edg_mk("*", "c2", "a3"), _edg_mk("*", "c3", "a2"))
+)
+const _EDG_CCY = _edg_mk(
+    "+",
     _edg_mk("-", _edg_mk("*", "a3", "b1"), _edg_mk("*", "a1", "b3")),
     _edg_mk("-", _edg_mk("*", "b3", "c1"), _edg_mk("*", "b1", "c3")),
-    _edg_mk("-", _edg_mk("*", "c3", "a1"), _edg_mk("*", "c1", "a3")))
-const _EDG_CCZ = _edg_mk("+",
+    _edg_mk("-", _edg_mk("*", "c3", "a1"), _edg_mk("*", "c1", "a3"))
+)
+const _EDG_CCZ = _edg_mk(
+    "+",
     _edg_mk("-", _edg_mk("*", "a1", "b2"), _edg_mk("*", "a2", "b1")),
     _edg_mk("-", _edg_mk("*", "b1", "c2"), _edg_mk("*", "b2", "c1")),
-    _edg_mk("-", _edg_mk("*", "c1", "a2"), _edg_mk("*", "c2", "a1")))
+    _edg_mk("-", _edg_mk("*", "c1", "a2"), _edg_mk("*", "c2", "a1"))
+)
 
 # --- Norm of the (post-flip) circumcenter direction and the geographic image of the
 #     normalized direction. Leaves: the cross-sum components ccx/ccy/ccz and n.
 #     Mirrors `n = sqrt(ccx^2+ccy^2+ccz^2)` then `_cart_to_lonlat(ccx/n,ccy/n,ccz/n)`.
-const _EDG_CCN = _edg_mk("sqrt",
-    _edg_mk("+", _edg_mk("*", "ccx", "ccx"), _edg_mk("*", "ccy", "ccy"), _edg_mk("*", "ccz", "ccz")))   # squares as *, not ^
+const _EDG_CCN = _edg_mk(
+    "sqrt",
+    _edg_mk("+", _edg_mk("*", "ccx", "ccx"), _edg_mk("*", "ccy", "ccy"), _edg_mk("*", "ccz", "ccz"))
+)   # squares as *, not ^
 const _EDG_CC_LON = _edg_mk("atan2", _edg_mk("/", "ccy", "n"), _edg_mk("/", "ccx", "n"))
 const _EDG_CC_LAT = _edg_mk("asin", _edg_mk("/", "ccz", "n"))             # no clamp
 
 # --- great-circle arc R·acos(p·q) over point leaves p1..p3, q1..q3 (no clamp); the
 #     points are pre-divided by R, mirroring `_duo_arc` (src/grids/duo.jl).
-const _EDG_ARC = _edg_mk("*", "R", _edg_mk("acos",
-    _edg_mk("+", _edg_mk("*", "p1", "q1"), _edg_mk("*", "p2", "q2"), _edg_mk("*", "p3", "q3"))))
+const _EDG_ARC = _edg_mk(
+    "*", "R", _edg_mk(
+        "acos",
+        _edg_mk("+", _edg_mk("*", "p1", "q1"), _edg_mk("*", "p2", "q2"), _edg_mk("*", "p3", "q3"))
+    )
+)
 
 """
     duo_circumcenter_geo_faq(::Type{T}, vertices_unit, faces, cell_cart) where {T}
@@ -89,8 +101,10 @@ the conditional unary negation are done in Julia exactly as the imperative code 
 the `±0.0` of a negated zero component is preserved); the norm and the `atan2`/`asin`
 image are evaluated via `eval_coeff`.
 """
-function duo_circumcenter_geo_faq(::Type{T}, vertices_unit::AbstractMatrix{<:Real},
-        faces::AbstractMatrix{<:Integer}, cell_cart::AbstractMatrix) where {T}
+function duo_circumcenter_geo_faq(
+        ::Type{T}, vertices_unit::AbstractMatrix{<:Real},
+        faces::AbstractMatrix{<:Integer}, cell_cart::AbstractMatrix
+    ) where {T}
     V = vertices_unit
     F = faces
     Nc = size(F, 2)
@@ -152,8 +166,10 @@ Byte-identical (T=Float64) to `edge_length(g)` (src/grids/duo.jl): replicates
 `_duo_arc` exactly — divide each endpoint by R, dot, then `R·acos(·)`; the `clamp`
 is a noop on a valid mesh and is dropped.
 """
-function duo_edge_length_faq(::Type{T}, vertices_scaled::AbstractMatrix,
-        edges::AbstractMatrix{<:Integer}, R::Real) where {T}
+function duo_edge_length_faq(
+        ::Type{T}, vertices_scaled::AbstractMatrix,
+        edges::AbstractMatrix{<:Integer}, R::Real
+    ) where {T}
     Ne = size(edges, 2)
     Rf = Float64(R)
     out = Vector{T}(undef, Ne)
@@ -182,8 +198,10 @@ Byte-identical (T=Float64) to `cell_distance(g)` (src/grids/duo.jl): per edge `e
 between the two cell centers, else `zero(T)`. The sentinel branch is plain Julia; the
 arc arithmetic is the FAQ AST.
 """
-function duo_cell_distance_faq(::Type{T}, cell_cart_scaled::AbstractMatrix,
-        edge_cells::AbstractMatrix{<:Integer}, R::Real) where {T}
+function duo_cell_distance_faq(
+        ::Type{T}, cell_cart_scaled::AbstractMatrix,
+        edge_cells::AbstractMatrix{<:Integer}, R::Real
+    ) where {T}
     Ne = size(edge_cells, 2)
     Rf = Float64(R)
     out = Vector{T}(undef, Ne)
@@ -220,8 +238,10 @@ const _EDG_EXCESS = let
     sdc = _edg_mk("acos", _EDG_DOT_AB)
     ss = _edg_mk("*", 0.5, _edg_mk("+", sda, sdb, sdc))
     shalf(x) = _edg_mk("/", x, 2.0)
-    st = _edg_mk("*", _edg_mk("tan", shalf(ss)), _edg_mk("tan", shalf(_edg_mk("-", ss, sda))),
-        _edg_mk("tan", shalf(_edg_mk("-", ss, sdb))), _edg_mk("tan", shalf(_edg_mk("-", ss, sdc))))
+    st = _edg_mk(
+        "*", _edg_mk("tan", shalf(ss)), _edg_mk("tan", shalf(_edg_mk("-", ss, sda))),
+        _edg_mk("tan", shalf(_edg_mk("-", ss, sdb))), _edg_mk("tan", shalf(_edg_mk("-", ss, sdc)))
+    )
     _edg_mk("*", 4.0, _edg_mk("atan", _edg_mk("sqrt", st)))
 end
 
@@ -233,8 +253,12 @@ const _EDG_LAT_U = _edg_mk("asin", "u3")
 const _EDG_MID_X = _edg_mk("+", "a1", "b1")
 const _EDG_MID_Y = _edg_mk("+", "a2", "b2")
 const _EDG_MID_Z = _edg_mk("+", "a3", "b3")
-const _EDG_MID_N = _edg_mk("sqrt", _edg_mk("+",
-    _edg_mk("*", _EDG_MID_X, _EDG_MID_X), _edg_mk("*", _EDG_MID_Y, _EDG_MID_Y), _edg_mk("*", _EDG_MID_Z, _EDG_MID_Z)))
+const _EDG_MID_N = _edg_mk(
+    "sqrt", _edg_mk(
+        "+",
+        _edg_mk("*", _EDG_MID_X, _EDG_MID_X), _edg_mk("*", _EDG_MID_Y, _EDG_MID_Y), _edg_mk("*", _EDG_MID_Z, _EDG_MID_Z)
+    )
+)
 const _EDG_LON_E = _edg_mk("atan2", _edg_mk("/", _EDG_MID_Y, _EDG_MID_N), _edg_mk("/", _EDG_MID_X, _EDG_MID_N))
 const _EDG_LAT_E = _edg_mk("asin", _edg_mk("/", _EDG_MID_Z, _EDG_MID_N))
 
@@ -263,8 +287,10 @@ circumcenters (golden `circ_x`/`circ_y`/`circ_z`).
 
 `cell_cart` (R-scaled cell centroids) is used ONLY for the flip-sign dot.
 """
-function duo_face_circumcenters_faq(::Type{T}, vertices_unit::AbstractMatrix{<:Real},
-        faces::AbstractMatrix{<:Integer}, cell_cart::AbstractMatrix) where {T}
+function duo_face_circumcenters_faq(
+        ::Type{T}, vertices_unit::AbstractMatrix{<:Real},
+        faces::AbstractMatrix{<:Integer}, cell_cart::AbstractMatrix
+    ) where {T}
     V = vertices_unit
     F = faces
     Nc = size(F, 2)
@@ -300,10 +326,12 @@ circumcenters, `lon_cell`/`lat_cell` `(Nv)`, `dc_edge`/`dv_edge`/`lon_edge`/`lat
 `(Ne)`, and `area_cell` `(Nv)`. Byte-identical (T=Float64) to the imperative
 `_duo_voronoi_dual` geometry.
 """
-function duo_dual_geometry_faq(::Type{T}, vertices_scaled::AbstractMatrix,
+function duo_dual_geometry_faq(
+        ::Type{T}, vertices_scaled::AbstractMatrix,
         faces::AbstractMatrix{<:Integer}, cell_cart::AbstractMatrix,
         edges::AbstractMatrix{<:Integer}, edge_cells::AbstractMatrix{<:Integer},
-        sorted_vertex_faces::AbstractVector, R::Real) where {T}
+        sorted_vertex_faces::AbstractVector, R::Real
+    ) where {T}
     Rf = Float64(R)
     Nv = size(vertices_scaled, 2)
     Ne = size(edges, 2)
@@ -382,8 +410,10 @@ sharing each edge (the MPAS dual-edge length), `(Ne,)`, edge-aligned with `edge_
 boundary edge with a single incident face yields `0`. Byte-identical (T=Float64) to the
 imperative `_duo_voronoi_dual` `dv_edge`.
 """
-function duo_dual_edge_length_faq(::Type{T}, face_cc_unit::AbstractMatrix,
-        edge_cells::AbstractMatrix{<:Integer}, R::Real) where {T}
+function duo_dual_edge_length_faq(
+        ::Type{T}, face_cc_unit::AbstractMatrix,
+        edge_cells::AbstractMatrix{<:Integer}, R::Real
+    ) where {T}
     Ne = size(edge_cells, 2)
     Rf = Float64(R)
     out = Vector{T}(undef, Ne)

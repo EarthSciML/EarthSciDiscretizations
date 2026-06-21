@@ -49,8 +49,10 @@
     da = mk("acos", dot_bc); db = mk("acos", dot_ca); dc = mk("acos", dot_ab)
     s = mk("*", 0.5, mk("+", da, db, dc))
     half(x) = mk("/", x, 2.0)
-    t = mk("*", mk("tan", half(s)), mk("tan", half(mk("-", s, da))),
-        mk("tan", half(mk("-", s, db))), mk("tan", half(mk("-", s, dc))))
+    t = mk(
+        "*", mk("tan", half(s)), mk("tan", half(mk("-", s, da))),
+        mk("tan", half(mk("-", s, db))), mk("tan", half(mk("-", s, dc)))
+    )
     area = mk("*", mk("*", 4.0, mk("atan", mk("sqrt", t))), mk("*", "R", "R"))   # no max guard
 
     bindings(V, i, j, k, R) = Dict{String, Float64}(
@@ -95,12 +97,12 @@
         R = g.R
         faq_area = [ESD.eval_coeff(area, bindings(V, F[1, c], F[2, c], F[3, c], R)) for c in 1:size(F, 2)]
         @test all(>(0), faq_area)
-        @test sum(faq_area) ≈ 4π * R^2 rtol = 1e-12
+        @test sum(faq_area) ≈ 4π * R^2 rtol = 1.0e-12
         # lon/lat from the FAQ are the geographic image of the FAQ cartesian centroid.
         for c in 1:size(F, 2)
             b = bindings(V, F[1, c], F[2, c], F[3, c], R)
-            @test ESD.eval_coeff(lat, b) ≈ asin(clamp(ESD.eval_coeff(cart[3], b) / R, -1.0, 1.0)) atol = 1e-14
-            @test ESD.eval_coeff(lon, b) ≈ atan(ESD.eval_coeff(cart[2], b), ESD.eval_coeff(cart[1], b)) atol = 1e-14
+            @test ESD.eval_coeff(lat, b) ≈ asin(clamp(ESD.eval_coeff(cart[3], b) / R, -1.0, 1.0)) atol = 1.0e-14
+            @test ESD.eval_coeff(lon, b) ≈ atan(ESD.eval_coeff(cart[2], b), ESD.eval_coeff(cart[1], b)) atol = 1.0e-14
         end
     end
 end
@@ -213,8 +215,10 @@ end
     dot_ab = mk("+", mk("*", "a1", "b1"), mk("*", "a2", "b2"), mk("*", "a3", "b3"))
     da = mk("acos", dot_bc); db = mk("acos", dot_ca); dc = mk("acos", dot_ab)
     s = mk("*", 0.5, mk("+", da, db, dc)); half(x) = mk("/", x, 2.0)
-    t = mk("*", mk("tan", half(s)), mk("tan", half(mk("-", s, da))),
-        mk("tan", half(mk("-", s, db))), mk("tan", half(mk("-", s, dc))))
+    t = mk(
+        "*", mk("tan", half(s)), mk("tan", half(mk("-", s, da))),
+        mk("tan", half(mk("-", s, db))), mk("tan", half(mk("-", s, dc)))
+    )
     area = mk("*", mk("*", 4.0, mk("atan", mk("sqrt", t))), mk("*", "R", "R"))
 
     V, F = ESD.duo_subdivide_faq(Float64, 0)

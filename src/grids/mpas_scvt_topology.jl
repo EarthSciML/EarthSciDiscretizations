@@ -130,22 +130,31 @@ end
 
 function _spherical_delaunay_triangles(U::AbstractMatrix{<:Real})
     N = size(U, 2)
-    N >= 4 || throw(ArgumentError(
-        "scvt topology leaf: spherical Delaunay needs ≥ 4 generators; got $N"))
+    N >= 4 || throw(
+        ArgumentError(
+            "scvt topology leaf: spherical Delaunay needs ≥ 4 generators; got $N"
+        )
+    )
 
     # --- seed tetrahedron: first three points + first non-coplanar fourth -----
     n012 = _face_normal(U, 1, 2, 3)
-    (abs(n012[1]) + abs(n012[2]) + abs(n012[3])) > 0 || throw(ArgumentError(
-        "scvt topology leaf: first three generators are collinear"))
+    (abs(n012[1]) + abs(n012[2]) + abs(n012[3])) > 0 || throw(
+        ArgumentError(
+            "scvt topology leaf: first three generators are collinear"
+        )
+    )
     k4 = 0
     @inbounds for k in 4:N
-        if abs(_dot3(n012, _sub(_v3(U, k), _v3(U, 1)))) > 1e-14
+        if abs(_dot3(n012, _sub(_v3(U, k), _v3(U, 1)))) > 1.0e-14
             k4 = k
             break
         end
     end
-    k4 != 0 || throw(ArgumentError(
-        "scvt topology leaf: all generators are coplanar (degenerate, not a closed mesh)"))
+    k4 != 0 || throw(
+        ArgumentError(
+            "scvt topology leaf: all generators are coplanar (degenerate, not a closed mesh)"
+        )
+    )
 
     # Strictly-interior reference: the seed-tetra centroid. It lies inside the
     # seed tetra and stays inside as the hull only grows, so it orients every
@@ -169,7 +178,7 @@ function _spherical_delaunay_triangles(U::AbstractMatrix{<:Real})
         # Faces visible from p (p strictly on their outward side, w.r.t. o).
         visible = NTuple{3, Int}[]
         for f in faces
-            if _visible_height(U, f[1], f[2], f[3], p, o) > 1e-12
+            if _visible_height(U, f[1], f[2], f[3], p, o) > 1.0e-12
                 push!(visible, f)
             end
         end
@@ -224,8 +233,11 @@ floating-point `circumcenters` by the geometry tolerance contract (see
 `TOPOLOGY_LEAF_CONTRACT.md`).
 """
 function scvt_spherical_delaunay(generators::AbstractMatrix{<:Real}; R::Real = 6.371e6)
-    size(generators, 1) == 3 || throw(ArgumentError(
-        "scvt_spherical_delaunay: generators must be (3, n_cells); got $(size(generators))"))
+    size(generators, 1) == 3 || throw(
+        ArgumentError(
+            "scvt_spherical_delaunay: generators must be (3, n_cells); got $(size(generators))"
+        )
+    )
     (R > 0 && isfinite(R)) ||
         throw(DomainError(R, "scvt_spherical_delaunay: R must be a positive finite number"))
     N = size(generators, 2)
@@ -238,8 +250,11 @@ function scvt_spherical_delaunay(generators::AbstractMatrix{<:Real}; R::Real = 6
         y = Float64(generators[2, i])
         z = Float64(generators[3, i])
         nrm = sqrt(x * x + y * y + z * z)
-        nrm > 0 || throw(ArgumentError(
-            "scvt_spherical_delaunay: generator $i is the zero vector"))
+        nrm > 0 || throw(
+            ArgumentError(
+                "scvt_spherical_delaunay: generator $i is the zero vector"
+            )
+        )
         U[1, i] = x / nrm
         U[2, i] = y / nrm
         U[3, i] = z / nrm
@@ -247,10 +262,13 @@ function scvt_spherical_delaunay(generators::AbstractMatrix{<:Real}; R::Real = 6
 
     tris = _spherical_delaunay_triangles(U)
     nt = length(tris)
-    nt == 2 * N - 4 || throw(ErrorException(
-        "scvt_spherical_delaunay: got $nt triangles, expected 2n-4 = $(2 * N - 4) for a " *
-            "closed mesh of $N generators (Euler check) — input is not a valid closed " *
-            "spherical mesh (degenerate or non-enclosing generators)"))
+    nt == 2 * N - 4 || throw(
+        ErrorException(
+            "scvt_spherical_delaunay: got $nt triangles, expected 2n-4 = $(2 * N - 4) for a " *
+                "closed mesh of $N generators (Euler check) — input is not a valid closed " *
+                "spherical mesh (degenerate or non-enclosing generators)"
+        )
+    )
 
     faces = Matrix{Int}(undef, 3, nt)
     circ = Matrix{Float64}(undef, 3, nt)
@@ -265,10 +283,14 @@ function scvt_spherical_delaunay(generators::AbstractMatrix{<:Real}; R::Real = 6
         b = _v3(U, tri[2])
         c = _v3(U, tri[3])
         cc = _cross3(a, b)
-        cc = (cc[1] + (b[2] * c[3] - b[3] * c[2]), cc[2] + (b[3] * c[1] - b[1] * c[3]),
-            cc[3] + (b[1] * c[2] - b[2] * c[1]))
-        cc = (cc[1] + (c[2] * a[3] - c[3] * a[2]), cc[2] + (c[3] * a[1] - c[1] * a[3]),
-            cc[3] + (c[1] * a[2] - c[2] * a[1]))
+        cc = (
+            cc[1] + (b[2] * c[3] - b[3] * c[2]), cc[2] + (b[3] * c[1] - b[1] * c[3]),
+            cc[3] + (b[1] * c[2] - b[2] * c[1]),
+        )
+        cc = (
+            cc[1] + (c[2] * a[3] - c[3] * a[2]), cc[2] + (c[3] * a[1] - c[1] * a[3]),
+            cc[3] + (c[1] * a[2] - c[2] * a[1]),
+        )
         # Same hemisphere as the triangle (outward from the sphere centre).
         if _dot3(cc, (a[1] + b[1] + c[1], a[2] + b[2] + c[2], a[3] + b[3] + c[3])) < 0
             cc = (-cc[1], -cc[2], -cc[3])

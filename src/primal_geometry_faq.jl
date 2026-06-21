@@ -40,8 +40,10 @@ _pg_mk(op, args...) = Dict{String, Any}("op" => op, "args" => collect(Any, args)
 const _PG_MX = _pg_mk("+", "a1", "b1", "c1")
 const _PG_MY = _pg_mk("+", "a2", "b2", "c2")
 const _PG_MZ = _pg_mk("+", "a3", "b3", "c3")
-const _PG_NSQ = _pg_mk("+",
-    _pg_mk("*", _PG_MX, _PG_MX), _pg_mk("*", _PG_MY, _PG_MY), _pg_mk("*", _PG_MZ, _PG_MZ))   # squares as *, not ^
+const _PG_NSQ = _pg_mk(
+    "+",
+    _pg_mk("*", _PG_MX, _PG_MX), _pg_mk("*", _PG_MY, _PG_MY), _pg_mk("*", _PG_MZ, _PG_MZ)
+)   # squares as *, not ^
 const _PG_NRM = _pg_mk("sqrt", _PG_NSQ)
 const _PG_UX = _pg_mk("/", _PG_MX, _PG_NRM)
 const _PG_UY = _pg_mk("/", _PG_MY, _PG_NRM)
@@ -64,11 +66,13 @@ const _PG_DB = _pg_mk("acos", _PG_DOT_CA)
 const _PG_DC = _pg_mk("acos", _PG_DOT_AB)
 const _PG_S = _pg_mk("*", 0.5, _pg_mk("+", _PG_DA, _PG_DB, _PG_DC))
 _pg_half(x) = _pg_mk("/", x, 2.0)
-const _PG_T = _pg_mk("*",
+const _PG_T = _pg_mk(
+    "*",
     _pg_mk("tan", _pg_half(_PG_S)),
     _pg_mk("tan", _pg_half(_pg_mk("-", _PG_S, _PG_DA))),
     _pg_mk("tan", _pg_half(_pg_mk("-", _PG_S, _PG_DB))),
-    _pg_mk("tan", _pg_half(_pg_mk("-", _PG_S, _PG_DC))))
+    _pg_mk("tan", _pg_half(_pg_mk("-", _PG_S, _PG_DC)))
+)
 const _PG_AREA = _pg_mk("*", _pg_mk("*", 4.0, _pg_mk("atan", _pg_mk("sqrt", _PG_T))), _pg_mk("*", "R", "R"))   # no max guard
 
 """
@@ -96,8 +100,10 @@ Byte-identical (T=Float64) to `build_duo_grid`'s cell-geometry loop (src/grids/d
 the per-cell bindings and ASTs mirror the imperative float ops exactly, and the
 `clamp` / `max` guards are dropped because they never fire on a valid mesh.
 """
-function primal_geometry_faq(::Type{T}, vertices_unit::AbstractMatrix{<:Real},
-        faces::AbstractMatrix{<:Integer}, R::Real) where {T}
+function primal_geometry_faq(
+        ::Type{T}, vertices_unit::AbstractMatrix{<:Real},
+        faces::AbstractMatrix{<:Integer}, R::Real
+    ) where {T}
     V = vertices_unit
     F = faces
     Nc = size(F, 2)

@@ -116,7 +116,7 @@ function main()
         JSON.print(io, out, 2)
         write(io, "\n")
     end
-    println("wrote ", path)
+    return println("wrote ", path)
 end
 
 main()

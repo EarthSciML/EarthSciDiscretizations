@@ -323,8 +323,8 @@ end
 # sanctions; the pointwise coordinate/metric queries are unchanged.
 _construction_faq(g::ArakawaGrid) =
     _grid_memo!(g, :_construction_faq) do
-        arakawa_construction_faq(g)
-    end
+    arakawa_construction_faq(g)
+end
 
 function cell_centers(g::ArakawaGrid{T}, axis::Symbol) where {T}
     d = _arakawa_axis_idx(g, axis)

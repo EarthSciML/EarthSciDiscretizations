@@ -46,19 +46,29 @@
     # --- circumcenter direction = −1.0 · (standard cross sum a×b+b×c+c×a):
     #     a=corner1, b=corner2, c=corner3; component k: 1=x,2=y,3=z.
     negc(t1, t2, t3) = mk("*", -1.0, mk("+", t1, t2, t3))
-    ccx = negc(mk("-", mk("*", "a2", "b3"), mk("*", "a3", "b2")),
+    ccx = negc(
+        mk("-", mk("*", "a2", "b3"), mk("*", "a3", "b2")),
         mk("-", mk("*", "b2", "c3"), mk("*", "b3", "c2")),
-        mk("-", mk("*", "c2", "a3"), mk("*", "c3", "a2")))
-    ccy = negc(mk("-", mk("*", "a3", "b1"), mk("*", "a1", "b3")),
+        mk("-", mk("*", "c2", "a3"), mk("*", "c3", "a2"))
+    )
+    ccy = negc(
+        mk("-", mk("*", "a3", "b1"), mk("*", "a1", "b3")),
         mk("-", mk("*", "b3", "c1"), mk("*", "b1", "c3")),
-        mk("-", mk("*", "c3", "a1"), mk("*", "c1", "a3")))
-    ccz = negc(mk("-", mk("*", "a1", "b2"), mk("*", "a2", "b1")),
+        mk("-", mk("*", "c3", "a1"), mk("*", "c1", "a3"))
+    )
+    ccz = negc(
+        mk("-", mk("*", "a1", "b2"), mk("*", "a2", "b1")),
         mk("-", mk("*", "b1", "c2"), mk("*", "b2", "c1")),
-        mk("-", mk("*", "c1", "a2"), mk("*", "c2", "a1")))
+        mk("-", mk("*", "c1", "a2"), mk("*", "c2", "a1"))
+    )
 
     # --- great-circle arc R·acos(p·q) over point leaves p1..p3, q1..q3 (no clamp).
-    arc = mk("*", "R", mk("acos",
-        mk("+", mk("*", "p1", "q1"), mk("*", "p2", "q2"), mk("*", "p3", "q3"))))
+    arc = mk(
+        "*", "R", mk(
+            "acos",
+            mk("+", mk("*", "p1", "q1"), mk("*", "p2", "q2"), mk("*", "p3", "q3"))
+        )
+    )
 
     # --- spherical-excess (L'Huilier) of triangle (A,B,C), NO R² (mirrors
     #     _spherical_triangle_area): da=acos(B·C), db=acos(C·A), dc=acos(A·B).
@@ -68,8 +78,10 @@
     sda = mk("acos", dot_bc); sdb = mk("acos", dot_ca); sdc = mk("acos", dot_ab)
     ss = mk("*", 0.5, mk("+", sda, sdb, sdc))
     shalf(x) = mk("/", x, 2.0)
-    st = mk("*", mk("tan", shalf(ss)), mk("tan", shalf(mk("-", ss, sda))),
-        mk("tan", shalf(mk("-", ss, sdb))), mk("tan", shalf(mk("-", ss, sdc))))
+    st = mk(
+        "*", mk("tan", shalf(ss)), mk("tan", shalf(mk("-", ss, sda))),
+        mk("tan", shalf(mk("-", ss, sdb))), mk("tan", shalf(mk("-", ss, sdc)))
+    )
     excess = mk("*", 4.0, mk("atan", mk("sqrt", st)))
 
     # --- lon/lat of a unit point u1..u3, and of a normalized edge midpoint.
@@ -82,10 +94,12 @@
     cbind(V, v1, v2, v3) = Dict{String, Float64}(
         "a1" => V[1, v1], "a2" => V[2, v1], "a3" => V[3, v1],
         "b1" => V[1, v2], "b2" => V[2, v2], "b3" => V[3, v2],
-        "c1" => V[1, v3], "c2" => V[2, v3], "c3" => V[3, v3])
+        "c1" => V[1, v3], "c2" => V[2, v3], "c3" => V[3, v3]
+    )
     pq(P, i, Q, j, R) = Dict{String, Float64}(
         "p1" => P[1, i], "p2" => P[2, i], "p3" => P[3, i],
-        "q1" => Q[1, j], "q2" => Q[2, j], "q3" => Q[3, j], "R" => R)
+        "q1" => Q[1, j], "q2" => Q[2, j], "q3" => Q[3, j], "R" => R
+    )
 
     R = 6.371e6
     # The MPAS Voronoi dual requires a subdivided primal (level ≥ 1).
@@ -157,7 +171,8 @@
                 b = Dict{String, Float64}(
                     "a1" => vu[1, v], "a2" => vu[2, v], "a3" => vu[3, v],
                     "b1" => facecc[1, fi], "b2" => facecc[2, fi], "b3" => facecc[3, fi],
-                    "c1" => facecc[1, fnext], "c2" => facecc[2, fnext], "c3" => facecc[3, fnext])
+                    "c1" => facecc[1, fnext], "c2" => facecc[2, fnext], "c3" => facecc[3, fnext]
+                )
                 area_v += ESD.eval_coeff(excess, b)
             end
             nbad += !same(Rf * Rf * area_v, imp.area_cell[v])
@@ -173,7 +188,8 @@
             v1, v2 = g.edges[1, e], g.edges[2, e]
             b = Dict{String, Float64}(
                 "a1" => vu[1, v1], "a2" => vu[2, v1], "a3" => vu[3, v1],
-                "b1" => vu[1, v2], "b2" => vu[2, v2], "b3" => vu[3, v2])
+                "b1" => vu[1, v2], "b2" => vu[2, v2], "b3" => vu[3, v2]
+            )
             nbad += !same(ESD.eval_coeff(lon_e, b), imp.lon_edge[e]) +
                 !same(ESD.eval_coeff(lat_e, b), imp.lat_edge[e])
         end
@@ -207,13 +223,14 @@
                 b = Dict{String, Float64}(
                     "a1" => vu[1, v], "a2" => vu[2, v], "a3" => vu[3, v],
                     "b1" => facecc[1, fi], "b2" => facecc[2, fi], "b3" => facecc[3, fi],
-                    "c1" => facecc[1, fnext], "c2" => facecc[2, fnext], "c3" => facecc[3, fnext])
+                    "c1" => facecc[1, fnext], "c2" => facecc[2, fnext], "c3" => facecc[3, fnext]
+                )
                 area_v += ESD.eval_coeff(excess, b)
             end
             push!(faq_area, Rf * Rf * area_v)
         end
         @test all(>(0), faq_area)
-        @test sum(faq_area) ≈ 4π * Rf^2 rtol = 1e-12
+        @test sum(faq_area) ≈ 4π * Rf^2 rtol = 1.0e-12
     end
 end
 
@@ -241,10 +258,12 @@ end
     @test isets["corners"]["size"] == 3 && isets["space"]["size"] == 3 && isets["ends"]["size"] == 2
 
     vars = model["variables"]
-    for v in ("R", "vert_coord", "centroid", "face_vert", "edge_cell", "edge_face",
+    for v in (
+            "R", "vert_coord", "centroid", "face_vert", "edge_cell", "edge_face",
             "ring_face", "ring_face_next", "circ_x", "circ_y", "circ_z",
             "dc_edge", "dv_edge", "cell_distance", "area_cell",
-            "lon_cell", "lat_cell", "lon_edge", "lat_edge")
+            "lon_cell", "lat_cell", "lon_edge", "lat_edge",
+        )
         @test haskey(vars, v)
     end
     for p in ("R", "vert_coord", "centroid", "face_vert", "edge_cell", "edge_face", "ring_face", "ring_face_next")
@@ -258,8 +277,10 @@ end
     lhs_name(e) = (e["lhs"] isa Dict && get(e["lhs"], "op", "") == "index") ? e["lhs"]["args"][1] : nothing
     eqfor(name) = only(filter(e -> lhs_name(e) == name, eqs))["rhs"]
     # Every named output is produced by an aggregate (the geometry FAQ).
-    for name in ("circ_x", "dc_edge", "dv_edge", "cell_distance", "area_cell",
-            "lon_cell", "lat_cell", "lon_edge", "lat_edge")
+    for name in (
+            "circ_x", "dc_edge", "dv_edge", "cell_distance", "area_cell",
+            "lon_cell", "lat_cell", "lon_edge", "lat_edge",
+        )
         @test eqfor(name)["op"] == "aggregate"
     end
     # The dual-cell area reduces over the ring (the spherical-excess fan).
@@ -319,24 +340,36 @@ end
 
     mk(op, args...) = Dict{String, Any}("op" => op, "args" => collect(Any, args))
     negc(t1, t2, t3) = mk("*", -1.0, mk("+", t1, t2, t3))
-    ccx = negc(mk("-", mk("*", "a2", "b3"), mk("*", "a3", "b2")),
+    ccx = negc(
+        mk("-", mk("*", "a2", "b3"), mk("*", "a3", "b2")),
         mk("-", mk("*", "b2", "c3"), mk("*", "b3", "c2")),
-        mk("-", mk("*", "c2", "a3"), mk("*", "c3", "a2")))
-    ccy = negc(mk("-", mk("*", "a3", "b1"), mk("*", "a1", "b3")),
+        mk("-", mk("*", "c2", "a3"), mk("*", "c3", "a2"))
+    )
+    ccy = negc(
+        mk("-", mk("*", "a3", "b1"), mk("*", "a1", "b3")),
         mk("-", mk("*", "b3", "c1"), mk("*", "b1", "c3")),
-        mk("-", mk("*", "c3", "a1"), mk("*", "c1", "a3")))
-    ccz = negc(mk("-", mk("*", "a1", "b2"), mk("*", "a2", "b1")),
+        mk("-", mk("*", "c3", "a1"), mk("*", "c1", "a3"))
+    )
+    ccz = negc(
+        mk("-", mk("*", "a1", "b2"), mk("*", "a2", "b1")),
         mk("-", mk("*", "b1", "c2"), mk("*", "b2", "c1")),
-        mk("-", mk("*", "c1", "a2"), mk("*", "c2", "a1")))
-    arc = mk("*", "R", mk("acos",
-        mk("+", mk("*", "p1", "q1"), mk("*", "p2", "q2"), mk("*", "p3", "q3"))))
+        mk("-", mk("*", "c1", "a2"), mk("*", "c2", "a1"))
+    )
+    arc = mk(
+        "*", "R", mk(
+            "acos",
+            mk("+", mk("*", "p1", "q1"), mk("*", "p2", "q2"), mk("*", "p3", "q3"))
+        )
+    )
     cbind(V, v1, v2, v3) = Dict{String, Float64}(
         "a1" => V[1, v1], "a2" => V[2, v1], "a3" => V[3, v1],
         "b1" => V[1, v2], "b2" => V[2, v2], "b3" => V[3, v2],
-        "c1" => V[1, v3], "c2" => V[2, v3], "c3" => V[3, v3])
+        "c1" => V[1, v3], "c2" => V[2, v3], "c3" => V[3, v3]
+    )
     pq(P, i, Q, j) = Dict{String, Float64}(
         "p1" => P[1, i], "p2" => P[2, i], "p3" => P[3, i],
-        "q1" => Q[1, j], "q2" => Q[2, j], "q3" => Q[3, j], "R" => Rf)
+        "q1" => Q[1, j], "q2" => Q[2, j], "q3" => Q[3, j], "R" => Rf
+    )
 
     # FAQ circumcenters (standard cross sum × −1.0) — and imperative reference.
     facecc = Matrix{Float64}(undef, 3, Nc)

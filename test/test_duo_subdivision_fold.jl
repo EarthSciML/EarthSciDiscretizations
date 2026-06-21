@@ -42,11 +42,11 @@
         0.0  1.0  -φ;
         0.0 -1.0  -φ;
         1.0   φ  0.0;
-       -1.0   φ  0.0;
+        -1.0   φ  0.0;
         1.0  -φ  0.0;
-       -1.0  -φ  0.0;
-         φ  0.0  1.0;
-         φ  0.0 -1.0;
+        -1.0  -φ  0.0;
+        φ  0.0  1.0;
+        φ  0.0 -1.0;
         -φ  0.0  1.0;
         -φ  0.0 -1.0;
     ]
@@ -61,16 +61,18 @@
     # exact float-op sequence of the imperative `n = sqrt(v[1]^2+v[2]^2+v[3]^2); v[d]/n`
     # (Julia `v^2` lowers to `v*v`). sqrt(Σ) is deterministic, so dividing each
     # component by it reproduces the single imperative `n` bit-for-bit.
-    _rsq(n) = Dict{String,Any}("op" => "*", "args" => [n, n])
-    _rnorm() = Dict{String,Any}("op" => "sqrt",
-        "args" => [Dict{String,Any}("op" => "+", "args" => [_rsq("r1"), _rsq("r2"), _rsq("r3")])])
-    _rcomp(d) = Dict{String,Any}("op" => "/", "args" => ["r$d", _rnorm()])
+    _rsq(n) = Dict{String, Any}("op" => "*", "args" => [n, n])
+    _rnorm() = Dict{String, Any}(
+        "op" => "sqrt",
+        "args" => [Dict{String, Any}("op" => "+", "args" => [_rsq("r1"), _rsq("r2"), _rsq("r3")])]
+    )
+    _rcomp(d) = Dict{String, Any}("op" => "/", "args" => ["r$d", _rnorm()])
 
     function declarative_seed()
         Nv = size(VERT_RAW, 1)
         V = Matrix{Float64}(undef, 3, Nv)
         for i in 1:Nv
-            b = Dict{String,Float64}("r1" => VERT_RAW[i, 1], "r2" => VERT_RAW[i, 2], "r3" => VERT_RAW[i, 3])
+            b = Dict{String, Float64}("r1" => VERT_RAW[i, 1], "r2" => VERT_RAW[i, 2], "r3" => VERT_RAW[i, 3])
             V[1, i] = ESD.eval_coeff(_rcomp(1), b)
             V[2, i] = ESD.eval_coeff(_rcomp(2), b)
             V[3, i] = ESD.eval_coeff(_rcomp(3), b)
@@ -81,16 +83,18 @@
 
     # --- One refine pass (the esd-heg.3 value-invention FAQ) -----------------
     # Midpoint coordinate AST: (v_a[d] + v_b[d]) / sqrt(Σ_d (v_a[d]+v_b[d])²).
-    _sum(d) = Dict{String,Any}("op" => "+", "args" => ["a$d", "b$d"])
-    _sq(d) = Dict{String,Any}("op" => "*", "args" => [_sum(d), _sum(d)])
-    _norm() = Dict{String,Any}("op" => "sqrt",
-        "args" => [Dict{String,Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])])
-    _component(d) = Dict{String,Any}("op" => "/", "args" => [_sum(d), _norm()])
+    _sum(d) = Dict{String, Any}("op" => "+", "args" => ["a$d", "b$d"])
+    _sq(d) = Dict{String, Any}("op" => "*", "args" => [_sum(d), _sum(d)])
+    _norm() = Dict{String, Any}(
+        "op" => "sqrt",
+        "args" => [Dict{String, Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])]
+    )
+    _component(d) = Dict{String, Any}("op" => "/", "args" => [_sum(d), _norm()])
 
     function faq_refine_once(V::Matrix{Float64}, F::Matrix{Int})
         Nv = size(V, 2)
         Nc = size(F, 2)
-        pairs = Tuple{Int,Int}[]
+        pairs = Tuple{Int, Int}[]
         for f in 1:Nc
             a, b, c = F[1, f], F[2, f], F[3, f]
             push!(pairs, REL.skolem_edge(a, b))
@@ -104,7 +108,7 @@
         Vnew = Matrix{Float64}(undef, 3, Nv + Ne)
         Vnew[:, 1:Nv] = V
         for (i, (lo, hi)) in enumerate(edges)
-            b = Dict{String,Float64}(
+            b = Dict{String, Float64}(
                 "a1" => V[1, lo], "a2" => V[2, lo], "a3" => V[3, lo],
                 "b1" => V[1, hi], "b2" => V[2, hi], "b3" => V[3, hi],
             )
@@ -222,34 +226,38 @@ end
     VERT_RAW = [
         0.0  1.0   φ;  0.0 -1.0   φ;  0.0  1.0  -φ;  0.0 -1.0  -φ;
         1.0   φ  0.0; -1.0   φ  0.0;  1.0  -φ  0.0; -1.0  -φ  0.0;
-         φ  0.0  1.0;   φ  0.0 -1.0;  -φ  0.0  1.0;  -φ  0.0 -1.0;
+        φ  0.0  1.0;   φ  0.0 -1.0;  -φ  0.0  1.0;  -φ  0.0 -1.0;
     ]
     FACE_VERT = [
         1  9  2; 1  2 11; 1 11  6; 1  6  5; 1  5  9; 9  5 10; 9 10  7; 9  7  2;
         2  7  8; 2  8 11; 11  8 12; 11 12  6; 6 12  3; 6  3  5; 5  3 10; 10  3  4;
         10  4  7; 7  4  8; 8  4 12; 12  4  3;
     ]
-    _rsq(n) = Dict{String,Any}("op" => "*", "args" => [n, n])
-    _rnorm() = Dict{String,Any}("op" => "sqrt",
-        "args" => [Dict{String,Any}("op" => "+", "args" => [_rsq("r1"), _rsq("r2"), _rsq("r3")])])
-    _rcomp(d) = Dict{String,Any}("op" => "/", "args" => ["r$d", _rnorm()])
-    _sum(d) = Dict{String,Any}("op" => "+", "args" => ["a$d", "b$d"])
-    _sq(d) = Dict{String,Any}("op" => "*", "args" => [_sum(d), _sum(d)])
-    _norm() = Dict{String,Any}("op" => "sqrt",
-        "args" => [Dict{String,Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])])
-    _component(d) = Dict{String,Any}("op" => "/", "args" => [_sum(d), _norm()])
+    _rsq(n) = Dict{String, Any}("op" => "*", "args" => [n, n])
+    _rnorm() = Dict{String, Any}(
+        "op" => "sqrt",
+        "args" => [Dict{String, Any}("op" => "+", "args" => [_rsq("r1"), _rsq("r2"), _rsq("r3")])]
+    )
+    _rcomp(d) = Dict{String, Any}("op" => "/", "args" => ["r$d", _rnorm()])
+    _sum(d) = Dict{String, Any}("op" => "+", "args" => ["a$d", "b$d"])
+    _sq(d) = Dict{String, Any}("op" => "*", "args" => [_sum(d), _sum(d)])
+    _norm() = Dict{String, Any}(
+        "op" => "sqrt",
+        "args" => [Dict{String, Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])]
+    )
+    _component(d) = Dict{String, Any}("op" => "/", "args" => [_sum(d), _norm()])
 
     function seed_mesh()
         V = Matrix{Float64}(undef, 3, size(VERT_RAW, 1))
         for i in 1:size(VERT_RAW, 1)
-            b = Dict{String,Float64}("r1" => VERT_RAW[i, 1], "r2" => VERT_RAW[i, 2], "r3" => VERT_RAW[i, 3])
+            b = Dict{String, Float64}("r1" => VERT_RAW[i, 1], "r2" => VERT_RAW[i, 2], "r3" => VERT_RAW[i, 3])
             V[1, i] = ESD.eval_coeff(_rcomp(1), b); V[2, i] = ESD.eval_coeff(_rcomp(2), b); V[3, i] = ESD.eval_coeff(_rcomp(3), b)
         end
         return V, Matrix{Int}(permutedims(FACE_VERT))
     end
     function refine_once(V, F)
         Nv = size(V, 2); Nc = size(F, 2)
-        pairs = Tuple{Int,Int}[]
+        pairs = Tuple{Int, Int}[]
         for f in 1:Nc
             a, b, c = F[1, f], F[2, f], F[3, f]
             push!(pairs, REL.skolem_edge(a, b)); push!(pairs, REL.skolem_edge(b, c)); push!(pairs, REL.skolem_edge(c, a))
@@ -257,8 +265,10 @@ end
         rk = REL.rank(pairs; base = 1); edges = rk.order; Ne = length(edges)
         Vnew = Matrix{Float64}(undef, 3, Nv + Ne); Vnew[:, 1:Nv] = V
         for (i, (lo, hi)) in enumerate(edges)
-            b = Dict{String,Float64}("a1" => V[1, lo], "a2" => V[2, lo], "a3" => V[3, lo],
-                "b1" => V[1, hi], "b2" => V[2, hi], "b3" => V[3, hi])
+            b = Dict{String, Float64}(
+                "a1" => V[1, lo], "a2" => V[2, lo], "a3" => V[3, lo],
+                "b1" => V[1, hi], "b2" => V[2, hi], "b3" => V[3, hi]
+            )
             Vnew[1, Nv + i] = ESD.eval_coeff(_component(1), b); Vnew[2, Nv + i] = ESD.eval_coeff(_component(2), b); Vnew[3, Nv + i] = ESD.eval_coeff(_component(3), b)
         end
         midvid(x, y) = Nv + rk.id[REL.skolem_edge(x, y)]
@@ -276,10 +286,12 @@ end
     end
     function fold(level)
         V, F = seed_mesh()
-        for _ in 1:level; V, F = refine_once(V, F); end
+        for _ in 1:level
+            V, F = refine_once(V, F)
+        end
         return V, F
     end
-    faces_json(F) = "[" * join(["[$(F[1,k]),$(F[2,k]),$(F[3,k])]" for k in 1:size(F, 2)], ",") * "]"
+    faces_json(F) = "[" * join(["[$(F[1, k]),$(F[2, k]),$(F[3, k])]" for k in 1:size(F, 2)], ",") * "]"
 
     for L in 0:2
         _, Ff = fold(L)

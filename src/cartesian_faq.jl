@@ -60,15 +60,23 @@ data" branch). In both cases `centers[i] = (edges[i] + edges[i+1])/2` and
 arithmetic step is evaluated by ESS (`eval_coeff`), so the result is bit-identical to
 the other bindings.
 """
-function _faq_axis(::Type{T}, uniform::Bool, n::Int, lo::T, hi::T,
-        supplied_edges::AbstractVector{T}) where {T <: AbstractFloat}
+function _faq_axis(
+        ::Type{T}, uniform::Bool, n::Int, lo::T, hi::T,
+        supplied_edges::AbstractVector{T}
+    ) where {T <: AbstractFloat}
     edges = Vector{T}(undef, n + 1)
     if uniform
-        dx = eval_coeff(_CART_DX_NODE,
-            Dict("hi" => Float64(hi), "lo" => Float64(lo), "n" => Float64(n)))
+        dx = eval_coeff(
+            _CART_DX_NODE,
+            Dict("hi" => Float64(hi), "lo" => Float64(lo), "n" => Float64(n))
+        )
         @inbounds for i in 1:(n + 1)
-            edges[i] = T(eval_coeff(_CART_EDGE_NODE,
-                Dict("lo" => Float64(lo), "i" => Float64(i), "dx" => dx)))
+            edges[i] = T(
+                eval_coeff(
+                    _CART_EDGE_NODE,
+                    Dict("lo" => Float64(lo), "i" => Float64(i), "dx" => dx)
+                )
+            )
         end
     else
         @inbounds for i in 1:(n + 1)

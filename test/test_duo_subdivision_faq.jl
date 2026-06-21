@@ -23,11 +23,13 @@
     # Midpoint coordinate AST: (v_a[d] + v_b[d]) / sqrt(Σ_d (v_a[d]+v_b[d])²).
     # Squares are products (`*`), NOT `^`, so the float ops match the imperative
     # `_midpoint!` bit-for-bit (Julia `mx^2` lowers to `mx*mx`; a float `^` would not).
-    _sum(d) = Dict{String,Any}("op" => "+", "args" => ["a$d", "b$d"])
-    _sq(d) = Dict{String,Any}("op" => "*", "args" => [_sum(d), _sum(d)])
-    _norm() = Dict{String,Any}("op" => "sqrt",
-        "args" => [Dict{String,Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])])
-    _component(d) = Dict{String,Any}("op" => "/", "args" => [_sum(d), _norm()])
+    _sum(d) = Dict{String, Any}("op" => "+", "args" => ["a$d", "b$d"])
+    _sq(d) = Dict{String, Any}("op" => "*", "args" => [_sum(d), _sum(d)])
+    _norm() = Dict{String, Any}(
+        "op" => "sqrt",
+        "args" => [Dict{String, Any}("op" => "+", "args" => [_sq(1), _sq(2), _sq(3)])]
+    )
+    _component(d) = Dict{String, Any}("op" => "/", "args" => [_sum(d), _norm()])
 
     # One FAQ refine pass over a mesh (V 3×Nv, F 3×Nc) using the ESS engine:
     #   skolem_edge + distinct + rank (value invention) and eval_coeff (geometry FAQ).
@@ -35,7 +37,7 @@
         Nv = size(V, 2)
         Nc = size(F, 2)
         # Directed local edges (a,b),(b,c),(c,a) of every face → canonical Skolem keys.
-        pairs = Tuple{Int,Int}[]
+        pairs = Tuple{Int, Int}[]
         for f in 1:Nc
             a, b, c = F[1, f], F[2, f], F[3, f]
             push!(pairs, REL.skolem_edge(a, b))
@@ -51,7 +53,7 @@
         Vnew = Matrix{Float64}(undef, 3, Nv + Ne)
         Vnew[:, 1:Nv] = V
         for (i, (lo, hi)) in enumerate(edges)
-            b = Dict{String,Float64}(
+            b = Dict{String, Float64}(
                 "a1" => V[1, lo], "a2" => V[2, lo], "a3" => V[3, lo],
                 "b1" => V[1, hi], "b2" => V[2, hi], "b3" => V[3, hi],
             )
@@ -149,7 +151,7 @@ end
         dicttype = Dict{String, Any},
     )
     V0, F0 = ESD.duo_subdivide_faq(Float64, 0)
-    pairs = Tuple{Int,Int}[]
+    pairs = Tuple{Int, Int}[]
     for f in 1:size(F0, 2)
         a, b, c = F0[1, f], F0[2, f], F0[3, f]
         push!(pairs, REL.skolem_edge(a, b)); push!(pairs, REL.skolem_edge(b, c)); push!(pairs, REL.skolem_edge(c, a))
