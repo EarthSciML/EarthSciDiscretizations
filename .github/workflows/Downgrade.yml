@@ -27,7 +27,15 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-      - uses: julia-actions/julia-downgrade-compat@v2
+      # Pinned to v2.4.0 on purpose. v2.5.0 (action PR #49) added an "old-style
+      # [extras]+[targets].test merged resolution" path that — unlike the
+      # else-branch it replaced — does NOT strip url-sourced [sources] deps
+      # before invoking the registry-only resolver. On this repo that makes the
+      # action die with "unknown package UUID: c7bf5e87-..." (EarthSciSerialization,
+      # which is unregistered and resolved via [sources]). v2.4.0 is the last
+      # release before that regression and keeps the source-stripping behavior.
+      # Revert to a newer tag once julia-actions/julia-downgrade-compat#49 is fixed.
+      - uses: julia-actions/julia-downgrade-compat@v2.4.0
         with:
           # EarthSciSerialization is not yet in the General registry; the
           # downgrade-compat action would fail to look it up for a lower bound
@@ -37,5 +45,14 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      # The downgrade step strips the url-sourced ESS dep for resolution and
+      # cannot re-add a url [sources] package to the Manifest (it only restores
+      # path sources), so ESS is absent from the downgraded Manifest and the
+      # subsequent Pkg.instantiate() fails with "EarthSciSerialization ... does
+      # not appear in the manifest". Resolve ESS back into the downgraded
+      # environment — the same script the unit and integration CI jobs use —
+      # before building and testing.
+      - name: "Resolve unregistered deps (EarthSciSerialization)"
+        run: scripts/setup_polecat_env.sh
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
