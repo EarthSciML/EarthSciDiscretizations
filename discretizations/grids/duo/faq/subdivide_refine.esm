@@ -1,0 +1,722 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "duo_subdivide_refine",
+    "description": "DUO icosahedral one-level subdivision as a value-invention FAQ pass (RFC semiring-faq-unified-ir \u00a77.3; bead esd-heg.3). The \u00a77.3 skolem/distinct/rank value-invention applied to mesh refinement, replacing the imperative _midpoint! + body of _subdivide_icosahedron (src/grids/duo.jl). The chain: (1) edge_set \u2014 the index-set-producing aggregate (semiring bool_and_or, distinct:true) that mints a midpoint vertex per unique undirected edge of the face->vertex connectivity, keyed by a canonical Skolem over the (sorted) endpoint vertex ids; (2) edges \u2014 exposed as a kind:derived index set via from_faq; (3) edge_dense_id \u2014 rank to dense ids (the array-backend index, \u00a75.7 sorted order); (4) mid_coord \u2014 the geometry FAQ: the normalized average of the two endpoints (mid_sum / sqrt(mid_sq)); (5) child_vert \u2014 the join of each face to its three edge-midpoints (edge_of_face) emitting four sub-faces in the order (a,ab,ca),(b,bc,ab),(c,ca,bc),(ab,bc,ca). Value-free structural spec (the connectivity/coords are parameter shapes; concrete data is fed by the conformance harness), mirroring tests/valid/aggregate/edge_enumeration_area_eff.esm in ESS. Index sizes are the canonical level-0->1 instance (Nc=20, Nv=12, Ne=30, 4*Nc child sub-faces); the pass shape is identical at any level. Byte/numeric equivalence to the imperative subdivision step is proven across the level ladder by test/test_duo_subdivision_faq.jl.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.nux"
+    ],
+    "tags": [
+      "duo",
+      "icosahedral",
+      "subdivision",
+      "value-invention",
+      "skolem",
+      "distinct",
+      "rank",
+      "faq",
+      "esd-heg.3"
+    ]
+  },
+  "models": {
+    "IcosahedralRefine": {
+      "index_sets": {
+        "faces": {
+          "kind": "interval",
+          "size": 20
+        },
+        "verts": {
+          "kind": "interval",
+          "size": 12
+        },
+        "corners": {
+          "kind": "interval",
+          "size": 3
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        },
+        "child_in_face": {
+          "kind": "interval",
+          "size": 4
+        },
+        "edges": {
+          "kind": "derived",
+          "from_faq": "edge_set"
+        }
+      },
+      "variables": {
+        "face_vert": {
+          "type": "parameter",
+          "shape": [
+            "faces",
+            "corners"
+          ],
+          "description": "Vertex ids of each face's three corners (level-n connectivity, CONST)."
+        },
+        "vert_coord": {
+          "type": "parameter",
+          "shape": [
+            "verts",
+            "space"
+          ],
+          "description": "Cartesian unit-sphere coordinates of the level-n vertices (CONST)."
+        },
+        "edge_of_face": {
+          "type": "parameter",
+          "shape": [
+            "faces",
+            "corners"
+          ],
+          "description": "Dense (1-based) edge id of each face's local edge le in {1,2,3} = corner-pairs (1,2),(2,3),(3,1); the inversion join of edge_set (RFC \u00a75.2), the edges_on_face connectivity. New midpoint vertex index = Nv + edge_of_face[f,le]."
+        },
+        "edge_lo": {
+          "type": "parameter",
+          "shape": [
+            "edges"
+          ],
+          "description": "Lower endpoint vertex id of each dense edge (the Skolem key's first component), keyed by dense edge id."
+        },
+        "edge_hi": {
+          "type": "parameter",
+          "shape": [
+            "edges"
+          ],
+          "description": "Upper endpoint vertex id of each dense edge (the Skolem key's second component), keyed by dense edge id."
+        },
+        "edge_exists": {
+          "type": "state",
+          "shape": [
+            "edges"
+          ],
+          "description": "Membership over the derived edges set (the index-set-producing aggregate output)."
+        },
+        "edge_dense_id": {
+          "type": "state",
+          "shape": [
+            "edges"
+          ],
+          "description": "Dense integer ids over the derived edges set (rank), \u00a75.7 sorted order."
+        },
+        "mid_sum": {
+          "type": "state",
+          "shape": [
+            "edges",
+            "space"
+          ],
+          "description": "Un-normalized midpoint = elementwise sum of the two endpoint coordinates."
+        },
+        "mid_sq": {
+          "type": "state",
+          "shape": [
+            "edges"
+          ],
+          "description": "Squared norm of mid_sum, reduced over space (sum_product FAQ)."
+        },
+        "mid_coord": {
+          "type": "state",
+          "shape": [
+            "edges",
+            "space"
+          ],
+          "description": "Invented midpoint vertex coordinates = mid_sum / sqrt(mid_sq) (normalized average; on the unit sphere)."
+        },
+        "child_vert": {
+          "type": "state",
+          "shape": [
+            "faces",
+            "child_in_face",
+            "corners"
+          ],
+          "description": "Vertex id of output corner cc of sub-face t of face f \u2014 the four emitted children, joining face corners to the three invented edge-midpoints."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1)+(2) edge_set: unique undirected edges (= midpoint vertices) from the face->corner connectivity. distinct:true under bool_and_or dedups; ranges iterate each face f and its corner pairs (ca,cb); filter ca<cb takes each pair once; key mints skolem(edge, vid_a, vid_b) over the corner vertex ids; the true body marks existence. Referenced by index_sets.edges.from_faq via id.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "edge_exists",
+              "edge"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "id": "edge_set",
+            "args": [
+              "face_vert"
+            ],
+            "semiring": "bool_and_or",
+            "distinct": true,
+            "output_idx": [
+              "edge"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              },
+              "ca": {
+                "from": "corners"
+              },
+              "cb": {
+                "from": "corners"
+              }
+            },
+            "filter": {
+              "op": "<",
+              "args": [
+                "ca",
+                "cb"
+              ]
+            },
+            "key": {
+              "op": "skolem",
+              "args": [
+                "edge",
+                {
+                  "op": "index",
+                  "args": [
+                    "face_vert",
+                    "f",
+                    "ca"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "face_vert",
+                    "f",
+                    "cb"
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "true",
+              "args": []
+            }
+          }
+        },
+        {
+          "_comment": "(3) rank: dense ids over the derived edges set by position in the sorted distinct sequence (\u00a75.5/\u00a75.7.3).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "edge_dense_id",
+              "e"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "semiring": "sum_product",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "expr": {
+              "op": "rank",
+              "args": [
+                "edges"
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4a) mid_sum[e,d] = v[edge_lo[e],d] + v[edge_hi[e],d] (elementwise over edges x space).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "mid_sum",
+              "e",
+              "d"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "vert_coord",
+              "edge_lo",
+              "edge_hi"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "e",
+              "d"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "vert_coord",
+                    {
+                      "op": "index",
+                      "args": [
+                        "edge_lo",
+                        "e"
+                      ]
+                    },
+                    "d"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "vert_coord",
+                    {
+                      "op": "index",
+                      "args": [
+                        "edge_hi",
+                        "e"
+                      ]
+                    },
+                    "d"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4b) mid_sq[e] = sum_d mid_sum[e,d]^2 (the squared norm; sum_product over space).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "mid_sq",
+              "e"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "mid_sum"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mid_sum",
+                    "e",
+                    "d"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "mid_sum",
+                    "e",
+                    "d"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4c) mid_coord[e,d] = mid_sum[e,d] / sqrt(mid_sq[e]) \u2014 the normalized-average midpoint on the unit sphere.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "mid_coord",
+              "e",
+              "d"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "mid_sum",
+              "mid_sq"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "e",
+              "d"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mid_sum",
+                    "e",
+                    "d"
+                  ]
+                },
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "mid_sq",
+                        "e"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) child_vert[f,t,cc]: emit 4 sub-faces per face. a,b,c = face corner vertices; ab,bc,ca = Nv + edge_of_face[f,le] the invented edge-midpoints. Order (a,ab,ca),(b,bc,ab),(c,ca,bc),(ab,bc,ca) matches the imperative _subdivide_icosahedron emission so children line up position-for-position.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "child_vert",
+              "f",
+              "t",
+              "cc"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "face_vert",
+              "edge_of_face"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "f",
+              "t",
+              "cc"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              },
+              "t": {
+                "from": "child_in_face"
+              },
+              "cc": {
+                "from": "corners"
+              }
+            },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                {
+                  "op": "==",
+                  "args": [
+                    "t",
+                    1
+                  ]
+                },
+                {
+                  "op": "ifelse",
+                  "args": [
+                    {
+                      "op": "==",
+                      "args": [
+                        "cc",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "face_vert",
+                        "f",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "ifelse",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            "cc",
+                            2
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            12,
+                            {
+                              "op": "index",
+                              "args": [
+                                "edge_of_face",
+                                "f",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            12,
+                            {
+                              "op": "index",
+                              "args": [
+                                "edge_of_face",
+                                "f",
+                                3
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ifelse",
+                  "args": [
+                    {
+                      "op": "==",
+                      "args": [
+                        "t",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "ifelse",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            "cc",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "face_vert",
+                            "f",
+                            2
+                          ]
+                        },
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {
+                              "op": "==",
+                              "args": [
+                                "cc",
+                                2
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                12,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "edge_of_face",
+                                    "f",
+                                    2
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                12,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "edge_of_face",
+                                    "f",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "ifelse",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            "t",
+                            3
+                          ]
+                        },
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {
+                              "op": "==",
+                              "args": [
+                                "cc",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "face_vert",
+                                "f",
+                                3
+                              ]
+                            },
+                            {
+                              "op": "ifelse",
+                              "args": [
+                                {
+                                  "op": "==",
+                                  "args": [
+                                    "cc",
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    12,
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "edge_of_face",
+                                        "f",
+                                        3
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    12,
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "edge_of_face",
+                                        "f",
+                                        2
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {
+                              "op": "==",
+                              "args": [
+                                "cc",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                12,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "edge_of_face",
+                                    "f",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ifelse",
+                              "args": [
+                                {
+                                  "op": "==",
+                                  "args": [
+                                    "cc",
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    12,
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "edge_of_face",
+                                        "f",
+                                        2
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    12,
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "edge_of_face",
+                                        "f",
+                                        3
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
