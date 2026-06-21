@@ -1,0 +1,46 @@
+{
+  "discretizations": {
+    "divergence_duo": {
+      "applies_to": { "op": "div", "args": ["$F"], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["edge_normal"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "O(h) on a quasi-uniform icosahedral triangular mesh",
+      "reference": "Heikes et al. (2023), J. Adv. Model. Earth Syst. 15:e2022MS003192 (DUO icosahedral triangular C-grid); flux-form finite-volume divergence on the triangular PRIMAL cell, the icosahedral-triangular analogue of the MPAS Voronoi divergence (Skamarock et al. 2012, Mon. Wea. Rev. 140:3090-3105, Eq. 24) and the divergence_mpas template (esd-6g4.1). Discrete operator: (div F)_i = (1/A_i) * sum_{k=1}^{3} s_{i,k} * l_e * F_e, with e = edges_on_face[i,k] the k-th of the triangle's three primal edges, s_{i,k} = edge_sign_on_face[i,k] in {+1,-1} the outward-normal orientation (reference normal points from the lower-indexed to the higher-indexed of the edge's two incident faces; s = +1 when i is that lower-indexed face), l_e = dc_edge[e] the PRIMAL edge arc length (the shared triangle side the flux crosses; DUO's dc_edge is the cell-center analogue of MPAS's dv_edge, swapped because DUO cells are the triangular primal while MPAS cells are the Voronoi dual), A_i = tri_area[i] the spherical-triangle area (the Gauss-theorem area enclosed by the three primal edges — NOT the dc·dv diamond area_eff used by the nn_diffusion_duo Laplacian; area_eff leaves an O(1) consistency error here), and F_e the edge-normal flux. The coefficient s*l/A is build-time-constant grid geometry (const-folded); only F_e reaches the per-step hot tree. The reduction bound is the constant 3 (every closed-icosahedral triangle has exactly three real edges, no padding) — contrast divergence_mpas's index(n_edges_on_cell, i) for the 5/6-valent Voronoi dual.",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "k": [1, 3]
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["edge_sign_on_face", "i", "k"] },
+                {
+                  "op": "/",
+                  "args": [
+                    { "op": "index", "args": [
+                        "dc_edge",
+                        { "op": "index", "args": ["edges_on_face", "i", "k"] }
+                    ]},
+                    { "op": "index", "args": ["tri_area", "i"] }
+                  ]
+                }
+              ]
+            },
+            { "op": "index", "args": [
+                "$F",
+                { "op": "index", "args": ["edges_on_face", "i", "k"] }
+            ]}
+          ]
+        },
+        "args": ["$F", "dc_edge", "tri_area", "edges_on_face", "edge_sign_on_face"]
+      }
+    }
+  }
+}

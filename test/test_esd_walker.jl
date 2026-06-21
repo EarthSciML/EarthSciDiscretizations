@@ -468,6 +468,26 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "divergence_duo"
+            # divergence_duo (esd-6g4.3): the DUO icosahedral-triangular flux-form
+            # divergence, the triangular-primal sibling of divergence_mpas. Layer-A
+            # passes via its canonical byte contract — an inline pattern+replacement
+            # rule (div($F, dim=cell) -> reduction arrayop weighted by
+            # edge_sign_on_face * dc_edge / tri_area) on a DUO grid with an
+            # edge-located F state; ESS discretize lowers div(F) and the walker
+            # byte-compares to the pinned expected.esm. Layer-B passes via the
+            # unstructured_divergence runner's DUO branch
+            # (mms_kind="div_const_field_sphere"): a constant cartesian field's
+            # edge-normal flux F_e=V·n̂_e (circumcenter-chord normal) is injected as
+            # the edge state, the builtin icosahedral ladder (level 2->3->4) is
+            # swept, and the cell-centered divergence is measured at each cell's
+            # circumcenter against -2(V·r̂)/R, clearing the expected_min_order of
+            # 0.9 (O(h) L∞ — the C-grid divergence is first-order in L∞ on the
+            # irregular icosahedral-triangular mesh, like nn_diffusion_duo).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "advection_mpas"
             # advection_mpas (esd-6g4.2): flux-form MPAS scalar advection
             # div(u*q) — the divergence_mpas reduction with the edge flux
@@ -745,7 +765,10 @@ using TestItems
     # esd-6g4.2 adds gradient_mpas (O(h²) MPAS edge-normal gradient) via the new
     # unstructured_gradient runner, taking the PASS count to 20 (advection_mpas
     # ships Layer-A only — its Layer-B convergence fixture is applicable:false).
-    @test layer_b_passes == 20
+    # esd-6g4.3 adds divergence_duo (O(h) DUO icosahedral-triangular flux-form
+    # divergence) via the same unstructured_divergence runner's DUO branch,
+    # taking the PASS count to 21.
+    @test layer_b_passes == 21
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

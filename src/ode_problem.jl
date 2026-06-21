@@ -597,9 +597,12 @@ function _inject_grids_mpas(
 end
 
 # Build dims for DUO icosahedral triangular grids.
-# GDD domain_spec must carry "n_cells" (integer = 20 * 4^level). When a
-# "loader" block is present, loads DuoGrid via build_duo_grid and returns it
-# as a third value so _unstructured_grid_const_arrays can emit its const_arrays.
+# GDD domain_spec must carry "n_cells" (integer = 20 * 4^level). Optional
+# "n_edges" (= 30 * 4^level) is declared as a dimension so edge-located states
+# (the edge-normal flux F of divergence_duo) resolve their shape — mirrors the
+# MPAS path. When a "loader" block is present, loads DuoGrid via build_duo_grid
+# and returns it as a third value so _unstructured_grid_const_arrays can emit
+# its const_arrays.
 function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
     n_cells_raw = get(domain_spec, "n_cells", nothing)
     n_cells_raw === nothing && throw(
@@ -621,6 +624,18 @@ function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
             "spacing" => "unstructured",
         ),
     ]
+
+    n_edges_raw = get(domain_spec, "n_edges", nothing)
+    if n_edges_raw !== nothing
+        push!(
+            dims, Dict{String, Any}(
+                "name" => "n_edges",
+                "size" => Int(n_edges_raw),
+                "periodic" => false,
+                "spacing" => "unstructured",
+            )
+        )
+    end
 
     # Load the DUO grid from the builtin icosahedral loader if specified.
     grid = nothing
@@ -787,9 +802,10 @@ end
 # gathers as `index(table, i = cell, k = slot)`.
 _cell_slot_table(m::AbstractMatrix) = Float64.(permutedims(m, (2, 1)))
 
-# DUO: the authored rule's coefficient is dc_edge[e] / (dv_edge[e] * area_eff[c])
-# and its reduction bound is the constant 3 — the closed icosahedral mesh is
-# valence-3, so every slot of cell_neighbors/edges_on_face is a real neighbour.
+# DUO: nn_diffusion_duo's coefficient is dc_edge[e] / (dv_edge[e] * area_eff[c]);
+# divergence_duo's is edge_sign_on_face[c,k] * dc_edge[e] / tri_area[c]. Both have
+# reduction bound the constant 3 — the closed icosahedral mesh is valence-3, so
+# every slot of cell_neighbors/edges_on_face/edge_sign_on_face is a real edge.
 #
 # The FVM-weight geometry is materialized directly from the FAQ-built DUO mesh
 # (esd-heg.9), retiring the imperative MPAS-Voronoi-dual round-trip that the prior
@@ -839,10 +855,46 @@ function _grid_primitive_arrays(grid::DuoGrid)
         area_eff[c] = 0.25 * s
     end
 
+    # edge_sign_on_face[k, c] ∈ {+1, -1}: the outward-normal orientation of the
+    # k-th primal edge of triangle c — the s_{i,k} factor of the flux-form
+    # divergence (divergence_duo; the triangular-primal analogue of MPAS's
+    # edge_sign_on_cell). Each primal edge is shared by exactly two triangular
+    # faces (the closed icosahedral mesh has no boundary). Convention: the
+    # reference edge normal points from the LOWER-indexed to the HIGHER-indexed of
+    # the edge's two incident faces (the divergence Layer-B runner samples
+    # F_e = V·n̂_e with the same lower→higher chord), so the normal points OUT of a
+    # face exactly when that face is the lower-indexed one:
+    #   sign = +1 if c == min(faces incident on e) else -1,  e = edges_on_face[k, c].
+    # Derived from the FAQ-built `edges_on_face` (byte-identical to the retired
+    # imperative `_extract_connectivity(::DuoGrid)` numbering), so it reproduces the
+    # prior host primitive exactly. Every slot k ∈ 1:3 is a real edge (valence-3
+    # closed mesh), so there is no padding to skip.
+    edge_face_lo = fill(typemax(Int), Ne)
+    @inbounds for c in 1:Nc, k in 1:3
+        e = edges_on_face[k, c]
+        c < edge_face_lo[e] && (edge_face_lo[e] = c)
+    end
+    edge_sign_on_face = Matrix{Int}(undef, 3, Nc)
+    @inbounds for c in 1:Nc, k in 1:3
+        e = edges_on_face[k, c]
+        edge_sign_on_face[k, c] = (c == edge_face_lo[e]) ? 1 : -1
+    end
+
     return Dict{String, AbstractArray{Float64}}(
         "cell_neighbors" => _cell_slot_table(grid.cell_neighbors),
         "edges_on_face" => _cell_slot_table(edges_on_face),
+        "edge_sign_on_face" => _cell_slot_table(edge_sign_on_face),
         "area" => area_eff,
+        # tri_area[c] = the spherical-triangle area of cell c (grid.area). This is
+        # the Gauss-divergence-theorem normalization for the FLUX-FORM divergence
+        # (divergence_duo): the flux integral ∮ F·n̂ dl runs over the three PRIMAL
+        # triangle edges (dc_edge lengths), so the enclosed area is the triangle
+        # itself — NOT the dc·dv "diamond" area_eff that normalizes the dc/dv
+        # Laplacian (nn_diffusion_duo). area_eff equals tri_area only for
+        # equilateral cells; on the distorted icosahedral mesh using area_eff for
+        # the divergence leaves an O(1) consistency error, while tri_area gives
+        # clean O(h) L∞ convergence.
+        "tri_area" => Float64.(grid.area),
         "dv_edge" => dv_edge,
         "dc_edge" => dc_edge,
     )

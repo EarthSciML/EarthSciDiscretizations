@@ -1405,62 +1405,150 @@ end
 
 # Single resolution of the unstructured-divergence sweep. Samples the constant
 # cartesian field V (from mms.aux) as the edge-normal flux F_e = V·n̂_e, drives
-# the divergence_mpas rule through build_ode_problem with F injected as the
-# edge-located state, and returns the L∞ error of the cell-centered divergence
-# output vs the analytic surface divergence -2(V·r̂)/R.
+# the flux-form divergence rule (divergence_mpas / divergence_duo) through
+# build_ode_problem with F injected as the edge-located state, and returns the
+# L∞ error of the cell-centered divergence output vs the analytic surface
+# divergence -2(V·r̂)/R. Supports both unstructured families: MPAS Voronoi cells
+# (esd-6g4.1) and DUO icosahedral triangular cells (esd-6g4.3). The two differ
+# only in how the per-edge reference normal and the per-cell evaluation point are
+# derived from the mesh; the rule, injection, and comparison are identical.
 function _run_layer_b_unstructured_divergence(mms, esm_path::AbstractString, gdd_path::AbstractString)
     gdd = JSON.parse(read(gdd_path, String))
     domain_spec = get(get(gdd, "grids", Dict{String, Any}()), "domain", Dict{String, Any}())
     family = String(get(domain_spec, "family", ""))
-    family == "mpas" || error(
-        "unstructured_divergence Layer-B runner currently supports family='mpas'; got '$family'"
-    )
 
-    loader_spec = get(domain_spec, "loader", nothing)
-    loader_spec === nothing && error("MPAS GDD missing loader spec")
-    loader_path = String(get(loader_spec, "path", ""))
-    startswith(loader_path, "builtin://") || error(
-        "unstructured_divergence Layer-B runner requires builtin:// MPAS path; got $loader_path"
-    )
-    R_sphere = Float64(get(loader_spec, "sphere_radius", 1.0))
-    grid = build_mpas_grid(
-        loader = Dict(
-            "path" => loader_path, "reader" => "auto",
-            "check" => String(get(loader_spec, "check", "strict"))
-        ),
-        R = R_sphere,
-    )
-    mesh = grid.mesh
-    Nc = mesh.n_cells
-    Ne = mesh.n_edges
-    R = Float64(grid.R)
-
-    # Constant cartesian field from the MMS auxiliary table.
+    # Constant cartesian field from the MMS auxiliary table (shared by families).
     aux = mms.aux
     (haskey(aux, "Vx") && haskey(aux, "Vy") && haskey(aux, "Vz")) || error(
         "unstructured_divergence runner: mms.aux missing Vx/Vy/Vz for the constant-field flux"
     )
     Vx = Float64(aux["Vx"]); Vy = Float64(aux["Vy"]); Vz = Float64(aux["Vz"])
 
-    # Edge-normal flux F_e = V·n̂_e. The reference normal points from
-    # cells_on_edge[1,e] to cells_on_edge[2,e] (MPAS "outward_from_first_cell"),
-    # matching edge_sign_on_cell. n̂_e is the tangent-plane projection (at the edge
-    # midpoint) of the cell-center chord, so V·n̂_e is the genuine normal
-    # component of the field threading the edge.
+    loader_spec = get(domain_spec, "loader", nothing)
+    loader_spec === nothing && error("$(family) GDD missing loader spec")
+    loader_path = String(get(loader_spec, "path", ""))
+    startswith(loader_path, "builtin://") || error(
+        "unstructured_divergence Layer-B runner requires a builtin:// loader path; got $loader_path"
+    )
+    R_sphere = Float64(get(loader_spec, "sphere_radius", 1.0))
+
+    # Per-family: build the mesh, the edge-normal flux injection (extra_ics), the
+    # cell count, the sphere radius, and the per-cell (lon, lat) evaluation point.
     extra_ics = Dict{String, Float64}()
-    sizehint!(extra_ics, Ne)
-    for e in 1:Ne
-        c1 = mesh.cells_on_edge[1, e]
-        c2 = mesh.cells_on_edge[2, e]
-        le = mesh.lon_edge[e]; be = mesh.lat_edge[e]
-        rhx = cos(be) * cos(le); rhy = cos(be) * sin(le); rhz = sin(be)
-        dx = mesh.x_cell[c2] - mesh.x_cell[c1]
-        dy = mesh.y_cell[c2] - mesh.y_cell[c1]
-        dz = mesh.z_cell[c2] - mesh.z_cell[c1]
-        dr = dx * rhx + dy * rhy + dz * rhz
-        nx = dx - dr * rhx; ny = dy - dr * rhy; nz = dz - dr * rhz
-        nn = sqrt(nx^2 + ny^2 + nz^2)
-        extra_ics["F[$e]"] = (Vx * nx + Vy * ny + Vz * nz) / nn
+    local Nc::Int
+    local R::Float64
+    local cell_lon::Vector{Float64}
+    local cell_lat::Vector{Float64}
+
+    if family == "mpas"
+        grid = build_mpas_grid(
+            loader = Dict(
+                "path" => loader_path, "reader" => "auto",
+                "check" => String(get(loader_spec, "check", "strict"))
+            ),
+            R = R_sphere,
+        )
+        mesh = grid.mesh
+        Nc = mesh.n_cells
+        Ne = mesh.n_edges
+        R = Float64(grid.R)
+        cell_lon = Float64.(mesh.lon_cell)
+        cell_lat = Float64.(mesh.lat_cell)
+
+        # Edge-normal flux F_e = V·n̂_e. The reference normal points from
+        # cells_on_edge[1,e] to cells_on_edge[2,e] (MPAS "outward_from_first_cell"),
+        # matching edge_sign_on_cell. n̂_e is the tangent-plane projection (at the
+        # edge midpoint) of the cell-center chord, so V·n̂_e is the genuine normal
+        # component of the field threading the edge.
+        sizehint!(extra_ics, Ne)
+        for e in 1:Ne
+            c1 = mesh.cells_on_edge[1, e]
+            c2 = mesh.cells_on_edge[2, e]
+            le = mesh.lon_edge[e]; be = mesh.lat_edge[e]
+            rhx = cos(be) * cos(le); rhy = cos(be) * sin(le); rhz = sin(be)
+            dx = mesh.x_cell[c2] - mesh.x_cell[c1]
+            dy = mesh.y_cell[c2] - mesh.y_cell[c1]
+            dz = mesh.z_cell[c2] - mesh.z_cell[c1]
+            dr = dx * rhx + dy * rhy + dz * rhz
+            nx = dx - dr * rhx; ny = dy - dr * rhy; nz = dz - dr * rhz
+            nn = sqrt(nx^2 + ny^2 + nz^2)
+            extra_ics["F[$e]"] = (Vx * nx + Vy * ny + Vz * nz) / nn
+        end
+    elseif family == "duo"
+        grid = build_duo_grid(
+            loader = (
+                path = loader_path,
+                reader = String(get(loader_spec, "reader", "auto")),
+                check = String(get(loader_spec, "check", "strict")),
+            ),
+            R = R_sphere,
+        )
+        R = Float64(grid.R)
+        faces = grid.faces            # (3, Nc) vertex indices
+        verts = grid.vertices         # (3, Nv) R-scaled cartesian
+        edges = grid.edges            # (2, Ne) sorted vertex pairs
+        Nc = size(faces, 2)
+        Ne = size(edges, 2)
+        # The triangular cell's FV center is its circumcenter (Voronoi
+        # orthogonality: the circumcenter-to-circumcenter chord across a primal
+        # edge is perpendicular to that edge), so analytic divergence is sampled
+        # at the circumcenter (cc_lon/cc_lat), exactly as nn_diffusion_duo's
+        # unstructured_ode runner uses it for the cell center.
+        cell_lon = Float64.(grid.cc_lon)
+        cell_lat = Float64.(grid.cc_lat)
+
+        # Circumcenter cartesian unit vectors per face (the dual vertices).
+        ccx = Vector{Float64}(undef, Nc)
+        ccy = Vector{Float64}(undef, Nc)
+        ccz = Vector{Float64}(undef, Nc)
+        for c in 1:Nc
+            lo = grid.cc_lon[c]; la = grid.cc_lat[c]
+            ccx[c] = cos(la) * cos(lo); ccy[c] = cos(la) * sin(lo); ccz[c] = sin(la)
+        end
+
+        # Edge → its two incident faces (sorted vertex-pair key, matching the
+        # MPAS-dual edge numbering used by edges_on_face/dc_edge). Built inline
+        # from faces so it stays aligned with grid.edges regardless of build order
+        # — the same construction _duo_edge_cells performs.
+        cells_by_key = Dict{Tuple{Int, Int}, Tuple{Int, Int}}()
+        for c in 1:Nc
+            v1 = faces[1, c]; v2 = faces[2, c]; v3 = faces[3, c]
+            for (a, b) in ((v2, v3), (v3, v1), (v1, v2))
+                key = a < b ? (a, b) : (b, a)
+                prev = get(cells_by_key, key, (0, 0))
+                cells_by_key[key] = prev[1] == 0 ? (c, 0) : (prev[1], c)
+            end
+        end
+
+        # Edge-normal flux F_e = V·n̂_e. The reference normal points from the
+        # LOWER-indexed to the HIGHER-indexed incident face (matching
+        # edge_sign_on_face's convention: sign = +1 for the lower-indexed face),
+        # tangent-plane projected at the primal edge midpoint. The chord is the
+        # circumcenter-to-circumcenter (dual-edge) direction, which is
+        # perpendicular to the primal edge.
+        sizehint!(extra_ics, Ne)
+        for e in 1:Ne
+            v1 = edges[1, e]; v2 = edges[2, e]
+            key = v1 < v2 ? (v1, v2) : (v2, v1)
+            fa, fb = cells_by_key[key]
+            flo = min(fa, fb); fhi = max(fa, fb)
+            # Edge midpoint direction (unit), from the two R-scaled vertices.
+            mx = verts[1, v1] + verts[1, v2]
+            my = verts[2, v1] + verts[2, v2]
+            mz = verts[3, v1] + verts[3, v2]
+            mn = sqrt(mx^2 + my^2 + mz^2)
+            rhx = mx / mn; rhy = my / mn; rhz = mz / mn
+            # Circumcenter chord lower→higher, tangent-projected at the midpoint.
+            dx = ccx[fhi] - ccx[flo]; dy = ccy[fhi] - ccy[flo]; dz = ccz[fhi] - ccz[flo]
+            dr = dx * rhx + dy * rhy + dz * rhz
+            nx = dx - dr * rhx; ny = dy - dr * rhy; nz = dz - dr * rhz
+            nn = sqrt(nx^2 + ny^2 + nz^2)
+            extra_ics["F[$e]"] = (Vx * nx + Vy * ny + Vz * nz) / nn
+        end
+    else
+        error(
+            "unstructured_divergence Layer-B runner supports family ∈ {mpas, duo}; got '$family'"
+        )
     end
 
     prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
@@ -1475,7 +1563,7 @@ function _run_layer_b_unstructured_divergence(mms, esm_path::AbstractString, gdd
         # Analytic surface divergence of the tangential projection of the constant
         # field on a sphere of radius R: ∇_s·V_t = -(2/R)(V·r̂). The MMS catalog's
         # `derivative` returns the unit-sphere value -2(V·r̂); divide by R here.
-        analytic = mms.derivative(mesh.lon_cell[c], mesh.lat_cell[c]) / R
+        analytic = mms.derivative(cell_lon[c], cell_lat[c]) / R
         err = max(err, abs(du[idx] - analytic))
     end
     return err
