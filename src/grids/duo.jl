@@ -72,41 +72,10 @@ const _DUO_FAMILY_VERSION = "1.0.0"
 # --- Base icosahedron ---------------------------------------------------
 
 """
-Return the 12 canonical icosahedron vertices on the unit sphere, as a
-(3, 12) matrix of element type `T`. Ordering is fixed and deterministic
-so subdivision level-0 output is byte-stable across runs and platforms.
-"""
-function _icosahedron_vertices(::Type{T}) where {T}
-    φ = (T(1) + sqrt(T(5))) / T(2)
-    raw = T[
-        0  1  φ;
-        0 -1  φ;
-        0  1 -φ;
-        0 -1 -φ;
-        1  φ  0;
-        -1  φ  0;
-        1 -φ  0;
-        -1 -φ  0;
-        φ  0  1;
-        φ  0 -1;
-        -φ  0  1;
-        -φ  0 -1;
-    ]
-    V = Matrix{T}(undef, 3, 12)
-    for i in 1:12
-        v = @view raw[i, :]
-        n = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
-        V[1, i] = v[1] / n
-        V[2, i] = v[2] / n
-        V[3, i] = v[3] / n
-    end
-    return V
-end
-
-"""
 Return the 20 triangular faces of the base icosahedron as (3, 20) Int
-matrix of 1-based vertex indices into `_icosahedron_vertices`. Winding
-is outward (right-hand rule → outward normal for positive spherical area).
+matrix of 1-based vertex indices into the canonical seed-vertex order
+(see `_faq_seed_vertices`, src/subdivide_faq.jl). Winding is outward
+(right-hand rule → outward normal for positive spherical area).
 """
 function _icosahedron_faces()
     F = [
@@ -132,139 +101,6 @@ function _icosahedron_faces()
         12  4  3;
     ]
     return Matrix{Int}(F')
-end
-
-# --- Recursive subdivision ---------------------------------------------
-
-# Edge-midpoint cache keyed on sorted vertex-pair → new vertex index.
-function _midpoint!(
-        V::Vector{NTuple{3, T}}, cache::Dict{Tuple{Int, Int}, Int},
-        a::Int, b::Int
-    ) where {T}
-    key = a < b ? (a, b) : (b, a)
-    idx = get(cache, key, 0)
-    if idx != 0
-        return idx
-    end
-    va = V[a]; vb = V[b]
-    mx = va[1] + vb[1]; my = va[2] + vb[2]; mz = va[3] + vb[3]
-    n = sqrt(mx^2 + my^2 + mz^2)
-    push!(V, (mx / n, my / n, mz / n))
-    idx = length(V)
-    cache[key] = idx
-    return idx
-end
-
-"""
-Subdivide the base icosahedron `level` times on the unit sphere. Returns
-(vertices 3×Nv, faces 3×Nc) at level `level`.
-"""
-function _subdivide_icosahedron(::Type{T}, level::Int) where {T}
-    V0 = _icosahedron_vertices(T)
-    F0 = _icosahedron_faces()
-    verts = NTuple{3, T}[(V0[1, i], V0[2, i], V0[3, i]) for i in 1:size(V0, 2)]
-    faces = Tuple{Int, Int, Int}[(F0[1, c], F0[2, c], F0[3, c]) for c in 1:size(F0, 2)]
-
-    for _ in 1:level
-        cache = Dict{Tuple{Int, Int}, Int}()
-        new_faces = Tuple{Int, Int, Int}[]
-        sizehint!(new_faces, 4 * length(faces))
-        for (a, b, c) in faces
-            ab = _midpoint!(verts, cache, a, b)
-            bc = _midpoint!(verts, cache, b, c)
-            ca = _midpoint!(verts, cache, c, a)
-            push!(new_faces, (a, ab, ca))
-            push!(new_faces, (b, bc, ab))
-            push!(new_faces, (c, ca, bc))
-            push!(new_faces, (ab, bc, ca))
-        end
-        faces = new_faces
-    end
-
-    Nv = length(verts); Nc = length(faces)
-    V = Matrix{T}(undef, 3, Nv)
-    for i in 1:Nv
-        v = verts[i]
-        V[1, i] = v[1]; V[2, i] = v[2]; V[3, i] = v[3]
-    end
-    F = Matrix{Int}(undef, 3, Nc)
-    for c in 1:Nc
-        f = faces[c]
-        F[1, c] = f[1]; F[2, c] = f[2]; F[3, c] = f[3]
-    end
-    return V, F
-end
-
-# --- Geometry helpers --------------------------------------------------
-
-_cart_to_lonlat(x::T, y::T, z::T) where {T} = (atan(y, x), asin(clamp(z, -one(T), one(T))))
-
-"""
-Spherical excess area of the unit-sphere triangle with vertices a,b,c
-(given as 3-tuples). Uses L'Huilier's theorem for numerical stability
-on near-degenerate triangles.
-"""
-function _spherical_triangle_area(a, b, c)
-    # Side lengths (great-circle arcs, on unit sphere).
-    da = acos(clamp(b[1] * c[1] + b[2] * c[2] + b[3] * c[3], -1.0, 1.0))
-    db = acos(clamp(c[1] * a[1] + c[2] * a[2] + c[3] * a[3], -1.0, 1.0))
-    dc = acos(clamp(a[1] * b[1] + a[2] * b[2] + a[3] * b[3], -1.0, 1.0))
-    s = 0.5 * (da + db + dc)
-    # L'Huilier: tan(E/4) = sqrt(tan(s/2) tan((s-a)/2) tan((s-b)/2) tan((s-c)/2))
-    t = tan(s / 2) * tan((s - da) / 2) * tan((s - db) / 2) * tan((s - dc) / 2)
-    t = max(t, 0.0)
-    return 4 * atan(sqrt(t))
-end
-
-# --- Connectivity -------------------------------------------------------
-
-"""
-Return (edges, cell_neighbors) from a faces matrix (3, Nc).
-- `edges`: (2, Ne) sorted vertex pairs (a < b).
-- `cell_neighbors`: (3, Nc) where `cell_neighbors[k, c]` is the cell
-  sharing the edge opposite vertex `faces[k, c]` in cell c. That edge
-  is (faces[k%3+1, c], faces[(k+1)%3+1, c]). 0 if no neighbor.
-"""
-function _build_connectivity(faces::Matrix{Int})
-    Nc = size(faces, 2)
-    # edge_key (min,max) → Vector of (cell, local_edge_k)
-    edge_map = Dict{Tuple{Int, Int}, Vector{Tuple{Int, Int}}}()
-    for c in 1:Nc
-        v1 = faces[1, c]; v2 = faces[2, c]; v3 = faces[3, c]
-        # Edge opposite vertex k=1 is (v2, v3); k=2 → (v3, v1); k=3 → (v1, v2)
-        for (k, (a, b)) in enumerate(((v2, v3), (v3, v1), (v1, v2)))
-            key = a < b ? (a, b) : (b, a)
-            list = get!(edge_map, key, Tuple{Int, Int}[])
-            push!(list, (c, k))
-        end
-    end
-    neighbors = zeros(Int, 3, Nc)
-    edges = Matrix{Int}(undef, 2, length(edge_map))
-    e = 0
-    for (key, list) in edge_map
-        e += 1
-        edges[1, e] = key[1]; edges[2, e] = key[2]
-        if length(list) == 2
-            (c1, k1), (c2, k2) = list[1], list[2]
-            neighbors[k1, c1] = c2
-            neighbors[k2, c2] = c1
-        elseif length(list) > 2
-            throw(AssertionError("duo: non-manifold edge $(key) shared by $(length(list)) cells"))
-        end
-        # length==1 → boundary; closed icosahedral mesh has none.
-    end
-    return edges, neighbors
-end
-
-function _vertex_faces(faces::Matrix{Int}, Nv::Int)
-    vf = [Int[] for _ in 1:Nv]
-    for c in 1:size(faces, 2), k in 1:3
-        push!(vf[faces[k, c]], c)
-    end
-    for v in 1:Nv
-        sort!(vf[v])
-    end
-    return vf
 end
 
 # --- Loader --------------------------------------------------------------
@@ -354,10 +190,10 @@ function build_duo_grid(;
     #     `EarthSciSerialization.Relational`; edges in the ESS canonical sorted order).
     # The imperative builders (`_subdivide_icosahedron`, `_build_connectivity`,
     # `_vertex_faces`, `_spherical_triangle_area`, the geometry loops, `_duo_arc`)
-    # are no longer on the production path — they remain defined only for the
-    # conformance tests until esd-heg.9 deletes them. Byte-identical (T=Float64) to
-    # the prior imperative output for every cell-indexed field; edges adopt the
-    # canonical (sorted) numbering (no test pins edge order; the golden is canonical).
+    # have been removed (esd-heg.9); this FAQ path is the sole construction route.
+    # Byte-identical (T=Float64) to the prior imperative output for every
+    # cell-indexed field; edges adopt the canonical (sorted) numbering (no test
+    # pins edge order; the golden is canonical).
     V, F = duo_subdivide_faq(T, level)               # D3: unit-sphere vertices + faces
     Nv = size(V, 2)
     Nc = size(F, 2)
@@ -649,17 +485,6 @@ function _duo_edge_cells(g::DuoGrid)
         end
         return out
     end
-end
-
-# Great-circle arc (on the sphere of radius R) between two stored points,
-# each given as a column of an `R`-scaled cartesian array. Normalizes to the
-# unit sphere first, so the result is `R · central_angle`.
-@inline function _duo_arc(g::DuoGrid{T}, P::AbstractMatrix{T}, i::Int, j::Int) where {T}
-    R = g.R
-    ax = P[1, i] / R; ay = P[2, i] / R; az = P[3, i] / R
-    bx = P[1, j] / R; by = P[2, j] / R; bz = P[3, j] / R
-    d = clamp(ax * bx + ay * by + az * bz, -one(T), one(T))
-    return R * acos(d)
 end
 
 """

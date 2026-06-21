@@ -66,7 +66,7 @@
     # geometry bit-for-bit, at every subdivision level.
     for level in 0:2
         g = build_duo_grid(loader = (path = "builtin://icosahedral/$level", reader = "builtin_icosahedral"))
-        V, F = ESD._subdivide_icosahedron(Float64, level)   # unit verts + faces, as build uses
+        V, F = ESD.duo_subdivide_faq(Float64, level)   # unit verts + faces, as build uses
         R = g.R
         Nc = size(F, 2)
         @test Nc == ESD.n_cells(g)
@@ -91,7 +91,7 @@
     # positive — independent confirmation the geometry is right, not just self-consistent.
     let
         g = build_duo_grid(loader = (path = "builtin://icosahedral/1", reader = "builtin_icosahedral"))
-        V, F = ESD._subdivide_icosahedron(Float64, 1)
+        V, F = ESD.duo_subdivide_faq(Float64, 1)
         R = g.R
         faq_area = [ESD.eval_coeff(area, bindings(V, F[1, c], F[2, c], F[3, c], R)) for c in 1:size(F, 2)]
         @test all(>(0), faq_area)
@@ -217,7 +217,7 @@ end
         mk("tan", half(mk("-", s, db))), mk("tan", half(mk("-", s, dc))))
     area = mk("*", mk("*", 4.0, mk("atan", mk("sqrt", t))), mk("*", "R", "R"))
 
-    V, F = ESD._subdivide_icosahedron(Float64, 0)
+    V, F = ESD.duo_subdivide_faq(Float64, 0)
     R = g.R
     for c in 1:Nc
         i, j, k = F[1, c], F[2, c], F[3, c]

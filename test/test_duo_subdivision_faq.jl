@@ -82,8 +82,8 @@
     # A single FAQ pass applied to level n must reproduce the imperative level n+1
     # mesh exactly (n = 0 and n = 1).
     for n in 0:1
-        Vn, Fn = ESD._subdivide_icosahedron(Float64, n)
-        Vexp, Fexp = ESD._subdivide_icosahedron(Float64, n + 1)
+        Vn, Fn = ESD.duo_subdivide_faq(Float64, n)
+        Vexp, Fexp = ESD.duo_subdivide_faq(Float64, n + 1)
         Vfaq, Ffaq, edges = faq_refine_once(Vn, Fn)
 
         # Counts: Nv' = Nv + Ne, Nc' = 4·Nc; Ne = 3·Nc/2 (closed triangular mesh).
@@ -108,7 +108,7 @@
     # (D) Orientation/permutation independence of the value invention: shuffling and
     #     reversing the input faces must not change the invented edge set (the
     #     determinism contract that makes the labeling cross-binding stable).
-    V0, F0 = ESD._subdivide_icosahedron(Float64, 0)
+    V0, F0 = ESD.duo_subdivide_faq(Float64, 0)
     _, _, edges0 = faq_refine_once(V0, F0)
     Fperm = F0[:, reverse(1:size(F0, 2))]            # permuted faces
     Frev = vcat(F0[3:3, :], F0[2:2, :], F0[1:1, :])  # reversed winding per face
@@ -148,7 +148,7 @@ end
         joinpath(FAQ_DIR, "fixtures", "canonical", "edge_set_level0.json");
         dicttype = Dict{String, Any},
     )
-    V0, F0 = ESD._subdivide_icosahedron(Float64, 0)
+    V0, F0 = ESD.duo_subdivide_faq(Float64, 0)
     pairs = Tuple{Int,Int}[]
     for f in 1:size(F0, 2)
         a, b, c = F0[1, f], F0[2, f], F0[3, f]

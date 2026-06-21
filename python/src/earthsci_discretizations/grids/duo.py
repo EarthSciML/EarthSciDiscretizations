@@ -103,34 +103,6 @@ def _resolve_loader_level(loader: DuoLoader) -> int:
 # --- Base icosahedron --------------------------------------------------------
 
 
-def _icosahedron_vertices() -> np.ndarray:
-    """Return the 12 canonical icosahedron unit-sphere vertices as ``(3, 12)``.
-
-    Ordering is fixed so subdivision level-0 output is byte-stable across runs
-    and platforms and matches the Julia binding (:file:`src/grids/duo.jl`).
-    """
-    phi = (1.0 + math.sqrt(5.0)) / 2.0
-    raw = np.array(
-        [
-            [0.0, 1.0, phi],
-            [0.0, -1.0, phi],
-            [0.0, 1.0, -phi],
-            [0.0, -1.0, -phi],
-            [1.0, phi, 0.0],
-            [-1.0, phi, 0.0],
-            [1.0, -phi, 0.0],
-            [-1.0, -phi, 0.0],
-            [phi, 0.0, 1.0],
-            [phi, 0.0, -1.0],
-            [-phi, 0.0, 1.0],
-            [-phi, 0.0, -1.0],
-        ],
-        dtype=np.float64,
-    )
-    norms = np.linalg.norm(raw, axis=1, keepdims=True)
-    return (raw / norms).T.copy()  # shape (3, 12)
-
-
 def _icosahedron_faces() -> np.ndarray:
     """Return the 20 triangular faces as ``(3, 20)`` of 0-based vertex indices.
 
@@ -164,143 +136,6 @@ def _icosahedron_faces() -> np.ndarray:
         dtype=np.int64,
     )
     return (faces_1based - 1).T.copy()  # shape (3, 20)
-
-
-# --- Recursive subdivision ---------------------------------------------------
-
-
-def _subdivide_icosahedron(level: int) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(vertices (3, Nv), faces (3, Nc))`` after ``level`` subdivisions."""
-    V0 = _icosahedron_vertices()
-    F0 = _icosahedron_faces()
-    verts: list[tuple[float, float, float]] = [
-        (float(V0[0, i]), float(V0[1, i]), float(V0[2, i])) for i in range(V0.shape[1])
-    ]
-    faces: list[tuple[int, int, int]] = [
-        (int(F0[0, c]), int(F0[1, c]), int(F0[2, c])) for c in range(F0.shape[1])
-    ]
-
-    for _ in range(level):
-        cache: dict[tuple[int, int], int] = {}
-
-        def midpoint(a: int, b: int, _cache: dict = cache) -> int:
-            key = (a, b) if a < b else (b, a)
-            idx = _cache.get(key)
-            if idx is not None:
-                return idx
-            va = verts[a]
-            vb = verts[b]
-            mx = va[0] + vb[0]
-            my = va[1] + vb[1]
-            mz = va[2] + vb[2]
-            n = math.sqrt(mx * mx + my * my + mz * mz)
-            verts.append((mx / n, my / n, mz / n))
-            idx = len(verts) - 1
-            _cache[key] = idx
-            return idx
-
-        new_faces: list[tuple[int, int, int]] = []
-        for a, b, c in faces:
-            ab = midpoint(a, b)
-            bc = midpoint(b, c)
-            ca = midpoint(c, a)
-            new_faces.append((a, ab, ca))
-            new_faces.append((b, bc, ab))
-            new_faces.append((c, ca, bc))
-            new_faces.append((ab, bc, ca))
-        faces = new_faces
-
-    Nv = len(verts)
-    Nc = len(faces)
-    V = np.empty((3, Nv), dtype=np.float64)
-    for i, v in enumerate(verts):
-        V[0, i], V[1, i], V[2, i] = v
-    F = np.empty((3, Nc), dtype=np.int64)
-    for c, f in enumerate(faces):
-        F[0, c], F[1, c], F[2, c] = f
-    return V, F
-
-
-# --- Geometry helpers --------------------------------------------------------
-
-
-def _cart_to_lonlat(x: float, y: float, z: float) -> tuple[float, float]:
-    return (math.atan2(y, x), math.asin(max(-1.0, min(1.0, z))))
-
-
-def _spherical_triangle_area(
-    a: tuple[float, float, float],
-    b: tuple[float, float, float],
-    c: tuple[float, float, float],
-) -> float:
-    """Spherical excess of the unit-sphere triangle ``(a, b, c)`` via L'Huilier.
-
-    Numerically stable on near-degenerate triangles - matches the Julia
-    binding's ``_spherical_triangle_area``.
-    """
-    da = math.acos(max(-1.0, min(1.0, b[0] * c[0] + b[1] * c[1] + b[2] * c[2])))
-    db = math.acos(max(-1.0, min(1.0, c[0] * a[0] + c[1] * a[1] + c[2] * a[2])))
-    dc = math.acos(max(-1.0, min(1.0, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])))
-    s = 0.5 * (da + db + dc)
-    t = (
-        math.tan(s / 2)
-        * math.tan((s - da) / 2)
-        * math.tan((s - db) / 2)
-        * math.tan((s - dc) / 2)
-    )
-    if t < 0.0:
-        t = 0.0
-    return 4.0 * math.atan(math.sqrt(t))
-
-
-# --- Connectivity ------------------------------------------------------------
-
-
-def _build_connectivity(
-    faces: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Build ``(edges (2, Ne), cell_neighbors (3, Nc))`` from faces ``(3, Nc)``.
-
-    ``cell_neighbors[k, c]`` is the cell sharing the edge opposite vertex
-    ``faces[k, c]`` in cell ``c`` (that edge spans ``faces[(k+1) % 3, c]`` and
-    ``faces[(k+2) % 3, c]``). ``-1`` means no neighbor.
-    """
-    Nc = faces.shape[1]
-    edge_map: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    for c in range(Nc):
-        v1, v2, v3 = int(faces[0, c]), int(faces[1, c]), int(faces[2, c])
-        pairs = ((v2, v3), (v3, v1), (v1, v2))
-        for k, (a, b) in enumerate(pairs):
-            key = (a, b) if a < b else (b, a)
-            edge_map.setdefault(key, []).append((c, k))
-
-    Ne = len(edge_map)
-    edges = np.empty((2, Ne), dtype=np.int64)
-    neighbors = np.full((3, Nc), -1, dtype=np.int64)
-    for e, (key, cells) in enumerate(edge_map.items()):
-        edges[0, e] = key[0]
-        edges[1, e] = key[1]
-        if len(cells) == 2:
-            (c1, k1), (c2, k2) = cells
-            neighbors[k1, c1] = c2
-            neighbors[k2, c2] = c1
-        elif len(cells) > 2:
-            raise AssertionError(
-                f"duo: non-manifold edge {key} shared by {len(cells)} cells"
-            )
-    return edges, neighbors
-
-
-def _vertex_faces(faces: np.ndarray, Nv: int) -> list[list[int]]:
-    vf: list[list[int]] = [[] for _ in range(Nv)]
-    Nc = faces.shape[1]
-    for c in range(Nc):
-        vf[int(faces[0, c])].append(c)
-        vf[int(faces[1, c])].append(c)
-        vf[int(faces[2, c])].append(c)
-    for v in range(Nv):
-        vf[v].sort()
-    return vf
 
 
 # --- Grid class --------------------------------------------------------------
@@ -558,8 +393,7 @@ def duo(
     np_dtype = _DTYPE_MAP[dtype]
 
     # ---- Declarative construction via the ESS front-door (esd-un6 / W2) --------
-    # The mesh is materialized through the landed ``earthsci_toolkit`` evaluators,
-    # NOT the imperative ``duo.py`` construction:
+    # The mesh is materialized through the landed ``earthsci_toolkit`` evaluators:
     #   * D3 subdivision  -> ``duo_subdivide_faq`` (every coordinate via
     #     ``eval_coeff``; vertex/face numbering kept in the imperative encounter
     #     order required for the primal-vertex-indexed Voronoi-dual byte-identity),
@@ -567,13 +401,8 @@ def duo(
     #   * D1a primal topology -> ``primal_topology_faq`` (value-invention through the
     #     relational skolem/distinct/rank/equijoin primitives; edges in the ESS
     #     canonical sorted order).
-    # The imperative builders (``_subdivide_icosahedron``, ``_build_connectivity``,
-    # ``_vertex_faces``, ``_spherical_triangle_area``, ``_cart_to_lonlat``, the
-    # cell-geometry loop) are no longer on the production path — they remain defined
-    # only until esd-heg.9 deletes them. Byte-identical (``float64``) to the prior
-    # imperative output for every cell-/face-/vertex-indexed field; edges adopt the
-    # canonical (sorted) numbering (no test pins edge order; mirrors the Julia W1
-    # path, ``src/grids/duo.jl``).
+    # Edges adopt the canonical (sorted) numbering (no test pins edge order; mirrors
+    # the Julia W1 path, ``src/grids/duo.jl``).
     V_unit, F = duo_subdivide_faq(level)  # D3: unit-sphere vertices + faces
     Nv = V_unit.shape[1]
 

@@ -53,7 +53,7 @@
 
     for level in 0:2
         g = build_duo_grid(loader = (path = "builtin://icosahedral/$level", reader = "builtin_icosahedral"))
-        V, F = ESD._subdivide_icosahedron(Float64, level)
+        V, F = ESD.duo_subdivide_faq(Float64, level)
         R = g.R
         Nc = ESD.n_cells(g)
 
@@ -205,7 +205,7 @@ end
             dicttype = Dict{String, Any},
         )
         g = build_duo_grid(loader = (path = "builtin://icosahedral/$level", reader = "builtin_icosahedral"))
-        V, F = ESD._subdivide_icosahedron(Float64, level)
+        V, F = ESD.duo_subdivide_faq(Float64, level)
         Nc = ESD.n_cells(g)
         @test golden["n_cells"] == Nc
         @test golden["level"] == level

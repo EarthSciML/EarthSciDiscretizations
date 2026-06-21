@@ -695,66 +695,6 @@ end
 # Unstructured connectivity extraction (geometry source for Route B binding)
 # ---------------------------------------------------------------------------
 
-# Return (ctables, scalar_arrs) for a DuoGrid:
-# ctables maps name → Matrix{Int} or Vector{Int} (integer connectivity);
-# scalar_arrs maps name → Vector{Float64} (per-cell float geometry).
-function _extract_connectivity(grid::DuoGrid)
-    # Build MPAS Voronoi dual to obtain circumcenter-to-circumcenter (dv_edge)
-    # and primal-edge-length (dc_edge) geometry needed for the FVM weights.
-    mesh = _duo_voronoi_dual(grid.level; R = grid.R)
-
-    # Invert cells_on_edge: (DUO vertex pair) → MPAS edge index.
-    Ne = mesh.n_edges
-    edge_idx_duo = Dict{Tuple{Int, Int}, Int}()
-    sizehint!(edge_idx_duo, Ne)
-    for e in 1:Ne
-        v1 = mesh.cells_on_edge[1, e]
-        v2 = mesh.cells_on_edge[2, e]
-        key = v1 < v2 ? (v1, v2) : (v2, v1)
-        edge_idx_duo[key] = e
-    end
-
-    # Build edges_on_face (3 × Nc, 0-based k): local edge k of DUO triangle c
-    # → MPAS edge index. Edge opposite vertex k+1 (1-based) of each triangle:
-    #   k=0 (opposite v1): edge (v2, v3)
-    #   k=1 (opposite v2): edge (v3, v1)
-    #   k=2 (opposite v3): edge (v1, v2)
-    Nc = size(grid.faces, 2)
-    edges_on_face = Matrix{Int}(undef, 3, Nc)
-    for c in 1:Nc
-        v1 = grid.faces[1, c]; v2 = grid.faces[2, c]; v3 = grid.faces[3, c]
-        edges_on_face[1, c] = edge_idx_duo[v2 < v3 ? (v2, v3) : (v3, v2)]
-        edges_on_face[2, c] = edge_idx_duo[v3 < v1 ? (v3, v1) : (v1, v3)]
-        edges_on_face[3, c] = edge_idx_duo[v1 < v2 ? (v1, v2) : (v2, v1)]
-    end
-
-    # area_eff[c] = (1/4) Σ_k dc_edge[k] * dv_edge[k] is the correct
-    # normalization area for the dc/dv FVM formula on triangular DUO cells.
-    # It equals the triangle area for equilateral cells and gives second-order
-    # accuracy on quasi-uniform meshes where grid.area (circumscribed-circle
-    # area) would not cancel the O(h) balance residual from distorted cells.
-    area_eff = Vector{Float64}(undef, Nc)
-    for c in 1:Nc
-        s = 0.0
-        for k in 1:3
-            e = edges_on_face[k, c]
-            s += mesh.dc_edge[e] * mesh.dv_edge[e]
-        end
-        area_eff[c] = 0.25 * s
-    end
-
-    ctables = Dict{String, Any}(
-        "cell_neighbors" => grid.cell_neighbors,  # 3 × n_cells, 1-based, 0-based k
-        "edges_on_face" => edges_on_face,         # 3 × n_cells, MPAS edge idx, 0-based k
-    )
-    scalar_arrs = Dict{String, Vector{Float64}}(
-        "area" => area_eff,
-        "dv_edge" => mesh.dv_edge,
-        "dc_edge" => mesh.dc_edge,
-    )
-    return ctables, scalar_arrs
-end
-
 function _extract_connectivity(grid::MpasGrid)
     mesh = grid.mesh
 
@@ -843,14 +783,61 @@ _cell_slot_table(m::AbstractMatrix) = Float64.(permutedims(m, (2, 1)))
 # DUO: the authored rule's coefficient is dc_edge[e] / (dv_edge[e] * area_eff[c])
 # and its reduction bound is the constant 3 — the closed icosahedral mesh is
 # valence-3, so every slot of cell_neighbors/edges_on_face is a real neighbour.
+#
+# The FVM-weight geometry is materialized directly from the FAQ-built DUO mesh
+# (esd-heg.9), retiring the imperative MPAS-Voronoi-dual round-trip that the prior
+# `_extract_connectivity(::DuoGrid)` performed:
+#   dc_edge[e]    = primal edge length (vertex↔vertex great-circle arc, D2b FAQ),
+#   dv_edge[e]    = dual edge length   (circumcenter↔circumcenter arc, D2b FAQ),
+#   edges_on_face = pure-integer triangle-local-edge → canonical edge id,
+#   area_eff[c]   = ¼ Σ_k dc_edge[k]·dv_edge[k] — the dc/dv FVM normalisation area
+#     (equals the triangle area for equilateral cells; gives second-order accuracy
+#     on quasi-uniform meshes where the circumscribed-circle `grid.area` would not).
+# Byte-identical (Float64) to the prior `_extract_connectivity(::DuoGrid)` output.
 function _grid_primitive_arrays(grid::DuoGrid)
-    ctables, scalar_arrs = _extract_connectivity(grid)
+    Nc = size(grid.faces, 2)
+
+    # Per-edge geometry (Float64, edge-aligned with grid.edges) via the D2b FAQ.
+    dc_edge = duo_edge_length_faq(Float64, grid.vertices, grid.edges, grid.R)
+    Vunit = Float64.(grid.vertices) ./ Float64(grid.R)
+    face_cc = duo_face_circumcenters_faq(Float64, Vunit, grid.faces, grid.cell_cart)
+    edge_cells = _duo_edge_cells(grid)
+    dv_edge = duo_dual_edge_length_faq(Float64, face_cc, edge_cells, grid.R)
+
+    # Canonical (min,max) vertex-pair → dense edge id (grid.edges numbering).
+    Ne = size(grid.edges, 2)
+    edge_id = Dict{Tuple{Int, Int}, Int}()
+    sizehint!(edge_id, Ne)
+    @inbounds for e in 1:Ne
+        edge_id[(grid.edges[1, e], grid.edges[2, e])] = e
+    end
+
+    # edges_on_face[k, c]: edge opposite local vertex k of triangle c
+    #   k=1 (opp v1) → (v2,v3); k=2 (opp v2) → (v3,v1); k=3 (opp v3) → (v1,v2).
+    edges_on_face = Matrix{Int}(undef, 3, Nc)
+    @inbounds for c in 1:Nc
+        v1 = grid.faces[1, c]; v2 = grid.faces[2, c]; v3 = grid.faces[3, c]
+        edges_on_face[1, c] = edge_id[v2 < v3 ? (v2, v3) : (v3, v2)]
+        edges_on_face[2, c] = edge_id[v3 < v1 ? (v3, v1) : (v1, v3)]
+        edges_on_face[3, c] = edge_id[v1 < v2 ? (v1, v2) : (v2, v1)]
+    end
+
+    area_eff = Vector{Float64}(undef, Nc)
+    @inbounds for c in 1:Nc
+        s = 0.0
+        for k in 1:3
+            e = edges_on_face[k, c]
+            s += dc_edge[e] * dv_edge[e]
+        end
+        area_eff[c] = 0.25 * s
+    end
+
     return Dict{String, AbstractArray{Float64}}(
-        "cell_neighbors" => _cell_slot_table(ctables["cell_neighbors"]::Matrix{Int}),
-        "edges_on_face" => _cell_slot_table(ctables["edges_on_face"]::Matrix{Int}),
-        "area" => scalar_arrs["area"],
-        "dv_edge" => scalar_arrs["dv_edge"],
-        "dc_edge" => scalar_arrs["dc_edge"],
+        "cell_neighbors" => _cell_slot_table(grid.cell_neighbors),
+        "edges_on_face" => _cell_slot_table(edges_on_face),
+        "area" => area_eff,
+        "dv_edge" => dv_edge,
+        "dc_edge" => dc_edge,
     )
 end
 

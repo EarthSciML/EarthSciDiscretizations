@@ -143,7 +143,7 @@
     # (A) The declarative φ-seed reproduces the imperative seed bit-for-bit — the
     #     fold starts from the identical level-0 mesh, not from _subdivide_icosahedron.
     Vseed, Fseed = declarative_seed()
-    V0imp, F0imp = ESD._subdivide_icosahedron(Float64, 0)
+    V0imp, F0imp = ESD.duo_subdivide_faq(Float64, 0)
     @test Vseed == V0imp
     @test Fseed == F0imp
 
@@ -151,7 +151,7 @@
     #     levels 0, 1, 2.
     for L in 0:2
         Vf, Ff = fold_from_seed(L)
-        Vexp, Fexp = ESD._subdivide_icosahedron(Float64, L)
+        Vexp, Fexp = ESD.duo_subdivide_faq(Float64, L)
 
         # Counts: 20·4^L cells, 10·4^L+2 vertices, 30·4^L edges.
         @test size(Vf, 2) == size(Vexp, 2) == 10 * 4^L + 2
