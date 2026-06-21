@@ -64,10 +64,15 @@ pub struct DuoGrid {
     loader: DuoLoader,
 }
 
-const NO_NEIGHBOR: u32 = u32::MAX;
+pub(crate) const NO_NEIGHBOR: u32 = u32::MAX;
 
 // ------------------- Base icosahedron -------------------------------------
 
+// Imperative construction below, superseded on the production path by the
+// front-door FAQ bridges (esd-un6 / W2). Retained unreferenced and marked
+// `#[allow(dead_code)]` until esd-heg.9 deletes it; the W2 parity tests still
+// exercise these against the front-door output to lock in byte-identity.
+#[allow(dead_code)]
 fn icosahedron_vertices_f64() -> [[f64; 3]; 12] {
     let phi = (1.0f64 + 5.0f64.sqrt()) / 2.0;
     let raw: [[f64; 3]; 12] = [
@@ -94,7 +99,10 @@ fn icosahedron_vertices_f64() -> [[f64; 3]; 12] {
 
 /// 20 triangular faces of the base icosahedron (0-based vertex indices).
 /// Winding matches the Julia reference so level-0 output is identical.
-fn icosahedron_faces_0based() -> [[u32; 3]; 20] {
+///
+/// `pub(crate)` so the front-door subdivision bridge (`duo_subdivide_faq`) can
+/// reuse the pure-integer structural table verbatim — no transcription risk.
+pub(crate) fn icosahedron_faces_0based() -> [[u32; 3]; 20] {
     // Julia 1-based → rust 0-based: subtract 1 from every index.
     [
         [0, 8, 1],
@@ -122,6 +130,7 @@ fn icosahedron_faces_0based() -> [[u32; 3]; 20] {
 
 // ------------------- Recursive subdivision --------------------------------
 
+#[allow(dead_code)]
 fn subdivide_icosahedron(level: u32) -> (Vec<[f64; 3]>, Vec<[u32; 3]>) {
     let base_v = icosahedron_vertices_f64();
     let base_f = icosahedron_faces_0based();
@@ -148,6 +157,7 @@ fn subdivide_icosahedron(level: u32) -> (Vec<[f64; 3]>, Vec<[u32; 3]>) {
     (verts, faces)
 }
 
+#[allow(dead_code)]
 fn midpoint(
     verts: &mut Vec<[f64; 3]>,
     cache: &mut HashMap<(u32, u32), u32>,
@@ -172,11 +182,13 @@ fn midpoint(
 
 // ------------------- Geometry helpers -------------------------------------
 
+#[allow(dead_code)]
 fn cart_to_lonlat(x: f64, y: f64, z: f64) -> (f64, f64) {
     (y.atan2(x), z.clamp(-1.0, 1.0).asin())
 }
 
 /// Spherical excess area of a unit-sphere triangle via L'Huilier's theorem.
+#[allow(dead_code)]
 fn spherical_triangle_area(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
     let da = (b[0] * c[0] + b[1] * c[1] + b[2] * c[2])
         .clamp(-1.0, 1.0)
@@ -196,8 +208,10 @@ fn spherical_triangle_area(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
 
 // ------------------- Connectivity -----------------------------------------
 
+#[allow(dead_code)]
 type Connectivity = (Vec<[u32; 2]>, Vec<[u32; 3]>);
 
+#[allow(dead_code)]
 fn build_connectivity(faces: &[[u32; 3]]) -> Result<Connectivity> {
     let nc = faces.len();
     // Edge opposite local vertex k is the edge between the other two:
@@ -245,12 +259,14 @@ fn build_connectivity(faces: &[[u32; 3]]) -> Result<Connectivity> {
     Ok((edges, pack3(&nbr_flat, nc)))
 }
 
+#[allow(dead_code)]
 fn pack3(flat: &[u32], nc: usize) -> Vec<[u32; 3]> {
     (0..nc)
         .map(|c| [flat[3 * c], flat[3 * c + 1], flat[3 * c + 2]])
         .collect()
 }
 
+#[allow(dead_code)]
 fn vertex_faces(faces: &[[u32; 3]], nv: usize) -> Vec<Vec<u32>> {
     let mut vf: Vec<Vec<u32>> = vec![Vec::new(); nv];
     for (c, f) in faces.iter().enumerate() {
@@ -353,38 +369,37 @@ impl Builder {
 
         let level = resolve_loader_level(&loader)?;
 
-        let (base_verts, base_faces) = subdivide_icosahedron(level);
+        // ---- Declarative construction via the ESS front-door (esd-un6 / W2) ----
+        // The mesh is materialized through the landed `earthsci_toolkit`
+        // evaluators, NOT the imperative `duo.rs` construction:
+        //   * D3 subdivision  → `duo_subdivide_faq` (every coordinate via
+        //     `eval_coeff`; vertex/face numbering kept in the imperative
+        //     encounter order required for the primal-vertex-indexed Voronoi-dual
+        //     byte-identity),
+        //   * D2a primal geometry → `primal_geometry_faq` (`eval_coeff`),
+        //   * D1a primal topology → `primal_topology_faq` (value-invention through
+        //     the relational skolem/distinct/rank/equijoin primitives; edges in
+        //     the ESS canonical sorted order).
+        // The imperative builders (`subdivide_icosahedron`, `build_connectivity`,
+        // `vertex_faces`, `spherical_triangle_area`, `cart_to_lonlat`, the
+        // cell-geometry loop) are no longer on the production path — they remain
+        // defined (`#[allow(dead_code)]`) only until esd-heg.9 deletes them.
+        // Byte-identical to the prior imperative output: the Rust `eval_coeff`
+        // path shares the imperative `f64` libm (left-fold `+`/`*`, `sqrt`, the
+        // inverse-trig methods), mirroring the Julia W1 path (`src/grids/duo.jl`).
+        let (base_verts, base_faces) = crate::grids::duo_subdivide_faq::duo_subdivide_faq(level); // D3
         let nv = base_verts.len();
         let nc = base_faces.len();
 
-        // Derive geometry at f64 precision; quantize to dtype on storage only
-        // where it matters for the conformance contract. Internal state stays
-        // f64 so accessors return the same values regardless of dtype — the
-        // dtype field tracks the *declared* precision per GRIDS_API §7.
-        let mut lon = vec![0.0_f64; nc];
-        let mut lat = vec![0.0_f64; nc];
-        let mut cell_cart = vec![0.0_f64; 3 * nc];
-        let mut area = vec![0.0_f64; nc];
-        let r2 = r * r;
-        for (c, f) in base_faces.iter().enumerate() {
-            let a = base_verts[f[0] as usize];
-            let b = base_verts[f[1] as usize];
-            let cc = base_verts[f[2] as usize];
-            let mx = a[0] + b[0] + cc[0];
-            let my = a[1] + b[1] + cc[1];
-            let mz = a[2] + b[2] + cc[2];
-            let n = (mx * mx + my * my + mz * mz).sqrt();
-            let ux = mx / n;
-            let uy = my / n;
-            let uz = mz / n;
-            cell_cart[3 * c] = r * ux;
-            cell_cart[3 * c + 1] = r * uy;
-            cell_cart[3 * c + 2] = r * uz;
-            let (lo, la) = cart_to_lonlat(ux, uy, uz);
-            lon[c] = lo;
-            lat[c] = la;
-            area[c] = spherical_triangle_area(a, b, cc) * r2;
-        }
+        // D2a: cell_cart (R-scaled), lon, lat, area via `eval_coeff`. Internal
+        // state stays f64 so accessors return the same values regardless of dtype
+        // — the dtype field tracks the *declared* precision per GRIDS_API §7.
+        let geom =
+            crate::grids::duo_primal_geometry_faq::primal_geometry_faq(&base_verts, &base_faces, r);
+        let lon = geom.lon;
+        let lat = geom.lat;
+        let cell_cart = geom.cell_cart;
+        let area = geom.area;
 
         let mut vertices = vec![0.0_f64; 3 * nv];
         for (i, v) in base_verts.iter().enumerate() {
@@ -400,20 +415,22 @@ impl Builder {
             faces_flat[3 * c + 2] = f[2];
         }
 
-        let (edges_pair, neighbors) = build_connectivity(&base_faces)?;
-        let mut edges_flat = vec![0_u32; 2 * edges_pair.len()];
-        for (e, ep) in edges_pair.iter().enumerate() {
+        // D1a value-invention topology through the ESS front-door: edge set
+        // (canonical sorted order), cell_neighbors, and per-vertex incident faces.
+        let topo = crate::grids::duo_topology_faq::primal_topology_faq(&base_faces, nv)?;
+        let mut edges_flat = vec![0_u32; 2 * topo.edges.len()];
+        for (e, ep) in topo.edges.iter().enumerate() {
             edges_flat[2 * e] = ep[0];
             edges_flat[2 * e + 1] = ep[1];
         }
         let mut neighbors_flat = vec![NO_NEIGHBOR; 3 * nc];
-        for (c, nb) in neighbors.iter().enumerate() {
+        for (c, nb) in topo.cell_neighbors.iter().enumerate() {
             neighbors_flat[3 * c] = nb[0];
             neighbors_flat[3 * c + 1] = nb[1];
             neighbors_flat[3 * c + 2] = nb[2];
         }
 
-        let vf = vertex_faces(&base_faces, nv);
+        let vf = topo.vertex_faces;
 
         let dtype_str = match dtype {
             Dtype::F64 => "float64",
@@ -831,5 +848,95 @@ mod tests {
             .filter(|v| g.vertex_faces(*v).len() == 5)
             .count();
         assert_eq!(pentagons, 12, "exactly 12 pentagonal vertices expected");
+    }
+
+    // ---- W2 (esd-un6): front-door FAQ vs imperative byte-identity parity ----
+    // The Rust `eval_coeff` path and the imperative builders call the same `f64`
+    // libm, so the front-door construction reproduces the imperative output
+    // EXACTLY (not merely within tolerance), mirroring the Julia W1 contract.
+
+    /// Reproduce the pre-W2 imperative per-cell geometry loop of `build`.
+    fn imperative_geometry(
+        verts: &[[f64; 3]],
+        faces: &[[u32; 3]],
+        r: f64,
+    ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        let nc = faces.len();
+        let mut cell_cart = vec![0.0_f64; 3 * nc];
+        let mut lon = vec![0.0_f64; nc];
+        let mut lat = vec![0.0_f64; nc];
+        let mut area = vec![0.0_f64; nc];
+        let r2 = r * r;
+        for (c, f) in faces.iter().enumerate() {
+            let a = verts[f[0] as usize];
+            let b = verts[f[1] as usize];
+            let cc = verts[f[2] as usize];
+            let mx = a[0] + b[0] + cc[0];
+            let my = a[1] + b[1] + cc[1];
+            let mz = a[2] + b[2] + cc[2];
+            let n = (mx * mx + my * my + mz * mz).sqrt();
+            let (ux, uy, uz) = (mx / n, my / n, mz / n);
+            cell_cart[3 * c] = r * ux;
+            cell_cart[3 * c + 1] = r * uy;
+            cell_cart[3 * c + 2] = r * uz;
+            let (lo, la) = cart_to_lonlat(ux, uy, uz);
+            lon[c] = lo;
+            lat[c] = la;
+            area[c] = spherical_triangle_area(a, b, cc) * r2;
+        }
+        (cell_cart, lon, lat, area)
+    }
+
+    #[test]
+    fn faq_subdivision_byte_identical_to_imperative() {
+        for level in 0..=3 {
+            let (vf, ff) = crate::grids::duo_subdivide_faq::duo_subdivide_faq(level);
+            let (vi, fi) = subdivide_icosahedron(level);
+            // Encounter-order vertex numbering + face order preserved exactly.
+            assert_eq!(ff, fi, "level {level}: face table / order diverged");
+            assert_eq!(vf, vi, "level {level}: vertex coords not byte-identical");
+        }
+    }
+
+    #[test]
+    fn faq_primal_geometry_byte_identical_to_imperative() {
+        let r = 6.371e6;
+        for level in 0..=3 {
+            let (verts, faces) = subdivide_icosahedron(level);
+            let geom =
+                crate::grids::duo_primal_geometry_faq::primal_geometry_faq(&verts, &faces, r);
+            let (cc, lon, lat, area) = imperative_geometry(&verts, &faces, r);
+            assert_eq!(geom.cell_cart, cc, "level {level}: cell_cart");
+            assert_eq!(geom.lon, lon, "level {level}: lon");
+            assert_eq!(geom.lat, lat, "level {level}: lat");
+            assert_eq!(geom.area, area, "level {level}: area");
+        }
+    }
+
+    #[test]
+    fn faq_topology_byte_identical_to_imperative() {
+        for level in 0..=3 {
+            let (verts, faces) = subdivide_icosahedron(level);
+            let nv = verts.len();
+            let topo = crate::grids::duo_topology_faq::primal_topology_faq(&faces, nv).unwrap();
+            let (edges_imp, nbr_imp) = build_connectivity(&faces).unwrap();
+            let vf_imp = vertex_faces(&faces, nv);
+            assert_eq!(
+                topo.cell_neighbors, nbr_imp,
+                "level {level}: cell_neighbors"
+            );
+            assert_eq!(topo.vertex_faces, vf_imp, "level {level}: vertex_faces");
+            // Both the value-invention `distinct` and the imperative
+            // `sort_unstable` emit the SAME canonical (sorted) edge order, so the
+            // edge array is byte-identical too.
+            assert_eq!(topo.edges, edges_imp, "level {level}: edges");
+            for w in topo.edges.windows(2) {
+                assert!(
+                    (w[0][0], w[0][1]) < (w[1][0], w[1][1]),
+                    "level {level}: edges must be canonical-sorted"
+                );
+            }
+            assert_eq!(topo.edges.len(), 30 * 4_usize.pow(level));
+        }
     }
 }

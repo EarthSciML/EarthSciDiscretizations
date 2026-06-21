@@ -11,3 +11,10 @@ pub mod duo;
 pub mod lat_lon;
 pub mod mpas;
 pub mod vertical;
+
+// DUO front-door construction bridges (esd-un6 / W2): D3 subdivision, D2a primal
+// geometry, and D1a value-invention topology routed through the ESS evaluator and
+// relational primitives. Crate-internal — consumed by `duo::Builder::build`.
+pub(crate) mod duo_primal_geometry_faq;
+pub(crate) mod duo_subdivide_faq;
+pub(crate) mod duo_topology_faq;

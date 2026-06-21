@@ -29,6 +29,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .duo_primal_geometry_faq import primal_geometry_faq
+from .duo_subdivide_faq import duo_subdivide_faq
+from .duo_topology_faq import primal_topology_faq
+
 __all__ = ["duo", "DuoGrid", "DuoLoader"]
 
 
@@ -553,47 +557,46 @@ def duo(
 
     np_dtype = _DTYPE_MAP[dtype]
 
-    V_unit, F = _subdivide_icosahedron(level)
+    # ---- Declarative construction via the ESS front-door (esd-un6 / W2) --------
+    # The mesh is materialized through the landed ``earthsci_toolkit`` evaluators,
+    # NOT the imperative ``duo.py`` construction:
+    #   * D3 subdivision  -> ``duo_subdivide_faq`` (every coordinate via
+    #     ``eval_coeff``; vertex/face numbering kept in the imperative encounter
+    #     order required for the primal-vertex-indexed Voronoi-dual byte-identity),
+    #   * D2a primal geometry -> ``primal_geometry_faq`` (``eval_coeff``),
+    #   * D1a primal topology -> ``primal_topology_faq`` (value-invention through the
+    #     relational skolem/distinct/rank/equijoin primitives; edges in the ESS
+    #     canonical sorted order).
+    # The imperative builders (``_subdivide_icosahedron``, ``_build_connectivity``,
+    # ``_vertex_faces``, ``_spherical_triangle_area``, ``_cart_to_lonlat``, the
+    # cell-geometry loop) are no longer on the production path — they remain defined
+    # only until esd-heg.9 deletes them. Byte-identical (``float64``) to the prior
+    # imperative output for every cell-/face-/vertex-indexed field; edges adopt the
+    # canonical (sorted) numbering (no test pins edge order; mirrors the Julia W1
+    # path, ``src/grids/duo.jl``).
+    V_unit, F = duo_subdivide_faq(level)  # D3: unit-sphere vertices + faces
     Nv = V_unit.shape[1]
-    Nc = F.shape[1]
 
-    # Cell centers: normalized centroid of the three unit vertex vectors.
-    cell_cart = np.empty((3, Nc), dtype=np_dtype)
-    lon = np.empty(Nc, dtype=np_dtype)
-    lat = np.empty(Nc, dtype=np_dtype)
-    area = np.empty(Nc, dtype=np_dtype)
-    R2 = R * R
+    pg = primal_geometry_faq(V_unit, F, R, np_dtype)  # D2a: cell_cart, lon, lat, area
+    cell_cart = pg["cell_cart"]
+    lon = pg["lon"]
+    lat = pg["lat"]
+    area = pg["area"]
 
-    for c in range(Nc):
-        a_i = int(F[0, c])
-        b_i = int(F[1, c])
-        c_i = int(F[2, c])
-        ax, ay, az = float(V_unit[0, a_i]), float(V_unit[1, a_i]), float(V_unit[2, a_i])
-        bx, by, bz = float(V_unit[0, b_i]), float(V_unit[1, b_i]), float(V_unit[2, b_i])
-        cx, cy, cz = float(V_unit[0, c_i]), float(V_unit[1, c_i]), float(V_unit[2, c_i])
-        mx = ax + bx + cx
-        my = ay + by + cy
-        mz = az + bz + cz
-        n = math.sqrt(mx * mx + my * my + mz * mz)
-        ux, uy, uz = mx / n, my / n, mz / n
-        cell_cart[0, c] = R * ux
-        cell_cart[1, c] = R * uy
-        cell_cart[2, c] = R * uz
-        lo, la = _cart_to_lonlat(ux, uy, uz)
-        lon[c] = lo
-        lat[c] = la
-        a_unit = _spherical_triangle_area(
-            (ax, ay, az), (bx, by, bz), (cx, cy, cz)
-        )
-        area[c] = a_unit * R2
-
+    # Scale vertex array to radius R for downstream consumers.
     vertices = np.empty((3, Nv), dtype=np_dtype)
     vertices[0, :] = R * V_unit[0, :]
     vertices[1, :] = R * V_unit[1, :]
     vertices[2, :] = R * V_unit[2, :]
 
-    edges, cell_neighbors = _build_connectivity(F)
-    vf = _vertex_faces(F, Nv)
+    # D1a value-invention topology through the ESS front-door: edge set + dense
+    # numbering (canonical sorted order), cell_neighbors, and per-vertex incident
+    # faces. cell_neighbors (cell×slot) and vertex_faces are byte-identical
+    # regardless of edge numbering.
+    topo = primal_topology_faq(F, Nv)
+    edges = topo["edges"]
+    cell_neighbors = topo["cell_neighbors"]
+    vf = topo["vertex_faces"]
 
     return DuoGrid(
         level=level,
