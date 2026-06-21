@@ -216,6 +216,61 @@ const _MMS_CONV_CATALOG = Dict{String, Function}(
                 for i in 1:ax.N, j in 1:ay.N
         )
     end,
+
+    # 1-D nonlinear (variable-coefficient) diffusion accumulator.
+    # Freeze u=sin(2πx) and f=2+sin(2πx); a state `acc` integrates the operator
+    # grad(f·grad(u)), so acc(t) = t·grad(f·grad(u)).  Closed form:
+    #   grad(f·grad(u)) = (2π)²·(cos(4πx) − 2·sin(2πx)).
+    # Reads the accumulator at cell centres (var_map key "acc[i]").  The
+    # linear-in-time accumulation makes the ODE-solver error negligible, so the
+    # L∞ residual is the rule's O(h²) spatial truncation.
+    "sin2pi_nonlinear_diffusion_accum" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+        ax = axes[1]
+        maximum(
+            let x = ax.lo + (i - 0.5) * ax.h,
+                    exact = t * (2π)^2 * (cos(4π * x) - 2 * sin(2π * x))
+                    abs(u_vec[var_map["acc[$i]"]] - exact)
+            end
+                for i in 1:ax.N
+        )
+    end,
+
+    # 1-D WENO5 flux-divergence accumulator.
+    # Freeze U=1 and q=sin(2πx+1); a state `acc` integrates div(U·q), so
+    # acc(t) = t·div(U·q) = t·2π·cos(2πx+1).  Reads the accumulator at cell
+    # centres (var_map key "acc[i]").  The linear-in-time accumulation isolates
+    # the rule's O(h⁵) spatial truncation from the ODE solver.
+    "sin2pi_shift1_div_accum" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+        ax = axes[1]
+        maximum(
+            let x = ax.lo + (i - 0.5) * ax.h,
+                    exact = t * 2π * cos(2π * x + 1.0)
+                    abs(u_vec[var_map["acc[$i]"]] - exact)
+            end
+                for i in 1:ax.N
+        )
+    end,
+
+    # 2-D mixed-derivative accumulator.
+    # Freeze u=cos(2π(x+y)); a state `acc` integrates d²u/dxdy, so
+    # acc(t) = t·d²u/dxdy = t·(−(2π)²)·cos(2π(x+y)).  Axes sort alphabetically
+    # (x, y); reads the accumulator at cell centres (var_map key "acc[i,j]").
+    # Freeze-accumulate avoids integrating the bare (indefinite-spectrum) mixed
+    # operator; the L∞ residual is the rule's O(h²) spatial truncation.
+    "mixed_deriv_2d_accum" =>
+        (u_vec, var_map, axes, t, manifest) -> begin
+        ax = axes[1]; ay = axes[2]
+        maximum(
+            let x = ax.lo + (i - 0.5) * ax.h,
+                    y = ay.lo + (j - 0.5) * ay.h,
+                    exact = t * (-(2π)^2) * cos(2π * (x + y))
+                    abs(u_vec[var_map["acc[$i,$j]"]] - exact)
+            end
+                for i in 1:ax.N, j in 1:ay.N
+        )
+    end,
 )
 
 # ---------------------------------------------------------------------------
