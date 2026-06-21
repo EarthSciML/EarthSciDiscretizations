@@ -206,7 +206,11 @@ end
     #     ghost_xmin = (0.125 + 1.875*u[1]) / 2.125
     #   xmax: no BC declared → ghost_xmax = 0
     # IC: u[i] = sin(π*(i-0.5)*dx).
-    # After ESS gains Robin support, replace @test_throws with:
+    # STATUS (esd-6g4.8/G9): DECLARATIVE-INFEASIBLE over the existing ESS engine
+    # — Robin BC cannot fire (no coefficient transport + no general-ghost lift;
+    # see discretizations/finite_difference/ROBIN_BC_INFEASIBILITY.md, ESS bead
+    # ess-lhi). The @test_throws below pins current behavior. After ess-lhi lands,
+    # replace it with:
     #   prob, var_map = build_ode_problem(esm_path; grid_ref=gdd_path)
     #   set u0; call prob.f; @test du[var_map["u[$i]"]] ≈ expected[i] atol=1e-10
     N = 8; dx = 0.125

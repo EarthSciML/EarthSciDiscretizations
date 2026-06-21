@@ -154,10 +154,15 @@ using TestItems
             # convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
             ("finite_difference", "neumann_bc"),
-            # robin_bc (esd-m9v): rewrite fixture ships `applicable:false`
-            # pending ESS support for kind/side/robin_alpha/beta/gamma
-            # pattern matching on the bc OpExpr (layer-A SKIP) and carries
-            # no convergence fixture (layer-B SKIP "no convergence fixtures").
+            # robin_bc (esd-m9v, esd-6g4.8/G9): rewrite fixture ships
+            # `applicable:false` — DECLARATIVE-INFEASIBLE over the existing ESS
+            # engine. G8 (ess-tox) landed kind/side discrimination, but Robin
+            # still cannot fire: ESS has no slot to transport robin_alpha/beta/
+            # gamma, and the production non-periodic lift hard-codes dirichlet+
+            # zero-neumann (throws E_BC_UNSUPPORTED otherwise). Verdict +
+            # precise gaps: discretizations/finite_difference/
+            # ROBIN_BC_INFEASIBILITY.md; engine work tracked in ESS bead ess-lhi.
+            # Layer-A SKIP; no convergence fixture (layer-B SKIP).
             ("finite_difference", "robin_bc"),
             # staggered_1st_uniform (esd-6g4.13): promoted out of this set. The
             # arrayop replacement (EINSUM-4) now drives end-to-end through ESS
