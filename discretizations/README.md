@@ -26,7 +26,12 @@ only when the ESS `esm-spec.md` §9.2 decision tree says so.
   `neumann_bc.json`, `periodic_bc.json`, `robin_bc.json`)
 - `finite_volume/` — finite-volume reconstructions and flux forms
 - `ic/` — initial-condition rules
-- `spectral/` — reserved for spectral / pseudo-spectral methods (no rules yet)
+- `spectral/` — spectral / pseudo-spectral methods. No catalog rules yet: the
+  declarative feasibility of the family is characterized in
+  `spectral/SPECTRAL_FEASIBILITY.md` (Fourier/Chebyshev differentiation are
+  AST-expressible and proven to machine precision but blocked from being a
+  general rule by an ESS reduction-range-sizing gap; spherical harmonics are
+  fundamentally infeasible). See that verdict before adding spectral rules.
 
 The per-family split is a starting convention and may evolve as content lands.
 See `../docs/REPO_LAYOUT.md` for the governing convention.
