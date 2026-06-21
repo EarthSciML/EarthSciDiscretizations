@@ -170,6 +170,9 @@ function _construct_curvilinear_grid(family::String, domain_spec::Dict{String, A
         lat_sp = Dict{String, Any}(String(k) => v for (k, v) in spatial["lat"])
         nlon = round(Int, (Float64(get(lon_sp, "max", π)) - Float64(get(lon_sp, "min", -π))) / Float64(lon_sp["grid_spacing"]))
         nlat = round(Int, (Float64(get(lat_sp, "max", π / 2)) - Float64(get(lat_sp, "min", -π / 2))) / Float64(lat_sp["grid_spacing"]))
+        # The returned LatLonGrid is FAQ-materialized: its curvilinear metric / cell
+        # coordinates are produced by `latlon_construction_faq` through the grid's bulk
+        # accessors (S5 reroute, esd-3we.5), so ESS.discretize reads FAQ geometry.
         return _latlon(; nlon = nlon, nlat = nlat, R = R)
     else
         error("_construct_curvilinear_grid: unsupported family '$family'")
@@ -477,7 +480,11 @@ function _inject_grids_spatial(domain_spec)
             levels = Float64.(axis_spec["levels"])
             N = length(levels) - 1
             N >= 1 || error("_inject_grids_spatial: 'levels' for axis '$axis_name' must have ≥ 2 entries")
-            widths = [levels[k + 1] - levels[k] for k in 1:N]
+            # Per-cell widths route through the M1 elementwise FAQ (`_faq_axis`,
+            # src/cartesian_faq.jl): the width difference `levels[k+1]-levels[k]` rides
+            # ESS's eval_coeff determinism contract instead of a host loop (S5 reroute,
+            # esd-3we.5). The structured grid construction now has a single pathway.
+            _, _, widths = _faq_axis(Float64, false, N, levels[1], levels[end], levels)
             all(w > 0 for w in widths) || error("_inject_grids_spatial: 'levels' must be strictly increasing for axis '$axis_name'")
             push!(
                 dims, Dict{String, Any}(

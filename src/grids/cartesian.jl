@@ -63,14 +63,16 @@ function _normalize_extent(extent, ::Type{T}, ndim::Int) where {T}
     end
 end
 
+# Per-axis coordinate construction routes through the M1 elementwise FAQ
+# (`_faq_axis`, src/cartesian_faq.jl): the affine map `lo + (i-1)*dx`, the cell-center
+# midpoint and the width difference all ride ESS's `eval_coeff` determinism contract
+# (the single pathway; no shadow arithmetic host-side). These wrappers retain only the
+# host-side INPUT VALIDATION (cell count, monotonicity) — the coordinate arithmetic
+# itself was deleted here when S5 (esd-3we.5) declarativized the constructor.
 function _uniform_axis(n::Int, lo::T, hi::T) where {T}
     n ≥ 1 || throw(ArgumentError("cartesian: cell count per axis must be ≥ 1; got $n"))
     hi > lo || throw(DomainError((lo, hi), "cartesian: extent must satisfy hi > lo"))
-    dx = (hi - lo) / n
-    edges = T[lo + i * dx for i in 0:n]
-    centers = T[(edges[i] + edges[i + 1]) / 2 for i in 1:n]
-    widths = T[edges[i + 1] - edges[i] for i in 1:n]
-    return edges, centers, widths
+    return _faq_axis(T, true, n, lo, hi, T[])
 end
 
 function _nonuniform_axis(edges_in::AbstractVector, ::Type{T}) where {T}
@@ -82,9 +84,8 @@ function _nonuniform_axis(edges_in::AbstractVector, ::Type{T}) where {T}
             throw(DomainError(edges, "cartesian: edges must be strictly increasing"))
     end
     n = length(edges) - 1
-    centers = T[(edges[i] + edges[i + 1]) / 2 for i in 1:n]
-    widths = T[edges[i + 1] - edges[i] for i in 1:n]
-    return n, edges, centers, widths
+    e, c, w = _faq_axis(T, false, n, edges[1], edges[end], edges)
+    return n, e, c, w
 end
 
 function _is_uniform(widths::Vector{T}) where {T}
@@ -400,49 +401,30 @@ function _cartesian_axis_idx(::CartesianGrid{T, N}, axis::Symbol) where {T, N}
     throw(ArgumentError("cartesian: unknown axis :$axis for $(N)D grid"))
 end
 
+# Memoized full construction materialized by the M1 elementwise FAQ
+# (`cartesian_construction_faq`, src/cartesian_faq.jl). S5 (esd-3we.5) routes every
+# arithmetic-bearing bulk accessor through this single FAQ pass so the cell
+# coordinates, the cell-volume product and the identity metric all ride ESS's
+# determinism contract instead of an imperative host loop. Keyed by `:_construction_faq`
+# so the NamedTuple is built once per grid (the pure-structural neighbor / boundary
+# linearization stays host-side below, as the FAQ convention sanctions).
+_construction_faq(g::CartesianGrid) =
+    _grid_memo!(g, :_construction_faq) do
+        cartesian_construction_faq(g)
+    end
+
 function cell_centers(g::CartesianGrid{T, N}, axis::Symbol) where {T, N}
     d = _cartesian_axis_idx(g, axis)
-    return _grid_memo!(g, (:cell_centers, axis)) do
-        nc = prod(g.n)
-        out = Vector{T}(undef, nc)
-        cs = g.centers[d]
-        ci = CartesianIndices(g.n)
-        @inbounds for k in 1:nc
-            out[k] = cs[ci[k][d]]
-        end
-        return out
-    end
+    return _construction_faq(g).cell_centers[d]
 end
 
 function cell_widths(g::CartesianGrid{T, N}, axis::Symbol) where {T, N}
     d = _cartesian_axis_idx(g, axis)
-    return _grid_memo!(g, (:cell_widths, axis)) do
-        nc = prod(g.n)
-        out = Vector{T}(undef, nc)
-        ws = g.widths[d]
-        ci = CartesianIndices(g.n)
-        @inbounds for k in 1:nc
-            out[k] = ws[ci[k][d]]
-        end
-        return out
-    end
+    return _construction_faq(g).cell_widths[d]
 end
 
 function cell_volume(g::CartesianGrid{T, N}) where {T, N}
-    return _grid_memo!(g, :cell_volume) do
-        nc = prod(g.n)
-        out = Vector{T}(undef, nc)
-        ci = CartesianIndices(g.n)
-        @inbounds for k in 1:nc
-            v = one(T)
-            ix = ci[k]
-            for d in 1:N
-                v *= g.widths[d][ix[d]]
-            end
-            out[k] = v
-        end
-        return out
-    end
+    return _construction_faq(g).cell_volume
 end
 
 function neighbor_indices(g::CartesianGrid{T, N}, axis::Symbol, offset::Int) where {T, N}
@@ -488,55 +470,30 @@ end
 # the second-derivative Jacobian is zero.
 
 function metric_g(g::CartesianGrid{T, N}) where {T, N}
-    return _grid_memo!(g, :metric_g) do
-        nc = prod(g.n)
-        out = zeros(T, nc, N, N)
-        @inbounds for k in 1:nc, d in 1:N
-            out[k, d, d] = one(T)
-        end
-        return out
-    end
+    return _construction_faq(g).metric_g
 end
 
 function metric_ginv(g::CartesianGrid{T, N}) where {T, N}
-    return _grid_memo!(g, :metric_ginv) do
-        nc = prod(g.n)
-        out = zeros(T, nc, N, N)
-        @inbounds for k in 1:nc, d in 1:N
-            out[k, d, d] = one(T)
-        end
-        return out
-    end
+    return _construction_faq(g).metric_ginv
 end
 
 function metric_jacobian(g::CartesianGrid{T, N}) where {T, N}
     # J = product of cell widths (cell_volume on a cartesian grid).
-    return cell_volume(g)
+    return _construction_faq(g).metric_jacobian
 end
 
 function metric_dgij_dxk(g::CartesianGrid{T, N}) where {T, N}
-    return _grid_memo!(g, :metric_dgij_dxk) do
-        zeros(T, prod(g.n), N, N, N)
-    end
+    return _construction_faq(g).metric_dgij_dxk
 end
 
 function coord_jacobian(g::CartesianGrid{T, N}, target::Symbol) where {T, N}
     target === :cartesian ||
         throw(ArgumentError("cartesian: coord_jacobian only supports target=:cartesian; got :$target"))
-    return _grid_memo!(g, (:coord_jacobian, target)) do
-        nc = prod(g.n)
-        out = zeros(T, nc, N, N)
-        @inbounds for k in 1:nc, d in 1:N
-            out[k, d, d] = one(T)
-        end
-        return out
-    end
+    return _construction_faq(g).coord_jacobian
 end
 
 function coord_jacobian_second(g::CartesianGrid{T, N}, target::Symbol) where {T, N}
     target === :cartesian ||
         throw(ArgumentError("cartesian: coord_jacobian_second only supports target=:cartesian; got :$target"))
-    return _grid_memo!(g, (:coord_jacobian_second, target)) do
-        zeros(T, prod(g.n), N, N, N)
-    end
+    return _construction_faq(g).coord_jacobian_second
 end

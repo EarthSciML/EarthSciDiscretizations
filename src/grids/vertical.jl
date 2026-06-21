@@ -78,7 +78,11 @@ _parse_vertical_coordinate(c::AbstractString) =
 
 function _vertical_uniform_sigma(nz::Int, ::Type{T}) where {T}
     nz ≥ 1 || throw(ArgumentError("vertical: nz must be ≥ 1; got $nz"))
-    return T[one(T) - T(k) / T(nz) for k in 0:nz]
+    # Affine sigma map `1 - k/nz` routed through ESS (`_VERT_SIGMA_LEVEL_NODE`,
+    # src/vertical_faq.jl) — the single-pathway FAQ arithmetic. S5 (esd-3we.5)
+    # deleted the host-side `one(T) - T(k)/T(nz)` loop here.
+    return T[T(eval_coeff(_VERT_SIGMA_LEVEL_NODE,
+        Dict("k" => Float64(k), "nz" => Float64(nz)))) for k in 0:nz]
 end
 
 function _vertical_coerce_levels(
@@ -150,16 +154,11 @@ function _vertical_coerce_hybrid(
     return arr
 end
 
-function _vertical_centers_and_widths(levels::Vector{T}) where {T}
-    n = length(levels) - 1
-    centers = Vector{T}(undef, n)
-    widths = Vector{T}(undef, n)
-    for k in 1:n
-        centers[k] = (levels[k] + levels[k + 1]) / T(2)
-        widths[k] = abs(levels[k + 1] - levels[k])
-    end
-    return centers, widths
-end
+# Cell centers / widths route through the M1 elementwise FAQ (`_faq_centers_widths`,
+# src/vertical_faq.jl): the midpoint `(levels[k]+levels[k+1])/2` and the absolute layer
+# thickness `abs(levels[k+1]-levels[k])` ride ESS's `eval_coeff` determinism contract.
+# S5 (esd-3we.5) deleted the host-side arithmetic loop that used to live here.
+_vertical_centers_and_widths(levels::Vector{T}) where {T} = _faq_centers_widths(levels)
 
 # ---------------------------------------------------------------------------
 # Generator
@@ -252,7 +251,11 @@ function _vertical(;
         nz_eff ≥ 1 || throw(ArgumentError("vertical: nz must be ≥ 1; got $nz_eff"))
         ak_arr = _vertical_coerce_hybrid(ak, T, nz_eff + 1, "ak")
         bk_arr = _vertical_coerce_hybrid(bk, T, nz_eff + 1, "bk")
-        sigma = ak_arr ./ p0_T .+ bk_arr
+        # Eta hybrid level `ak[k]/p0 + bk[k]` routed through ESS
+        # (`_VERT_ETA_LEVEL_NODE`, src/vertical_faq.jl); S5 deleted the host `./ .+`.
+        sigma = T[T(eval_coeff(_VERT_ETA_LEVEL_NODE,
+            Dict("ak" => Float64(ak_arr[k]), "p0" => Float64(p0_T), "bk" => Float64(bk_arr[k]))))
+                  for k in 1:length(ak_arr)]
         for k in 1:(length(sigma) - 1)
             sigma[k + 1] < sigma[k] ||
                 throw(

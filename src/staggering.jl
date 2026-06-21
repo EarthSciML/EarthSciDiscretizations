@@ -1,22 +1,12 @@
 """
 C-grid staggering definitions.
+
+The staggered-location vocabulary (`VarLocation`) lives here; it is the shared location
+code used by the arakawa grid family and its declarative construction FAQ
+(`src/arakawa_faq.jl`), as well as the DUO dual-geometry FAQ. The imperative
+staggered-shape arithmetic (`grid_size` / `full_array_size` / `ghost_array_size`) that
+used to live here was declarativized into the arakawa construction FAQ's
+`_ark_location_shape` (S4) and deleted by S5 (esd-3we.5).
 """
 
 @enum VarLocation CellCenter UEdge VEdge Corner
-
-function grid_size(loc::VarLocation, Nc::Int)
-    return loc == CellCenter ? (Nc, Nc) :
-        loc == UEdge ? (Nc + 1, Nc) :
-        loc == VEdge ? (Nc, Nc + 1) :
-        (Nc + 1, Nc + 1)
-end
-
-function full_array_size(loc::VarLocation, Nc::Int)
-    ni, nj = grid_size(loc, Nc)
-    return (6, ni, nj)
-end
-
-function ghost_array_size(loc::VarLocation, Nc::Int, Ng::Int)
-    ni, nj = grid_size(loc, Nc)
-    return (6, ni + 2Ng, nj + 2Ng)
-end

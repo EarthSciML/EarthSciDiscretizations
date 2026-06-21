@@ -122,7 +122,6 @@ export LatLonGrid, nlon, nlon_uniform, row_offset, lon_edges, lon_centers, cell_
 
 # Exports: Staggering
 export VarLocation, CellCenter, UEdge, VEdge, Corner
-export grid_size, full_array_size, ghost_array_size
 
 # Exports: Rule catalog
 export RuleFile, load_rules

@@ -314,34 +314,30 @@ function _arakawa_axis_idx(::ArakawaGrid, axis::Symbol)
     throw(ArgumentError("arakawa: unknown axis :$axis (expected :x or :y)"))
 end
 
+# Memoized full construction materialized by the M1 elementwise FAQ
+# (`arakawa_construction_faq`, src/arakawa_faq.jl). S5 (esd-3we.5) routes the
+# arithmetic-bearing bulk accessors — the affine cell-centre coordinates, the staggered
+# spacings dx/dy and the cell-volume product — through this single FAQ pass so they ride
+# ESS's determinism contract instead of an imperative host loop. The pure-structural
+# row-major neighbor linearization + masks stay host-side below, as the FAQ convention
+# sanctions; the pointwise coordinate/metric queries are unchanged.
+_construction_faq(g::ArakawaGrid) =
+    _grid_memo!(g, :_construction_faq) do
+        arakawa_construction_faq(g)
+    end
+
 function cell_centers(g::ArakawaGrid{T}, axis::Symbol) where {T}
     d = _arakawa_axis_idx(g, axis)
-    return _grid_memo!(g, (:cell_centers, axis)) do
-        nx = arakawa_nx(g); ny = arakawa_ny(g)
-        out = Vector{T}(undef, nx * ny)
-        @inbounds for j in 1:ny, i in 1:nx
-            xy = arakawa_cell_center(g.base, i, j)
-            out[(j - 1) * nx + i] = T(xy[d])
-        end
-        return out
-    end
+    return _construction_faq(g).coords.cell_center[d]
 end
 
 function cell_widths(g::ArakawaGrid{T}, axis::Symbol) where {T}
     d = _arakawa_axis_idx(g, axis)
-    return _grid_memo!(g, (:cell_widths, axis)) do
-        nx = arakawa_nx(g); ny = arakawa_ny(g)
-        w = d == 1 ? T(arakawa_dx(g.base)) : T(arakawa_dy(g.base))
-        return fill(w, nx * ny)
-    end
+    return _construction_faq(g).cell_widths[d]
 end
 
 function cell_volume(g::ArakawaGrid{T}) where {T}
-    return _grid_memo!(g, :cell_volume) do
-        nx = arakawa_nx(g); ny = arakawa_ny(g)
-        a = T(arakawa_dx(g.base)) * T(arakawa_dy(g.base))
-        return fill(a, nx * ny)
-    end
+    return _construction_faq(g).cell_volume
 end
 
 function neighbor_indices(g::ArakawaGrid, axis::Symbol, offset::Int)
