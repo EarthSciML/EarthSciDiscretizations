@@ -52,6 +52,15 @@ include("edge_dual_geometry_faq.jl")
 # topology_faq.jl (above).
 include("grids/mpas_scvt_topology.jl")
 
+# MPAS-SCVT mesh generator host DRIVER (esd-e5m.4 / D4): the external Lloyd
+# fixed-point loop (RHS-only — NO loop in the IR) over the declarative D2 step
+# (lloyd_step.esm via materialize_value_invention), capped by the D3 topology leaf
+# ONCE at convergence, emitting MpasMeshData. Reuses the dual topology/geometry FAQ
+# stack (voronoi_dual_topology_faq + duo_dual_geometry_faq) shared with the DUO
+# Voronoi dual. Depends on mpas.jl, mpas_scvt_topology.jl, topology_faq.jl,
+# edge_dual_geometry_faq.jl, subdivide_faq.jl (all above / resolved at call time).
+include("grids/mpas_scvt.jl")
+
 # Cartesian grid construction as the structured-grid FAQ template (esd-3we.1 / S1)
 # — thin bridge routing the affine coordinate map + elementwise metric/neighbor/
 # boundary derivations through the landed ESS M1 evaluator (eval_coeff). Declarative
@@ -136,6 +145,11 @@ export voronoi_dual_topology_faq
 # Exports: MPAS-SCVT spherical-topology leaf (esd-e5m.3 / D3) — the one-time
 # post-convergence spherical Delaunay (wrap S2B) + deterministic Voronoi connectivity.
 export scvt_spherical_delaunay, scvt_voronoi_connectivity
+
+# Exports: MPAS-SCVT mesh generator host DRIVER (esd-e5m.4 / D4) — the external
+# Lloyd fixed-point loop over the declarative step + the D1 background quadrature,
+# emitting MpasMeshData via the D3 leaf at convergence.
+export build_scvt_mesh, scvt_lloyd_solve, scvt_background_quadrature
 
 # Exports: DUO construction FAQ bridges wired into build_duo_grid (esd-ohd / W1)
 export duo_subdivide_faq                              # D3 subdivision (esd-heg.3)

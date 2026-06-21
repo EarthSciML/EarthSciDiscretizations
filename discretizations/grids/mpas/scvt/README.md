@@ -10,7 +10,7 @@ a one-time spherical-Delaunay topology leaf (epic `esd-e5m`). The pieces:
 | `esd-e5m.1` (**this dir**) | **D1** background quadrature mesh + density sampling | `background_quadrature.esm` |
 | `esd-e5m.2` (**this dir**) | **D2** one Lloyd iteration (assign → centroid → move) | `lloyd_step.esm`, `LLOYD_STEP_CONTRACT.md` |
 | `esd-e5m.3` (**this dir**) | **D3** spherical-topology leaf (wrap S2B) + determinism/tolerance contract | `topology_leaf.esm`, `TOPOLOGY_LEAF_CONTRACT.md` |
-| `esd-e5m.4` | D4 `build_scvt_mesh` host driver (external fixed-point loop) | *(host driver)* |
+| `esd-e5m.4` (**this dir**) | **D4** `build_scvt_mesh` host driver (external fixed-point loop) | `src/grids/mpas_scvt.jl`, `BUILD_DRIVER_CONTRACT.md` |
 | `esd-e5m.5` | D5 conformance drain | *(conformance)* |
 
 ---
@@ -252,3 +252,65 @@ generators leaves the triangulation invariant); the **ρ ≡ 1 regression**
 (`cells_on_cell` byte-identical to the imperative `_duo_voronoi_dual` — uniform-
 density SCVT recovers the quasi-uniform icosahedral-dual mesh); the tolerance-
 geometry invariant; and the schema-valid declaration.
+
+---
+
+# `build_scvt_mesh` host driver (esd-e5m.4 / D4)
+
+The external fixed-point **loop** that ties D1 + D2 + D3 into an `MpasMeshData` —
+the grid-construction analogue of `build_ode_problem`: the engine materialises the
+RHS (here, ONE Lloyd iteration), the host owns the solve (here, the fixed-point
+iteration). `build_scvt_mesh` (and the lower-level `scvt_lloyd_solve` /
+`scvt_background_quadrature`) live in
+[`src/grids/mpas_scvt.jl`](../../../../src/grids/mpas_scvt.jl).
+
+## The driver boundary
+
+```
+generators₀, ρ, level
+  │  bg_coord, bg_mass = scvt_background_quadrature(level; density=ρ)   (D1, eval_coeff)
+  ▼
+┌─[LOOP, host RHS-only — NO loop in the IR]──────────────────────────────────────┐
+│  vi       = materialize_value_invention(lloyd_step.esm, {bg_coord,bg_mass,gen}) │ ◀ D2 STEP
+│  gen_next = R · vi.centroid / |vi.centroid|     (sphere re-projection, HOST √)   │
+│  until    max_g ‖gen_next[g] − gen[g]‖ < tol    (HOST convergence test)          │
+└─────────────────────────────────────────────────────────────────────────────────┘
+  │  gen (converged)
+  ▼  conn = scvt_voronoi_connectivity(gen; R)   (D3 LEAF, ONCE) + dual geometry
+  ▼  MpasMeshData
+```
+
+Per the epic's DECLARATIVE-OR-FAIL rule the per-iteration **step** is the
+declarative FAQ (D2), the **loop is host (RHS-only)**, and the **topology is the
+irreducible leaf** (D3). The host owns exactly two operations: the **convergence
+test** and the **sphere re-projection** — the projection needs a `sqrt`, outside
+the value-invention build-time op set (`LLOYD_STEP_CONTRACT.md` §1), the same
+boundary D3 draws at its convex-hull leaf. **No recurrence is lowered into the
+IR**: `build_scvt_mesh` calls `materialize_value_invention` once per host
+iteration with `gen` as the only varying parameter, and iterates that ONE
+declarative step to a fixed point.
+
+## What it emits
+
+`build_scvt_mesh` emits the **same** `MpasMeshData` the imperative DUO Voronoi
+dual (`_duo_voronoi_dual`) produces, reusing the identical dual topology
+(`voronoi_dual_topology_faq`, via the D3 leaf) and dual geometry
+(`duo_dual_geometry_faq`) FAQ stack. The ONLY differences from the DUO dual are the
+**source of the generators** (Lloyd convergence under a density `ρ`, not the fixed
+icosahedral subdivision) and the **source of the triangulation** (the
+spherical-Delaunay leaf, not the DUO primal faces) — so it is the only path
+supporting variable resolution. Cells = generators, dual vertices = the Delaunay
+circumcentres, edges = the Delaunay edges; the cell areas conserve mass
+(`Σ area = 4πR²`). The full normative contract is
+**[`BUILD_DRIVER_CONTRACT.md`](BUILD_DRIVER_CONTRACT.md)**.
+
+## Proof
+
+[`test/test_mpas_scvt_build.jl`](../../../../test/test_mpas_scvt_build.jl) drives
+the loop end-to-end: the **uniform CVT** (a level-0 seed + level-2 background
+converges to the dodecahedron — 12 pentagons, `n_edges = 30`, `n_vertices = 20` —
+mass-conserving, `check_mesh(strict)`); the **level-1 icosahedral dual** (42
+generators → 12 pentagons + 30 hexagons); **variable resolution** (`ρ = 2 + z`
+reweights the mesh away from the uniform CVT); and the **host-loop-over-declarative-
+step** invariant (a deterministic off-CVT seed takes > 1 iteration and converges to
+a genuine fixed point — one more declarative step moves `< 1e-9`).
