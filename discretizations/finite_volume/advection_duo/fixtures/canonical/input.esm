@@ -1,0 +1,70 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "advection_duo_canonical"
+  },
+  "grids": {
+    "domain": {
+      "family": "duo",
+      "dimensions": [
+        { "name": "n_cells", "size": 320, "periodic": false, "spacing": "unstructured" },
+        { "name": "n_edges", "size": 480, "periodic": false, "spacing": "unstructured" }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "adv": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "q":   { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "U":   { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["adv"], "wrt": "t" }, "rhs": { "op": "div", "args": [ { "op": "*", "args": ["U", "q"] } ], "dim": "cell" } },
+        { "lhs": { "op": "D", "args": ["q"], "wrt": "t" }, "rhs": 0.0 },
+        { "lhs": { "op": "D", "args": ["U"], "wrt": "t" }, "rhs": 0.0 }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "advection_duo",
+      "pattern": { "op": "div", "args": [ { "op": "*", "args": ["$U", "$q"] } ], "dim": "cell" },
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": { "k": [1, 3] },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["edge_sign_on_face", "i", "k"] },
+                { "op": "/", "args": [
+                    { "op": "index", "args": ["dc_edge", { "op": "index", "args": ["edges_on_face", "i", "k"] }] },
+                    { "op": "index", "args": ["tri_area", "i"] }
+                ]}
+              ]
+            },
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["$U", { "op": "index", "args": ["edges_on_face", "i", "k"] }] },
+                { "op": "*", "args": [
+                    0.5,
+                    { "op": "+", "args": [
+                        { "op": "index", "args": ["$q", "i"] },
+                        { "op": "index", "args": ["$q", { "op": "index", "args": ["cell_neighbors", "i", "k"] }] }
+                    ]}
+                ]}
+              ]
+            }
+          ]
+        },
+        "args": ["$U", "$q", "dc_edge", "tri_area", "edges_on_face", "edge_sign_on_face", "cell_neighbors"]
+      }
+    }
+  ]
+}

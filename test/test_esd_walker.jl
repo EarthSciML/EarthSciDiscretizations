@@ -530,6 +530,33 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "advection_duo"
+            # advection_duo (esd-6g4.3): flux-form scalar transport on the DUO
+            # mesh — the divergence of the advective flux q·U, composing the
+            # divergence_duo stencil with a centered edge reconstruction. Layer-A
+            # passes via its canonical byte contract (the div($U*$q, dim=cell)
+            # pattern lowers to the cell-output reduction). Layer-B SKIPs: the
+            # convergence fixture ships applicable:false — the flux-divergence
+            # STRUCTURE is validated (the q≡1 reduction equals divergence_duo at
+            # O(h)), but the centered edge reconstruction (q[i]+q[nbr])/2 is
+            # sub-first-order in L∞ on the irregular icosahedral mesh, so the
+            # spatially-varying-scalar MMS pends a higher-order reconstruction.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "flux_duo"
+            # flux_duo (esd-6g4.3): the edge-normal advective flux U·q_e (the
+            # un-summed integrand of advection_duo), an edge-OUTPUT reconstruction
+            # like gradient_duo. Layer-A passes via its canonical byte contract
+            # (the flux($U,$q, dim=edge) pattern lowers to the edge-output
+            # reduction over the two incident faces). Layer-B SKIPs: applicable:
+            # false — the edge reconstruction shares advection_duo's open item
+            # (sub-first-order centered interpolation on the irregular mesh).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "flux_1d_ppm"
             # flux_1d_ppm: Layer-A passes via its canonical byte contract —
             # the PPM replacement AST (CW84 limiter + Courant-fraction integral,

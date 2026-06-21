@@ -1,0 +1,55 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "flux_duo_canonical"
+  },
+  "grids": {
+    "domain": {
+      "family": "duo",
+      "dimensions": [
+        { "name": "n_cells", "size": 320, "periodic": false, "spacing": "unstructured" },
+        { "name": "n_edges", "size": 480, "periodic": false, "spacing": "unstructured" }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "F": { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 },
+        "U": { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 },
+        "q": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["F"], "wrt": "t" }, "rhs": { "op": "flux", "args": ["U", "q"], "dim": "edge" } },
+        { "lhs": { "op": "D", "args": ["U"], "wrt": "t" }, "rhs": 0.0 },
+        { "lhs": { "op": "D", "args": ["q"], "wrt": "t" }, "rhs": 0.0 }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "flux_duo",
+      "pattern": { "op": "flux", "args": ["$U", "$q"], "dim": "edge" },
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": { "s": [1, 2] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "*", "args": [
+                0.5,
+                { "op": "index", "args": ["$U", "i"] }
+            ]},
+            { "op": "index", "args": [
+                "$q",
+                { "op": "index", "args": ["faces_on_edge", "i", "s"] }
+            ]}
+          ]
+        },
+        "args": ["$U", "$q", "faces_on_edge"]
+      }
+    }
+  ]
+}

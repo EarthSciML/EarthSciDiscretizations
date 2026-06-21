@@ -1,0 +1,32 @@
+{
+  "discretizations": {
+    "flux_duo": {
+      "applies_to": { "op": "flux", "args": ["$U", "$q"], "dim": "edge" },
+      "grid_family": "unstructured",
+      "requires_locations": ["edge_normal", "cell_center"],
+      "emits_location": "edge_normal",
+      "combine": "+",
+      "accuracy": "O(h) on a quasi-uniform icosahedral triangular mesh",
+      "reference": "Heikes et al. (2023), J. Adv. Model. Earth Syst. 15:e2022MS003192 (DUO icosahedral triangular C-grid); the edge-normal advective flux of a transported scalar — the building block that divergence_duo integrates to form advection_duo. flux(U,q)_e = U[e] · (q[faces_on_edge[e,1]] + q[faces_on_edge[e,2]])/2, the prescribed edge-normal mass-flux velocity U[e] times the second-order centered reconstruction of q at edge e from its two incident triangles. This is an edge-OUTPUT arrayop (free index over edges, gathering the two incident cells via faces_on_edge, written as a reduction over the two faces s∈{1,2} with weight 1/2), the same edge-output form as gradient_duo. The edge reconstruction is the un-summed integrand of advection_duo's flux divergence: div(U·q) = (1/tri_area) Σ_k edge_sign_on_face · dc_edge · flux(U,q). U is a build-time prescribed edge field; only q and U reach the per-step hot tree.",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": { "s": [1, 2] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "*", "args": [
+                0.5,
+                { "op": "index", "args": ["$U", "i"] }
+            ]},
+            { "op": "index", "args": [
+                "$q",
+                { "op": "index", "args": ["faces_on_edge", "i", "s"] }
+            ]}
+          ]
+        },
+        "args": ["$U", "$q", "faces_on_edge"]
+      }
+    }
+  }
+}

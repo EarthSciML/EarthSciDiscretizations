@@ -1,0 +1,23 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "advection_duo_pde",
+    "description": "Flux-form scalar advection d(adv)/dt = div(U*q, dim=cell) on a DUO icosahedral triangular mesh. q is the transported cell-centered scalar; U is the prescribed edge-normal mass-flux velocity (edge-located); adv is the cell-centered flux-divergence output (the advective tendency is -adv). Lowered from advection_duo (Heikes et al. 2023): the divergence_duo stencil applied to the centered edge reconstruction U[e]*(q[i]+q[nbr])/2. q and U are injected at bind time by the unstructured-advection Layer-B runner; both tendencies are frozen (zero) so one RHS evaluation yields the discrete flux divergence of the prescribed scalar and velocity fields."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "adv": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "q":   { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "U":   { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["adv"], "wrt": "t" }, "rhs": { "op": "div", "args": [ { "op": "*", "args": ["U", "q"] } ], "dim": "cell" } },
+        { "lhs": { "op": "D", "args": ["q"], "wrt": "t" }, "rhs": 0.0 },
+        { "lhs": { "op": "D", "args": ["U"], "wrt": "t" }, "rhs": 0.0 }
+      ],
+      "time": { "t0": 0.0, "t_final": 0.001 }
+    }
+  }
+}
