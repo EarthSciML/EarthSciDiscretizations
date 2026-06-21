@@ -1,0 +1,37 @@
+{
+  "discretizations": {
+    "gradient_duo": {
+      "applies_to": { "op": "grad", "args": ["$q"], "dim": "edge" },
+      "grid_family": "unstructured",
+      "requires_locations": ["cell_center"],
+      "emits_location": "edge_normal",
+      "combine": "+",
+      "accuracy": "O(h) on a quasi-uniform icosahedral triangular mesh",
+      "reference": "Heikes et al. (2023), J. Adv. Model. Earth Syst. 15:e2022MS003192 (DUO icosahedral triangular C-grid); the C-grid normal gradient, the discrete adjoint of divergence_duo. Maps a cell-centered scalar q to its edge-normal derivative: (grad q)_i = (q[faces_on_edge[i,2]] - q[faces_on_edge[i,1]]) / dv_edge[i], where i runs over EDGES (the edge-located output's index), faces_on_edge[i,1]=f_lo and faces_on_edge[i,2]=f_hi are the lower- and higher-indexed of edge i's two incident triangles, and dv_edge[i] is the great-circle distance between their circumcenters (the two cell centers). The result is the gradient component along the reference normal n̂_i (which points f_lo -> f_hi, matching edge_sign_on_face), so divergence_duo and gradient_duo share one orientation. Written as a reduction over the two incident faces s∈{1,2} with the centered-difference sign (2s-3) (s=1→-1 at f_lo, s=2→+1 at f_hi), exactly the implicit-output-index reduction form of divergence_duo but with the free index running over edges rather than cells. dv_edge and faces_on_edge are build-time-constant grid geometry; only q reaches the per-step hot tree.",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "s": [1, 2]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "-", "args": [ { "op": "*", "args": [2, "s"] }, 3 ] },
+                { "op": "index", "args": [
+                    "$q",
+                    { "op": "index", "args": ["faces_on_edge", "i", "s"] }
+                ]}
+              ]
+            },
+            { "op": "index", "args": ["dv_edge", "i"] }
+          ]
+        },
+        "args": ["$q", "faces_on_edge", "dv_edge"]
+      }
+    }
+  }
+}

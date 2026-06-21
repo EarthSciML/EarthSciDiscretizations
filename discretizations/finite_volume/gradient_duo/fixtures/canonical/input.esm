@@ -1,0 +1,58 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "gradient_duo_canonical"
+  },
+  "grids": {
+    "domain": {
+      "family": "duo",
+      "dimensions": [
+        { "name": "n_cells", "size": 320, "periodic": false, "spacing": "unstructured" },
+        { "name": "n_edges", "size": 480, "periodic": false, "spacing": "unstructured" }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "g": { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 },
+        "q": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["g"], "wrt": "t" }, "rhs": { "op": "grad", "args": ["q"], "dim": "edge" } },
+        { "lhs": { "op": "D", "args": ["q"], "wrt": "t" }, "rhs": 0.0 }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "gradient_duo",
+      "pattern": { "op": "grad", "args": ["$q"], "dim": "edge" },
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "s": [1, 2]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "-", "args": [ { "op": "*", "args": [2, "s"] }, 3 ] },
+                { "op": "index", "args": [
+                    "$q",
+                    { "op": "index", "args": ["faces_on_edge", "i", "s"] }
+                ]}
+              ]
+            },
+            { "op": "index", "args": ["dv_edge", "i"] }
+          ]
+        },
+        "args": ["$q", "faces_on_edge", "dv_edge"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "gradient_duo_pde",
+    "description": "C-grid normal gradient d(g)/dt = grad(q, dim=edge) on a DUO icosahedral triangular mesh. q is the cell-centered scalar; g is the edge-normal gradient output (edge-located, shape [n_edges]). Lowered from gradient_duo (Heikes et al. 2023): (grad q)_e = (q[faces_on_edge[e,2]] - q[faces_on_edge[e,1]]) / dv_edge[e]. The cell field q is injected at bind time by the unstructured-gradient Layer-B runner; the q tendency is frozen (zero) so one RHS evaluation yields the discrete edge-normal gradient of the prescribed scalar field."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "g": { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 },
+        "q": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["g"], "wrt": "t" }, "rhs": { "op": "grad", "args": ["q"], "dim": "edge" } },
+        { "lhs": { "op": "D", "args": ["q"], "wrt": "t" }, "rhs": 0.0 }
+      ],
+      "time": { "t0": 0.0, "t_final": 0.001 }
+    }
+  }
+}

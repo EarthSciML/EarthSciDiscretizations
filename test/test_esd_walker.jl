@@ -511,6 +511,25 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("fixture-declared not applicable", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "gradient_duo"
+            # gradient_duo (esd-6g4.3): the DUO C-grid normal gradient, the
+            # discrete adjoint of divergence_duo (edge OUTPUT from a cell-centered
+            # input). Layer-A passes via its canonical byte contract — an inline
+            # pattern+replacement rule (grad($q, dim=edge) -> a reduction arrayop
+            # over the two incident faces s∈{1,2} with the centered-difference sign
+            # (2s-3), the free index running over edges) on a DUO grid; ESS
+            # discretize lowers grad(q) and the walker byte-compares to the pinned
+            # expected.esm. Layer-B passes via the new unstructured_gradient runner
+            # (mms_kind="grad_const_field_sphere"): the linear scalar q=a·r̂ is
+            # injected at cell circumcenters, the builtin icosahedral ladder (level
+            # 2->3->4) is swept, and the edge-normal gradient (q[f_hi]-q[f_lo])/
+            # dv_edge is measured against a·n̂_e, clearing the expected_min_order of
+            # 0.9 (O(h) L∞ — the two-point edge-normal difference is first-order on
+            # the irregular icosahedral mesh). Observed orders [0.99, 0.99].
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "flux_1d_ppm"
             # flux_1d_ppm: Layer-A passes via its canonical byte contract —
             # the PPM replacement AST (CW84 limiter + Courant-fraction integral,
@@ -767,8 +786,10 @@ using TestItems
     # ships Layer-A only — its Layer-B convergence fixture is applicable:false).
     # esd-6g4.3 adds divergence_duo (O(h) DUO icosahedral-triangular flux-form
     # divergence) via the same unstructured_divergence runner's DUO branch,
-    # taking the PASS count to 21.
-    @test layer_b_passes == 21
+    # taking the PASS count to 21, and gradient_duo (O(h) DUO C-grid normal
+    # gradient) via the unstructured_gradient runner's DUO branch, taking it
+    # to 22.
+    @test layer_b_passes == 22
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

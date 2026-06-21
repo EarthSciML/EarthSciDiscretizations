@@ -869,10 +869,25 @@ function _grid_primitive_arrays(grid::DuoGrid)
     # imperative `_extract_connectivity(::DuoGrid)` numbering), so it reproduces the
     # prior host primitive exactly. Every slot k ∈ 1:3 is a real edge (valence-3
     # closed mesh), so there is no padding to skip.
+    # faces_on_edge[s, e]: the two triangular faces incident on primal edge e,
+    # slot 1 = LOWER-indexed face, slot 2 = HIGHER-indexed face (built by inverting
+    # edges_on_face). The closed icosahedral mesh has exactly two faces per edge
+    # (no boundary). This is the edge→cell gather table for edge-OUTPUT operators:
+    # the C-grid normal gradient (gradient_duo) reads q at the two incident faces,
+    # and the advective flux (flux_duo) reconstructs q there. The lower→higher slot
+    # order matches edge_sign_on_face's reference normal, so a positive
+    # gradient/flux points along that same normal.
+    faces_on_edge = zeros(Int, 2, Ne)
     edge_face_lo = fill(typemax(Int), Ne)
+    edge_face_hi = fill(0, Ne)
     @inbounds for c in 1:Nc, k in 1:3
         e = edges_on_face[k, c]
         c < edge_face_lo[e] && (edge_face_lo[e] = c)
+        c > edge_face_hi[e] && (edge_face_hi[e] = c)
+    end
+    @inbounds for e in 1:Ne
+        faces_on_edge[1, e] = edge_face_lo[e]
+        faces_on_edge[2, e] = edge_face_hi[e]
     end
     edge_sign_on_face = Matrix{Int}(undef, 3, Nc)
     @inbounds for c in 1:Nc, k in 1:3
@@ -884,6 +899,10 @@ function _grid_primitive_arrays(grid::DuoGrid)
         "cell_neighbors" => _cell_slot_table(grid.cell_neighbors),
         "edges_on_face" => _cell_slot_table(edges_on_face),
         "edge_sign_on_face" => _cell_slot_table(edge_sign_on_face),
+        # (slot, edge) → (edge, slot): the edge-OUTPUT gather table ESS indexes as
+        # index(faces_on_edge, e = edge, s = slot) for the gradient_duo / flux_duo
+        # rules whose free index runs over edges.
+        "faces_on_edge" => _cell_slot_table(faces_on_edge),
         "area" => area_eff,
         # tri_area[c] = the spherical-triangle area of cell c (grid.area). This is
         # the Gauss-divergence-theorem normalization for the FLUX-FORM divergence
