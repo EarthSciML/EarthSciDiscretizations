@@ -11,7 +11,7 @@ a one-time spherical-Delaunay topology leaf (epic `esd-e5m`). The pieces:
 | `esd-e5m.2` (**this dir**) | **D2** one Lloyd iteration (assign → centroid → move) | `lloyd_step.esm`, `LLOYD_STEP_CONTRACT.md` |
 | `esd-e5m.3` (**this dir**) | **D3** spherical-topology leaf (wrap S2B) + determinism/tolerance contract | `topology_leaf.esm`, `TOPOLOGY_LEAF_CONTRACT.md` |
 | `esd-e5m.4` (**this dir**) | **D4** `build_scvt_mesh` host driver (external fixed-point loop) | `src/grids/mpas_scvt.jl`, `BUILD_DRIVER_CONTRACT.md` |
-| `esd-e5m.5` | D5 conformance drain | *(conformance)* |
+| `esd-e5m.5` | D5 conformance drain | `test/test_mpas_scvt_conformance.jl`, `tests/conformance/grids/mpas/scvt/variable_resolution/` |
 
 ---
 
@@ -314,3 +314,73 @@ generators → 12 pentagons + 30 hexagons); **variable resolution** (`ρ = 2 + z
 reweights the mesh away from the uniform CVT); and the **host-loop-over-declarative-
 step** invariant (a deterministic off-CVT seed takes > 1 iteration and converges to
 a genuine fixed point — one more declarative step moves `< 1e-9`).
+
+---
+
+# Conformance drain (esd-e5m.5 / D5)
+
+The lower layers each ship their own conformance (D1 background-quadrature byte
+goldens, D2 Lloyd-step byte golden, D3 cross-binding topology golden). D5 drains
+the remaining **driver-level** obligations — the things only the full Lloyd
+`build_scvt_mesh` loop can demonstrate — in
+[`test/test_mpas_scvt_conformance.jl`](../../../../test/test_mpas_scvt_conformance.jl).
+
+## (a) ρ ≡ 1 regression vs the quasi-uniform DUO-dual (`x1.*` family)
+
+Under uniform density the SCVT reduces to a CVT whose fixed point is the
+quasi-uniform icosahedral-dual mesh. The full driver on the 42-generator level-1
+seed reproduces the imperative `_duo_voronoi_dual(1)` **structure exactly** (42
+cells, 120 edges, 80 dual vertices, the 12-pentagon + 30-hexagon valence
+histogram, `Σ area = 4πR²`).
+
+The geometry is reproduced **to tolerance, and that tolerance is the background
+quadrature resolution**: the per-cell area gap to the DUO-dual shrinks
+monotonically as the background refines —
+
+| background level | quadrature points | max per-cell area gap |
+|-----------------:|------------------:|----------------------:|
+| 2 | 320 | 8.4 % |
+| 3 | 1280 | 5.0 % |
+| 4 | 5120 | 2.3 % |
+
+— the rigorous form of "uniform-density SCVT reproduces the `x1.*` family." The
+**connectivity** recovers the DUO-dual's *byte-for-byte* when the generators are
+fed straight to the topology leaf (pinned in
+[`test/test_mpas_scvt_topology_leaf.jl`](../../../../test/test_mpas_scvt_topology_leaf.jl));
+the full driver moves the generators to the centroidal fixed point, so a few
+near-cocircular edges flip while the valence histogram (the topology invariant) is
+preserved.
+
+## (b) CVT fixed-point property
+
+At convergence every generator **is** the density-weighted centroid of its Voronoi
+cell. The test checks this two ways for both uniform `ρ ≡ 1` and variable
+`ρ = 2 + z`: one more declarative D2 Lloyd step moves the converged generators by
+`< 1e-9` (residual ≈ 1.6e-16 — an exact discrete fixed point), and an independent
+test-local nearest-generator centroid recompute agrees with the generators to
+`< 1e-6`. The level-3 background attends all 42 generators (none held).
+
+## (c) Variable-resolution reference fixture
+
+The headline capability over the fixed DUO dual. The converged `ρ = 2 + z` mesh is
+pinned in
+[`tests/conformance/grids/mpas/scvt/variable_resolution/`](../../../../tests/conformance/grids/mpas/scvt/variable_resolution/)
+and reproduced to the §5.8 tolerance contract, with the density-shift correctness
+property asserted (`ρ` largest toward the north pole → smaller cells there → cell
+area negatively correlated with `z`, observed `corr ≈ −0.73`). The external jigsaw
+/ MPAS-Tools generators are offline tools not available in this environment, so
+this is an **internal** reference (the canonical pipeline's own reproducible
+var-res output); the VERDICT and the independent correctness anchors (the
+analytically-pinned `1/6` density integral at D1, the CVT property at (b)) are in
+the fixture's [`README.md`](../../../../tests/conformance/grids/mpas/scvt/variable_resolution/README.md).
+
+## Cross-binding
+
+The **deterministic integer topology** is binding-neutral and pinned cross-binding
+by the D3 leaf golden
+([`tests/conformance/grids/mpas/scvt/topology_leaf/`](../../../../tests/conformance/grids/mpas/scvt/topology_leaf/));
+the **tolerance geometry** rides the shared `duo_dual_geometry_faq` §5.8 contract
+(`tests/conformance/grids/duo/`). The Lloyd **loop** itself is the host driver
+(`build_ode_problem` analogue), reference binding Julia — there is no second
+binding of the loop to pin, exactly as the epic's DECLARATIVE-OR-FAIL boundary
+draws it (`BUILD_DRIVER_CONTRACT.md`).
