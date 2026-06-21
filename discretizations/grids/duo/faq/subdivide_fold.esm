@@ -1,0 +1,182 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "duo_subdivide_fold",
+    "description": "DUO icosahedral build-time level-fold (RFC semiring-faq-unified-ir §7.3; bead esd-heg.4). The full level-N mesh expressed declaratively as the base icosahedron seed folded through the one-level value-invention refine pass (subdivide_refine.esm) N times, where N = grid options.level is a build-time constant. This document declares the SEED as a literal/trivial FAQ constant: (1) vert_raw — the 12 golden-ratio (phi = (1+sqrt(5))/2) icosahedron vertices, pre-normalization (value-free parameter shape; concrete data fed by the conformance harness, mirroring subdivide_refine.esm); (2) seed_sq — the squared norm of each raw vertex, reduced over space (sum_product FAQ); (3) seed_coord — the unit-sphere base vertices = vert_raw / sqrt(seed_sq) (the normalize-to-sphere FAQ; the level-0 mesh vertices), bit-for-bit identical to the imperative _icosahedron_vertices; (4) face_vert — the 20 base triangular faces (CONST connectivity), the seed connectivity consumed by the first refine pass. THE FOLD: the level-N vertex/face index sets are obtained by chaining subdivide_refine over (seed_coord, face_vert): each pass's output vertices+faces become the next pass's input parameters (vert_coord, face_vert). This is exactly the per-level driver loop `for _ in 1:level` of _subdivide_icosahedron (src/grids/duo.jl) — the last recursive kernel — expressed as a composition of declarative passes. ESS has no native build-time repeat/iterate/fold construct over a build-time-constant level (no such key in esm-schema.json; no whole-model value-invention runner), so the N-times unroll is performed caller-side, exactly as the landed precedent test/test_duo_subdivision_faq.jl drives the single pass; the missing native affordance is filed as ESS bead ess-vnk. Value-free structural spec; index sizes are the canonical level-0 seed (Nv=12, Nc=20). Byte/numeric equivalence to the imperative _subdivide_icosahedron across the level ladder (L=0,1,2) is proven by test/test_duo_subdivision_fold.jl: byte-identical canonical faces, icos_level{0,1,2} counts (20*4^L cells), imperative coords to ULP.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.furiosa"
+    ],
+    "tags": [
+      "duo",
+      "icosahedral",
+      "subdivision",
+      "level-fold",
+      "value-invention",
+      "seed",
+      "faq",
+      "esd-heg.4"
+    ]
+  },
+  "models": {
+    "IcosahedralSeed": {
+      "index_sets": {
+        "verts": {
+          "kind": "interval",
+          "size": 12
+        },
+        "faces": {
+          "kind": "interval",
+          "size": 20
+        },
+        "corners": {
+          "kind": "interval",
+          "size": 3
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        }
+      },
+      "variables": {
+        "vert_raw": {
+          "type": "parameter",
+          "shape": [
+            "verts",
+            "space"
+          ],
+          "description": "Raw (pre-normalization) cartesian coordinates of the 12 base icosahedron vertices: entries drawn from {0, +/-1, +/-phi} with phi = (1+sqrt(5))/2 the golden ratio. The literal/trivial FAQ seed constant (value-free shape; the concrete {0,+/-1,+/-phi} layout is fed by the harness)."
+        },
+        "face_vert": {
+          "type": "parameter",
+          "shape": [
+            "faces",
+            "corners"
+          ],
+          "description": "Vertex ids (1-based) of each of the 20 base icosahedron triangular faces, outward-wound. The seed connectivity (CONST) consumed by the first refine pass of the fold."
+        },
+        "seed_sq": {
+          "type": "state",
+          "shape": [
+            "verts"
+          ],
+          "description": "Squared norm of each raw vertex, reduced over space (sum_product FAQ): seed_sq[v] = sum_d vert_raw[v,d]^2."
+        },
+        "seed_coord": {
+          "type": "state",
+          "shape": [
+            "verts",
+            "space"
+          ],
+          "description": "Unit-sphere base icosahedron vertex coordinates = vert_raw / sqrt(seed_sq) (normalize-to-sphere FAQ). The level-0 mesh vertices; the seed of the build-time fold. Bit-for-bit identical to the imperative _icosahedron_vertices."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(seed-1) seed_sq[v] = sum_d vert_raw[v,d]^2 (squared norm; sum_product over space). Squares are products (*), NOT ^, so the float ops match the imperative `n = sqrt(v[1]^2+v[2]^2+v[3]^2)` bit-for-bit (Julia v^2 lowers to v*v).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "seed_sq",
+              "v"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "vert_raw"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "v"
+            ],
+            "ranges": {
+              "v": {
+                "from": "verts"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "vert_raw",
+                    "v",
+                    "d"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "vert_raw",
+                    "v",
+                    "d"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(seed-2) seed_coord[v,d] = vert_raw[v,d] / sqrt(seed_sq[v]) — the normalize-to-sphere FAQ. The level-0 base icosahedron vertex; the seed of the fold. sqrt(seed_sq[v]) reproduces the single imperative `n` per vertex, so each component divides by the identical norm bit-for-bit.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "seed_coord",
+              "v",
+              "d"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "vert_raw",
+              "seed_sq"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "v",
+              "d"
+            ],
+            "ranges": {
+              "v": {
+                "from": "verts"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "vert_raw",
+                    "v",
+                    "d"
+                  ]
+                },
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "seed_sq",
+                        "v"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

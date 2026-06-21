@@ -94,3 +94,60 @@ imperative `build_duo_grid` area/centroid/lon/lat to **0 ULP** across levels 0, 
 plus the physical invariant (areas sum to 4πR²), the schema-valid declarative
 document, and the cross-binding canonical-byte contract (reproduced bit-for-bit by
 both the imperative grid and the FAQ).
+
+---
+
+# Build-time level-fold: seed + compose refine × level (esd-heg.4)
+
+`subdivide_fold.esm` expresses the **full level-N mesh** declaratively as the base
+icosahedron **seed** folded through the one-level `subdivide_refine` pass **N
+times**, where `N = grid options.level` is a build-time constant. This is the
+declarative replacement for the per-level driver loop `for _ in 1:level` of
+`_subdivide_icosahedron` ([`src/grids/duo.jl`](../../../../src/grids/duo.jl)) — the
+last recursive kernel.
+
+1. **The seed** (the *literal/trivial FAQ constant*): the 12 golden-ratio
+   (`φ = (1+√5)/2`) icosahedron vertices, pre-normalization, plus the 20 base
+   faces. `subdivide_fold.esm` declares the **normalize-to-sphere FAQ**
+   `seed_coord = vert_raw / sqrt(Σ_d vert_raw_d²)` (squares as products, 3-arg `+`
+   left-assoc), so the declarative seed is **bit-for-bit identical** to the
+   imperative `_icosahedron_vertices`.
+2. **The fold**: each pass's output vertices + faces become the next pass's input
+   parameters (`vert_coord`, `face_vert`). After `level` passes the level-N mesh is
+   complete. The single pass is already proven equivalent to one imperative step
+   (above), so the fold reproduces the imperative full mesh by induction.
+
+## No native repeat affordance — caller-side unroll
+
+ESS has **no native build-time repeat / iterate / fold construct** over a
+build-time-constant level: there is no `repeat`/`iterate`/`level`/`loop` key in
+`esm-schema.json`, and no whole-model value-invention runner that ingests
+`index_sets` + `variables` + `equations` and materializes the state arrays (the
+engine exposes the per-primitive functions `skolem_edge` / `distinct` / `rank` and
+the expression evaluator, which callers compose). So the `level`-times unroll is
+performed **caller-side**, exactly as the landed single-pass proof drives one pass.
+`subdivide_fold.esm` therefore declares the seed (the new declarative content) and
+documents the fold composition; the missing native affordance is filed as
+upstream **EarthSciSerialization bead `ess-vnk`** (a build-time
+*repeat-pass-`level`-times* engine primitive would let the fold itself be declared,
+not just the seed).
+
+## Byte-identity contract
+
+The fold's `§5.7` canonical labeling — base vertices keep their seed ids, each pass
+appends midpoint vertices in `distinct`+`rank` order — is deterministic and
+cross-binding stable (the imperative `push!`/`Dict` order is not).
+`fixtures/canonical/mesh_level{0,1,2}.json` pin the exact canonical cell→vertex
+connectivity (`faces_canonical`) and the `icos_level{0,1,2}.esm` counts
+(`20·4^L` cells); the test regenerates and compares them byte-for-byte.
+
+## Proof
+
+[`test/test_duo_subdivision_fold.jl`](../../../../test/test_duo_subdivision_fold.jl)
+drives the same landed ESS primitives to build the declarative seed and fold the
+refine pass `level` times, and proves the fold reproduces the imperative
+`_subdivide_icosahedron` **full mesh** for levels 0, 1, 2: declarative seed
+bit-identical to imperative, identical vertex coordinate set (coords to ULP),
+identical triangles **position-for-position with winding preserved**,
+`icos_level{0,1,2}` counts (`20·4^L` cells), the canonical full-mesh byte contract,
+and seed-face permutation/winding-independence of the canonical labeling.
