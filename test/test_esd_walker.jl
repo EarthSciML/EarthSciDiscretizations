@@ -195,6 +195,27 @@ using TestItems
             ("finite_volume", "weno5_advection_2d"),
         ]
     )
+    # esd-6g4.13 (G14): high-order grad (4/6/8) + upwind ported to the vertical
+    # and latlon grid families. Each ships a canonical byte contract (Layer-A
+    # PASS via `discretize`) and no convergence/ fixture (Layer-B SKIP "no
+    # convergence fixtures"), mirroring the staggered_1st_uniform /
+    # upwind_1st_nonuniform numeric-UNIT pattern. The vertical rules are the
+    # uniform-spacing cartesian central stencils with dz=h (coefficients
+    # verified by the identical cartesian centered_4th/6th/8th_uniform Layer-B);
+    # the latlon rules carry the spherical metric (1/(R·cos_lat·dlon) for the
+    # lon term, 1/(R·dlat) for the lat term) on standard central coefficients.
+    pass_layer_a_canonical_only_g14 = Set(
+        [
+            ("finite_difference", "centered_4th_uniform_vertical"),
+            ("finite_difference", "centered_6th_uniform_vertical"),
+            ("finite_difference", "centered_8th_uniform_vertical"),
+            ("finite_difference", "upwind_1st_vertical"),
+            ("finite_difference", "centered_4th_uniform_latlon"),
+            ("finite_difference", "centered_6th_uniform_latlon"),
+            ("finite_difference", "centered_8th_uniform_latlon"),
+            ("finite_difference", "upwind_1st_latlon"),
+        ]
+    )
     for r in results
         @test r.layer_c.outcome == WalkESDTests.LAYER_SKIP
         @test !isempty(r.layer_c.reason)
@@ -516,6 +537,14 @@ using TestItems
             # rule ships no convergence/ fixture (a 1D staggered MMS runner is
             # out of scope here — the catalog rule's numeric proof is the Layer-A
             # byte contract).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif key in pass_layer_a_canonical_only_g14
+            # esd-6g4.13 (G14): vertical / latlon high-order grad + upwind.
+            # Layer-A passes via the canonical byte contract; Layer-B SKIPs (no
+            # convergence/ fixture — see the set's definition comment above).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
