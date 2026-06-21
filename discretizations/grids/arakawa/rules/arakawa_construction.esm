@@ -1,0 +1,289 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "arakawa_construction",
+    "description": "Arakawa staggered-grid construction as a declarative semiring-FAQ document (RFC semiring-faq-unified-ir §5.1/§5.2; bead esd-3we.4 / S4). The staggered-grid sibling of the cartesian structured-grid FAQ TEMPLATE (cartesian_construction.esm): it expresses the whole arakawa coordinate/location/neighbor/boundary construction over a cartesian base with the landed M1 path (cartesian interval index-sets + elementwise arrayop bodies — NO value-invention, NO recursion, all CONST cadence), the same way cartesian_construction.esm expresses rectilinear construction and duo/rules/primal_topology.esm expresses unstructured connectivity (M3). The arakawa stagger over a cartesian base is SEPARABLE: each of the four staggered locations (CellCenter / UEdge / VEdge / Corner) is the cartesian product of two staggered 1-D affine maps per axis — a CENTER map (cell centres, half-cell offset) and a NODE map (cell faces / corners). This instance pins a uniform square base of nx=ny=4 cells on [0,1]x[0,1] with lo=0, dx=dy=1/4=0.25 (a small illustrative instance; the conformance fixtures live in tests/conformance/grids/arakawa/fixtures.json); the per-axis arrays generalize to each axis (the evaluation bridge src/arakawa_faq.jl runs both axes, then gathers the four staggered locations as the cartesian product of the two axis maps). The construction is five families of elementwise equations: (1) CENTER MAP — centers[i] = lo + (i - 0.5)*dx is the affine map with the HALF-CELL stagger offset over the 1-based `cells_x` interval (this is what distinguishes a staggered centre from a rectilinear edge). (2) NODE MAP — nodes[i] = lo + (i - 1)*dx is the affine cell-face/corner map over `nodes_x` (identical in form to the cartesian-template `edges`, so the ESS evaluation is bit-identical to the imperative builder). The four locations are then pure structural gathers: CellCenter=(center_x,center_y), UEdge=(node_x,center_y), VEdge=(center_x,node_y), Corner=(node_x,node_y). (3) CELL VOLUME — cell_volume[k] = dx*dy is the cell area (the product routed through ESS; in N-D the bridge multiplies across axes). (4) NEIGHBOR MAPS — neighbor_minus[i] / neighbor_plus[i] are the plus/minus AXIS offsets with the 0-SENTINEL convention (ifelse on the interval bounds: out-of-range -> 0 = no neighbor; the bridge renumbers these per-axis offsets into ROW-MAJOR flattened cell ids, slow axis = j, matching the imperative arakawa Tier-C layout). (5) BOUNDARY MASK — boundary_lower[i] / boundary_upper[i] mark the first/last cell of the axis. Plus the STATIC A-E VARIABLE-LOCATION TABLE: h_location / u_location / v_location over the `staggers` interval (1=A..5=E) are the small closed-form lookup (ifelse on the stagger index) mapping each stagger to where its h/u/v variables live, encoded as integer location codes CellCenter=0, UEdge=1, VEdge=2, Corner=3 (A->(CC,CC,CC), B->(CC,Corner,Corner), C->(CC,UEdge,VEdge), D->(CC,VEdge,UEdge), E->(CC,Corner,Corner) rotated) — the relational replacement for the shape arithmetic in src/staggering.jl. Every value is build-time-constant (CONST cadence): the entire grid folds into the setup artifact off any per-step hot path (cadence-partition §6.1) — a construction document, not a dynamical model. Cross-binding byte-identity is guaranteed by the ESS determinism contract (CONFORMANCE_SPEC.md §5.5): the elementwise arithmetic is evaluated by EarthSciSerialization's AST evaluator in every binding (Julia/Python/Rust), so the staggered coordinates and derived arrays are bit-identical, pinned for the arakawa conformance fixtures in tests/conformance/grids/arakawa/construction/.",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.nux"
+    ],
+    "tags": [
+      "arakawa",
+      "staggered-grid",
+      "c-grid",
+      "stagger-transform",
+      "affine",
+      "variable-location-table",
+      "neighbor-map",
+      "boundary-mask",
+      "arrayop",
+      "elementwise",
+      "interval-index-set",
+      "cadence-partition",
+      "declarativization",
+      "esd-3we.4"
+    ]
+  },
+  "models": {
+    "ArakawaConstruction": {
+      "index_sets": {
+        "cells_x": { "kind": "interval", "size": 4 },
+        "nodes_x": { "kind": "interval", "size": 5 },
+        "cells": { "kind": "interval", "size": 16 },
+        "staggers": { "kind": "interval", "size": 5 }
+      },
+      "variables": {
+        "lo": {
+          "type": "parameter",
+          "default": 0.0,
+          "description": "Affine origin of the axis (the lower base extent). CONST. Both axes of this square instance share lo=0."
+        },
+        "dx": {
+          "type": "parameter",
+          "default": 0.25,
+          "description": "Affine spacing along x, dx = (xhi - xlo)/nx. CONST. Here (1 - 0)/4 = 1/4 = 0.25 (exact in binary64)."
+        },
+        "dy": {
+          "type": "parameter",
+          "default": 0.25,
+          "description": "Affine spacing along y, dy = (yhi - ylo)/ny. CONST. Here (1 - 0)/4 = 0.25. The square base has dx = dy; the bridge carries them separately."
+        },
+        "centers": {
+          "type": "state",
+          "shape": ["cells_x"],
+          "description": "Cell-centre coordinates along x, the staggered affine map with the HALF-CELL offset: centers[i] = lo + (i - 0.5)*dx. CONST. The CENTER map; CellCenter and VEdge gather it along x. (The y-axis center map is identical in form with dy.)"
+        },
+        "nodes": {
+          "type": "state",
+          "shape": ["nodes_x"],
+          "description": "Cell-face / corner coordinates along x, the affine node map: nodes[i] = lo + (i - 1)*dx (offset i-1 is the 0-based node index, so nodes[1]=lo and nodes[nx+1]=xhi). CONST. The NODE map; UEdge and Corner gather it along x. Identical in form to the cartesian-template `edges`."
+        },
+        "cell_volume": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Per-cell measure (area in 2-D) = product of the axis spacings: cell_volume[k] = dx*dy. CONST. In N-D the bridge multiplies across axes."
+        },
+        "neighbor_minus": {
+          "type": "state",
+          "shape": ["cells_x"],
+          "description": "Index of the minus-side (offset -1) AXIS neighbor of each cell, 0-SENTINEL: neighbor_minus[i] = (i > 1) ? i-1 : 0. CONST. The bridge linearizes these per-axis offsets into ROW-MAJOR flattened cell ids (slow axis = j)."
+        },
+        "neighbor_plus": {
+          "type": "state",
+          "shape": ["cells_x"],
+          "description": "Index of the plus-side (offset +1) AXIS neighbor of each cell, 0-SENTINEL: neighbor_plus[i] = (i < nx) ? i+1 : 0, with nx = 4 (cells_x.size). CONST."
+        },
+        "boundary_lower": {
+          "type": "state",
+          "shape": ["cells_x"],
+          "description": "Lower-boundary mask: 1 for the first cell of the axis (i == 1), else 0. CONST."
+        },
+        "boundary_upper": {
+          "type": "state",
+          "shape": ["cells_x"],
+          "description": "Upper-boundary mask: 1 for the last cell of the axis (i == nx), else 0, with nx = 4 (cells_x.size). CONST."
+        },
+        "h_location": {
+          "type": "state",
+          "shape": ["staggers"],
+          "description": "Variable-location code for the h (scalar) field per stagger (1=A..5=E). Always CellCenter for every Arakawa stagger, so h_location[s] = 0. Location codes: CellCenter=0, UEdge=1, VEdge=2, Corner=3. CONST static table."
+        },
+        "u_location": {
+          "type": "state",
+          "shape": ["staggers"],
+          "description": "Variable-location code for the u field per stagger: A->CellCenter(0), B->Corner(3), C->UEdge(1), D->VEdge(2), E->Corner(3). The closed-form ifelse lookup over the stagger index. CONST static table."
+        },
+        "v_location": {
+          "type": "state",
+          "shape": ["staggers"],
+          "description": "Variable-location code for the v field per stagger: A->CellCenter(0), B->Corner(3), C->VEdge(2), D->UEdge(1), E->Corner(3). The closed-form ifelse lookup over the stagger index. CONST static table."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1) CENTER MAP — staggered cell centres along x. centers[i] = lo + (i - 0.5)*dx, the affine map with the half-cell stagger offset over the 1-based `cells_x` interval. Elementwise arrayop (output_idx=[i], no reduction).",
+          "lhs": { "op": "index", "args": ["centers", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells_x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "lo",
+                { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, "dx"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2) NODE MAP — cell faces / corners along x. nodes[i] = lo + (i - 1)*dx over the 1-based `nodes_x` interval (offset i-1 is the 0-based node index). Identical in form to the cartesian-template `edges`.",
+          "lhs": { "op": "index", "args": ["nodes", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "nodes_x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "lo",
+                { "op": "*", "args": [{ "op": "-", "args": ["i", 1] }, "dx"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(3) CELL VOLUME — per-cell area = product of the axis spacings: cell_volume[k] = dx*dy, over the flattened `cells` interval.",
+          "lhs": { "op": "index", "args": ["cell_volume", "k"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["k"],
+            "ranges": { "k": { "from": "cells" } },
+            "expr": { "op": "*", "args": ["dx", "dy"] }
+          }
+        },
+        {
+          "_comment": "(4) NEIGHBOR MAP — minus side (offset -1), 0-sentinel. neighbor_minus[i] = (i > 1) ? i-1 : 0.",
+          "lhs": { "op": "index", "args": ["neighbor_minus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells_x" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": ["i", 1] },
+                { "op": "-", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) NEIGHBOR MAP — plus side (offset +1), 0-sentinel. neighbor_plus[i] = (i < nx) ? i+1 : 0, with nx = 4 (cells_x.size).",
+          "lhs": { "op": "index", "args": ["neighbor_plus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells_x" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "<", "args": ["i", 4] },
+                { "op": "+", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY MASK — lower. boundary_lower[i] = (i == 1) ? 1 : 0.",
+          "lhs": { "op": "index", "args": ["boundary_lower", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells_x" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 1] }, 1, 0]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY MASK — upper. boundary_upper[i] = (i == nx) ? 1 : 0, with nx = 4 (cells_x.size).",
+          "lhs": { "op": "index", "args": ["boundary_upper", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells_x" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 4] }, 1, 0]
+            }
+          }
+        },
+        {
+          "_comment": "STATIC TABLE — h_location[s] = 0 (CellCenter) for every stagger s in `staggers` (1=A..5=E).",
+          "lhs": { "op": "index", "args": ["h_location", "s"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["s"],
+            "ranges": { "s": { "from": "staggers" } },
+            "expr": 0
+          }
+        },
+        {
+          "_comment": "STATIC TABLE — u_location[s] over `staggers`. A(1)->0 CellCenter, B(2)->3 Corner, C(3)->1 UEdge, D(4)->2 VEdge, E(5)->3 Corner. Nested ifelse lookup on the stagger index.",
+          "lhs": { "op": "index", "args": ["u_location", "s"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["s"],
+            "ranges": { "s": { "from": "staggers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "==", "args": ["s", 1] }, 0,
+                {
+                  "op": "ifelse",
+                  "args": [
+                    { "op": "==", "args": ["s", 2] }, 3,
+                    {
+                      "op": "ifelse",
+                      "args": [
+                        { "op": "==", "args": ["s", 3] }, 1,
+                        {
+                          "op": "ifelse",
+                          "args": [{ "op": "==", "args": ["s", 4] }, 2, 3]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "STATIC TABLE — v_location[s] over `staggers`. A(1)->0 CellCenter, B(2)->3 Corner, C(3)->2 VEdge, D(4)->1 UEdge, E(5)->3 Corner. Nested ifelse lookup on the stagger index.",
+          "lhs": { "op": "index", "args": ["v_location", "s"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["s"],
+            "ranges": { "s": { "from": "staggers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "==", "args": ["s", 1] }, 0,
+                {
+                  "op": "ifelse",
+                  "args": [
+                    { "op": "==", "args": ["s", 2] }, 3,
+                    {
+                      "op": "ifelse",
+                      "args": [
+                        { "op": "==", "args": ["s", 3] }, 2,
+                        {
+                          "op": "ifelse",
+                          "args": [{ "op": "==", "args": ["s", 4] }, 1, 3]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

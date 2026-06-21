@@ -45,6 +45,14 @@ include("cartesian_faq.jl")
 # companion: discretizations/grids/vertical/rules/vertical_construction.esm.
 include("vertical_faq.jl")
 
+# Arakawa staggered-grid construction as the structured-grid FAQ (esd-3we.4 / S4) —
+# thin bridge routing dx/dy + the two staggered 1-D affine maps + the cell-volume
+# product through the landed ESS M1 evaluator; the four staggered locations, neighbor/
+# boundary maps and static A–E location table are structural. Declarative companion:
+# discretizations/grids/arakawa/rules/arakawa_construction.esm. Depends on the arakawa
+# runtime (grids/arakawa.jl) and eval_coeff (rule_eval.jl), both included above.
+include("arakawa_faq.jl")
+
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -103,6 +111,9 @@ export cartesian_construction_faq
 
 # Exports: Vertical construction FAQ bridge — reuses the template (esd-3we.2 / S2)
 export vertical_construction_faq
+
+# Exports: Arakawa staggered construction FAQ bridge (esd-3we.4 / S4)
+export arakawa_construction_faq
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
