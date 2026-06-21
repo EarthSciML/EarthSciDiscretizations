@@ -1,4 +1,11 @@
-# Layer-C integration driver — invoked by the Integration CI job.
+# Layer-C integration driver — invoked by the Integration CI job through the
+# package test target:  Pkg.test(; test_args=["integration"])  (which routes
+# test/runtests.jl here and sets ESD_RUN_INTEGRATION=1).
+#
+# It MUST run under the test target, not a bare `julia --project=.`: the ODE
+# solver it drives, OrdinaryDiffEqDefault, is a test-only dependency declared in
+# [extras]+[targets].test (the library itself exposes only the RHS, never a
+# solver), so it is on the load path only inside `Pkg.test`.
 #
 # Runs walk_esd_tests with ESD_RUN_INTEGRATION=1 set in the environment so
 # every rule with integration fixtures is exercised end-to-end: ESM+GDD →
@@ -12,7 +19,7 @@ using EarthSciDiscretizations
 
 if get(ENV, "ESD_RUN_INTEGRATION", "0") != "1"
     println(stderr, "ERROR: ESD_RUN_INTEGRATION must be set to \"1\" to run this script.")
-    println(stderr, "Usage: ESD_RUN_INTEGRATION=1 julia --project=. test/run_integration_tests.jl")
+    println(stderr, "Usage: julia --project=. -e 'using Pkg; Pkg.test(; test_args=[\"integration\"])'")
     exit(1)
 end
 

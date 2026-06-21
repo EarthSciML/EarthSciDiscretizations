@@ -36,8 +36,6 @@ jobs:
   integration:
     name: "Layer-C Integration"
     runs-on: ubuntu-latest
-    env:
-      ESD_RUN_INTEGRATION: "1"
     steps:
       - uses: actions/checkout@v6
 
@@ -57,5 +55,9 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
+      # Run under the package test target (Pkg.test) so the test-only ODE solver
+      # (OrdinaryDiffEqDefault, declared in [extras]+[targets].test rather than
+      # [deps]) is on the load path for the integration cases' ODE solve. The
+      # "integration" test arg routes runtests.jl to the Layer-C suite.
       - name: "Run Layer-C integration suite"
-        run: julia --project=. test/run_integration_tests.jl
+        run: julia --project=. -e 'using Pkg; Pkg.test(; test_args=["integration"])'

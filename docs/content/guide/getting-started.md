@@ -15,8 +15,8 @@ The whole pipeline is one call plus a `solve`:
 > → `build_ode_problem` → `ODEProblem` → `solve`**
 
 ESD constructs the spatially-discretized `ODEProblem`; you choose the
-time integrator. The intended solver dependency is
-`OrdinaryDiffEqDefault`.
+time integrator. ESD itself depends on no solver — add one to your own
+project; `OrdinaryDiffEqDefault` is the recommended default.
 
 ## A complete example (Path A)
 
@@ -146,7 +146,8 @@ multi-variable model the keys are `"<name>[<cell>]"` per variable.)
 
 ESD hands back a standard SciML `ODEProblem`, so any
 `OrdinaryDiffEq`/SciML solver works. `OrdinaryDiffEqDefault.solve`
-auto-selects an integrator and is the intended dependency:
+auto-selects an integrator and is the recommended default (add it to
+your own project — ESD does not depend on a solver):
 
 ```julia
 using OrdinaryDiffEqDefault: solve

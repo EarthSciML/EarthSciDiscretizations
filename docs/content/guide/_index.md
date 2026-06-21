@@ -39,8 +39,10 @@ Loads the PDE component `.esm`, optionally merges the GDD at `grid_ref`,
 runs the ESS discretization pipeline, and returns a
 `SciMLBase.ODEProblem` together with `var_map::Dict{String,Int}` mapping
 each scalar state name (e.g. `"u[1]"`) to its index in `prob.u0`. The
-constructor never invokes a solver — you `solve` it yourself, with
-`OrdinaryDiffEqDefault` as the intended solver dependency.
+constructor never invokes a solver — you `solve` it yourself, with the
+time integrator of your choice. ESD itself takes no solver dependency;
+`OrdinaryDiffEqDefault` is the recommended default to add to your own
+project.
 
 ## Pages
 
