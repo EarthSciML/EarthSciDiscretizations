@@ -1,0 +1,500 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "latlon_construction",
+    "description": "Lat-lon structured-grid construction as a declarative semiring-FAQ document (RFC semiring-faq-unified-ir §5.1/§5.2; bead esd-3we.3 / S2). The lat-lon instance of the STRUCTURED-GRID FAQ TEMPLATE established by cartesian (discretizations/grids/cartesian/rules/cartesian_construction.esm): it expresses the whole lat-lon coordinate/metric/neighbor/boundary construction with the landed M1 path (interval index-sets + elementwise arrayop bodies — NO value-invention, NO recursion, all CONST-cadence), the rectilinear-sphere counterpart to duo/rules/primal_topology.esm. This instance pins the REGULAR `small` conformance fixture: nlat=8 equal-angle latitude rows on [-pi/2, pi/2], nlon=16 longitudes per row, R=1, lon_start=-pi (so dlon = 2pi/16 = pi/8 = 0.39269908169872414). Four interval index-sets seed everything: `lat_nodes` (the nlat+1 latitude edges), `rows` (the nlat latitude rows), `lon_cells` (the nlon longitudes of a row), `cells` (the nlat*nlon flat cells). The construction is five families of elementwise equations: (1) LATITUDE coords — `lat_edges` are DATA (equal-angle here, genuine Gaussian-quadrature edges for the reduced_gaussian variant), `lat_centers[j] = (lat_edges[j] + lat_edges[j+1])/2` is the elementwise midpoint (supplied lat_centers override it as data), `lat_widths[j] = lat_edges[j+1] - lat_edges[j]` the elementwise difference. (2) LONGITUDE coords — the per-row affine map `lon_centers[i] = lon_start + (i-1/2)*dlon` with uniform width `lon_widths[i] = dlon` (offset i-1/2 is the cell-center fraction; the reduced_gaussian variant has a per-row dlon = 2pi/nlon_per_row[j]). (3) CELL AREA — the spherical-rectangle measure `cell_area[j] = R^2 * dlon * (sin(lat_edges[j+1]) - sin(lat_edges[j]))`, row-constant. (4) CURVILINEAR METRIC — closed-form on the sphere of radius R: `metric_g_lonlon = R^2 cos^2(phi)`, `metric_g_latlat = R^2`, `metric_g_lonlat = 0`, the inverse `metric_ginv_lonlon = 1/(R^2 cos^2 phi)` (Inf at the poles where cos phi = 0; the bridge guards) and `metric_ginv_latlat = 1/R^2`, the metric Jacobian `metric_jacobian = R^2 |cos phi|`, the lone non-vanishing derivative `dg_lonlon_dlat = d g_lonlon / d phi = -2 R^2 cos(phi) sin(phi)` (every other dg_ij/dx_k vanishes), the coordinate Jacobian `coord_jacobian = I` to the (lon,lat) target (computational and target axes coincide) and its second derivative `coord_jacobian_second = 0`; all row-constant (longitudinally independent). (5) NEIGHBOR + BOUNDARY — `neighbor_lon_minus/plus` wrap PERIODICALLY in longitude (no sentinel: ifelse on the row bounds picks the wrap-around cell), `neighbor_lat_minus/plus` step to the adjacent row with the 0-SENTINEL at the poles (pole_policy=:none) and the nearest-center column rank `_latlon_map_i` (identity when nlon is uniform, a relational rank/join over the column fraction for the reduced_gaussian variant; the bridge linearizes the per-cell flat ids), and `boundary_lat_lower/upper` mark the first/last latitude row (longitude wraps, so it has no boundary cells). Every value is build-time-constant (CONST cadence): the entire grid folds into the setup artifact off any per-step hot path (cadence-partition §6.1). Cross-binding byte-identity is guaranteed by the ESS determinism contract (CONFORMANCE_SPEC.md §5.5): the elementwise arithmetic — including the sin/cos of the latitudes — is evaluated by EarthSciSerialization's AST evaluator in every binding, so the coordinates, areas and trig metric are bit-identical, pinned for the lat-lon conformance fixtures in tests/conformance/grids/latlon/construction/. The evaluation bridge src/latlon_faq.jl runs every row, then forms the per-cell flattened ragged-row-major arrays.",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.slit"
+    ],
+    "tags": [
+      "lat_lon",
+      "structured-grid",
+      "rectilinear",
+      "curvilinear-metric",
+      "spherical",
+      "trig-metric",
+      "neighbor-map",
+      "periodic",
+      "reduced-gaussian",
+      "boundary-mask",
+      "arrayop",
+      "elementwise",
+      "interval-index-set",
+      "cadence-partition",
+      "declarativization",
+      "esd-3we.3"
+    ]
+  },
+  "models": {
+    "LatLonConstruction": {
+      "index_sets": {
+        "lat_nodes": { "kind": "interval", "size": 9 },
+        "rows": { "kind": "interval", "size": 8 },
+        "lon_cells": { "kind": "interval", "size": 16 },
+        "cells": { "kind": "interval", "size": 128 }
+      },
+      "variables": {
+        "R": {
+          "type": "parameter",
+          "default": 1.0,
+          "description": "Sphere radius. CONST. The `small` fixture uses R=1; realistic grids use R=6.371e6 m."
+        },
+        "lon_start": {
+          "type": "parameter",
+          "default": -3.141592653589793,
+          "description": "Longitude of the western edge of column 1 (the affine origin of the per-row longitude map). CONST. Default -pi."
+        },
+        "dlon": {
+          "type": "parameter",
+          "default": 0.39269908169872414,
+          "description": "Longitude cell width of a UNIFORM row, dlon = 2*pi/nlon. CONST. Here 2*pi/16 = pi/8 = 0.39269908169872414. The reduced_gaussian variant has a per-row dlon = 2*pi/nlon_per_row[j]."
+        },
+        "lat_edges": {
+          "type": "state",
+          "shape": ["lat_nodes"],
+          "description": "Latitude cell-face coordinates (radians), one per node of the 1-based `lat_nodes` interval. DATA: equal-angle here (lat_edges[k] = -pi/2 + (k-1)*pi/nlat), genuine Gaussian-quadrature latitudes for the reduced_gaussian variant. CONST."
+        },
+        "lat_centers": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Latitude row-center coordinates, the elementwise midpoint of each row's two latitude faces: lat_centers[j] = (lat_edges[j] + lat_edges[j+1])/2. Supplied lat_centers override this as data. CONST."
+        },
+        "lat_widths": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Latitude cell widths, the elementwise face difference: lat_widths[j] = lat_edges[j+1] - lat_edges[j]. CONST."
+        },
+        "lon_centers": {
+          "type": "state",
+          "shape": ["lon_cells"],
+          "description": "Longitude cell-center coordinates of a uniform row, the per-row affine map: lon_centers[i] = lon_start + (i - 1/2)*dlon. CONST."
+        },
+        "lon_widths": {
+          "type": "state",
+          "shape": ["lon_cells"],
+          "description": "Longitude cell widths of a uniform row = dlon for every cell. CONST."
+        },
+        "cell_area": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Spherical-rectangle cell area (row-constant): cell_area[j] = R^2 * dlon * (sin(lat_edges[j+1]) - sin(lat_edges[j])). CONST."
+        },
+        "metric_g_lonlon": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Covariant metric component g_lambdalambda = R^2 cos^2(phi) at the row center phi = lat_centers[j]. CONST."
+        },
+        "metric_g_latlat": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Covariant metric component g_phiphi = R^2 (latitude-independent). CONST."
+        },
+        "metric_g_lonlat": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Off-diagonal metric component g_lambdaphi = 0 (the lat-lon basis is orthogonal). CONST."
+        },
+        "metric_ginv_lonlon": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Inverse metric component g^lambdalambda = 1/(R^2 cos^2 phi). Inf at the poles (cos phi = 0); the bridge guards g_lonlon > 0. CONST."
+        },
+        "metric_ginv_latlat": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Inverse metric component g^phiphi = 1/R^2. CONST."
+        },
+        "metric_jacobian": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Metric Jacobian J = sqrt(det g) = R^2 |cos(phi)|. CONST."
+        },
+        "dg_lonlon_dlat": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "The lone non-vanishing metric derivative d g_lambdalambda / d phi = -2 R^2 cos(phi) sin(phi). Every other d g_ij / d x_k vanishes. CONST."
+        },
+        "coord_jacobian": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Coordinate Jacobian d(comp)/d(lon,lat) to the (lon,lat) target = identity (computational and target axes coincide); diagonal component = 1. CONST."
+        },
+        "coord_jacobian_second": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Second coordinate derivative = 0 (the identity coordinate map has no curvature). CONST."
+        },
+        "neighbor_lon_minus": {
+          "type": "state",
+          "shape": ["lon_cells"],
+          "description": "Index of the minus-side (west, offset -1) longitude neighbor, wrapping PERIODICALLY: neighbor_lon_minus[i] = (i > 1) ? i-1 : nlon. No 0-sentinel — longitude has no boundary. CONST."
+        },
+        "neighbor_lon_plus": {
+          "type": "state",
+          "shape": ["lon_cells"],
+          "description": "Index of the plus-side (east, offset +1) longitude neighbor, wrapping PERIODICALLY: neighbor_lon_plus[i] = (i < nlon) ? i+1 : 1, with nlon = 16. CONST."
+        },
+        "neighbor_lat_minus": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Adjacent-row index of the minus-side (south, offset -1) latitude neighbor with the 0-SENTINEL at the south pole: neighbor_lat_minus[j] = (j > 1) ? j-1 : 0 (pole_policy=:none). The bridge linearizes per-cell and applies the nearest-center column rank _latlon_map_i (identity for uniform nlon; a relational rank/join over (i-1/2)/from_n for the reduced_gaussian variant). CONST."
+        },
+        "neighbor_lat_plus": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Adjacent-row index of the plus-side (north, offset +1) latitude neighbor with the 0-SENTINEL at the north pole: neighbor_lat_plus[j] = (j < nlat) ? j+1 : 0, with nlat = 8. CONST."
+        },
+        "boundary_lat_lower": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Lower-boundary (southernmost row) mask: 1 for j == 1, else 0. CONST."
+        },
+        "boundary_lat_upper": {
+          "type": "state",
+          "shape": ["rows"],
+          "description": "Upper-boundary (northernmost row) mask: 1 for j == nlat, else 0, with nlat = 8. CONST. (Longitude wraps periodically, so it has no boundary mask.)"
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1) LATITUDE — centers. Elementwise midpoint of each row's two latitude faces over `rows`: lat_centers[j] = (lat_edges[j] + lat_edges[j+1])/2. Supplied lat_centers (reduced_gaussian) override this as data.",
+          "lhs": { "op": "index", "args": ["lat_centers", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_edges"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    { "op": "index", "args": ["lat_edges", "j"] },
+                    { "op": "index", "args": ["lat_edges", { "op": "+", "args": ["j", 1] }] }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(1) LATITUDE — widths. Elementwise face difference over `rows`: lat_widths[j] = lat_edges[j+1] - lat_edges[j].",
+          "lhs": { "op": "index", "args": ["lat_widths", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_edges"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["lat_edges", { "op": "+", "args": ["j", 1] }] },
+                { "op": "index", "args": ["lat_edges", "j"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2) LONGITUDE — centers. The per-row affine map over `lon_cells`: lon_centers[i] = lon_start + (i - 1/2)*dlon. Offset i-1/2 is the cell-center fraction (column 1 center is lon_start + dlon/2).",
+          "lhs": { "op": "index", "args": ["lon_centers", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "lon_cells" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "lon_start",
+                { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, "dlon"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2) LONGITUDE — widths. Uniform-row width = dlon for every longitude cell.",
+          "lhs": { "op": "index", "args": ["lon_widths", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "lon_cells" } },
+            "expr": "dlon"
+          }
+        },
+        {
+          "_comment": "(3) CELL AREA — the spherical-rectangle measure over `rows`: cell_area[j] = R^2 * dlon * (sin(lat_edges[j+1]) - sin(lat_edges[j])). sin is evaluated by the ESS AST evaluator.",
+          "lhs": { "op": "index", "args": ["cell_area", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_edges"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "*", "args": [{ "op": "*", "args": ["R", "R"] }, "dlon"] },
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "sin", "args": [{ "op": "index", "args": ["lat_edges", { "op": "+", "args": ["j", 1] }] }] },
+                    { "op": "sin", "args": [{ "op": "index", "args": ["lat_edges", "j"] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — g_lonlon = R^2 cos^2(phi) over `rows`, phi = lat_centers[j].",
+          "lhs": { "op": "index", "args": ["metric_g_lonlon", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_centers"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "*", "args": ["R", "R"] },
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] },
+                    { "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — g_latlat = R^2 (latitude-independent) over `rows`.",
+          "lhs": { "op": "index", "args": ["metric_g_latlat", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": { "op": "*", "args": ["R", "R"] }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — g_lonlat = 0 (orthogonal basis) over `rows`.",
+          "lhs": { "op": "index", "args": ["metric_g_lonlat", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": 0
+          }
+        },
+        {
+          "_comment": "(4) METRIC — ginv_lonlon = 1/(R^2 cos^2 phi) over `rows`. Inf at the poles (cos phi = 0); the bridge guards g_lonlon > 0.",
+          "lhs": { "op": "index", "args": ["metric_ginv_lonlon", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_centers"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                1,
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "*", "args": ["R", "R"] },
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] },
+                        { "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — ginv_latlat = 1/R^2 over `rows`.",
+          "lhs": { "op": "index", "args": ["metric_ginv_latlat", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": { "op": "/", "args": [1, { "op": "*", "args": ["R", "R"] }] }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — Jacobian J = R^2 |cos(phi)| over `rows`.",
+          "lhs": { "op": "index", "args": ["metric_jacobian", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_centers"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "*", "args": ["R", "R"] },
+                { "op": "abs", "args": [{ "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — the lone non-vanishing derivative d g_lonlon / d phi = -2 R^2 cos(phi) sin(phi) over `rows`.",
+          "lhs": { "op": "index", "args": ["dg_lonlon_dlat", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["lat_centers"],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "*", "args": [{ "op": "*", "args": [-2, "R"] }, "R"] },
+                    { "op": "cos", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] }
+                  ]
+                },
+                { "op": "sin", "args": [{ "op": "index", "args": ["lat_centers", "j"] }] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) METRIC — coord_jacobian = identity (diagonal 1) to the (lon,lat) target over `rows`.",
+          "lhs": { "op": "index", "args": ["coord_jacobian", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": 1
+          }
+        },
+        {
+          "_comment": "(4) METRIC — coord_jacobian_second = 0 (identity coordinate map has no curvature) over `rows`.",
+          "lhs": { "op": "index", "args": ["coord_jacobian_second", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": 0
+          }
+        },
+        {
+          "_comment": "(5) NEIGHBOR — longitude minus side (west), PERIODIC wrap (no sentinel): neighbor_lon_minus[i] = (i > 1) ? i-1 : nlon, with nlon = 16.",
+          "lhs": { "op": "index", "args": ["neighbor_lon_minus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "lon_cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": ["i", 1] },
+                { "op": "-", "args": ["i", 1] },
+                16
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) NEIGHBOR — longitude plus side (east), PERIODIC wrap: neighbor_lon_plus[i] = (i < nlon) ? i+1 : 1, with nlon = 16.",
+          "lhs": { "op": "index", "args": ["neighbor_lon_plus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "lon_cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "<", "args": ["i", 16] },
+                { "op": "+", "args": ["i", 1] },
+                1
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) NEIGHBOR — latitude minus side (south), 0-SENTINEL at the south pole: neighbor_lat_minus[j] = (j > 1) ? j-1 : 0. The bridge linearizes per-cell and applies the nearest-center column rank _latlon_map_i.",
+          "lhs": { "op": "index", "args": ["neighbor_lat_minus", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": ["j", 1] },
+                { "op": "-", "args": ["j", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) NEIGHBOR — latitude plus side (north), 0-SENTINEL at the north pole: neighbor_lat_plus[j] = (j < nlat) ? j+1 : 0, with nlat = 8.",
+          "lhs": { "op": "index", "args": ["neighbor_lat_plus", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "<", "args": ["j", 8] },
+                { "op": "+", "args": ["j", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY — latitude lower (southernmost row): boundary_lat_lower[j] = (j == 1) ? 1 : 0.",
+          "lhs": { "op": "index", "args": ["boundary_lat_lower", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["j", 1] }, 1, 0]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY — latitude upper (northernmost row): boundary_lat_upper[j] = (j == nlat) ? 1 : 0, with nlat = 8.",
+          "lhs": { "op": "index", "args": ["boundary_lat_upper", "j"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["j"],
+            "ranges": { "j": { "from": "rows" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["j", 8] }, 1, 0]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

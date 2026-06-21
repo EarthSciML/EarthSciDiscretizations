@@ -53,6 +53,14 @@ include("vertical_faq.jl")
 # runtime (grids/arakawa.jl) and eval_coeff (rule_eval.jl), both included above.
 include("arakawa_faq.jl")
 
+# Lat-lon grid construction as the structured-grid FAQ (esd-3we.3 / S2) — thin bridge
+# routing the per-row affine longitude map, the spherical-rectangle cell area, and the
+# closed-form curvilinear (sin/cos) metric through the landed ESS M1 evaluator
+# (eval_coeff); periodic / reduced-Gaussian nearest-center neighbor maps and boundary
+# masks are structural index logic. Declarative companion:
+# discretizations/grids/latlon/rules/latlon_construction.esm.
+include("latlon_faq.jl")
+
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -114,6 +122,9 @@ export vertical_construction_faq
 
 # Exports: Arakawa staggered construction FAQ bridge (esd-3we.4 / S4)
 export arakawa_construction_faq
+
+# Exports: Lat-lon construction FAQ bridge — structured-grid template (esd-3we.3 / S2)
+export latlon_construction_faq
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
