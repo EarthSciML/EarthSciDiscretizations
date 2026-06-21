@@ -32,6 +32,16 @@ include("rule_eval.jl")
 # discretizations/grids/duo/primal_topology.esm.
 include("topology_faq.jl")
 
+# DUO grid CONSTRUCTION as the front-door declarative path (esd-ohd / W1):
+# subdivision (D3), primal geometry (D2a), and edge/circumcenter geometry (D2b)
+# bridges. `build_duo_grid` (grids/duo.jl) calls these + `primal_topology_faq`
+# (D1a) instead of the imperative construction, routing every coordinate through
+# `eval_coeff` and connectivity through `EarthSciSerialization.Relational`.
+# Declarative companions under discretizations/grids/duo/{faq,rules}/*.esm.
+include("subdivide_faq.jl")
+include("primal_geometry_faq.jl")
+include("edge_dual_geometry_faq.jl")
+
 # Cartesian grid construction as the structured-grid FAQ template (esd-3we.1 / S1)
 # — thin bridge routing the affine coordinate map + elementwise metric/neighbor/
 # boundary derivations through the landed ESS M1 evaluator (eval_coeff). Declarative
@@ -113,6 +123,11 @@ export primal_topology_faq
 
 # Exports: DUO→MPAS Voronoi-dual topology value-invention FAQ bridge (esd-heg.2 / D1b)
 export voronoi_dual_topology_faq
+
+# Exports: DUO construction FAQ bridges wired into build_duo_grid (esd-ohd / W1)
+export duo_subdivide_faq                              # D3 subdivision (esd-heg.3)
+export primal_geometry_faq                            # D2a primal geometry (esd-heg.6)
+export duo_circumcenter_geo_faq, duo_edge_length_faq, duo_cell_distance_faq  # D2b (esd-heg.7)
 
 # Exports: Cartesian construction FAQ bridge — structured-grid template (esd-3we.1 / S1)
 export cartesian_construction_faq

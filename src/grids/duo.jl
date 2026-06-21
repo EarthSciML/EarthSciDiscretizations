@@ -342,56 +342,35 @@ function build_duo_grid(;
     T = dtype
     R_T = T(R)
 
-    V, F = _subdivide_icosahedron(T, level)
+    # ---- Declarative construction via the ESS front-door (esd-ohd / W1) --------
+    # The mesh is materialized through the landed EarthSciSerialization evaluators,
+    # NOT the imperative `duo.jl` construction:
+    #   * D3 subdivision  → `duo_subdivide_faq` (every coordinate via `eval_coeff`;
+    #     vertex/face numbering kept in the imperative encounter order required for
+    #     the primal-vertex-indexed Voronoi-dual byte-identity),
+    #   * D2a primal geometry → `primal_geometry_faq` (`eval_coeff`),
+    #   * D2b circumcenter geometry → `duo_circumcenter_geo_faq` (`eval_coeff`),
+    #   * D1a primal topology → `primal_topology_faq` (value-invention through
+    #     `EarthSciSerialization.Relational`; edges in the ESS canonical sorted order).
+    # The imperative builders (`_subdivide_icosahedron`, `_build_connectivity`,
+    # `_vertex_faces`, `_spherical_triangle_area`, the geometry loops, `_duo_arc`)
+    # are no longer on the production path — they remain defined only for the
+    # conformance tests until esd-heg.9 deletes them. Byte-identical (T=Float64) to
+    # the prior imperative output for every cell-indexed field; edges adopt the
+    # canonical (sorted) numbering (no test pins edge order; the golden is canonical).
+    V, F = duo_subdivide_faq(T, level)               # D3: unit-sphere vertices + faces
     Nv = size(V, 2)
     Nc = size(F, 2)
 
-    # Cell centers: normalized centroid of the three unit vertex vectors.
-    cell_cart = Matrix{T}(undef, 3, Nc)
-    lon = Vector{T}(undef, Nc)
-    lat = Vector{T}(undef, Nc)
-    area = Vector{T}(undef, Nc)
-    R2 = R_T * R_T
-    for c in 1:Nc
-        a_i = F[1, c]; b_i = F[2, c]; c_i = F[3, c]
-        ax = V[1, a_i]; ay = V[2, a_i]; az = V[3, a_i]
-        bx = V[1, b_i]; by = V[2, b_i]; bz = V[3, b_i]
-        cx = V[1, c_i]; cy = V[2, c_i]; cz = V[3, c_i]
-        mx = ax + bx + cx; my = ay + by + cy; mz = az + bz + cz
-        n = sqrt(mx^2 + my^2 + mz^2)
-        ux = mx / n; uy = my / n; uz = mz / n
-        cell_cart[1, c] = R_T * ux
-        cell_cart[2, c] = R_T * uy
-        cell_cart[3, c] = R_T * uz
-        lon[c], lat[c] = _cart_to_lonlat(ux, uy, uz)
-        # Area via L'Huilier on unit sphere, then scale by R².
-        a_unit = _spherical_triangle_area(
-            (Float64(ax), Float64(ay), Float64(az)),
-            (Float64(bx), Float64(by), Float64(bz)),
-            (Float64(cx), Float64(cy), Float64(cz)),
-        )
-        area[c] = T(a_unit * Float64(R2))
-    end
+    pg = primal_geometry_faq(T, V, F, R_T)           # D2a: cell_cart (R-scaled), lon, lat, area
+    cell_cart = pg.cell_cart
+    lon = pg.lon
+    lat = pg.lat
+    area = pg.area
 
-    # Circumcenter-based cell positions (used for FVM weights).
-    # For spherical triangle with unit vertices a,b,c: cc_dir = (a×b)+(b×c)+(c×a).
-    cc_lon = Vector{T}(undef, Nc)
-    cc_lat = Vector{T}(undef, Nc)
-    for c in 1:Nc
-        a_i = F[1, c]; b_i = F[2, c]; c_i = F[3, c]
-        ax = Float64(V[1, a_i]); ay = Float64(V[2, a_i]); az = Float64(V[3, a_i])
-        bx = Float64(V[1, b_i]); by = Float64(V[2, b_i]); bz = Float64(V[3, b_i])
-        cx = Float64(V[1, c_i]); cy = Float64(V[2, c_i]); cz = Float64(V[3, c_i])
-        ccx = (ay * bz - az * by) + (by * cz - bz * cy) + (cy * az - cz * ay)
-        ccy = (az * bx - ax * bz) + (bz * cx - bx * cz) + (cz * ax - cx * az)
-        ccz = (ax * by - ay * bx) + (bx * cy - by * cx) + (cx * ay - cy * ax)
-        # Centroid sanity check — flip if facing wrong way.
-        if ccx * Float64(cell_cart[1, c]) + ccy * Float64(cell_cart[2, c]) + ccz * Float64(cell_cart[3, c]) < 0
-            ccx = -ccx; ccy = -ccy; ccz = -ccz
-        end
-        n = sqrt(ccx^2 + ccy^2 + ccz^2)
-        cc_lon[c], cc_lat[c] = _cart_to_lonlat(ccx / n, ccy / n, ccz / n)
-    end
+    cc = duo_circumcenter_geo_faq(T, V, F, cell_cart)   # D2b: circumcenter lon/lat
+    cc_lon = cc.cc_lon
+    cc_lat = cc.cc_lat
 
     # Scale vertex array to radius R for downstream consumers.
     V_scaled = Matrix{T}(undef, 3, Nv)
@@ -401,8 +380,20 @@ function build_duo_grid(;
         V_scaled[3, i] = R_T * V[3, i]
     end
 
-    edges, cell_neighbors = _build_connectivity(F)
-    vf = _vertex_faces(F, Nv)
+    # D1a value-invention topology through the ESS front-door (primal_topology_faq →
+    # EarthSciSerialization.Relational skolem/distinct/rank): the edge set + dense
+    # numbering, cell_neighbors, and the per-vertex incident faces. The edge numbering
+    # is the ESS CANONICAL (sorted) order — the cross-binding-stable numbering aligned
+    # with the already-canonical D1a topology golden and the Rust/Python front-door
+    # parity landed in ess-3lj.2 (F2) — replacing the imperative `_build_connectivity`
+    # Dict-insertion order. cell_neighbors (cell×slot) and vertex_faces are byte-identical
+    # regardless of edge numbering. The edge-indexed D2b geometry golden
+    # (edge_dual_geometry_level1.json) is re-pinned to this canonical order — a pure
+    # permutation of the same byte-identical values (see regenerate_edge_dual_geometry.jl).
+    topo = primal_topology_faq(F, Nv)
+    edges = topo.edges
+    cell_neighbors = topo.cell_neighbors
+    vf = topo.vertex_faces
 
     provenance = Dict{String, Any}(
         "binding" => "julia",
@@ -679,12 +670,8 @@ Great-circle arc length of each mesh edge (vertex-to-vertex), shape
 """
 function edge_length(g::DuoGrid{T}) where {T}
     return _grid_memo!(g, :edge_length) do
-        Ne = size(g.edges, 2)
-        out = Vector{T}(undef, Ne)
-        @inbounds for e in 1:Ne
-            out[e] = _duo_arc(g, g.vertices, g.edges[1, e], g.edges[2, e])
-        end
-        return out
+        # D2b geometry FAQ: great-circle arcs via `eval_coeff` (replaces `_duo_arc`).
+        duo_edge_length_faq(T, g.vertices, g.edges, g.R)
     end
 end
 
@@ -696,7 +683,7 @@ Great-circle arc length of edge `e` (vertex-to-vertex).
 function edge_length(g::DuoGrid, e::Integer)
     (1 <= e <= size(g.edges, 2)) ||
         throw(BoundsError("duo: edge index $e out of range 1:$(size(g.edges, 2))"))
-    return _duo_arc(g, g.vertices, g.edges[1, e], g.edges[2, e])
+    return edge_length(g)[e]
 end
 
 """
@@ -709,14 +696,10 @@ single incident cell (not reachable on a closed mesh) yields `0`.
 """
 function cell_distance(g::DuoGrid{T}) where {T}
     return _grid_memo!(g, :cell_distance) do
+        # D2b geometry FAQ: cell-center arcs via `eval_coeff` (replaces `_duo_arc`).
+        # `_duo_edge_cells` is pure-integer connectivity (not geometry), kept as-is.
         ec = _duo_edge_cells(g)
-        Ne = size(g.edges, 2)
-        out = Vector{T}(undef, Ne)
-        @inbounds for e in 1:Ne
-            c1 = ec[1, e]; c2 = ec[2, e]
-            out[e] = (c1 != 0 && c2 != 0) ? _duo_arc(g, g.cell_cart, c1, c2) : zero(T)
-        end
-        return out
+        duo_cell_distance_faq(T, g.cell_cart, ec, g.R)
     end
 end
 
