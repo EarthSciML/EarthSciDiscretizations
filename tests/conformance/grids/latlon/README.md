@@ -1,10 +1,11 @@
 # Lat-lon cross-language conformance harness
 
-Verifies that the grid-accessor bindings (Python, Rust, TypeScript)
+Verifies that the grid-accessor bindings (Julia, Python, Rust, TypeScript)
 produce numerically equivalent accessor output for the `lat_lon` family
 on a shared set of query points. The Julia `lat_lon` runtime is on `main`
-(`src/grids/latlon.jl`); only its dedicated conformance runner against
-this golden is still pending (see "Reference binding").
+(`src/grids/latlon.jl`, declarative via the construction FAQ since esd-3we.3 / S3)
+and its dedicated conformance runner against this golden landed with the S6
+audit (esd-3we.6): `test/test_latlon_conformance.jl`.
 
 Scope follows the 2026-04-20 mayor correction (bead `dsc-suu`): the `.esm`
 grid artifact is a **declarative config**, not a serialized geometry blob.
@@ -17,6 +18,7 @@ points rather than serialized geometry bytes.
 - `fixtures.json` — fixture opts and query points, shared across bindings
 - `regenerate_golden.py` — reference-golden regenerator
 - `golden/<fixture>.json` — reference accessor outputs and rule-eval coefficients
+- `../../../../test/test_latlon_conformance.jl` — Julia accessor test
 - `../../../../python/tests/test_lat_lon_conformance.py` — Python accessor test
 - `../../../../rust/tests/lat_lon_conformance.rs` — Rust accessor test
 - `../../../../rust/tests/lat_lon_rule_conformance.rs` — Rust rule-eval test
@@ -31,12 +33,13 @@ and friends), but the golden corpus was produced by the Python binding
 before it landed.
 
 Downstream tests treat the golden as authoritative — they don't care which
-binding emitted it. Still pending:
-
-1. A dedicated Julia conformance test under `test/test_lat_lon_conformance.jl`
-   mirroring the three existing per-binding tests.
-2. Regenerating the golden from Julia (or keeping the Python script as a
-   cross-check); the contract is unchanged.
+binding emitted it. The Julia binding is now wired into this layer by
+`test/test_latlon_conformance.jl` (esd-3we.6 / S6), which checks the
+FAQ-backed Julia accessors against this Python-generated golden to `1e-14`
+(closed-form sin/cos geometry agrees across bindings). The golden is therefore
+**kept Python-generated** as the cross-binding reference (the Python script is
+retained as a cross-check, not retired); regenerating from Julia is unnecessary
+since the contract is the shared-tolerance accessor match, not the emitting libm.
 
 ## Fixtures
 
@@ -115,6 +118,11 @@ Commit the updated `golden/*.json` files. All bindings must re-verify.
 
 ## Running
 
+### Julia
+```bash
+julia --project=. -e 'using Pkg; Pkg.test()'   # runs test/test_latlon_conformance.jl among the @testitems
+```
+
 ### Python
 ```bash
 cd python && PYTHONPATH=src pytest tests/test_lat_lon_conformance.py
@@ -131,6 +139,6 @@ cd rust && cargo test --test lat_lon_rule_conformance
 cd typescript && npm test -- lat_lon.conformance
 ```
 
-All three exiting 0 ⇒ bindings conform on this corpus. A dedicated Julia
-conformance runner (`test/test_lat_lon_conformance.jl`) is still pending
-and will round out the matrix.
+All four exiting 0 ⇒ bindings conform on this corpus. The Julia arm
+(`test/test_latlon_conformance.jl`, esd-3we.6 / S6) completes the matrix,
+matching the cartesian / vertical / arakawa families that already ship one.
