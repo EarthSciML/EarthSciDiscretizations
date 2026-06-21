@@ -27,4 +27,5 @@ pub(crate) mod duo_topology_faq;
 // they are a parallel construction oracle (imperative stays the front-door until
 // the S5 reroute, esd-3we.5); exercised by `rust/tests/*_construction_*.rs`.
 pub mod cartesian_faq;
+pub mod lat_lon_faq;
 pub mod vertical_faq;
