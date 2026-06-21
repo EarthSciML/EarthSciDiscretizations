@@ -490,6 +490,21 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test !isempty(r.layer_b.reason)
+        elseif r.family === :ic && r.name == "expression_ic"
+            # expression_ic (esd-6g4.12 / G13): ships a canonical/ fixture that
+            # drives the ESS ic-arrayop materializer on the structured grid
+            # families — latlon (8×8) and arakawa (4×4) carried as two grids +
+            # two models in one document. Layer-A passes via the whole-document
+            # byte golden (each model's IC lowers to an arrayop with grid-correct
+            # ranges and coord_<dim> substitution). Layer-B/C/D SKIP: an IC is an
+            # initialization transform, not a spatial-operator MMS / conservation
+            # target, so the rule ships no convergence/ or conservation/ fixture.
+            # Unstructured families (duo/mpas) are DECLARATIVE-INFEASIBLE here — see
+            # discretizations/ic/expression_ic/UNSTRUCTURED_IC_INFEASIBILITY.md.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
         else
             @test r.layer_a.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no canonical or rewrite fixtures", r.layer_a.reason)
