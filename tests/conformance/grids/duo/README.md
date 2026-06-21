@@ -22,16 +22,23 @@ than serialized geometry bytes.
 
 ## Fixtures
 
-Two fixtures per `docs/GRIDS_API.md` §4 (both `builtin://icosahedral/<level>`):
+Three fixtures per `docs/GRIDS_API.md` §4 (all `builtin://icosahedral/<level>`),
+spanning the icosahedral subdivision ladder level 0/1/2:
 
 | Name        | level | R (m)   | Nc  | Purpose                                   |
 |-------------|-------|---------|-----|-------------------------------------------|
 | `small`     | 0     | 1.0     | 20  | Bare icosahedron on unit sphere (all 20). |
+| `medium`    | 1     | 1.0     | 80  | First subdivision, unit sphere (all 80).  |
 | `realistic` | 2     | 6.371e6 | 320 | Earth radius, 2× subdivided (20 cells).   |
 
-`small` covers every cell. `realistic` samples the first 5 base-triangle
-children of a few icosahedron faces — enough to exercise the midpoint cache
-(cross-face connectivity) without bloating the golden.
+`small` covers every cell. `medium` covers every cell of the first
+subdivision — the level at which the midpoint cache first mints shared
+edge-vertices, so cross-face connectivity is exercised on the full mesh at
+O(1) (unit-sphere) magnitudes. `realistic` then samples the first 5
+base-triangle children of a few icosahedron faces — enough to confirm the
+midpoint cache and Earth-radius scaling hold at depth without bloating the
+golden. Together the three pin the cross-binding contract at
+`icos_level0/1/2` (bead `esd-heg.10`, D5).
 
 ## Comparison protocol (per `docs/GRIDS_API.md` §4)
 
