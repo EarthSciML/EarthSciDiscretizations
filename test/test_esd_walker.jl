@@ -159,10 +159,12 @@ using TestItems
             # pattern matching on the bc OpExpr (layer-A SKIP) and carries
             # no convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "robin_bc"),
-            # staggered_1st_uniform (esd-slh): arrayop replacement form (EINSUM-4);
-            # ships canonical/input.esm applicable:false pending ESS
-            # stencil-schema dispatch; no convergence fixture.
-            ("finite_difference", "staggered_1st_uniform"),
+            # staggered_1st_uniform (esd-6g4.13): promoted out of this set. The
+            # arrayop replacement (EINSUM-4) now drives end-to-end through ESS
+            # `discretize` once the rule's `applies_to` carries `dim: $x` (the
+            # missing field — not "stencil-schema dispatch" — was what blocked the
+            # earlier applicable:false stub). Layer-A PASSes via the canonical byte
+            # contract; see the explicit elseif below.
         ]
     )
     # The hot-path FV rules (dsc-ntxo, audit dsc-ztvz / F6) ship
@@ -501,6 +503,19 @@ using TestItems
             # target, so the rule ships no convergence/ or conservation/ fixture.
             # Unstructured families (duo/mpas) are DECLARATIVE-INFEASIBLE here — see
             # discretizations/ic/expression_ic/UNSTRUCTURED_IC_INFEASIBILITY.md.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "staggered_1st_uniform"
+            # staggered_1st_uniform (esd-6g4.13): Layer-A passes via its canonical
+            # byte contract. The cc_to_face arrayop replacement drives the MAC
+            # staggered gradient grad(p)|cell_center → dv/dt|face_x through ESS
+            # `discretize` (single-equation document; the face_to_cc direction is
+            # the mirror stencil documented in the rule JSON). Layer-B SKIPs: the
+            # rule ships no convergence/ fixture (a 1D staggered MMS runner is
+            # out of scope here — the catalog rule's numeric proof is the Layer-A
+            # byte contract).
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
