@@ -42,6 +42,16 @@ include("subdivide_faq.jl")
 include("primal_geometry_faq.jl")
 include("edge_dual_geometry_faq.jl")
 
+# MPAS-SCVT spherical-topology LEAF (esd-e5m.3 / D3): the one-time post-convergence
+# topology op of the declarative SCVT mesh generator. The irreducible spherical
+# Delaunay (convex hull of the generator directions) — canonical executor the
+# s2bindings.rs S2B FFI (s2b-s7b) — composed with the landed declarative dual
+# topology FAQ (voronoi_dual_topology_faq) to emit deterministic Voronoi
+# connectivity. Determinism (integer) + tolerance (geometry) contract:
+# discretizations/grids/mpas/scvt/TOPOLOGY_LEAF_CONTRACT.md. Depends on
+# topology_faq.jl (above).
+include("grids/mpas_scvt_topology.jl")
+
 # Cartesian grid construction as the structured-grid FAQ template (esd-3we.1 / S1)
 # — thin bridge routing the affine coordinate map + elementwise metric/neighbor/
 # boundary derivations through the landed ESS M1 evaluator (eval_coeff). Declarative
@@ -123,6 +133,10 @@ export primal_topology_faq
 
 # Exports: DUO→MPAS Voronoi-dual topology value-invention FAQ bridge (esd-heg.2 / D1b)
 export voronoi_dual_topology_faq
+
+# Exports: MPAS-SCVT spherical-topology leaf (esd-e5m.3 / D3) — the one-time
+# post-convergence spherical Delaunay (wrap S2B) + deterministic Voronoi connectivity.
+export scvt_spherical_delaunay, scvt_voronoi_connectivity
 
 # Exports: DUO construction FAQ bridges wired into build_duo_grid (esd-ohd / W1)
 export duo_subdivide_faq                              # D3 subdivision (esd-heg.3)

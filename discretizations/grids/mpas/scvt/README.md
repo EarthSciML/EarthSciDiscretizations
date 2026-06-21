@@ -9,7 +9,7 @@ a one-time spherical-Delaunay topology leaf (epic `esd-e5m`). The pieces:
 |------|-------|----------|
 | `esd-e5m.1` (**this dir**) | **D1** background quadrature mesh + density sampling | `background_quadrature.esm` |
 | `esd-e5m.2` | D2 one Lloyd iteration (assign → centroid → move) | *(step `.esm`, MAYOR-held on ESS E1+E2)* |
-| `esd-e5m.3` | D3 spherical-topology leaf (wrap S2B) | *(leaf op, MAYOR-held on S2B)* |
+| `esd-e5m.3` (**this dir**) | **D3** spherical-topology leaf (wrap S2B) + determinism/tolerance contract | `topology_leaf.esm`, `TOPOLOGY_LEAF_CONTRACT.md` |
 | `esd-e5m.4` | D4 `build_scvt_mesh` host driver (external fixed-point loop) | *(host driver)* |
 | `esd-e5m.5` | D5 conformance drain | *(conformance)* |
 
@@ -109,3 +109,74 @@ no shadow evaluator) and proves, across levels 0–2:
   density-weighted integral;
 - the schema-valid declarative document and the cross-binding canonical-byte
   contract (reproduced bit-for-bit by both the FAQ and the imperative grid area).
+
+---
+
+# Spherical-topology leaf (esd-e5m.3 / D3)
+
+The one-time, post-convergence topology operation. Given the converged SCVT
+generators it emits the spherical **Delaunay** triangulation and its dual
+**Voronoi** connectivity (`cells_on_cell` / `edges_on_cell` / the circumcentre-
+ring `vertices_on_cell`). It runs ONCE at convergence — never in the Lloyd
+recurrence — and the D4 driver assembles its output into `MpasMeshData`.
+
+## The leaf boundary
+
+```
+generators ─[LEAF: spherical Delaunay = 3-D convex hull of unit directions]─▶
+    triangles + circumcentres ─[FAQ: voronoi_dual_topology_faq, esd-heg.2]─▶
+        cells_on_cell / edges_on_cell / vertices_on_cell
+```
+
+Per the epic's DECLARATIVE-OR-FAIL rule the SCVT *step* (D2) is a declarative
+FAQ, but the topology is **"an allowed irreducible leaf (like
+`intersect_polygon`)."** Only the `generators → triangulation` step is
+irreducible (an iterative convex-hull construction whose robustness lives in how
+the orientation arithmetic is evaluated); everything below it is the **landed**
+declarative dual-topology FAQ (`voronoi_dual_topology_faq`,
+[`../../duo/rules/voronoi_dual_topology.esm`](../../duo/rules/voronoi_dual_topology.esm)),
+which previously hard-wired the DUO primal triangulation and now consumes the
+leaf's arbitrary-generator triangulation.
+
+## Canonical executor + cross-binding consistency
+
+The triangulation is emitted in production by the **s2bindings.rs S2B FFI**
+(`SphericalDelaunay`, bead `s2b-s7b`), which uses an exact orientation predicate
+so the integer connectivity is byte-identical across bindings even at cospherical
+degeneracies. The Julia reference (`scvt_spherical_delaunay` /
+`scvt_voronoi_connectivity`, [`src/grids/mpas_scvt_topology.jl`](../../../../src/grids/mpas_scvt_topology.jl))
+computes the same hull with a Float64 predicate — exact for the non-degenerate
+inputs the contract requires — and emits the identical canonical ordering, so the
+two agree byte-for-byte on a well-posed mesh (the `intersect_polygon` pattern:
+native per-binding kernels under one contract).
+
+## Determinism + tolerance contract
+
+The full normative contract is **[`TOPOLOGY_LEAF_CONTRACT.md`](TOPOLOGY_LEAF_CONTRACT.md)**:
+
+- **Determinism (integer connectivity).** Triangles CCW-from-outside, rotated
+  smallest-index-first, lexicographically sorted; dual rings CCW rotated to the
+  smallest neighbour, `cells_on_cell` / `vertices_on_cell` index-aligned;
+  undirected edges the canonical skolem `(min, max)`; Euler `n_tri = 2n − 4` hard-
+  failed otherwise. Byte-identical across bindings (`CONFORMANCE_SPEC.md` §5.5 /
+  §5.7).
+- **Tolerance (geometry).** The circumcentre coordinates (and downstream areas /
+  edge lengths) ride the §5.8 tolerance contract (`atol ≈ 1e-15 R²`), not byte
+  identity.
+
+The declarative companion is [`topology_leaf.esm`](topology_leaf.esm) (schema-
+valid; declares the leaf's emitted connectivity + the circumcentre-equidistance
+tolerance witness).
+
+## Proof
+
+[`test/test_mpas_scvt_topology_leaf.jl`](../../../../test/test_mpas_scvt_topology_leaf.jl)
+proves, on the octahedron (6 → 8) and icosahedral level-1 (42 → 80) seeds: exact
+connectivity + the byte golden
+([`tests/conformance/grids/mpas/scvt/topology_leaf/`](../../../../tests/conformance/grids/mpas/scvt/topology_leaf/));
+structural invariants (Euler, two-triangles-per-edge, canonical ordering,
+adjacency symmetry, S2B vertex alignment); **determinism** (permuting the
+generators leaves the triangulation invariant); the **ρ ≡ 1 regression**
+(`cells_on_cell` byte-identical to the imperative `_duo_voronoi_dual` — uniform-
+density SCVT recovers the quasi-uniform icosahedral-dual mesh); the tolerance-
+geometry invariant; and the schema-valid declaration.

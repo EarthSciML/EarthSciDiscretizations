@@ -1,0 +1,99 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "mpas_scvt_topology_leaf",
+    "description": "MPAS-SCVT spherical-topology LEAF declaration (epic esd-e5m, bead esd-e5m.3 / D3). The one-time, post-convergence topology operation of the declarative MPAS-SCVT mesh generator: given the converged SCVT generators (the Voronoi cell centres), it emits the spherical DELAUNAY triangulation of the generators and its dual VORONOI connectivity (cells_on_cell / edges_on_cell / the circumcentre-ring vertices_on_cell). This document declares the leaf BOUNDARY and its determinism/tolerance contract; the runnable reference is `scvt_voronoi_connectivity` (src/grids/mpas_scvt_topology.jl) and the normative contract is TOPOLOGY_LEAF_CONTRACT.md (this directory). IRREDUCIBLE LEAF, not a FAQ: per the epic's DECLARATIVE-OR-FAIL contract the per-iteration SCVT step (D2) must be a declarative semiring-FAQ, but the topology is explicitly 'an allowed irreducible leaf (like intersect_polygon)'. The boundary is drawn here — generators --[LEAF: spherical Delaunay = the 3-D convex hull of the unit generator directions]--> triangles + circumcentres --[DECLARATIVE FAQ: voronoi_dual_topology_faq, bead esd-heg.2]--> cells_on_cell / edges_on_cell. The triangulation step is the part that genuinely cannot be expressed as a semiring aggregate (an iterative, control-flow-heavy convex-hull construction whose robustness lives in HOW the orientation arithmetic is evaluated — the same status as acos/sqrt or the ESS intersect_polygon geometry leaf); everything below it is the LANDED declarative dual-topology FAQ, which previously hard-wired the DUO primal triangulation and now consumes the leaf's arbitrary-generator triangulation. CANONICAL EXECUTOR: the s2bindings.rs S2B FFI (SphericalDelaunay::from_lon_lat -> voronoi_connectivity, bead s2b-s7b), which resolves orientation with an EXACT predicate (Shewchuk static filter -> ExactFloat) so the integer connectivity is byte-identical across bindings even at cospherical degeneracies; the Julia reference binding computes the same hull with a Float64 predicate (exact for the non-degenerate inputs the contract requires) and emits the IDENTICAL canonical ordering, so the two agree byte-for-byte on a well-posed mesh — the contract is the cross-binding glue, exactly as intersect_polygon uses GeometryOps in Julia and s2bindings in Rust under one tolerance contract. CONTRACT (two regimes): (1) DETERMINISM — the INTEGER connectivity (triangle_cell, and the downstream cells_on_cell / edges_on_cell / vertices_on_cell) is byte-identical across bindings (CONFORMANCE_SPEC.md §5.5 / §5.7): triangles are emitted CCW as seen from outside the sphere, each rotated smallest-cell-index first, the whole list sorted lexicographically; the dual rings are CCW rotated to the smallest neighbour index with cells_on_cell / vertices_on_cell index-aligned; an undirected Delaunay/Voronoi edge is the canonical skolem tuple (min(u,v), max(u,v)); a closed mesh requires triangles == 2*cells - 4 (Euler), hard-failed otherwise. (2) TOLERANCE — the FLOATING-POINT circumcentre geometry (circumcenter, and the downstream areas / edge lengths) rides the §5.8 tolerance contract (atol ~ 1e-15 R^2), NOT byte-identity. This declaration is value-free (connectivity/coords are parameter shapes; concrete data is fed by the conformance harness / the D4 driver). The canonical instance is the icosahedron level-0 (cells=12 generators -> triangles=20 = 2*12-4, every Voronoi cell a pentagon); the leaf shape is identical at any generator count. The one declarative equation re-derives the DEFINING circumcentre property as a schema-valid tolerance witness: each Voronoi vertex circumcenter[t] is equidistant from the three generators of its Delaunay triangle triangle_cell[t,:] (the three circ_dist2[t,k] are equal to tolerance). Byte/structure proof: test/test_mpas_scvt_topology_leaf.jl; cross-binding integer golden: tests/conformance/grids/mpas/scvt/topology_leaf/.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.slit"
+    ],
+    "tags": [
+      "mpas",
+      "scvt",
+      "icosahedral",
+      "voronoi",
+      "delaunay",
+      "spherical-topology",
+      "topology-leaf",
+      "convex-hull",
+      "cells-on-cell",
+      "edges-on-cell",
+      "vertices-on-cell",
+      "circumcenter",
+      "determinism",
+      "tolerance",
+      "irreducible-leaf",
+      "wrap-s2b",
+      "s2b-s7b",
+      "esd-e5m.3"
+    ]
+  },
+  "models": {
+    "MpasScvtTopologyLeaf": {
+      "index_sets": {
+        "cells": { "kind": "interval", "size": 12 },
+        "triangles": { "kind": "interval", "size": 20 },
+        "corner": { "kind": "interval", "size": 3 },
+        "space": { "kind": "interval", "size": 3 }
+      },
+      "variables": {
+        "R": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Sphere radius (CONST). The circumcentres are scaled to radius R; circ_dist2 is exact in any consistent length unit."
+        },
+        "cell_coord": {
+          "type": "parameter",
+          "shape": ["cells", "space"],
+          "description": "Cartesian position of each generator (the Voronoi cell centre), on the sphere of radius R (CONST). At convergence these are the SCVT generators the D4 driver supplies; here they are the canonical icosahedron-level-0 cell centres. The leaf's input."
+        },
+        "triangle_cell": {
+          "type": "parameter",
+          "shape": ["triangles", "corner"],
+          "description": "The spherical DELAUNAY triangulation emitted by the leaf: triangle_cell[t,:] is the 3 generator (cell) ids of triangle t. The INTEGER connectivity — byte-identical across bindings by the determinism contract: each triangle is CCW-from-outside, rotated smallest-cell-index first, and the list is lexicographically sorted. Computed by the convex hull of the unit generator directions (canonical executor the s2bindings.rs S2B FFI); the dual cells_on_cell / edges_on_cell are derived from it by the landed voronoi_dual_topology_faq (esd-heg.2). CONST connectivity."
+        },
+        "circumcenter": {
+          "type": "parameter",
+          "shape": ["triangles", "space"],
+          "description": "The dual VORONOI vertices emitted by the leaf: circumcenter[t,:] is the circumcentre of Delaunay triangle t (the point on the sphere equidistant from its three generators), scaled to radius R. The FLOATING-POINT geometry — rides the tolerance contract, NOT byte-identity. CONST."
+        },
+        "circ_dist2": {
+          "type": "state",
+          "shape": ["triangles", "corner"],
+          "description": "Squared distance from Voronoi vertex circumcenter[t,:] to the k-th generator of its triangle, cell_coord[triangle_cell[t,k], :] (sum_product over space of the per-axis difference squared). The DEFINING circumcentre property: the three circ_dist2[t,k] (k over corner) are EQUAL to tolerance — the schema-valid declarative witness that circumcenter[t] is the circumcentre of triangle_cell[t,:]. Declared state for a balanced system; CONST-folded out of the (empty) hot path by the cadence partition (the topology runs ONCE at convergence, never in the Lloyd recurrence)."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "circ_dist2[t,k] = sum_d ( circumcenter[t,d] - cell_coord[triangle_cell[t,k], d] )^2 — the squared distance from the dual Voronoi vertex of triangle t to its k-th corner generator (gathered through the CONST triangle_cell connectivity). Squares are products (not ^). The three corners' distances are equal to tolerance iff circumcenter[t] is the true circumcentre — the tolerance-contract geometry witness. sum_product reduces over the space index d; mirrors the projected-difference idiom of voronoi_dual_topology.esm (A2).",
+          "lhs": { "op": "index", "args": ["circ_dist2", "t", "k"] },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": ["t", "k"],
+            "ranges": { "t": { "from": "triangles" }, "k": { "from": "corner" }, "d": { "from": "space" } },
+            "semiring": "sum_product",
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["circumcenter", "t", "d"] },
+                    { "op": "index", "args": ["cell_coord", { "op": "index", "args": ["triangle_cell", "t", "k"] }, "d"] }
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["circumcenter", "t", "d"] },
+                    { "op": "index", "args": ["cell_coord", { "op": "index", "args": ["triangle_cell", "t", "k"] }, "d"] }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
