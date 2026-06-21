@@ -1,0 +1,293 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "mpas_scvt_lloyd_step",
+    "description": "MPAS-SCVT one-iteration Lloyd STEP, expressed as a declarative value-invention FAQ evaluated end-to-end by the front-door (RFC semiring-faq-unified-ir §5.5 rules 5-6 + §5.7 rule 6; CONFORMANCE_SPEC.md §5.5.1 rules 5-6; epic esd-e5m, bead esd-e5m.2 / D2; MAYOR-held on ESS E1 ess-os1 + E2 ess-2u5, both landed). ONE Lloyd / SCVT iteration over the FIXED background quadrature point set declared by background_quadrature.esm (esd-e5m.1 / D1): per generator g it forms the density-weighted centroid c_g = (sum_{p->g} rho_p dA_p x_p) / (sum_{p->g} rho_p dA_p) over the background points p assigned to g, then moves g to c_g (re-normalized to the sphere). THE THREE STEP PIECES, all declarative through the value-invention front-door (value_invention.materialize_value_invention): (1) ASSIGN -- assign[c] = argmin_g dist2(bg_coord[c], gen[g]), the E1 arg-witness reducer (ess-os1): per background point the nearest-generator INDEX over the points x generators candidate join, squared-Euclidean distance so the metric is */-/+ only (argmin invariant to the monotone square, no sqrt), the §5.7 rule-6 smallest-generator-id tie-break making the integer buffer byte-identical across bindings. (Replace the unpruned candidate set with a bin-Skolem `join` -- the landed broad-phase idiom of nearest_generator_argmin.esm's NearestGeneratorBinned model -- to prune candidates to a point's lat-lon bin at scale; the unpruned form here is the canonical small instance.) (2) CENTROID -- den[g] = sum_{c:assign[c]=g} bg_mass[c] and num_{x,y,z}[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,{1,2,3}], the E2 grouped sum_product reductions (ess-2u5) keyed on the data-dependent `assign` buffer, run through Relational.group_aggregate (§5.5 rule 5: bucket by the canonical integer key, sum sequentially in canonical value order so the float sum is byte-reproducible). The density-weighted moment is bg_mass*bg_coord = the D1 bg_moment integrand, recomputed inline so num and den share the single bg_mass factor (the rho*area product byte-identical between numerator and denominator, per D1). One grouped reduction per SPACE component because a grouped semiring reduction emits a single output index (group-by g); the 3-D moment is therefore three scalar reductions num_x/num_y/num_z, not one [generators,space] aggregate. (3) ELEMENTWISE MOVE -- centroid_{x,y,z}[g] = num_{x,y,z}[g] / den[g], the DERIVED elementwise buffer over the two grouped reductions: the generator's next (pre-projection) position in R^3, exactly as nearest_generator_centroid.esm frames centroid = num/den as 'the next Lloyd / SCVT generator position'. An unattended generator (no assigned point) folds to den=0 and centroid=NaN; the host loop keeps its old seed. DECLARATIVE-OR-FAIL: every STEP piece above is declarative and is materialised ONCE at build time off the per-step hot path (§6.1 CONST/DISCRETE), dropped from the ODE, exactly like the E1/E2 fixtures; the only irreducible leaf is the E1 argmin (like intersect_polygon §8.1) and, downstream of the epic, the D3 spherical-Delaunay topology leaf. The fixed-point LOOP is host RHS-only: the host re-invokes this build with updated generators each iteration. The final SPHERE RE-PROJECTION of the centroid to the next generator -- gen_next[g,:] = R * centroid[g,:] / |centroid[g,:]| -- is the host loop's RHS-only elementwise step (it needs a sqrt/norm, outside the value-invention build-time op set of */-/+ / floor / ceil / index; the build-time relational front-door deliberately carries no transcendental geometry, the same boundary at which D3 draws its convex-hull leaf), so it is documented in the host-loop contract (LLOYD_STEP_CONTRACT.md) rather than emitted as a value-invention buffer. CONFORMANCE (cross-binding contract): the integer `assign` buffer is byte-identical across bindings (§5.7 rule 6 tie-break); the grouped/derived float buffers ride the §5.8 tolerance contract. Value-free structural spec; index sizes are the canonical level-0 instance composing D1 (n_cells = 20 background quadrature points = the level-0 DUO primal cells) and the icosahedral generator set (n_generators = 12). Concrete factors (bg_coord, bg_mass from D1; gen the current generators) are fed by the conformance harness / the D4 host driver, mirroring nearest_generator_centroid.esm. Proof: test/test_mpas_scvt_lloyd_step_faq.jl drives EarthSciSerialization.materialize_value_invention end-to-end and pins fixtures/canonical/lloyd_step_level0.json: the 3-D step reduces EXACTLY to the landed ESS E2 result (centroid_x == [0, 1.125, 2.0]) on the planar regression; mass is conserved (sum_g den[g] == sum_c bg_mass[c]); the assignment partitions the points and is reproduced by an independent nearest-generator recomputation with the smallest-id tie-break; and the rho==1 (CVT) vs rho = 2 + z (variable-resolution) centroids differ as the density dictates.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.nux"
+    ],
+    "tags": [
+      "mpas",
+      "scvt",
+      "icosahedral",
+      "lloyd",
+      "centroidal-voronoi",
+      "argmin",
+      "arg-witness",
+      "grouped-reduction",
+      "group-by",
+      "centroid",
+      "value-invention",
+      "nearest-generator",
+      "density",
+      "faq",
+      "ess-os1",
+      "ess-2u5",
+      "esd-e5m.2"
+    ]
+  },
+  "models": {
+    "ScvtLloydStep": {
+      "index_sets": {
+        "cells": {
+          "kind": "interval",
+          "size": 20
+        },
+        "generators": {
+          "kind": "interval",
+          "size": 12
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        }
+      },
+      "variables": {
+        "bg_coord": {
+          "type": "parameter",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "description": "Background quadrature point coordinate on the sphere = the DUO icosahedral primal-cell centroid (background_quadrature.esm bg_coord; esd-e5m.1 / D1). The FIXED point set this iteration integrates over. CONST: fed by D1 / the conformance harness. Read by the argmin distance metric (the assignment) and the centroid numerator (the density-weighted moment)."
+        },
+        "bg_mass": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Density-weighted quadrature measure of each background point = rho_p * dA_p (background_quadrature.esm bg_mass; esd-e5m.1 / D1). CONST. The centroid DENOMINATOR integrand (summed per generator to form sum_{p->g} rho_p dA_p) and -- multiplied by bg_coord -- the NUMERATOR integrand. rho == 1 is the uniform-density (CVT) regression; a sampled rho drives variable resolution."
+        },
+        "gen": {
+          "type": "parameter",
+          "shape": [
+            "generators",
+            "space"
+          ],
+          "description": "Current generator (Voronoi cell centre) positions on the sphere -- the INPUT of this Lloyd iteration. CONST within one build: the host fixed-point loop (D4) re-invokes the build with the updated generators each iteration (the loop is host RHS-only). Read only by the argmin distance metric."
+        },
+        "assign": {
+          "type": "state",
+          "shape": [
+            "cells"
+          ],
+          "description": "Nearest-generator INDEX of each background point: assign[c] = argmin_g dist2(bg_coord[c], gen[g]). The E1 arg-witness output (ess-os1) -- an integer 1-based generator id buffer materialised at setup (CONST cadence) and dropped from the ODE. The §5.7 rule-6 smallest-generator-id tie-break makes it byte-identical across bindings. The GROUP KEY the centroid reductions bucket on."
+        },
+        "den": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Centroid DENOMINATOR per generator: den[g] = sum_{c:assign[c]=g} bg_mass[c]. The grouped total density-weighted mass assigned to g (E2 grouped sum_product, ess-2u5, keyed on `assign`). A generator with no assigned point folds to the empty-sum identity 0. Value-invention; materialised at setup, dropped from the ODE."
+        },
+        "num_x": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Centroid NUMERATOR, x-component, per generator: num_x[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,1] = sum_{c->g} bg_moment_x[c]. A grouped sum_product reduction (E2) keyed on `assign`; one reduction per space component because a grouped reduction emits a single output index. Value-invention, dropped from the ODE."
+        },
+        "num_y": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Centroid NUMERATOR, y-component: num_y[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,2]. As num_x for the second space axis."
+        },
+        "num_z": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Centroid NUMERATOR, z-component: num_z[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,3]. As num_x for the third space axis."
+        },
+        "centroid_x": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Density-weighted cell-centroid x-component centroid_x[g] = num_x[g]/den[g] -- the ELEMENTWISE MOVE: the generator's next (pre-projection) position in R^3, the Lloyd / SCVT update. A DERIVED elementwise buffer over the two grouped reductions (E2); value-invention, dropped from the ODE. An unattended generator (den=0) gives NaN (0/0); the host keeps its old seed. The host loop projects centroid to the sphere -- gen_next = R*centroid/|centroid| -- as its RHS-only step (LLOYD_STEP_CONTRACT.md)."
+        },
+        "centroid_y": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Density-weighted cell-centroid y-component centroid_y[g] = num_y[g]/den[g]. As centroid_x for the second space axis."
+        },
+        "centroid_z": {
+          "type": "state",
+          "shape": [
+            "generators"
+          ],
+          "description": "Density-weighted cell-centroid z-component centroid_z[g] = num_z[g]/den[g]. As centroid_x for the third space axis."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1) ASSIGN -- assign[c] = argmin_g dist2(bg_coord[c], gen[g]) over the FULL points x generators candidate set (E1 arg-witness, ess-os1). A per-point map (output c, no outer contraction) whose body is the `argmin` reducer: it contracts the inner range g over generators, evaluates the squared-Euclidean distance FAQ dist2 = sum_d (bg_coord[c,d]-gen[g,d])^2 at each candidate (squared so the metric is */-/+ only -- argmin is invariant to the monotone square, no sqrt), and returns the witnessing generator index arg:\"g\". Equidistant generators resolve to the SMALLEST id (§5.7 rule 6), so the integer buffer is byte-identical across bindings. The space sum is written as the three explicit axis terms (literal component indices 1/2/3) because the argmin body is a flat scalar FAQ.",
+          "lhs": { "op": "index", "args": ["assign", "c"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["c"],
+            "ranges": { "c": { "from": "cells" } },
+            "args": ["bg_coord", "gen"],
+            "expr": {
+              "op": "argmin",
+              "args": ["bg_coord", "gen"],
+              "arg": "g",
+              "ranges": { "g": { "from": "generators" } },
+              "expr": {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 1] }, { "op": "index", "args": ["gen", "g", 1] }] },
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 1] }, { "op": "index", "args": ["gen", "g", 1] }] }
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 2] }, { "op": "index", "args": ["gen", "g", 2] }] },
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 2] }, { "op": "index", "args": ["gen", "g", 2] }] }
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 3] }, { "op": "index", "args": ["gen", "g", 3] }] },
+                      { "op": "-", "args": [{ "op": "index", "args": ["bg_coord", "c", 3] }, { "op": "index", "args": ["gen", "g", 3] }] }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "_comment": "(2a) CENTROID DENOMINATOR -- den[g] = sum_{c:assign[c]=g} bg_mass[c] (E2 grouped sum_product, ess-2u5). Output index g over generators, contraction c over cells, with the inner equi-join join.on [[assign,g]] gating each +-term (bg_mass[c]) onto the bucket whose key assign[c] equals g. Because the key column `assign` is a materialised value-invention buffer (not a loop index), the reduction runs through Relational.group_aggregate at setup (§5.5 rule 5), NOT the dense simulate evaluator. Empty groups fold to the 0-bar identity 0.",
+          "lhs": { "op": "index", "args": ["den", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" }, "c": { "from": "cells" } },
+            "semiring": "sum_product",
+            "join": [{ "on": [["assign", "g"]] }],
+            "args": ["assign", "bg_mass"],
+            "expr": { "op": "index", "args": ["bg_mass", "c"] }
+          }
+        },
+        {
+          "_comment": "(2b) CENTROID NUMERATOR x -- num_x[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,1] = sum_{c->g} bg_moment_x[c]. The same grouped reduction and group key as den, with the +-term being the density-weighted moment bg_mass[c]*bg_coord[c,1] (D1's bg_moment integrand, recomputed inline so num and den share the bg_mass factor byte-identically).",
+          "lhs": { "op": "index", "args": ["num_x", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" }, "c": { "from": "cells" } },
+            "semiring": "sum_product",
+            "join": [{ "on": [["assign", "g"]] }],
+            "args": ["assign", "bg_mass", "bg_coord"],
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["bg_mass", "c"] },
+                { "op": "index", "args": ["bg_coord", "c", 1] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2c) CENTROID NUMERATOR y -- num_y[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,2]. As num_x for the second space axis.",
+          "lhs": { "op": "index", "args": ["num_y", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" }, "c": { "from": "cells" } },
+            "semiring": "sum_product",
+            "join": [{ "on": [["assign", "g"]] }],
+            "args": ["assign", "bg_mass", "bg_coord"],
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["bg_mass", "c"] },
+                { "op": "index", "args": ["bg_coord", "c", 2] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2d) CENTROID NUMERATOR z -- num_z[g] = sum_{c:assign[c]=g} bg_mass[c]*bg_coord[c,3]. As num_x for the third space axis.",
+          "lhs": { "op": "index", "args": ["num_z", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" }, "c": { "from": "cells" } },
+            "semiring": "sum_product",
+            "join": [{ "on": [["assign", "g"]] }],
+            "args": ["assign", "bg_mass", "bg_coord"],
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["bg_mass", "c"] },
+                { "op": "index", "args": ["bg_coord", "c", 3] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(3a) ELEMENTWISE MOVE x -- centroid_x[g] = num_x[g]/den[g]. A DERIVED elementwise buffer over the two grouped reductions (E2): per generator, divide the grouped numerator by the grouped denominator -- the next Lloyd / SCVT generator x-position (pre sphere-projection). No contraction and no join; just a `/` reading the upstream materialised buffers. den=0 (unattended generator) gives NaN.",
+          "lhs": { "op": "index", "args": ["centroid_x", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" } },
+            "args": ["num_x", "den"],
+            "expr": {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": ["num_x", "g"] },
+                { "op": "index", "args": ["den", "g"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(3b) ELEMENTWISE MOVE y -- centroid_y[g] = num_y[g]/den[g]. As centroid_x for the second space axis.",
+          "lhs": { "op": "index", "args": ["centroid_y", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" } },
+            "args": ["num_y", "den"],
+            "expr": {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": ["num_y", "g"] },
+                { "op": "index", "args": ["den", "g"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(3c) ELEMENTWISE MOVE z -- centroid_z[g] = num_z[g]/den[g]. As centroid_x for the third space axis.",
+          "lhs": { "op": "index", "args": ["centroid_z", "g"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["g"],
+            "ranges": { "g": { "from": "generators" } },
+            "args": ["num_z", "den"],
+            "expr": {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": ["num_z", "g"] },
+                { "op": "index", "args": ["den", "g"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

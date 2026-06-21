@@ -8,7 +8,7 @@ a one-time spherical-Delaunay topology leaf (epic `esd-e5m`). The pieces:
 | Bead | Piece | Artifact |
 |------|-------|----------|
 | `esd-e5m.1` (**this dir**) | **D1** background quadrature mesh + density sampling | `background_quadrature.esm` |
-| `esd-e5m.2` | D2 one Lloyd iteration (assign → centroid → move) | *(step `.esm`, MAYOR-held on ESS E1+E2)* |
+| `esd-e5m.2` (**this dir**) | **D2** one Lloyd iteration (assign → centroid → move) | `lloyd_step.esm`, `LLOYD_STEP_CONTRACT.md` |
 | `esd-e5m.3` (**this dir**) | **D3** spherical-topology leaf (wrap S2B) + determinism/tolerance contract | `topology_leaf.esm`, `TOPOLOGY_LEAF_CONTRACT.md` |
 | `esd-e5m.4` | D4 `build_scvt_mesh` host driver (external fixed-point loop) | *(host driver)* |
 | `esd-e5m.5` | D5 conformance drain | *(conformance)* |
@@ -109,6 +109,78 @@ no shadow evaluator) and proves, across levels 0–2:
   density-weighted integral;
 - the schema-valid declarative document and the cross-binding canonical-byte
   contract (reproduced bit-for-bit by both the FAQ and the imperative grid area).
+
+---
+
+# One-iteration Lloyd step (assign → centroid → move) (esd-e5m.2 / D2)
+
+`lloyd_step.esm` declares **one** Lloyd / SCVT iteration over the fixed D1
+background quadrature point set, evaluated end-to-end by the EarthSciSerialization
+**value-invention front-door** (`materialize_value_invention`) — composing the two
+MAYOR-held ESS keystones, **E1** (`argmin` arg-witness, `ess-os1`) and **E2**
+(grouped `sum_product` over a derived key, `ess-2u5`), both now landed.
+
+## The three declarative step pieces
+
+Given the background points `bg_coord`, their density-weighted measure `bg_mass`
+(both from D1), and the current generators `gen`, one iteration is:
+
+1. **Assign (E1).** `assign[c] = argmin_g dist²(bg_coord[c], gen[g])` — per
+   background point the nearest-generator **index**, a squared-Euclidean distance
+   (so the metric is `*`/`−`/`+` only, no `sqrt`) with the §5.7 rule-6
+   **smallest-generator-id tie-break**, making the integer buffer byte-identical
+   across bindings.
+2. **Centroid (E2).** `den[g] = Σ_{c:assign[c]=g} bg_mass[c]` and
+   `num_{x,y,z}[g] = Σ_{c:assign[c]=g} bg_mass[c]·bg_coord[c,·]` — grouped
+   `sum_product` reductions keyed on the data-dependent `assign` buffer, run
+   through `Relational.group_aggregate`. One scalar reduction per **space**
+   component, because a grouped reduction emits a single output index.
+3. **Move.** `centroid_{x,y,z}[g] = num_{x,y,z}[g] / den[g]` — the derived
+   elementwise division: the generator's next (pre-projection) position. An
+   unattended generator (`den = 0`) folds to `NaN`; the host keeps its old seed.
+
+All eight buffers are value-invention — materialised **once** at build time, off
+the per-step hot path, and dropped from the ODE.
+
+## DECLARATIVE-OR-FAIL: where the boundary falls
+
+Per the epic rule the per-iteration **step** is the declarative FAQ above; the
+**loop is host (RHS-only)** and the topology is the D3 leaf. The final **sphere
+re-projection** that turns the centroid into the next generator —
+`gen_next = R · centroid / |centroid|` — needs a Euclidean norm (`sqrt`), which is
+**outside the value-invention build-time op set** (`index`/`skolem`/`floor`/`ceil`/
+`+`/`−`/`*`/`/`); the relational front-door carries no transcendental geometry, the
+same boundary at which D3 draws its convex-hull leaf. So the projection is the
+**host loop's RHS-only step** (it reads the centroid, writes the next generators,
+and re-invokes the build), documented in
+[`LLOYD_STEP_CONTRACT.md`](LLOYD_STEP_CONTRACT.md) — not emitted as a buffer. The
+centroid `num/den` **is** the planar Lloyd move (exactly as the landed E2 fixture
+frames it); the projection is the only sphere-specific addition.
+
+## What "byte/tolerance-identical across bindings" means here
+
+- **Determinism (integer).** `assign` is byte-identical across bindings (§5.7
+  rule 6 tie-break) and density-independent (a pure distance argmin).
+- **Tolerance (float).** `den` / `num_*` / `centroid_*` ride the §5.8 tolerance
+  contract across bindings (the grouped float sums derive from the libm-dependent
+  spherical-excess `bg_mass`); the Julia reference reproduces them bit-for-bit.
+
+The full contract is **[`LLOYD_STEP_CONTRACT.md`](LLOYD_STEP_CONTRACT.md)**.
+
+## Proof
+
+[`test/test_mpas_scvt_lloyd_step_faq.jl`](../../../../test/test_mpas_scvt_lloyd_step_faq.jl)
+drives `materialize_value_invention` end-to-end and proves: a **planar
+regression** reduces the 3-D step bit-for-bit to the landed ESS E2 result
+(`centroid_x == [0, 1.125, 2.0]`); the **level-0 composition** (D1's 20 points × 12
+icosahedral generators) has `assign` equal to an independent nearest-generator
+recomputation, conserves mass (`Σ den = Σ bg_mass`), and folds unattended
+generators to `NaN`; a **CVT regression** shows refinement attends every generator
+and shrinks the one-step move (the icosahedral generators are a centroidal fixed
+point); and the schema-valid declaration + the level-0 canonical byte golden
+([`fixtures/canonical/lloyd_step_level0.json`](fixtures/canonical/lloyd_step_level0.json),
+regenerate with [`regenerate_lloyd_step_fixtures.jl`](regenerate_lloyd_step_fixtures.jl))
+are reproduced by the front-door for both `ρ ≡ 1` and `ρ = 2 + z`.
 
 ---
 
