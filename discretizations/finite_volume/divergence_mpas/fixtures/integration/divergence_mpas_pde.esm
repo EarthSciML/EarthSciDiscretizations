@@ -1,0 +1,21 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "divergence_mpas_pde",
+    "description": "Flux-form divergence d(div)/dt = div(F, dim=cell) on an MPAS Voronoi mesh. F is the edge-normal flux (edge-located, shape [n_edges]); div is the cell-centered output. The divergence is lowered from divergence_mpas (Skamarock et al. 2012, Eq. 24): sum_k edge_sign_on_cell[i,k] * dv_edge[e]/area_cell[i] * F[e]. MMS edge fluxes are injected at bind time by the unstructured-divergence Layer-B runner; the F tendency is frozen (zero) so one RHS evaluation yields the discrete divergence of the prescribed flux field."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "div": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "F":   { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["div"], "wrt": "t" }, "rhs": { "op": "div", "args": ["F"], "dim": "cell" } },
+        { "lhs": { "op": "D", "args": ["F"], "wrt": "t" }, "rhs": 0.0 }
+      ],
+      "time": { "t0": 0.0, "t_final": 0.001 }
+    }
+  }
+}

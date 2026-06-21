@@ -1,0 +1,70 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "divergence_mpas_canonical"
+  },
+  "grids": {
+    "domain": {
+      "family": "mpas",
+      "dimensions": [
+        { "name": "n_cells", "size": 162, "periodic": false, "spacing": "unstructured" },
+        { "name": "n_edges", "size": 480, "periodic": false, "spacing": "unstructured" }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "div": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 },
+        "F": { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["div"], "wrt": "t" }, "rhs": { "op": "div", "args": ["F"], "dim": "cell" } },
+        { "lhs": { "op": "D", "args": ["F"], "wrt": "t" }, "rhs": 0.0 }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "divergence_mpas",
+      "pattern": { "op": "div", "args": ["$F"], "dim": "cell" },
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "k": [
+            1,
+            { "op": "index", "args": ["n_edges_on_cell", "i"] }
+          ]
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["edge_sign_on_cell", "i", "k"] },
+                {
+                  "op": "/",
+                  "args": [
+                    { "op": "index", "args": [
+                        "dv_edge",
+                        { "op": "index", "args": ["edges_on_cell", "i", "k"] }
+                    ]},
+                    { "op": "index", "args": ["area_cell", "i"] }
+                  ]
+                }
+              ]
+            },
+            { "op": "index", "args": [
+                "$F",
+                { "op": "index", "args": ["edges_on_cell", "i", "k"] }
+            ]}
+          ]
+        },
+        "args": ["$F", "dv_edge", "area_cell", "edges_on_cell", "edge_sign_on_cell", "n_edges_on_cell"]
+      }
+    }
+  ]
+}

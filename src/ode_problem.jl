@@ -757,10 +757,34 @@ end
 
 function _extract_connectivity(grid::MpasGrid)
     mesh = grid.mesh
+
+    # edge_sign_on_cell[k, c] ∈ {+1, -1}: the outward-normal orientation of
+    # cell c's k-th incident edge, the s_{i,k} factor of the flux-form
+    # divergence (Skamarock et al. 2012, Eq. 24; ESS RFC §7.3). MPAS stores the
+    # edge-normal direction as pointing from cells_on_edge[1,e] to
+    # cells_on_edge[2,e] ("outward_from_first_cell" convention), so that normal
+    # points OUT of cell c exactly when c is the first cell of the edge:
+    #   sign = +1 if cells_on_edge[1, e] == c else -1,  e = edges_on_cell[k, c].
+    # This is build-time-constant grid geometry derived from the loaded mesh
+    # primitives — the unstructured analogue of DuoGrid's host-derived area_eff
+    # — not an operator. Only real edges k ≤ n_edges_on_cell[c] are written;
+    # trailing padding slots stay 0 and are never read (the authored reduction's
+    # upper bound is index(n_edges_on_cell, i)).
+    me = mesh.max_edges
+    Nc = mesh.n_cells
+    edge_sign_on_cell = zeros(Int, me, Nc)
+    @inbounds for c in 1:Nc
+        for k in 1:mesh.n_edges_on_cell[c]
+            e = mesh.edges_on_cell[k, c]
+            edge_sign_on_cell[k, c] = mesh.cells_on_edge[1, e] == c ? 1 : -1
+        end
+    end
+
     ctables = Dict{String, Any}(
         "cells_on_cell" => mesh.cells_on_cell,   # max_edges × n_cells, 1-based
         "edges_on_cell" => mesh.edges_on_cell,   # max_edges × n_cells, 1-based
         "n_edges_on_cell" => mesh.n_edges_on_cell, # n_cells,   1-based cell → valence
+        "edge_sign_on_cell" => edge_sign_on_cell, # max_edges × n_cells, ±1 (0 padding)
     )
     scalar_arrs = Dict{String, Vector{Float64}}(
         "area_cell" => mesh.area_cell,
@@ -829,15 +853,17 @@ function _grid_primitive_arrays(grid::DuoGrid)
     )
 end
 
-# MPAS: the authored rule's coefficient is dv_edge[e] / (dc_edge[e] *
-# area_cell[c]); valence varies (5/6), so its reduction bound is
+# MPAS: nn_diffusion_mpas's coefficient is dv_edge[e] / (dc_edge[e] *
+# area_cell[c]); divergence_mpas's is edge_sign_on_cell[c,k] * dv_edge[e] /
+# area_cell[c]. Valence varies (5/6), so the reduction bound is
 # `index(n_edges_on_cell, i)` and the gather stops at the cell's real-neighbour
-# count, never reading the trailing padding columns of cells_on_cell/edges_on_cell.
+# count, never reading the trailing padding columns of the (cell, slot) tables.
 function _grid_primitive_arrays(grid::MpasGrid)
     ctables, scalar_arrs = _extract_connectivity(grid)
     return Dict{String, AbstractArray{Float64}}(
         "cells_on_cell" => _cell_slot_table(ctables["cells_on_cell"]::Matrix{Int}),
         "edges_on_cell" => _cell_slot_table(ctables["edges_on_cell"]::Matrix{Int}),
+        "edge_sign_on_cell" => _cell_slot_table(ctables["edge_sign_on_cell"]::Matrix{Int}),
         "n_edges_on_cell" => Float64.(ctables["n_edges_on_cell"]::Vector{Int}),
         "area_cell" => scalar_arrs["area_cell"],
         "dv_edge" => scalar_arrs["dv_edge"],

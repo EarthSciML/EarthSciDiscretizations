@@ -393,6 +393,26 @@ using TestItems
             @test occursin("fixture-declared not applicable", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "divergence_mpas"
+            # divergence_mpas (esd-6g4.1): the flagship MPAS flux-form divergence
+            # and the unstructured-operator TEMPLATE for the G-series. Layer-A
+            # passes via its canonical byte contract — an inline
+            # pattern+replacement rule (div($F, dim=cell) -> reduction arrayop
+            # weighted by edge_sign_on_cell * dv_edge / area_cell) on an MPAS grid
+            # with an edge-located F state; ESS discretize lowers div(F) and the
+            # walker byte-compares to the pinned expected.esm. Layer-B passes via
+            # the new unstructured_divergence runner
+            # (mms_kind="div_const_field_sphere"): a constant cartesian field's
+            # edge-normal flux F_e=V·n̂_e is injected as the edge state, the
+            # builtin Voronoi dual ladder (level 3->4->5) is swept, and the
+            # cell-centered divergence is measured against -2(V·r̂)/R, clearing
+            # the fixture's expected_min_order of 0.9 (O(h) L∞ — the MPAS C-grid
+            # divergence is first-order in L∞ on the irregular icosahedral-Voronoi
+            # mesh, exactly like nn_diffusion_mpas).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "flux_1d_ppm"
             # flux_1d_ppm: Layer-A passes via its canonical byte contract —
             # the PPM replacement AST (CW84 limiter + Courant-fraction integral,
@@ -544,7 +564,9 @@ using TestItems
         1 for r in results
             if (String(r.family), r.name) in pass_layer_d; init = 0
     )
-    @test layer_b_passes == 18
+    # esd-6g4.1 adds divergence_mpas (O(h) MPAS flux-form divergence) via the
+    # new unstructured_divergence Layer-B runner, taking the PASS count to 19.
+    @test layer_b_passes == 19
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

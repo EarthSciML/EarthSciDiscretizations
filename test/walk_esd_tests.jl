@@ -680,6 +680,23 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
         ic = (lon, lat) -> sin(lon) * cos(lat),
         derivative = (lon, lat) -> -2.0 * sin(lon) * cos(lat),
     ),
+    # MPAS flux-form divergence MMS (divergence_mpas, esd-6g4.1). The input is a
+    # CONSTANT cartesian vector field V; the surface divergence of its tangential
+    # projection on a sphere of radius R is ∇_s·V_t = -(2/R)(V·r̂) (the runner
+    # applies the 1/R scaling). `ic` is unused — the divergence input is the
+    # edge-normal flux F_e = V·n̂_e, sampled by the unstructured_divergence runner
+    # from the cartesian V carried in `_LAYER_B_MMS_AUX`, NOT a cell-center field.
+    # `derivative(lon, lat)` returns the unit-sphere divergence -2(V·r̂), with
+    # r̂ = (cos lat cos lon, cos lat sin lon, sin lat). The V components here MUST
+    # match `_LAYER_B_MMS_AUX["div_const_field_sphere"]`.
+    "div_const_field_sphere" => (
+        ic = (lon, lat) -> 0.0,
+        derivative = (lon, lat) -> -2.0 * (
+            1.0 * cos(lat) * cos(lon) +
+            0.37 * cos(lat) * sin(lon) +
+            (-0.6) * sin(lat)
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -696,6 +713,12 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
 const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
     "sin_2pi_x_unit_advection" => Dict{String, Any}("U" => 1.0),
     "sin_2pi_x_nonlinear_diffusion" => Dict{String, Any}("f" => (x -> 2 + sin(2π * x))),
+    # Constant cartesian field components for the MPAS divergence MMS. The
+    # unstructured_divergence runner reads these to build the edge-normal flux
+    # F_e = V·n̂_e at each edge. MUST match the V in the catalog's
+    # `div_const_field_sphere` derivative.
+    "div_const_field_sphere" =>
+        Dict{String, Any}("Vx" => 1.0, "Vy" => 0.37, "Vz" => -0.6),
 )
 
 # ---------------------------------------------------------------------------
@@ -755,6 +778,16 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}(
         # at t=0, and measures L∞ error vs the analytic Laplacian. Convergence
         # order is computed across the builtin mesh ladder.
         "unstructured_ode",
+        # `unstructured_divergence` (esd-6g4.1) — edge-flux divergence runner for
+        # unstructured flux-form rules (grid_family=unstructured whose
+        # `requires_locations` names an edge location, e.g. divergence_mpas).
+        # Differs from unstructured_ode in that the manufactured input lives on
+        # EDGES, not cells: loads the MPAS Voronoi mesh, samples the edge-normal
+        # flux F_e = V·n̂_e of a constant cartesian field, injects it as the
+        # edge-located state F via build_ode_problem, evaluates the RHS at t=0,
+        # and measures L∞ error of the cell-centered divergence output vs the
+        # analytic surface divergence -2(V·r̂)/R across the builtin mesh ladder.
+        "unstructured_divergence",
     ]
 )
 
@@ -773,6 +806,7 @@ const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
     # "unstructured_ode" before reaching the lowering gate.
     "stencil_form_rule" => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
     "unstructured_ode" => "ESD/esd-cal",
+    "unstructured_divergence" => "ESD/esd-6g4.1",
     "unsupported" => "no follow-up bead — out of Layer-B scope",
 )
 
@@ -848,6 +882,16 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     # Delegate to a separate sweep function that builds the ODE problem directly.
     if topology_key == "unstructured_ode"
         return _run_layer_b_unstructured_ode_sweep(
+            rule, mms, input_json,
+            convergence_dir, expected_min_order
+        )
+    end
+
+    # Unstructured divergence topology: like unstructured_ode, reads grid_refs
+    # (GDD paths), but samples the manufactured input on EDGES (the edge-normal
+    # flux) rather than cells, and measures the cell-centered divergence output.
+    if topology_key == "unstructured_divergence"
+        return _run_layer_b_unstructured_divergence_sweep(
             rule, mms, input_json,
             convergence_dir, expected_min_order
         )
@@ -943,6 +987,17 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     # lowerer. Check grid_family BEFORE the lowering gate so these rules do not
     # fall through to "stencil_form_rule".
     if String(get(spec, "grid_family", "")) == "unstructured"
+        # Within the unstructured family, route on the rule's input LOCATION
+        # (a generic schema attribute, not the rule name): a flux-form rule whose
+        # `requires_locations` names an edge location (e.g. the edge-normal flux
+        # of divergence_mpas) needs the edge-sampling divergence runner; a rule
+        # with cell-centered input (e.g. the nn_diffusion Laplacian) uses the
+        # ODE-pipeline runner.
+        reqlocs = get(spec, "requires_locations", Any[])
+        if reqlocs isa AbstractVector &&
+           any(l -> occursin("edge", lowercase(String(l))), reqlocs)
+            return "unstructured_divergence"
+        end
         return "unstructured_ode"
     end
 
@@ -1207,6 +1262,155 @@ function _run_layer_b_unstructured_ode(mms, esm_path::AbstractString, gdd_path::
         idx = get(var_map, "u[$c]", nothing)
         idx === nothing && error("var_map missing key 'u[$c]'")
         analytic = mms.derivative(lon_c[c], lat_c[c]) * inv_R2
+        err = max(err, abs(du[idx] - analytic))
+    end
+    return err
+end
+
+# ---------------------------------------------------------------------------
+# Layer-B `unstructured_divergence` runner (esd-6g4.1). The MPAS flux-form
+# divergence consumes an edge-located flux F (one value per edge), not a
+# cell-centered field, so it cannot ride the unstructured_ode runner (which
+# samples cell centers). This sweep mirrors the ode sweep's structure — read
+# the GDD ladder from `grid_refs`, run each resolution, compute the L∞
+# convergence order — but the per-grid step samples the manufactured flux on
+# edges and reads the cell-centered divergence output.
+# ---------------------------------------------------------------------------
+function _run_layer_b_unstructured_divergence_sweep(
+        rule::RuleFile, mms, input_json::AbstractDict,
+        convergence_dir::AbstractString,
+        expected_min_order::Float64
+    )
+    esm_rel = get(input_json, "esm", nothing)
+    esm_rel === nothing &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm missing 'esm' field for unstructured_divergence runner")
+    esm_path = joinpath(convergence_dir, String(esm_rel))
+    isfile(esm_path) ||
+        return LayerResult(LAYER_FAIL, "unstructured_divergence runner: esm path not found: $esm_path")
+
+    grid_refs_raw = get(input_json, "grid_refs", Any[])
+    isempty(grid_refs_raw) &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm declares no grid_refs for unstructured_divergence")
+    length(grid_refs_raw) < 2 &&
+        return LayerResult(LAYER_FAIL, "unstructured_divergence runner needs ≥ 2 grid_refs for convergence order (got $(length(grid_refs_raw)))")
+
+    errors = Float64[]
+    for gdd_rel in grid_refs_raw
+        gdd_path = let p = String(gdd_rel)
+            isabspath(p) ? p : joinpath(convergence_dir, p)
+        end
+        isfile(gdd_path) ||
+            return LayerResult(LAYER_FAIL, "unstructured_divergence runner: grid_ref not found: $gdd_path")
+        err = try
+            _run_layer_b_unstructured_divergence(mms, esm_path, gdd_path)
+        catch e
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured divergence pipeline threw at grid=$(basename(gdd_path)): $(sprint(showerror, e))"
+            )
+        end
+        if !(err isa Real) || !isfinite(err)
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured divergence runner at grid=$(basename(gdd_path)) returned non-finite: $(typeof(err))"
+            )
+        end
+        push!(errors, Float64(err))
+    end
+
+    any(iszero, errors) &&
+        return LayerResult(LAYER_FAIL, "zero error in unstructured divergence sweep (degenerate fixture): $errors")
+
+    orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
+    min_order = minimum(orders)
+    if min_order >= expected_min_order
+        return LayerResult(
+            LAYER_PASS,
+            "min order $(round(min_order; digits = 2)) >= expected $(expected_min_order) " *
+                "over $(length(grid_refs_raw)) grids (orders=$(round.(orders; digits = 2)))",
+        )
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "min order $(round(min_order; digits = 2)) below expected $(expected_min_order) " *
+                "(orders=$(round.(orders; digits = 2)), errors=$(round.(errors; sigdigits = 3)))",
+        )
+    end
+end
+
+# Single resolution of the unstructured-divergence sweep. Samples the constant
+# cartesian field V (from mms.aux) as the edge-normal flux F_e = V·n̂_e, drives
+# the divergence_mpas rule through build_ode_problem with F injected as the
+# edge-located state, and returns the L∞ error of the cell-centered divergence
+# output vs the analytic surface divergence -2(V·r̂)/R.
+function _run_layer_b_unstructured_divergence(mms, esm_path::AbstractString, gdd_path::AbstractString)
+    gdd = JSON.parse(read(gdd_path, String))
+    domain_spec = get(get(gdd, "grids", Dict{String, Any}()), "domain", Dict{String, Any}())
+    family = String(get(domain_spec, "family", ""))
+    family == "mpas" || error(
+        "unstructured_divergence Layer-B runner currently supports family='mpas'; got '$family'"
+    )
+
+    loader_spec = get(domain_spec, "loader", nothing)
+    loader_spec === nothing && error("MPAS GDD missing loader spec")
+    loader_path = String(get(loader_spec, "path", ""))
+    startswith(loader_path, "builtin://") || error(
+        "unstructured_divergence Layer-B runner requires builtin:// MPAS path; got $loader_path"
+    )
+    R_sphere = Float64(get(loader_spec, "sphere_radius", 1.0))
+    grid = build_mpas_grid(
+        loader = Dict(
+            "path" => loader_path, "reader" => "auto",
+            "check" => String(get(loader_spec, "check", "strict"))
+        ),
+        R = R_sphere,
+    )
+    mesh = grid.mesh
+    Nc = mesh.n_cells
+    Ne = mesh.n_edges
+    R = Float64(grid.R)
+
+    # Constant cartesian field from the MMS auxiliary table.
+    aux = mms.aux
+    (haskey(aux, "Vx") && haskey(aux, "Vy") && haskey(aux, "Vz")) || error(
+        "unstructured_divergence runner: mms.aux missing Vx/Vy/Vz for the constant-field flux"
+    )
+    Vx = Float64(aux["Vx"]); Vy = Float64(aux["Vy"]); Vz = Float64(aux["Vz"])
+
+    # Edge-normal flux F_e = V·n̂_e. The reference normal points from
+    # cells_on_edge[1,e] to cells_on_edge[2,e] (MPAS "outward_from_first_cell"),
+    # matching edge_sign_on_cell. n̂_e is the tangent-plane projection (at the edge
+    # midpoint) of the cell-center chord, so V·n̂_e is the genuine normal
+    # component of the field threading the edge.
+    extra_ics = Dict{String, Float64}()
+    sizehint!(extra_ics, Ne)
+    for e in 1:Ne
+        c1 = mesh.cells_on_edge[1, e]
+        c2 = mesh.cells_on_edge[2, e]
+        le = mesh.lon_edge[e]; be = mesh.lat_edge[e]
+        rhx = cos(be) * cos(le); rhy = cos(be) * sin(le); rhz = sin(be)
+        dx = mesh.x_cell[c2] - mesh.x_cell[c1]
+        dy = mesh.y_cell[c2] - mesh.y_cell[c1]
+        dz = mesh.z_cell[c2] - mesh.z_cell[c1]
+        dr = dx * rhx + dy * rhy + dz * rhz
+        nx = dx - dr * rhx; ny = dy - dr * rhy; nz = dz - dr * rhz
+        nn = sqrt(nx^2 + ny^2 + nz^2)
+        extra_ics["F[$e]"] = (Vx * nx + Vy * ny + Vz * nz) / nn
+    end
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
+
+    du = similar(prob.u0)
+    prob.f(du, prob.u0, prob.p, 0.0)
+
+    err = 0.0
+    for c in 1:Nc
+        idx = get(var_map, "div[$c]", nothing)
+        idx === nothing && error("var_map missing key 'div[$c]'")
+        # Analytic surface divergence of the tangential projection of the constant
+        # field on a sphere of radius R: ∇_s·V_t = -(2/R)(V·r̂). The MMS catalog's
+        # `derivative` returns the unit-sphere value -2(V·r̂); divide by R here.
+        analytic = mms.derivative(mesh.lon_cell[c], mesh.lat_cell[c]) / R
         err = max(err, abs(du[idx] - analytic))
     end
     return err

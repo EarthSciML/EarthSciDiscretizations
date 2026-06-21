@@ -1,0 +1,49 @@
+{
+  "discretizations": {
+    "divergence_mpas": {
+      "applies_to": { "op": "div", "args": ["$F"], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["edge_normal"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "accuracy": "O(h^2) on a quasi-uniform Voronoi mesh",
+      "reference": "Skamarock et al. (2012), Mon. Wea. Rev. 140:3090-3105, Eq. 24 (MPAS flux-form finite-volume divergence); ESS RFC discretization.md §7.3 worked MPAS-divergence example. Discrete operator: (div F)_i = (1/A_i) * sum_k s_{i,k} * l_{e} * F_{e}, with e = edges_on_cell[i,k] the k-th incident edge of cell i, s_{i,k} = edge_sign_on_cell[i,k] in {+1,-1} the outward-normal orientation (MPAS 'outward_from_first_cell' convention: +1 when cells_on_edge[1,e]==i), l_e = dv_edge[e] the Voronoi edge arc length, A_i = area_cell[i] the cell area, and F_e the edge-normal flux. The coefficient s*l/A is build-time-constant grid geometry (const-folded); only F_e reaches the per-step hot tree.",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": {
+          "k": [
+            1,
+            { "op": "index", "args": ["n_edges_on_cell", "i"] }
+          ]
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["edge_sign_on_cell", "i", "k"] },
+                {
+                  "op": "/",
+                  "args": [
+                    { "op": "index", "args": [
+                        "dv_edge",
+                        { "op": "index", "args": ["edges_on_cell", "i", "k"] }
+                    ]},
+                    { "op": "index", "args": ["area_cell", "i"] }
+                  ]
+                }
+              ]
+            },
+            { "op": "index", "args": [
+                "$F",
+                { "op": "index", "args": ["edges_on_cell", "i", "k"] }
+            ]}
+          ]
+        },
+        "args": ["$F", "dv_edge", "area_cell", "edges_on_cell", "edge_sign_on_cell", "n_edges_on_cell"]
+      }
+    }
+  }
+}
