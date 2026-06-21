@@ -113,16 +113,65 @@ function build_ode_problem(
         merge!(const_array_boundaries, _grid_const_array_boundaries(loaded_grids))
     end
 
-    f!, u0, p, tspan, var_map = EarthSciSerialization.build_evaluator(
-        disc;
-        initial_conditions = numeric_ics,
-        const_arrays = const_arrays,
-        const_array_boundaries = const_array_boundaries
+    f!, u0, p, tspan, var_map = _build_evaluator_gj4(
+        disc, numeric_ics, const_arrays, const_array_boundaries
     )
 
     prob = SciMLBase.ODEProblem(f!, u0, tspan, p)
     return prob, var_map
 end
+
+# Call ESS `build_evaluator`, threading the ess-gj4 per-const-array boundary
+# policy ONLY when the resolved EarthSciSerialization actually accepts it.
+#
+# The `const_array_boundaries` kwarg landed on `build_evaluator(::Model)` at
+# ess-gj4 (ESS 78b6a577). Passing it unconditionally regressed this SHARED
+# pipeline against any ESS depot/precompile checkout that predates the kwarg:
+# the MethodError threw for EVERY unstructured runner (MPAS / DUO / arakawa),
+# even though those bind an EMPTY boundary map and never need the policy.
+# Gating keeps the shared path green across ESS versions — non-covariant
+# runners are byte-identical either way, and only the covariant-FV latlon
+# binding (the sole producer of a non-empty boundary map) actually requires
+# the kwarg.
+#
+# Support is detected on the `Model` method specifically: `disc` is the native
+# esm dict, so the call dispatches through the slurping `AbstractDict`
+# front-door whose `kwargs...` would make any detection on `typeof(disc)`
+# spuriously match; the `Model` method (no slurp) is where the kwarg is really
+# declared. When a boundary policy IS requested but the kwarg is unavailable,
+# fail loudly rather than silently dropping it and integrating a wrong operator.
+function _build_evaluator_gj4(disc, numeric_ics, const_arrays, const_array_boundaries)
+    if _ess_supports_const_array_boundaries()
+        return EarthSciSerialization.build_evaluator(
+            disc;
+            initial_conditions = numeric_ics,
+            const_arrays = const_arrays,
+            const_array_boundaries = const_array_boundaries,
+        )
+    end
+    isempty(const_array_boundaries) || error(
+        "build_ode_problem: a loaded grid requested a const_array boundary " *
+        "policy ($(collect(keys(const_array_boundaries)))) but the resolved " *
+        "EarthSciSerialization.build_evaluator does not accept the " *
+        "`const_array_boundaries` kwarg (pre-ess-gj4). Update ESS to " *
+        "origin/main ≥ 78b6a577.",
+    )
+    return EarthSciSerialization.build_evaluator(
+        disc;
+        initial_conditions = numeric_ics,
+        const_arrays = const_arrays,
+    )
+end
+
+# True iff the resolved ESS `build_evaluator` explicitly accepts the ess-gj4
+# `const_array_boundaries` kwarg on its `Model` method — the real binding
+# site. The `AbstractDict` / `EsmFile` front-doors slurp `kwargs...` and would
+# always report a match, so the check targets `Model` (no slurp) directly.
+_ess_supports_const_array_boundaries() = hasmethod(
+    EarthSciSerialization.build_evaluator,
+    Tuple{EarthSciSerialization.Model},
+    (:const_array_boundaries,),
+)
 
 # ---------------------------------------------------------------------------
 # Path B: PDESystem → ESS.discretize(sys, grid) curvilinear pipeline (esd-ncg)
