@@ -1,0 +1,315 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "cartesian_construction",
+    "description": "Cartesian structured-grid construction as a declarative semiring-FAQ document (RFC semiring-faq-unified-ir §5.1/§5.2; bead esd-3we.1 / S1). The STRUCTURED-GRID FAQ TEMPLATE: it expresses the whole cartesian coordinate/metric/neighbor/boundary construction with the landed M1 path (cartesian interval index-sets + elementwise arrayop bodies — NO value-invention, NO recursion, all CONST-cadence), the same way duo/rules/primal_topology.esm expresses unstructured connectivity with the M3 path. This instance pins a uniform 1-D axis of n=8 cells on [lo, lo+n*dx] with lo=0, dx=1/8 (the `small_1d` conformance fixture); the per-axis arrays generalize to each axis of an N-D grid (the evaluation bridge src/cartesian_faq.jl runs every axis, then forms the per-cell flattened arrays as the cartesian product of the axis index-sets). Two interval index-sets seed everything: `edge_nodes` (the n+1 cell faces) and `cells` (the n cells). The construction is four families of elementwise equations over those sets: (1) AFFINE COORDINATES — `edges[i] = lo + (i-1)*dx` is the affine map over the 1-based `edge_nodes` interval (offset i-1 is the 0-based node index; a non-uniform axis instead supplies `edges` as DATA and skips this equation), `centers[i] = (edges[i] + edges[i+1])/2` and `widths[i] = edges[i+1] - edges[i]` are the elementwise midpoint/difference over `cells` (neighbor-node gathers edges[i+1] via affine index arithmetic). (2) IDENTITY METRIC — a cartesian grid is flat: the metric tensor `metric_g` and its inverse `metric_ginv` are the Kronecker delta (in 1-D the single diagonal component is 1), the metric Jacobian `jacobian` is the product of the axis widths (in 1-D = `widths`, i.e. `cell_volume`), all metric derivatives `dgij_dxk` vanish, the coordinate Jacobian `coord_jacobian` to the cartesian target is the identity (diagonal 1) and its second derivative `coord_jacobian_second` vanishes. (3) NEIGHBOR MAPS — `neighbor_minus[i]` / `neighbor_plus[i]` are the plus/minus axis offsets with the 0-SENTINEL convention (ifelse on the interval bounds: out-of-range → 0 = no neighbor; the bridge renumbers these axis offsets into flattened cell ids per N-D linearization). (4) BOUNDARY MASK — `boundary_lower[i]` / `boundary_upper[i]` mark the first/last cell of the axis. `cell_volume[i]` is the cell measure (= `jacobian`). Every value is build-time-constant (CONST cadence): the entire grid folds into the setup artifact off any per-step hot path (cadence-partition §6.1) — this is a construction document, not a dynamical model. Cross-binding byte-identity is guaranteed by the ESS determinism contract (CONFORMANCE_SPEC.md §5.5): the elementwise arithmetic is evaluated by EarthSciSerialization's AST evaluator in every binding (Julia/Python/Rust), so the affine coordinates and derived arrays are bit-identical, pinned for the cartesian conformance fixtures in tests/conformance/grids/cartesian/construction/.",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.rictus"
+    ],
+    "tags": [
+      "cartesian",
+      "structured-grid",
+      "rectilinear",
+      "affine",
+      "identity-metric",
+      "neighbor-map",
+      "boundary-mask",
+      "arrayop",
+      "elementwise",
+      "interval-index-set",
+      "cadence-partition",
+      "declarativization",
+      "esd-3we.1"
+    ]
+  },
+  "models": {
+    "CartesianConstruction": {
+      "index_sets": {
+        "edge_nodes": { "kind": "interval", "size": 9 },
+        "cells": { "kind": "interval", "size": 8 }
+      },
+      "variables": {
+        "lo": {
+          "type": "parameter",
+          "default": 0.0,
+          "description": "Affine origin of the axis (the lower extent edges[1]). CONST. A non-uniform axis ignores this and supplies `edges` as data."
+        },
+        "dx": {
+          "type": "parameter",
+          "default": 0.125,
+          "description": "Affine spacing of a UNIFORM axis, dx = (hi - lo)/n. CONST. Here (1 - 0)/8 = 1/8 = 0.125 (exact in binary64). A non-uniform axis has no single dx; its widths come from the supplied edges."
+        },
+        "edges": {
+          "type": "state",
+          "shape": ["edge_nodes"],
+          "description": "Cell-face coordinates, one per node of the 1-based `edge_nodes` interval. Uniform: the affine map edges[i] = lo + (i-1)*dx. Non-uniform: supplied as data. CONST; assigned algebraically (not D/dt), folded out of the hot path by the cadence partition."
+        },
+        "centers": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Cell-center coordinates, the elementwise midpoint of each cell's two faces: centers[i] = (edges[i] + edges[i+1])/2. CONST."
+        },
+        "widths": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Cell widths, the elementwise face difference: widths[i] = edges[i+1] - edges[i]. CONST."
+        },
+        "cell_volume": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Cell measure (length in 1-D, area in 2-D, volume in 3-D) = product of the axis widths. In 1-D cell_volume[i] = widths[i]. CONST."
+        },
+        "jacobian": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Metric Jacobian J = det(g)^(1/2) = product of the axis widths = cell_volume. Identity-metric grid, so J is purely the measure. CONST."
+        },
+        "metric_g": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Metric tensor component. A cartesian grid is flat: g_ij = delta_ij. In 1-D the single diagonal component g_11 = 1. CONST."
+        },
+        "metric_ginv": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Inverse metric tensor component. Identity metric, so g^ij = delta_ij; in 1-D g^11 = 1. CONST."
+        },
+        "dgij_dxk": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Derivative of the metric tensor, d g_ij / d x_k. The cartesian metric is constant, so every component vanishes: 0. CONST."
+        },
+        "coord_jacobian": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Coordinate Jacobian d x_cartesian / d xi to the cartesian target. The cartesian grid IS the target, so this is the identity; in 1-D the diagonal component = 1. CONST."
+        },
+        "coord_jacobian_second": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Second coordinate derivative d^2 x_cartesian / d xi d xj. Affine coordinates have no curvature, so every component vanishes: 0. CONST."
+        },
+        "neighbor_minus": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Index of the minus-side (offset -1) axis neighbor of each cell, with the 0-SENTINEL convention: the first cell has no minus neighbor, so neighbor_minus[1] = 0. neighbor_minus[i] = (i > 1) ? i-1 : 0. CONST."
+        },
+        "neighbor_plus": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Index of the plus-side (offset +1) axis neighbor of each cell, 0-SENTINEL: the last cell has no plus neighbor, neighbor_plus[n] = 0. neighbor_plus[i] = (i < n) ? i+1 : 0. CONST."
+        },
+        "boundary_lower": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Lower-boundary mask: 1 for the first cell of the axis (i == 1), else 0. CONST."
+        },
+        "boundary_upper": {
+          "type": "state",
+          "shape": ["cells"],
+          "description": "Upper-boundary mask: 1 for the last cell of the axis (i == n), else 0. CONST."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1) AFFINE COORDINATES — edges. The affine map over the 1-based `edge_nodes` interval: edges[i] = lo + (i-1)*dx, where (i-1) is the 0-based node offset so edges[1]=lo and edges[n+1]=lo+n*dx=hi. Elementwise arrayop (output_idx=[i], no reduction) over edge_nodes. A non-uniform axis omits this equation and supplies `edges` as data.",
+          "lhs": { "op": "index", "args": ["edges", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "edge_nodes" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "lo",
+                { "op": "*", "args": [{ "op": "-", "args": ["i", 1] }, "dx"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(1) AFFINE COORDINATES — centers. Elementwise midpoint of each cell's two faces over `cells`: centers[i] = (edges[i] + edges[i+1])/2. The edges[i+1] neighbor-node gather is affine index arithmetic on the loop index.",
+          "lhs": { "op": "index", "args": ["centers", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["edges"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    { "op": "index", "args": ["edges", "i"] },
+                    { "op": "index", "args": ["edges", { "op": "+", "args": ["i", 1] }] }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(1) AFFINE COORDINATES — widths. Elementwise face difference over `cells`: widths[i] = edges[i+1] - edges[i].",
+          "lhs": { "op": "index", "args": ["widths", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["edges"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["edges", { "op": "+", "args": ["i", 1] }] },
+                { "op": "index", "args": ["edges", "i"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(4) CELL VOLUME — the cell measure = product of the axis widths. In this 1-D template cell_volume[i] = widths[i]; the bridge multiplies across axes for N-D.",
+          "lhs": { "op": "index", "args": ["cell_volume", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["widths"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": { "op": "index", "args": ["widths", "i"] }
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — jacobian. Metric Jacobian J = product of widths = cell_volume (identity metric contributes no extra factor).",
+          "lhs": { "op": "index", "args": ["jacobian", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["widths"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": { "op": "index", "args": ["widths", "i"] }
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — metric_g = delta_ij. In 1-D the single diagonal component g_11 = 1 for every cell.",
+          "lhs": { "op": "index", "args": ["metric_g", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": 1
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — metric_ginv = delta_ij (inverse of identity is identity); 1-D diagonal g^11 = 1.",
+          "lhs": { "op": "index", "args": ["metric_ginv", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": 1
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — dgij_dxk = 0. The cartesian metric is constant; all its spatial derivatives vanish.",
+          "lhs": { "op": "index", "args": ["dgij_dxk", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": 0
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — coord_jacobian to the cartesian target = identity; 1-D diagonal = 1.",
+          "lhs": { "op": "index", "args": ["coord_jacobian", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": 1
+          }
+        },
+        {
+          "_comment": "(2) IDENTITY METRIC — coord_jacobian_second = 0. Affine coordinates have no curvature.",
+          "lhs": { "op": "index", "args": ["coord_jacobian_second", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": 0
+          }
+        },
+        {
+          "_comment": "(3) NEIGHBOR MAP — minus side (offset -1), 0-sentinel. neighbor_minus[i] = (i > 1) ? i-1 : 0.",
+          "lhs": { "op": "index", "args": ["neighbor_minus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": ["i", 1] },
+                { "op": "-", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(3) NEIGHBOR MAP — plus side (offset +1), 0-sentinel. neighbor_plus[i] = (i < n) ? i+1 : 0, with n = 8 (cells.size).",
+          "lhs": { "op": "index", "args": ["neighbor_plus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "<", "args": ["i", 8] },
+                { "op": "+", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY MASK — lower. boundary_lower[i] = (i == 1) ? 1 : 0.",
+          "lhs": { "op": "index", "args": ["boundary_lower", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 1] }, 1, 0]
+            }
+          }
+        },
+        {
+          "_comment": "(5) BOUNDARY MASK — upper. boundary_upper[i] = (i == n) ? 1 : 0, with n = 8 (cells.size).",
+          "lhs": { "op": "index", "args": ["boundary_upper", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "cells" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 8] }, 1, 0]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

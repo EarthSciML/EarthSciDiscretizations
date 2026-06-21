@@ -32,6 +32,12 @@ include("rule_eval.jl")
 # discretizations/grids/duo/primal_topology.esm.
 include("topology_faq.jl")
 
+# Cartesian grid construction as the structured-grid FAQ template (esd-3we.1 / S1)
+# — thin bridge routing the affine coordinate map + elementwise metric/neighbor/
+# boundary derivations through the landed ESS M1 evaluator (eval_coeff). Declarative
+# companion: discretizations/grids/cartesian/rules/cartesian_construction.esm.
+include("cartesian_faq.jl")
+
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -84,6 +90,9 @@ export primal_topology_faq
 
 # Exports: DUO→MPAS Voronoi-dual topology value-invention FAQ bridge (esd-heg.2 / D1b)
 export voronoi_dual_topology_faq
+
+# Exports: Cartesian construction FAQ bridge — structured-grid template (esd-3we.1 / S1)
+export cartesian_construction_faq
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
