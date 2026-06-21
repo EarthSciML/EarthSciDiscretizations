@@ -1,0 +1,21 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "gradient_mpas_pde",
+    "description": "Edge-normal gradient d(g)/dt = grad(phi, dim=edge) on an MPAS Voronoi mesh. phi is the cell-centered scalar; g is the edge-located gradient output (shape [n_edges]). Lowered from gradient_mpas (Ringler et al. 2010, Eq. 22): (grad phi)_e = (phi[c2]-phi[c1])/dc_edge[e], c1=cells_on_edge[1,e], c2=cells_on_edge[2,e]. The unstructured_gradient Layer-B runner injects the cell-center field phi = V*r (V the constant cartesian field) at bind time; the phi tendency is frozen (zero) so one RHS evaluation yields the discrete edge-normal gradient."
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "g":   { "type": "state", "shape": ["n_edges"], "location": "edge_normal", "default": 0.0 },
+        "phi": { "type": "state", "shape": ["n_cells"], "location": "cell_center", "default": 0.0 }
+      },
+      "equations": [
+        { "lhs": { "op": "D", "args": ["g"], "wrt": "t" }, "rhs": { "op": "grad", "args": ["phi"], "dim": "edge" } },
+        { "lhs": { "op": "D", "args": ["phi"], "wrt": "t" }, "rhs": 0.0 }
+      ],
+      "time": { "t0": 0.0, "t_final": 0.001 }
+    }
+  }
+}

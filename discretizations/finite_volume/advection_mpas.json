@@ -1,0 +1,86 @@
+{
+  "discretizations": {
+    "advection_mpas": {
+      "applies_to": { "op": "div", "args": [ { "op": "*", "args": ["$q", "$u"] } ], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["edge_normal", "cell_center"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "where": [
+        { "guard": "var_location_is", "pvar": "$q", "location": "cell_center" },
+        { "guard": "var_location_is", "pvar": "$u", "location": "edge_normal" }
+      ],
+      "accuracy": "O(h) L-inf median on a quasi-uniform Voronoi mesh (centered edge interpolation; NOT L-inf-convergent at maximally-distorted cells — see convergence fixture skip_reason)",
+      "reference": "Flux-form scalar advection on an MPAS C-grid (Ringler et al. 2010, J. Comput. Phys. 229:3065; Skamarock et al. 2012, Mon. Wea. Rev. 140:3090, Eq. 24 divergence of the advective flux). Pattern div($q*$u) (cf. weno5_advection's div($U*$q)): the advected tendency is the flux-form divergence of the edge flux F_e = u_e * q_hat_e, with u_e the edge-normal velocity (edge-located), q_hat_e = (q[c1]+q[c2])/2 the scalar centered-interpolated from the two flanking cells c1=cells_on_edge[1,e], c2=cells_on_edge[2,e], and (div F)_i = (1/area_cell[i]) sum_k edge_sign_on_cell[i,k]*dv_edge[e]*F_e, e=edges_on_cell[i,k]. The geometry factor edge_sign_on_cell*dv_edge/area_cell is build-time-constant (const-folded); the 1/2 weight is a literal; only the state product u_e*q_hat_e reaches the per-step hot tree. This variant binds the cell scalar as $q and the edge velocity as $u (location-guarded).",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": { "k": [ 1, { "op": "index", "args": ["n_edges_on_cell", "i"] } ] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "*", "args": [
+                { "op": "index", "args": ["edge_sign_on_cell", "i", "k"] },
+                { "op": "/", "args": [
+                    { "op": "index", "args": ["dv_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }] },
+                    { "op": "index", "args": ["area_cell", "i"] }
+                ]}
+            ]},
+            { "op": "*", "args": [
+                { "op": "index", "args": ["$u", { "op": "index", "args": ["edges_on_cell", "i", "k"] }] },
+                { "op": "/", "args": [
+                    { "op": "+", "args": [
+                        { "op": "index", "args": ["$q", { "op": "index", "args": ["cells_on_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }, 1] }] },
+                        { "op": "index", "args": ["$q", { "op": "index", "args": ["cells_on_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }, 2] }] }
+                    ]},
+                    2
+                ]}
+            ]}
+          ]
+        },
+        "args": ["$u", "$q", "dv_edge", "area_cell", "edges_on_cell", "edge_sign_on_cell", "cells_on_edge", "n_edges_on_cell"]
+      }
+    },
+    "advection_mpas_velocity_first": {
+      "applies_to": { "op": "div", "args": [ { "op": "*", "args": ["$u", "$q"] } ], "dim": "cell" },
+      "grid_family": "unstructured",
+      "requires_locations": ["edge_normal", "cell_center"],
+      "emits_location": "cell_center",
+      "combine": "+",
+      "where": [
+        { "guard": "var_location_is", "pvar": "$u", "location": "edge_normal" },
+        { "guard": "var_location_is", "pvar": "$q", "location": "cell_center" }
+      ],
+      "accuracy": "O(h) L-inf median on a quasi-uniform Voronoi mesh (see advection_mpas)",
+      "reference": "Operand-order MIRROR of advection_mpas: identical flux-form advection replacement, but the pattern lists the edge velocity ($u) first and the cell scalar ($q) second, so it fires for the canonical operand order where the edge-velocity variable name sorts before the cell-scalar variable name (ESS sorts commutative `*` operands by variable name). The location guards make the two variants mutually exclusive: exactly one fires for any pair of operand names. No fixtures of its own (the canonical byte contract + convergence skip live on advection_mpas); the walker SKIPs both layers for this variant.",
+      "replacement": {
+        "op": "arrayop",
+        "reduce": "+",
+        "ranges": { "k": [ 1, { "op": "index", "args": ["n_edges_on_cell", "i"] } ] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "*", "args": [
+                { "op": "index", "args": ["edge_sign_on_cell", "i", "k"] },
+                { "op": "/", "args": [
+                    { "op": "index", "args": ["dv_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }] },
+                    { "op": "index", "args": ["area_cell", "i"] }
+                ]}
+            ]},
+            { "op": "*", "args": [
+                { "op": "index", "args": ["$u", { "op": "index", "args": ["edges_on_cell", "i", "k"] }] },
+                { "op": "/", "args": [
+                    { "op": "+", "args": [
+                        { "op": "index", "args": ["$q", { "op": "index", "args": ["cells_on_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }, 1] }] },
+                        { "op": "index", "args": ["$q", { "op": "index", "args": ["cells_on_edge", { "op": "index", "args": ["edges_on_cell", "i", "k"] }, 2] }] }
+                    ]},
+                    2
+                ]}
+            ]}
+          ]
+        },
+        "args": ["$u", "$q", "dv_edge", "area_cell", "edges_on_cell", "edge_sign_on_cell", "cells_on_edge", "n_edges_on_cell"]
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "discretizations": {
+    "gradient_mpas": {
+      "applies_to": { "op": "grad", "args": ["$phi"], "dim": "edge" },
+      "grid_family": "unstructured",
+      "requires_locations": ["cell_center"],
+      "emits_location": "edge_normal",
+      "accuracy": "O(h^2) on a quasi-uniform Voronoi mesh",
+      "reference": "Ringler et al. (2010), J. Comput. Phys. 229:3065-3090, Eq. 22 (TRiSK edge-normal gradient on a C-grid); ESS RFC discretization.md §7.3 worked MPAS-operator family. Discrete operator: (grad phi)_e = (phi_{c2} - phi_{c1}) / dc_edge[e], the edge-normal component of the gradient at edge e, with c1 = cells_on_edge[1,e], c2 = cells_on_edge[2,e] the two cells flanking the edge (the normal points c1->c2, the MPAS 'outward_from_first_cell' convention shared with edge_sign_on_cell), and dc_edge[e] the distance between the two cell centers. The output lives on EDGES (output index ranges over edges, no reduction); 1/dc_edge is build-time-constant grid geometry (const-folded), only phi reaches the per-step hot tree.",
+      "replacement": {
+        "op": "arrayop",
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": [
+                    "$phi",
+                    { "op": "index", "args": ["cells_on_edge", "i", 2] }
+                ]},
+                { "op": "index", "args": [
+                    "$phi",
+                    { "op": "index", "args": ["cells_on_edge", "i", 1] }
+                ]}
+              ]
+            },
+            { "op": "index", "args": ["dc_edge", "i"] }
+          ]
+        },
+        "args": ["$phi", "cells_on_edge", "dc_edge"]
+      }
+    }
+  }
+}

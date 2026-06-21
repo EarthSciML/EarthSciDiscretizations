@@ -441,6 +441,51 @@ using TestItems
             @test occursin("canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
             @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "gradient_mpas"
+            # gradient_mpas (esd-6g4.2): MPAS edge-normal gradient (grad φ)_e =
+            # (φ[c2]−φ[c1])/dc_edge[e], the TRiSK cell-scalar→edge-normal gradient
+            # (Ringler et al. 2010, Eq. 22) — the edge-OUTPUT counterpart of the
+            # divergence_mpas template (host primitive cells_on_edge added in
+            # src/ode_problem.jl). Layer-A passes via its canonical byte contract:
+            # an inline pattern+replacement rule (grad($phi, dim=edge) → an
+            # edge-output arrayop whose free output index ranges over EDGES, no
+            # reduction) on an MPAS grid with an edge-located g state; ESS
+            # discretize lowers grad(phi) and the walker byte-compares to the
+            # pinned expected.esm. Layer-B passes via the new unstructured_gradient
+            # runner (mms_kind="grad_linear_field_sphere"): the linear cartesian
+            # field φ=V·r is injected as the cell state, the builtin Voronoi dual
+            # ladder (level 3→4→5) is swept, and the edge-located gradient output
+            # is measured against the analytic edge-normal gradient V·n̂_e, clearing
+            # the fixture's expected_min_order of 1.7 (O(h²) L∞ — unlike the
+            # first-order flux-form divergence/diffusion, the edge-normal gradient
+            # is genuinely second order on the irregular dual).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("min order", r.layer_b.reason)
+        elseif r.family === :finite_volume && r.name == "advection_mpas"
+            # advection_mpas (esd-6g4.2): flux-form MPAS scalar advection
+            # div(u*q) — the divergence_mpas reduction with the edge flux
+            # u_e·(q[c1]+q[c2])/2 (q centered-interpolated to the edge). Matches
+            # the weno5_advection pattern div($u*$q). Layer-A passes via its
+            # canonical byte contract: an inline location-GUARDED pattern (the
+            # var_location_is guards pin q=cell_center, u=edge_normal so the
+            # commutative-product operand roles survive ESS canonicalization).
+            # Layer-B SKIPs by fixture decree (applicable:false): the unlimited
+            # centered C-grid advection is L∞-low-order on the non-centroidal
+            # icosahedral-Voronoi dual — the edge-interpolation defect plateaus
+            # L∞ at the most distorted cells (verified MMS-independent: both a
+            # constant-cartesian-field and a divergence-free rotation MMS plateau),
+            # so a clean L∞-convergent sweep is deferred. The rule's correctness
+            # rests on the Layer-A byte contract plus the shared divergence_mpas
+            # convergence proof. See MPAS_FLUX_VERDICT.md. The operand-order mirror
+            # advection_mpas_velocity_first (a sibling key in advection_mpas.json,
+            # not separately walked) makes the operator robust to either variable
+            # naming when both variants are referenced.
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif r.family === :finite_volume && r.name == "flux_1d_ppm"
             # flux_1d_ppm: Layer-A passes via its canonical byte contract —
             # the PPM replacement AST (CW84 limiter + Courant-fraction integral,
@@ -673,7 +718,10 @@ using TestItems
     )
     # esd-6g4.1 adds divergence_mpas (O(h) MPAS flux-form divergence) via the
     # new unstructured_divergence Layer-B runner, taking the PASS count to 19.
-    @test layer_b_passes == 19
+    # esd-6g4.2 adds gradient_mpas (O(h²) MPAS edge-normal gradient) via the new
+    # unstructured_gradient runner, taking the PASS count to 20 (advection_mpas
+    # ships Layer-A only — its Layer-B convergence fixture is applicable:false).
+    @test layer_b_passes == 20
     @test layer_limiter_passes == 2
     @test layer_d_passes == 2
     # Count fails/skips from the live result set so this assertion stays

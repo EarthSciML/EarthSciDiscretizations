@@ -1,0 +1,141 @@
+{
+  "esm": "0.4.0",
+  "metadata": {
+    "name": "gradient_mpas_canonical"
+  },
+  "grids": {
+    "domain": {
+      "family": "mpas",
+      "dimensions": [
+        {
+          "name": "n_cells",
+          "size": 162,
+          "periodic": false,
+          "spacing": "unstructured"
+        },
+        {
+          "name": "n_edges",
+          "size": 480,
+          "periodic": false,
+          "spacing": "unstructured"
+        }
+      ]
+    }
+  },
+  "models": {
+    "M": {
+      "grid": "domain",
+      "variables": {
+        "g": {
+          "type": "state",
+          "shape": [
+            "n_edges"
+          ],
+          "location": "edge_normal",
+          "default": 0.0
+        },
+        "phi": {
+          "type": "state",
+          "shape": [
+            "n_cells"
+          ],
+          "location": "cell_center",
+          "default": 0.0
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "g"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "grad",
+            "args": [
+              "phi"
+            ],
+            "dim": "edge"
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "phi"
+            ],
+            "wrt": "t"
+          },
+          "rhs": 0.0
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "gradient_mpas",
+      "pattern": {
+        "op": "grad",
+        "args": [
+          "$phi"
+        ],
+        "dim": "edge"
+      },
+      "replacement": {
+        "op": "arrayop",
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "$phi",
+                    {
+                      "op": "index",
+                      "args": [
+                        "cells_on_edge",
+                        "i",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "$phi",
+                    {
+                      "op": "index",
+                      "args": [
+                        "cells_on_edge",
+                        "i",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dc_edge",
+                "i"
+              ]
+            }
+          ]
+        },
+        "args": [
+          "$phi",
+          "cells_on_edge",
+          "dc_edge"
+        ]
+      }
+    }
+  ]
+}

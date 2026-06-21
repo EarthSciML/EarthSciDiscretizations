@@ -785,6 +785,7 @@ function _extract_connectivity(grid::MpasGrid)
         "edges_on_cell" => mesh.edges_on_cell,   # max_edges × n_cells, 1-based
         "n_edges_on_cell" => mesh.n_edges_on_cell, # n_cells,   1-based cell → valence
         "edge_sign_on_cell" => edge_sign_on_cell, # max_edges × n_cells, ±1 (0 padding)
+        "cells_on_edge" => mesh.cells_on_edge,   # 2 × n_edges, 1-based edge → {c1,c2}
     )
     scalar_arrs = Dict{String, Vector{Float64}}(
         "area_cell" => mesh.area_cell,
@@ -858,12 +859,22 @@ end
 # area_cell[c]. Valence varies (5/6), so the reduction bound is
 # `index(n_edges_on_cell, i)` and the gather stops at the cell's real-neighbour
 # count, never reading the trailing padding columns of the (cell, slot) tables.
+#
+# gradient_mpas / advection_mpas (esd-6g4.2) additionally reference the inverse
+# connectivity `cells_on_edge` (the two cells flanking each edge), exposed here
+# as an (edge, slot) Float64 table. The edge-normal gradient is the per-edge map
+# (φ[c2]-φ[c1])/dc_edge[e] (output index ranges over EDGES, no reduction); the
+# flux-form advection reuses the divergence reduction with the edge flux
+# u_e·(q[c1]+q[c2])/2. Both need c1=cells_on_edge[e,1], c2=cells_on_edge[e,2].
+# Like edge_sign_on_cell this is a build-time-constant primitive read straight
+# off the loaded mesh — no host operator, no arrayop rewrite.
 function _grid_primitive_arrays(grid::MpasGrid)
     ctables, scalar_arrs = _extract_connectivity(grid)
     return Dict{String, AbstractArray{Float64}}(
         "cells_on_cell" => _cell_slot_table(ctables["cells_on_cell"]::Matrix{Int}),
         "edges_on_cell" => _cell_slot_table(ctables["edges_on_cell"]::Matrix{Int}),
         "edge_sign_on_cell" => _cell_slot_table(ctables["edge_sign_on_cell"]::Matrix{Int}),
+        "cells_on_edge" => _cell_slot_table(ctables["cells_on_edge"]::Matrix{Int}),
         "n_edges_on_cell" => Float64.(ctables["n_edges_on_cell"]::Vector{Int}),
         "area_cell" => scalar_arrs["area_cell"],
         "dv_edge" => scalar_arrs["dv_edge"],

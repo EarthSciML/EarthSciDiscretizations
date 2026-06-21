@@ -705,6 +705,26 @@ const _LAYER_B_MMS_CATALOG = Dict{String, NamedTuple{(:ic, :derivative), Tuple{F
             (-0.6) * sin(lat)
         ),
     ),
+    # MPAS edge-normal gradient MMS (gradient_mpas, esd-6g4.2). The input is a
+    # cell-center scalar φ linear in cartesian coordinates: φ = V·r (V the same
+    # constant cartesian field as the divergence MMS). The analytic edge-normal
+    # surface gradient is ∇_s φ · n̂_e = V·n̂_e (the tangential projection of the
+    # constant 3-D gradient ∇φ = V; the radial part drops out because n̂_e ⊥ r̂).
+    # `ic(lon, lat)` returns the unit-sphere field value V·r̂ — but the
+    # unstructured_gradient runner sets φ directly from the cartesian cell
+    # coordinates (x_cell, y_cell, z_cell), which is R-exact, so this entry is a
+    # convenience mirror. `derivative` is unused: the per-EDGE analytic V·n̂_e is
+    # not a cell lat/lon scalar and is computed inside the runner from the V
+    # carried in `_LAYER_B_MMS_AUX`. The V components MUST match
+    # `_LAYER_B_MMS_AUX["grad_linear_field_sphere"]`.
+    "grad_linear_field_sphere" => (
+        ic = (lon, lat) -> (
+            1.0 * cos(lat) * cos(lon) +
+            0.37 * cos(lat) * sin(lon) +
+            (-0.6) * sin(lat)
+        ),
+        derivative = (lon, lat) -> 0.0,
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -726,6 +746,12 @@ const _LAYER_B_MMS_AUX = Dict{String, Dict{String, Any}}(
     # F_e = V·n̂_e at each edge. MUST match the V in the catalog's
     # `div_const_field_sphere` derivative.
     "div_const_field_sphere" =>
+        Dict{String, Any}("Vx" => 1.0, "Vy" => 0.37, "Vz" => -0.6),
+    # Constant cartesian field components for the MPAS gradient MMS. The
+    # unstructured_gradient runner reads these to (a) set the cell-center field
+    # φ = V·r and (b) build the analytic edge-normal gradient V·n̂_e at each edge.
+    # MUST match the V in the catalog's `grad_linear_field_sphere` entry.
+    "grad_linear_field_sphere" =>
         Dict{String, Any}("Vx" => 1.0, "Vy" => 0.37, "Vz" => -0.6),
 )
 
@@ -796,6 +822,17 @@ const _LAYER_B_SUPPORTED_TOPOLOGIES = Set{String}(
         # and measures L∞ error of the cell-centered divergence output vs the
         # analytic surface divergence -2(V·r̂)/R across the builtin mesh ladder.
         "unstructured_divergence",
+        # `unstructured_gradient` (esd-6g4.2) — edge-OUTPUT gradient runner for
+        # unstructured rules that EMIT an edge location (grid_family=unstructured
+        # whose `emits_location` names an edge location, e.g. gradient_mpas).
+        # The mirror of unstructured_divergence: the manufactured input is a
+        # cell-center scalar (a linear cartesian field φ = V·r) and the OUTPUT
+        # lives on edges. Loads the MPAS Voronoi mesh, injects φ as the
+        # cell-located state via build_ode_problem, evaluates the RHS at t=0, and
+        # measures L∞ error of the edge-located gradient output (grad φ)_e vs the
+        # analytic edge-normal surface gradient V·n̂_e across the builtin mesh
+        # ladder. O(h²) L∞ (the edge-normal gradient is genuinely second order).
+        "unstructured_gradient",
     ]
 )
 
@@ -815,6 +852,7 @@ const _LAYER_B_TOPOLOGY_TRACKING = Dict{String, String}(
     "stencil_form_rule" => "ESS/esm-bpr (non-unstructured stencil lowering pending)",
     "unstructured_ode" => "ESD/esd-cal",
     "unstructured_divergence" => "ESD/esd-6g4.1",
+    "unstructured_gradient" => "ESD/esd-6g4.2",
     "unsupported" => "no follow-up bead — out of Layer-B scope",
 )
 
@@ -900,6 +938,16 @@ function run_mms_convergence(rule::RuleFile, convergence_dir::AbstractString)
     # flux) rather than cells, and measures the cell-centered divergence output.
     if topology_key == "unstructured_divergence"
         return _run_layer_b_unstructured_divergence_sweep(
+            rule, mms, input_json,
+            convergence_dir, expected_min_order
+        )
+    end
+
+    # Unstructured gradient topology: the mirror of unstructured_divergence —
+    # the manufactured input is a cell-center scalar (φ = V·r) and the measured
+    # output lives on EDGES (the edge-normal gradient (grad φ)_e).
+    if topology_key == "unstructured_gradient"
+        return _run_layer_b_unstructured_gradient_sweep(
             rule, mms, input_json,
             convergence_dir, expected_min_order
         )
@@ -995,12 +1043,21 @@ function _layer_b_topology_key(rule::RuleFile, input_json::AbstractDict)
     # lowerer. Check grid_family BEFORE the lowering gate so these rules do not
     # fall through to "stencil_form_rule".
     if String(get(spec, "grid_family", "")) == "unstructured"
-        # Within the unstructured family, route on the rule's input LOCATION
-        # (a generic schema attribute, not the rule name): a flux-form rule whose
-        # `requires_locations` names an edge location (e.g. the edge-normal flux
-        # of divergence_mpas) needs the edge-sampling divergence runner; a rule
-        # with cell-centered input (e.g. the nn_diffusion Laplacian) uses the
-        # ODE-pipeline runner.
+        # Within the unstructured family, route on the rule's LOCATION signature
+        # (generic schema attributes, not the rule name):
+        #   1. A rule that EMITS an edge location (e.g. gradient_mpas: cell scalar
+        #      -> edge-normal gradient) produces an EDGE-shaped output and needs
+        #      the edge-output gradient runner. Checked first because such a rule
+        #      may also `require` a cell location only.
+        #   2. A flux-form rule whose `requires_locations` names an edge location
+        #      (e.g. the edge-normal flux of divergence_mpas) consumes an edge
+        #      input and emits a cell output -> the edge-sampling divergence runner.
+        #   3. Otherwise (cell-in, cell-out, e.g. the nn_diffusion Laplacian) ->
+        #      the cell-centered ODE-pipeline runner.
+        emitsloc = lowercase(String(get(spec, "emits_location", "")))
+        if occursin("edge", emitsloc)
+            return "unstructured_gradient"
+        end
         reqlocs = get(spec, "requires_locations", Any[])
         if reqlocs isa AbstractVector &&
            any(l -> occursin("edge", lowercase(String(l))), reqlocs)
@@ -1419,6 +1476,151 @@ function _run_layer_b_unstructured_divergence(mms, esm_path::AbstractString, gdd
         # field on a sphere of radius R: ∇_s·V_t = -(2/R)(V·r̂). The MMS catalog's
         # `derivative` returns the unit-sphere value -2(V·r̂); divide by R here.
         analytic = mms.derivative(mesh.lon_cell[c], mesh.lat_cell[c]) / R
+        err = max(err, abs(du[idx] - analytic))
+    end
+    return err
+end
+
+# Sweep driver for the unstructured-GRADIENT topology (esd-6g4.2): the mirror of
+# `_run_layer_b_unstructured_divergence_sweep`. Same convergence-order machinery
+# over the builtin MPAS mesh ladder; only the per-resolution kernel differs (the
+# manufactured input is a cell-center scalar and the measured output lives on
+# edges). Reads `esm` (the gradient PDE document) and `grid_refs` (GDD paths).
+function _run_layer_b_unstructured_gradient_sweep(
+        rule::RuleFile, mms, input_json::AbstractDict,
+        convergence_dir::AbstractString,
+        expected_min_order::Float64
+    )
+    esm_rel = get(input_json, "esm", nothing)
+    esm_rel === nothing &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm missing 'esm' field for unstructured_gradient runner")
+    esm_path = joinpath(convergence_dir, String(esm_rel))
+    isfile(esm_path) ||
+        return LayerResult(LAYER_FAIL, "unstructured_gradient runner: esm path not found: $esm_path")
+
+    grid_refs_raw = get(input_json, "grid_refs", Any[])
+    isempty(grid_refs_raw) &&
+        return LayerResult(LAYER_FAIL, "convergence/input.esm declares no grid_refs for unstructured_gradient")
+    length(grid_refs_raw) < 2 &&
+        return LayerResult(LAYER_FAIL, "unstructured_gradient runner needs ≥ 2 grid_refs for convergence order (got $(length(grid_refs_raw)))")
+
+    errors = Float64[]
+    for gdd_rel in grid_refs_raw
+        gdd_path = let p = String(gdd_rel)
+            isabspath(p) ? p : joinpath(convergence_dir, p)
+        end
+        isfile(gdd_path) ||
+            return LayerResult(LAYER_FAIL, "unstructured_gradient runner: grid_ref not found: $gdd_path")
+        err = try
+            _run_layer_b_unstructured_gradient(mms, esm_path, gdd_path)
+        catch e
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured gradient pipeline threw at grid=$(basename(gdd_path)): $(sprint(showerror, e))"
+            )
+        end
+        if !(err isa Real) || !isfinite(err)
+            return LayerResult(
+                LAYER_FAIL,
+                "unstructured gradient runner at grid=$(basename(gdd_path)) returned non-finite: $(typeof(err))"
+            )
+        end
+        push!(errors, Float64(err))
+    end
+
+    any(iszero, errors) &&
+        return LayerResult(LAYER_FAIL, "zero error in unstructured gradient sweep (degenerate fixture): $errors")
+
+    orders = [log2(errors[i] / errors[i + 1]) for i in 1:(length(errors) - 1)]
+    min_order = minimum(orders)
+    if min_order >= expected_min_order
+        return LayerResult(
+            LAYER_PASS,
+            "min order $(round(min_order; digits = 2)) >= expected $(expected_min_order) " *
+                "over $(length(grid_refs_raw)) grids (orders=$(round.(orders; digits = 2)))",
+        )
+    else
+        return LayerResult(
+            LAYER_FAIL,
+            "min order $(round(min_order; digits = 2)) below expected $(expected_min_order) " *
+                "(orders=$(round.(orders; digits = 2)), errors=$(round.(errors; sigdigits = 3)))",
+        )
+    end
+end
+
+# Single resolution of the unstructured-gradient sweep. Sets the cell-center
+# scalar φ = V·r (V the constant cartesian field from mms.aux, r the cartesian
+# cell-center position — R-exact), drives the gradient_mpas rule through
+# build_ode_problem, and returns the L∞ error of the EDGE-located gradient output
+# (grad φ)_e vs the analytic edge-normal surface gradient V·n̂_e. The edge normal
+# n̂_e is computed exactly as in the divergence runner (tangent-plane projection of
+# the c1→c2 cell-center chord), so the two operators share the n̂_e convention.
+function _run_layer_b_unstructured_gradient(mms, esm_path::AbstractString, gdd_path::AbstractString)
+    gdd = JSON.parse(read(gdd_path, String))
+    domain_spec = get(get(gdd, "grids", Dict{String, Any}()), "domain", Dict{String, Any}())
+    family = String(get(domain_spec, "family", ""))
+    family == "mpas" || error(
+        "unstructured_gradient Layer-B runner currently supports family='mpas'; got '$family'"
+    )
+
+    loader_spec = get(domain_spec, "loader", nothing)
+    loader_spec === nothing && error("MPAS GDD missing loader spec")
+    loader_path = String(get(loader_spec, "path", ""))
+    startswith(loader_path, "builtin://") || error(
+        "unstructured_gradient Layer-B runner requires builtin:// MPAS path; got $loader_path"
+    )
+    R_sphere = Float64(get(loader_spec, "sphere_radius", 1.0))
+    grid = build_mpas_grid(
+        loader = Dict(
+            "path" => loader_path, "reader" => "auto",
+            "check" => String(get(loader_spec, "check", "strict"))
+        ),
+        R = R_sphere,
+    )
+    mesh = grid.mesh
+    Nc = mesh.n_cells
+    Ne = mesh.n_edges
+
+    # Constant cartesian field from the MMS auxiliary table.
+    aux = mms.aux
+    (haskey(aux, "Vx") && haskey(aux, "Vy") && haskey(aux, "Vz")) || error(
+        "unstructured_gradient runner: mms.aux missing Vx/Vy/Vz for the linear field φ = V·r"
+    )
+    Vx = Float64(aux["Vx"]); Vy = Float64(aux["Vy"]); Vz = Float64(aux["Vz"])
+
+    # Cell-center scalar φ = V·r (r = cartesian cell-center position, R-scaled).
+    # Linear in cartesian coordinates, so the chord difference φ[c2]-φ[c1] is
+    # exact and the discrete edge gradient is second order.
+    extra_ics = Dict{String, Float64}()
+    sizehint!(extra_ics, Nc)
+    for c in 1:Nc
+        extra_ics["phi[$c]"] = Vx * mesh.x_cell[c] + Vy * mesh.y_cell[c] + Vz * mesh.z_cell[c]
+    end
+
+    prob, var_map = build_ode_problem(esm_path; grid_ref = gdd_path, extra_ics = extra_ics)
+
+    du = similar(prob.u0)
+    prob.f(du, prob.u0, prob.p, 0.0)
+
+    err = 0.0
+    for e in 1:Ne
+        idx = get(var_map, "g[$e]", nothing)
+        idx === nothing && error("var_map missing key 'g[$e]'")
+        # Analytic edge-normal surface gradient: ∇_s φ · n̂_e = V·n̂_e. n̂_e is the
+        # tangent-plane projection (at the edge midpoint) of the cell-center chord
+        # pointing cells_on_edge[1,e]→cells_on_edge[2,e] — the same reference
+        # normal the divergence runner uses, so signs are consistent.
+        c1 = mesh.cells_on_edge[1, e]
+        c2 = mesh.cells_on_edge[2, e]
+        le = mesh.lon_edge[e]; be = mesh.lat_edge[e]
+        rhx = cos(be) * cos(le); rhy = cos(be) * sin(le); rhz = sin(be)
+        dx = mesh.x_cell[c2] - mesh.x_cell[c1]
+        dy = mesh.y_cell[c2] - mesh.y_cell[c1]
+        dz = mesh.z_cell[c2] - mesh.z_cell[c1]
+        dr = dx * rhx + dy * rhy + dz * rhz
+        nx = dx - dr * rhx; ny = dy - dr * rhy; nz = dz - dr * rhz
+        nn = sqrt(nx^2 + ny^2 + nz^2)
+        analytic = (Vx * nx + Vy * ny + Vz * nz) / nn
         err = max(err, abs(du[idx] - analytic))
     end
     return err
