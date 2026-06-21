@@ -1,0 +1,414 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "vertical_construction",
+    "description": "Vertical (1-D column) structured-grid construction as a declarative semiring-FAQ document (RFC semiring-faq-unified-ir §5.1/§5.2; bead esd-3we.2 / S2). Reuses the STRUCTURED-GRID FAQ TEMPLATE established by cartesian (discretizations/grids/cartesian/rules/cartesian_construction.esm, esd-3we.1 / S1): the whole vertical level-synthesis / center / width / volume / metric / neighbor / boundary construction expressed with the landed M1 path (interval index-sets + elementwise arrayop bodies — NO value-invention, NO recursion, all CONST-cadence), evaluated by EarthSciSerialization's AST evaluator so every binding reproduces the bytes (CONFORMANCE_SPEC.md §5.5). A vertical column is 1-D, so there is a single axis (:z) and two interval index-sets seed everything: `interfaces` (the nz+1 layer faces / half-levels) and `layers` (the nz cells). The construction is families of elementwise equations over those sets, split across two models for the two synthesis flavors the family supports. (A) LEVEL SYNTHESIS PER COORDINATE KIND. Uniform sigma (VerticalSigmaConstruction, pinned to the `sigma_uniform_n16` conformance fixture, nz=16): the generative affine-like map `levels[i] = 1 - (i-1)/nz` over the 1-based `interfaces` interval ((i-1) is the 0-based interface index, so levels[1]=1 at the surface and levels[nz+1]=0 at the top, strictly decreasing) — the direct vertical analogue of cartesian's `edges[i] = lo + (i-1)*dx`. Eta hybrid sigma-pressure (VerticalHybridConstruction, pinned to the `eta_hybrid_l12` fixture, nz=12): `levels[i] = ak[i]/p0 + bk[i]` where ak/bk are DATA inputs (supplied as `state` arrays with no generator equation, exactly like cartesian's supplied non-uniform `edges`) and p0 is the reference surface pressure — one multiply-add per interface, the load-bearing arithmetic the strict 0.0-tolerance vertical fixtures are designed to catch if any operand were promoted across bindings. Explicit z / theta / z_star: the interface `levels` are supplied verbatim as DATA (the same supplied-array branch; no synthesis equation), so they are not re-pinned here. (B) CELL CENTERS / WIDTHS / VOLUME — `centers[i] = (levels[i] + levels[i+1])/2` is the elementwise midpoint reduction over `layers` (neighbor-interface gather levels[i+1] via affine index arithmetic), `widths[i] = abs(levels[i+1] - levels[i])` is the elementwise face difference (abs keeps thickness positive whether levels increase like z/theta or decrease like sigma), and the 1-D `cell_volume[i] = widths[i]` is the cell measure. (C) METRIC EVAL — the named layer metrics: `metric_dz[i] = widths[i]` (thickness), `metric_z[i] = centers[i]` (cell-center coordinate), `metric_sigma[i] = centers[i]` (sigma at center, defined for the sigma-like kinds sigma/eta/hybrid_sigma_theta), and the hybrid layer-averages `metric_pressure[i] = ((ak[i] + bk[i]*p0) + (ak[i+1] + bk[i+1]*p0))/2` (reference pressure p = ak + bk*p0 averaged across the layer's two interfaces), `metric_ak[i] = (ak[i] + ak[i+1])/2`, `metric_bk[i] = (bk[i] + bk[i+1])/2` (coefficient layer-averages, defined when hybrid coefficients are present). (D) NEIGHBOR MAPS — `neighbor_minus[i]` / `neighbor_plus[i]` are the plus/minus-k layer offsets with the 0-SENTINEL convention (ifelse on the interval bounds: out-of-range → 0 = no neighbor). (E) BOUNDARY MASK — `boundary_lower[i]` / `boundary_upper[i]` mark the bottom/top layer of the column. The Tier-V accessors are aliases of these arrays: half_levels = `levels`, layer_thickness = `widths`, pressure_coefficients = (ak, bk, p0). Every value is build-time-constant (CONST cadence): the whole column folds into the setup artifact off any per-step hot path (cadence-partition §6.1) — a construction document, not a dynamical model. The evaluation bridge src/vertical_faq.jl runs these equations through `eval_coeff` (the single ESS pathway; ESD hosts no shadow evaluator, AGENTS.md / GRIDS_API §4.3) and materializes the structural integer arrays (neighbor linearization, masks) as pure index logic, exactly as cartesian_faq.jl does. The construction is pinned for the vertical conformance fixtures in tests/conformance/grids/vertical/construction/.",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.rictus"
+    ],
+    "tags": [
+      "vertical",
+      "structured-grid",
+      "column",
+      "sigma",
+      "eta",
+      "hybrid-sigma-pressure",
+      "level-synthesis",
+      "layer-average",
+      "metric-eval",
+      "neighbor-map",
+      "boundary-mask",
+      "arrayop",
+      "elementwise",
+      "interval-index-set",
+      "cadence-partition",
+      "declarativization",
+      "esd-3we.2"
+    ]
+  },
+  "models": {
+    "VerticalSigmaConstruction": {
+      "index_sets": {
+        "interfaces": { "kind": "interval", "size": 17 },
+        "layers": { "kind": "interval", "size": 16 }
+      },
+      "variables": {
+        "nz": {
+          "type": "parameter",
+          "default": 16.0,
+          "description": "Uniform-sigma layer count (nz = layers.size). CONST. The terrain-following sigma coordinate is dimensionless in [0, 1]: 1 at the surface, 0 at the model top. Other coordinate kinds synthesize `levels` differently (eta: ak/p0 + bk; z/theta/z_star: supplied as data) — see VerticalHybridConstruction and the `levels` description."
+        },
+        "levels": {
+          "type": "state",
+          "shape": ["interfaces"],
+          "description": "Interface (half-level) coordinates, one per node of the 1-based `interfaces` interval. Uniform sigma: the affine-like map levels[i] = 1 - (i-1)/nz, so levels[1]=1 (surface) and levels[nz+1]=0 (top), strictly decreasing — the vertical analogue of cartesian edges[i]=lo+(i-1)*dx. Eta: levels[i] = ak[i]/p0 + bk[i] (VerticalHybridConstruction). Explicit z/theta/z_star: supplied verbatim as data. CONST; assigned algebraically (not D/dt), folded out of the hot path by the cadence partition. Aliased by the Tier-V accessor half_levels."
+        },
+        "centers": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Cell-center coordinates, the elementwise midpoint of each layer's two interfaces: centers[i] = (levels[i] + levels[i+1])/2. CONST."
+        },
+        "widths": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Layer thicknesses, the elementwise absolute face difference: widths[i] = abs(levels[i+1] - levels[i]). abs keeps the thickness positive whether levels increase (z/theta) or decrease (sigma). CONST. Aliased by the Tier-V accessor layer_thickness."
+        },
+        "cell_volume": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Cell measure of the 1-D column = the layer thickness: cell_volume[i] = widths[i]. CONST."
+        },
+        "metric_dz": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :dz — the layer thickness, metric_dz[i] = widths[i]. CONST."
+        },
+        "metric_z": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :z — the cell-center coordinate, metric_z[i] = centers[i]. CONST."
+        },
+        "metric_sigma": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :sigma — sigma at the cell center, metric_sigma[i] = centers[i]. Defined for the sigma-like coordinate kinds (sigma, eta, hybrid_sigma_theta). CONST."
+        },
+        "neighbor_minus": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Index of the minus-k (offset -1) layer neighbor of each layer, with the 0-SENTINEL convention: the bottom layer has no minus neighbor, so neighbor_minus[1] = 0. neighbor_minus[i] = (i > 1) ? i-1 : 0. CONST."
+        },
+        "neighbor_plus": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Index of the plus-k (offset +1) layer neighbor of each layer, 0-SENTINEL: the top layer has no plus neighbor, neighbor_plus[nz] = 0. neighbor_plus[i] = (i < nz) ? i+1 : 0, with nz = 16 (layers.size). CONST."
+        },
+        "boundary_lower": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Lower-boundary (bottom) mask: 1 for the first layer of the column (i == 1), else 0. CONST."
+        },
+        "boundary_upper": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Upper-boundary (top) mask: 1 for the last layer of the column (i == nz), else 0. CONST."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(A) LEVEL SYNTHESIS — uniform sigma. The affine-like map over the 1-based `interfaces` interval: levels[i] = 1 - (i-1)/nz, where (i-1) is the 0-based interface index so levels[1]=1 (surface) and levels[nz+1]=0 (top). Elementwise arrayop (output_idx=[i], no reduction) over interfaces. Eta and supplied-levels kinds use the data branch instead (see VerticalHybridConstruction / the `levels` description).",
+          "lhs": { "op": "index", "args": ["levels", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "interfaces" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                1,
+                { "op": "/", "args": [{ "op": "-", "args": ["i", 1] }, "nz"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(B) CELL CENTERS — elementwise midpoint of each layer's two interfaces over `layers`: centers[i] = (levels[i] + levels[i+1])/2. The levels[i+1] neighbor-interface gather is affine index arithmetic on the loop index.",
+          "lhs": { "op": "index", "args": ["centers", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["levels"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    { "op": "index", "args": ["levels", "i"] },
+                    { "op": "index", "args": ["levels", { "op": "+", "args": ["i", 1] }] }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(B) LAYER WIDTHS — elementwise absolute face difference over `layers`: widths[i] = abs(levels[i+1] - levels[i]). abs keeps thickness positive for decreasing (sigma) and increasing (z/theta) levels alike.",
+          "lhs": { "op": "index", "args": ["widths", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["levels"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["levels", { "op": "+", "args": ["i", 1] }] },
+                    { "op": "index", "args": ["levels", "i"] }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(B) CELL VOLUME — the 1-D column measure = the layer thickness. cell_volume[i] = widths[i].",
+          "lhs": { "op": "index", "args": ["cell_volume", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["widths"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": { "op": "index", "args": ["widths", "i"] }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :dz — the layer thickness. metric_dz[i] = widths[i].",
+          "lhs": { "op": "index", "args": ["metric_dz", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["widths"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": { "op": "index", "args": ["widths", "i"] }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :z — the cell-center coordinate. metric_z[i] = centers[i].",
+          "lhs": { "op": "index", "args": ["metric_z", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["centers"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": { "op": "index", "args": ["centers", "i"] }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :sigma — sigma at the cell center (sigma-like kinds). metric_sigma[i] = centers[i].",
+          "lhs": { "op": "index", "args": ["metric_sigma", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["centers"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": { "op": "index", "args": ["centers", "i"] }
+          }
+        },
+        {
+          "_comment": "(D) NEIGHBOR MAP — minus-k side (offset -1), 0-sentinel. neighbor_minus[i] = (i > 1) ? i-1 : 0.",
+          "lhs": { "op": "index", "args": ["neighbor_minus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": ["i", 1] },
+                { "op": "-", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(D) NEIGHBOR MAP — plus-k side (offset +1), 0-sentinel. neighbor_plus[i] = (i < nz) ? i+1 : 0, with nz = 16 (layers.size).",
+          "lhs": { "op": "index", "args": ["neighbor_plus", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "<", "args": ["i", 16] },
+                { "op": "+", "args": ["i", 1] },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(E) BOUNDARY MASK — lower (bottom). boundary_lower[i] = (i == 1) ? 1 : 0.",
+          "lhs": { "op": "index", "args": ["boundary_lower", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 1] }, 1, 0]
+            }
+          }
+        },
+        {
+          "_comment": "(E) BOUNDARY MASK — upper (top). boundary_upper[i] = (i == nz) ? 1 : 0, with nz = 16 (layers.size).",
+          "lhs": { "op": "index", "args": ["boundary_upper", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "ifelse",
+              "args": [{ "op": "==", "args": ["i", 16] }, 1, 0]
+            }
+          }
+        }
+      ]
+    },
+    "VerticalHybridConstruction": {
+      "index_sets": {
+        "interfaces": { "kind": "interval", "size": 13 },
+        "layers": { "kind": "interval", "size": 12 }
+      },
+      "variables": {
+        "p0": {
+          "type": "parameter",
+          "default": 100000.0,
+          "description": "Reference surface pressure (Pa) for the hybrid sigma-pressure coordinate. CONST. Here 1.0e5 Pa (the `eta_hybrid_l12` fixture)."
+        },
+        "ak": {
+          "type": "state",
+          "shape": ["interfaces"],
+          "description": "Hybrid A coefficient at each interface (pressure term, Pa), supplied as DATA — no generator equation, the same supplied-array branch as cartesian's non-uniform `edges`. Length nz+1 = interfaces.size. CONST."
+        },
+        "bk": {
+          "type": "state",
+          "shape": ["interfaces"],
+          "description": "Hybrid B coefficient at each interface (sigma term, dimensionless), supplied as DATA. Length nz+1 = interfaces.size. CONST."
+        },
+        "levels": {
+          "type": "state",
+          "shape": ["interfaces"],
+          "description": "Synthesized eta interface coordinate: levels[i] = ak[i]/p0 + bk[i] — one multiply-add per interface. Must be strictly decreasing (validated by the generator). CONST. Aliased by half_levels."
+        },
+        "metric_pressure": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :pressure — reference pressure p = ak + bk*p0 averaged across the layer's two interfaces: metric_pressure[i] = ((ak[i] + bk[i]*p0) + (ak[i+1] + bk[i+1]*p0))/2. Requires hybrid coefficients. CONST."
+        },
+        "metric_ak": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :ak — the A coefficient averaged across the layer's two interfaces: metric_ak[i] = (ak[i] + ak[i+1])/2. CONST."
+        },
+        "metric_bk": {
+          "type": "state",
+          "shape": ["layers"],
+          "description": "Named metric :bk — the B coefficient averaged across the layer's two interfaces: metric_bk[i] = (bk[i] + bk[i+1])/2. CONST."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(A) LEVEL SYNTHESIS — eta hybrid sigma-pressure. levels[i] = ak[i]/p0 + bk[i] over the 1-based `interfaces` interval; ak/bk are DATA inputs, p0 the reference surface pressure. One multiply-add (here divide-add) per interface — the arithmetic the strict 0.0-tolerance vertical fixtures pin.",
+          "lhs": { "op": "index", "args": ["levels", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["ak", "bk"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "interfaces" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                { "op": "/", "args": [{ "op": "index", "args": ["ak", "i"] }, "p0"] },
+                { "op": "index", "args": ["bk", "i"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :pressure — layer-average reference pressure. metric_pressure[i] = (p_lo + p_hi)/2 with p_lo = ak[i] + bk[i]*p0 and p_hi = ak[i+1] + bk[i+1]*p0 (gathered from the layer's two bounding interfaces).",
+          "lhs": { "op": "index", "args": ["metric_pressure", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["ak", "bk"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        { "op": "index", "args": ["ak", "i"] },
+                        { "op": "*", "args": [{ "op": "index", "args": ["bk", "i"] }, "p0"] }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        { "op": "index", "args": ["ak", { "op": "+", "args": ["i", 1] }] },
+                        { "op": "*", "args": [{ "op": "index", "args": ["bk", { "op": "+", "args": ["i", 1] }] }, "p0"] }
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :ak — layer-average A coefficient. metric_ak[i] = (ak[i] + ak[i+1])/2.",
+          "lhs": { "op": "index", "args": ["metric_ak", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["ak"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    { "op": "index", "args": ["ak", "i"] },
+                    { "op": "index", "args": ["ak", { "op": "+", "args": ["i", 1] }] }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(C) METRIC :bk — layer-average B coefficient. metric_bk[i] = (bk[i] + bk[i+1])/2.",
+          "lhs": { "op": "index", "args": ["metric_bk", "i"] },
+          "rhs": {
+            "op": "arrayop",
+            "args": ["bk"],
+            "output_idx": ["i"],
+            "ranges": { "i": { "from": "layers" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    { "op": "index", "args": ["bk", "i"] },
+                    { "op": "index", "args": ["bk", { "op": "+", "args": ["i", 1] }] }
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

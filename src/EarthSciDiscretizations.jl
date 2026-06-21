@@ -38,6 +38,13 @@ include("topology_faq.jl")
 # companion: discretizations/grids/cartesian/rules/cartesian_construction.esm.
 include("cartesian_faq.jl")
 
+# Vertical (1-D column) grid construction as elementwise FAQ (esd-3we.2 / S2) —
+# reuses the structured-grid template: a thin bridge routing the per-coordinate
+# level synthesis + center/width/volume + named layer metrics through the landed
+# ESS M1 evaluator (eval_coeff), with structural neighbor/boundary arrays. Declarative
+# companion: discretizations/grids/vertical/rules/vertical_construction.esm.
+include("vertical_faq.jl")
+
 # Top-level ESM → ODEProblem constructor (esd-3ck). Loads a PDE component
 # .esm file and an optional GDD, runs the canonical ESS pipeline, and
 # returns a SciMLBase.ODEProblem ready for the caller to solve.
@@ -93,6 +100,9 @@ export voronoi_dual_topology_faq
 
 # Exports: Cartesian construction FAQ bridge — structured-grid template (esd-3we.1 / S1)
 export cartesian_construction_faq
+
+# Exports: Vertical construction FAQ bridge — reuses the template (esd-3we.2 / S2)
+export vertical_construction_faq
 
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
