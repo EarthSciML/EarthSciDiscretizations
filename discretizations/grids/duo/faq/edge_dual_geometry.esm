@@ -1,0 +1,2945 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "authors": [
+      "EarthSciDiscretizations/gastown.furiosa"
+    ],
+    "description": "DUO edge + MPAS Voronoi-dual GEOMETRY expressed as a semiring-FAQ value-invention pass (RFC semiring-faq-unified-ir \u00a78.1 geometry FAQ; bead esd-heg.7 / D2b), the declarative replacement for the geometry half of the imperative _duo_voronoi_dual (src/grids/mpas.jl, steps 1 / circumcenters / 5 / area) and the DUO Tier-U edge_length / cell_distance accessors (src/grids/duo.jl), plus their per-binding equivalents. The COMPANION of voronoi_dual_topology.esm (D1b, esd-heg.2): that document produces the dual topology (cells_on_cell / edges_on_cell) and the angularly-ordered incident-face ring (sorted_vertex_faces); this one consumes that ring (ring_face / ring_face_next) for the dual-cell area fan and produces every dual geometric metric. Inputs (CONST, supplied by the topology/geometry passes): vert_coord (MPAS cell = DUO vertex unit direction = duo.vertices/R), centroid (DUO face centroid = D2a cell_cart/R), face_vert / edge_cell / edge_face / ring_face connectivity, and R. Outputs: (1) circumcenter (circ_x/y/z) \u2014 the DUO face circumcenter (MPAS dual vertex) as the normalized cross-product sum a\u00d7b+b\u00d7c+c\u00d7a; the imperative outward-orientation flip (cc\u00b7centroid<0 \u2192 negate, which fires for EVERY face on the consistently-wound icosahedral mesh) is reproduced bit-for-bit as the standard cross sum NEGATED (\u00d7\u22121.0), so no data-dependent branch is needed and even zero components keep the imperative's \u22120.0 (reversing the operand order would not: x\u2212x is +0.0 reversed but \u22120.0 negated). (2) dc_edge \u2014 cell-center-to-cell-center great-circle arc R\u00b7acos(\u00b7), identical to the DUO edge_length (vertex-to-vertex arc). (3) dv_edge \u2014 Voronoi-vertex-to-vertex arc R\u00b7acos(\u00b7) over the two incident circumcenters. (4) cell_distance \u2014 the DUO Tier-U centroid-to-centroid arc (distinct from dv_edge, which uses circumcenters). (5) lon_cell / lat_cell \u2014 MPAS cell-centre geographic coords. (6) lon_edge / lat_edge \u2014 geographic coords of the normalized edge midpoint. (7) area_cell \u2014 the Voronoi dual-cell area as the spherical-excess (L'Huilier) FAN from the cell centre over consecutive circumcenter pairs in the D1b angular ring, summed and scaled by R\u00b2. Squares are products (not ^), reductions and tan-products are folded in space/ring order, and the cross sum is standard-order-negated \u2014 so the FAQ reproduces the imperative float ops bit-for-bit; deterministic formulas with NO clipping (clamp/max), per the acceptance contract: on a valid icosahedral mesh every acos argument and the L'Huilier radicand already lie in range, so clipping never fires and the bytes match. Value-free structural spec (connectivity/coords are parameter shapes; concrete data fed by the conformance harness). Index sizes are the canonical level-0 dual instance (the icosahedron\u2192dodecahedron dual: cells=12 pentagons, faces=20, edges=30, ring=5); the pass shape is identical at any level (the ring becomes ragged 5/6 once subdivision introduces hexagons). Byte/numeric equivalence to _duo_voronoi_dual and edge_length / cell_distance is proven across dual levels 1/2/3 by test/test_duo_edge_dual_geometry_faq.jl.",
+    "name": "duo_edge_dual_geometry",
+    "tags": [
+      "duo",
+      "mpas",
+      "icosahedral",
+      "voronoi-dual",
+      "geometry",
+      "circumcenter",
+      "cross-product",
+      "dc-edge",
+      "dv-edge",
+      "edge-length",
+      "cell-distance",
+      "spherical-excess",
+      "lhuilier",
+      "dual-area",
+      "faq",
+      "value-invention",
+      "declarativization",
+      "esd-heg.7"
+    ]
+  },
+  "models": {
+    "DuoEdgeDualGeometry": {
+      "equations": [
+        {
+          "_comment": "(1a) ccr_x[f] = \u22121.0\u00b7[ (a_y b_z \u2212 a_z b_y) + (b_y c_z \u2212 b_z c_y) + (c_y a_z \u2212 c_z a_y) ]; a,b,c = face f's three corner unit vectors (vert_coord gathered through face_vert). The standard cross sum a\u00d7b+b\u00d7c+c\u00d7a, negated \u2014 the imperative's universal outward flip \u2014 so even zero components carry the imperative's \u22120.0 bit-for-bit.",
+          "lhs": {
+            "args": [
+              "ccr_x",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                -1.0,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1b) ccr_y[f] = \u22121.0\u00b7[ (a_z b_x \u2212 a_x b_z) + (b_z c_x \u2212 b_x c_z) + (c_z a_x \u2212 c_x a_z) ].",
+          "lhs": {
+            "args": [
+              "ccr_y",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                -1.0,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                3
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1c) ccr_z[f] = \u22121.0\u00b7[ (a_x b_y \u2212 a_y b_x) + (b_x c_y \u2212 b_y c_x) + (c_x a_y \u2212 c_y a_x) ].",
+          "lhs": {
+            "args": [
+              "ccr_z",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                -1.0,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    2
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    3
+                                  ],
+                                  "op": "index"
+                                },
+                                2
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "vert_coord",
+                                {
+                                  "args": [
+                                    "face_vert",
+                                    "f",
+                                    1
+                                  ],
+                                  "op": "index"
+                                },
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "-"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1d) cc_nrm2[f] = ccr_x\u00b2 + ccr_y\u00b2 + ccr_z\u00b2 \u2014 squared norm of the raw circumcenter direction (squares as products, not ^, to match the imperative cn = sqrt(ccx*ccx+\u2026)).",
+          "lhs": {
+            "args": [
+              "cc_nrm2",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ccr_x",
+                        "f"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ccr_x",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ccr_y",
+                        "f"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ccr_y",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ccr_z",
+                        "f"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ccr_z",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1e) circ_x[f] = ccr_x / sqrt(cc_nrm2) \u2014 unit circumcenter (MPAS dual-vertex direction) component x.",
+          "lhs": {
+            "args": [
+              "circ_x",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ccr_x",
+                    "f"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "cc_nrm2",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "sqrt"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1f) circ_y[f] = ccr_y / sqrt(cc_nrm2) \u2014 unit circumcenter (MPAS dual-vertex direction) component y.",
+          "lhs": {
+            "args": [
+              "circ_y",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ccr_y",
+                    "f"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "cc_nrm2",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "sqrt"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(1g) circ_z[f] = ccr_z / sqrt(cc_nrm2) \u2014 unit circumcenter (MPAS dual-vertex direction) component z.",
+          "lhs": {
+            "args": [
+              "circ_z",
+              "f"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ccr_z",
+                    "f"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "cc_nrm2",
+                        "f"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "sqrt"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "f"
+            ],
+            "ranges": {
+              "f": {
+                "from": "faces"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(2a) dc_dot[e] = \u03a3_d vert_coord[edge_cell[e,1],d]\u00b7vert_coord[edge_cell[e,2],d] \u2014 cosine of the arc between an edge's two MPAS cell centres (the DUO end vertices), reduced over space d. NO clamp (|dot|\u22641 on a valid mesh).",
+          "lhs": {
+            "args": [
+              "dc_dot",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "d": {
+                "from": "space"
+              },
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(2b) dc_edge[e] = R\u00b7acos(dc_dot[e]) \u2014 cell-center-to-cell-center great-circle distance. Identical formula+inputs to the DUO Tier-U edge_length (the vertex-to-vertex arc), so this single equation IS both dc_edge (mpas) and edge_length (duo).",
+          "lhs": {
+            "args": [
+              "dc_edge",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                "R",
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "dc_dot",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "acos"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(3a) dv_dot[e] = circ\u00b7circ of the edge's two incident DUO-face circumcenters (MPAS dual vertices), explicit 3-term to match the imperative c1x*c2x+c1y*c2y+c1z*c2z (circ is per-component, not space-indexed).",
+          "lhs": {
+            "args": [
+              "dv_dot",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            1
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            2
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            1
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            2
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            1
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "edge_face",
+                            "e",
+                            2
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(3b) dv_edge[e] = R\u00b7acos(dv_dot[e]) \u2014 Voronoi vertex-to-vertex great-circle arc. NO clamp.",
+          "lhs": {
+            "args": [
+              "dv_edge",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                "R",
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "dv_dot",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "acos"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(4a) cd_dot[e] = \u03a3_d centroid[edge_face[e,1],d]\u00b7centroid[edge_face[e,2],d] \u2014 cosine of the arc between the two DUO face CENTROIDS (cell_cart, the D2a primal-geometry output) sharing the edge. Distinct from dv_edge, which uses the face CIRCUMCENTERS.",
+          "lhs": {
+            "args": [
+              "cd_dot",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "centroid",
+                    {
+                      "args": [
+                        "edge_face",
+                        "e",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "centroid",
+                    {
+                      "args": [
+                        "edge_face",
+                        "e",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    "d"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "d": {
+                "from": "space"
+              },
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(4b) cell_distance[e] = R\u00b7acos(cd_dot[e]) \u2014 the DUO Tier-U cell-center-to-cell-center arc (great-circle between the two adjacent primal face centroids).",
+          "lhs": {
+            "args": [
+              "cell_distance",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                "R",
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "cd_dot",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "acos"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(5a) lon_cell[c] = atan2(vert_coord[c,2], vert_coord[c,1]) \u2014 MPAS cell-centre longitude (the cell IS DUO vertex c; space 2=y, 1=x).",
+          "lhs": {
+            "args": [
+              "lon_cell",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    "c",
+                    2
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    "c",
+                    1
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "atan2"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(5b) lat_cell[c] = asin(vert_coord[c,3]) \u2014 MPAS cell-centre latitude (space 3=z); NO clamp (z\u2208[\u22121,1] on the unit sphere).",
+          "lhs": {
+            "args": [
+              "lat_cell",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    "c",
+                    3
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "asin"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6a) emid_x[e] = vert_coord[edge_cell[e,1],1] + vert_coord[edge_cell[e,2],1] \u2014 un-normalized edge midpoint, x component (sum of the two end vertices).",
+          "lhs": {
+            "args": [
+              "emid_x",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    1
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    1
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6b) emid_y[e] = vert_coord[edge_cell[e,1],2] + vert_coord[edge_cell[e,2],2] \u2014 un-normalized edge midpoint, y component (sum of the two end vertices).",
+          "lhs": {
+            "args": [
+              "emid_y",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    2
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    2
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6c) emid_z[e] = vert_coord[edge_cell[e,1],3] + vert_coord[edge_cell[e,2],3] \u2014 un-normalized edge midpoint, z component (sum of the two end vertices).",
+          "lhs": {
+            "args": [
+              "emid_z",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        1
+                      ],
+                      "op": "index"
+                    },
+                    3
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "vert_coord",
+                    {
+                      "args": [
+                        "edge_cell",
+                        "e",
+                        2
+                      ],
+                      "op": "index"
+                    },
+                    3
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6d) emid_nrm2[e] = emid_x\u00b2 + emid_y\u00b2 + emid_z\u00b2 \u2014 squared norm of the edge midpoint (squares as products).",
+          "lhs": {
+            "args": [
+              "emid_nrm2",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_x",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "emid_x",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_y",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "emid_y",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_z",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "emid_z",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6e) lon_edge[e] = atan2(emid_y/sqrt(emid_nrm2), emid_x/sqrt(emid_nrm2)) \u2014 edge-midpoint longitude (normalize then atan2, matching the imperative atan(my/mn, mx/mn)).",
+          "lhs": {
+            "args": [
+              "lon_edge",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_y",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "emid_nrm2",
+                            "e"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "sqrt"
+                    }
+                  ],
+                  "op": "/"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_x",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "emid_nrm2",
+                            "e"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "sqrt"
+                    }
+                  ],
+                  "op": "/"
+                }
+              ],
+              "op": "atan2"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(6f) lat_edge[e] = asin(emid_z/sqrt(emid_nrm2)) \u2014 edge-midpoint latitude; NO clamp.",
+          "lhs": {
+            "args": [
+              "lat_edge",
+              "e"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "emid_z",
+                        "e"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "emid_nrm2",
+                            "e"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "sqrt"
+                    }
+                  ],
+                  "op": "/"
+                }
+              ],
+              "op": "asin"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7a) fan_dot_bc[c,s] = circumcenter[ring_face[c,s]] \u00b7 circumcenter[ring_face_next[c,s]] \u2014 cosine of the arc opposite the cell centre A (B\u00b7C) for fan triangle s of dual cell c.",
+          "lhs": {
+            "args": [
+              "fan_dot_bc",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7b) fan_dot_ca[c,s] = circumcenter[ring_face_next[c,s]] \u00b7 vert_coord[c] \u2014 cosine of the arc C\u00b7A.",
+          "lhs": {
+            "args": [
+              "fan_dot_ca",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        1
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        2
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "ring_face_next",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        3
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7c) fan_dot_ab[c,s] = vert_coord[c] \u00b7 circumcenter[ring_face[c,s]] \u2014 cosine of the arc A\u00b7B.",
+          "lhs": {
+            "args": [
+              "fan_dot_ab",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_x",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        1
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_y",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        2
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "circ_z",
+                        {
+                          "args": [
+                            "ring_face",
+                            "c",
+                            "s"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "vert_coord",
+                        "c",
+                        3
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7d) fan_da[c,s] = acos(fan_dot_bc) \u2014 great-circle arc opposite A (the cell centre); NO clamp.",
+          "lhs": {
+            "args": [
+              "fan_da",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "fan_dot_bc",
+                    "c",
+                    "s"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7e) fan_db[c,s] = acos(fan_dot_ca).",
+          "lhs": {
+            "args": [
+              "fan_db",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "fan_dot_ca",
+                    "c",
+                    "s"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7f) fan_dc[c,s] = acos(fan_dot_ab).",
+          "lhs": {
+            "args": [
+              "fan_dc",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "fan_dot_ab",
+                    "c",
+                    "s"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "acos"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7g) fan_semi[c,s] = 0.5\u00b7(fan_da + fan_db + fan_dc) \u2014 half-perimeter of fan triangle s (sum in da,db,dc order to match the imperative).",
+          "lhs": {
+            "args": [
+              "fan_semi",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "fan_da",
+                        "c",
+                        "s"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "fan_db",
+                        "c",
+                        "s"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "fan_dc",
+                        "c",
+                        "s"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7h) fan_excess[c,s] = 4\u00b7atan(sqrt( tan(s/2)\u00b7tan((s\u2212da)/2)\u00b7tan((s\u2212db)/2)\u00b7tan((s\u2212dc)/2) )) \u2014 L'Huilier spherical excess of fan triangle s (unsigned, NO R\u00b2, NO max guard); tan-product left-folded to match the imperative associativity.",
+          "lhs": {
+            "args": [
+              "fan_excess",
+              "c",
+              "s"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                4.0,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        "fan_semi",
+                                        "c",
+                                        "s"
+                                      ],
+                                      "op": "index"
+                                    },
+                                    2.0
+                                  ],
+                                  "op": "/"
+                                }
+                              ],
+                              "op": "tan"
+                            },
+                            {
+                              "args": [
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            "fan_semi",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        },
+                                        {
+                                          "args": [
+                                            "fan_da",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        }
+                                      ],
+                                      "op": "-"
+                                    },
+                                    2.0
+                                  ],
+                                  "op": "/"
+                                }
+                              ],
+                              "op": "tan"
+                            },
+                            {
+                              "args": [
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            "fan_semi",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        },
+                                        {
+                                          "args": [
+                                            "fan_db",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        }
+                                      ],
+                                      "op": "-"
+                                    },
+                                    2.0
+                                  ],
+                                  "op": "/"
+                                }
+                              ],
+                              "op": "tan"
+                            },
+                            {
+                              "args": [
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            "fan_semi",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        },
+                                        {
+                                          "args": [
+                                            "fan_dc",
+                                            "c",
+                                            "s"
+                                          ],
+                                          "op": "index"
+                                        }
+                                      ],
+                                      "op": "-"
+                                    },
+                                    2.0
+                                  ],
+                                  "op": "/"
+                                }
+                              ],
+                              "op": "tan"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "sqrt"
+                    }
+                  ],
+                  "op": "atan"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c",
+              "s"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        },
+        {
+          "_comment": "(7i) area_cell[c] = R\u00b7R \u00b7 \u03a3_s fan_excess[c,s] \u2014 the Voronoi dual-cell area (spherical-excess fan over the angular ring of incident-face circumcenters), reduced over the ring slots s and scaled by R\u00b2. The ragged 5/6 ring is supplied by the topology bridge (sorted_vertex_faces, esd-heg.2).",
+          "lhs": {
+            "args": [
+              "area_cell",
+              "c"
+            ],
+            "op": "index"
+          },
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "R",
+                    "R"
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    "fan_excess",
+                    "c",
+                    "s"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "s": {
+                "from": "ring"
+              }
+            },
+            "semiring": "sum_product"
+          }
+        }
+      ],
+      "index_sets": {
+        "cells": {
+          "kind": "interval",
+          "size": 12
+        },
+        "corners": {
+          "kind": "interval",
+          "size": 3
+        },
+        "edges": {
+          "kind": "interval",
+          "size": 30
+        },
+        "ends": {
+          "kind": "interval",
+          "size": 2
+        },
+        "faces": {
+          "kind": "interval",
+          "size": 20
+        },
+        "ring": {
+          "kind": "interval",
+          "size": 5
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        }
+      },
+      "variables": {
+        "R": {
+          "description": "Sphere radius (CONST); arcs scale by R and the dual-cell area by R\u00b2.",
+          "shape": [],
+          "type": "parameter"
+        },
+        "area_cell": {
+          "description": "Voronoi dual-cell area = R\u00b2\u00b7\u03a3_s fan_excess (spherical-excess fan).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "cc_nrm2": {
+          "description": "Squared norm of the raw circumcenter direction (ccr_x\u00b2+ccr_y\u00b2+ccr_z\u00b2).",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "ccr_x": {
+          "description": "Raw (un-normalized) circumcenter direction x = \u2212(standard cross sum), folding the universal outward flip.",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "ccr_y": {
+          "description": "Raw circumcenter direction y.",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "ccr_z": {
+          "description": "Raw circumcenter direction z.",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "cd_dot": {
+          "description": "Cosine of the centroid\u2194centroid arc (dot of the edge's two adjacent face centroids).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "cell_distance": {
+          "description": "DUO Tier-U cell-center-to-cell-center arc R\u00b7acos(cd_dot) over the primal face centroids.",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "centroid": {
+          "description": "Recovered-unit cartesian direction of each DUO face CENTROID = the D2a cell_cart/R (esd-heg.6). CONST; used only by cell_distance (the centroid-to-centroid arc), distinct from the circumcenter.",
+          "shape": [
+            "faces",
+            "space"
+          ],
+          "type": "parameter"
+        },
+        "circ_x": {
+          "description": "Unit circumcenter (MPAS dual-vertex direction) x = ccr_x/sqrt(cc_nrm2).",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "circ_y": {
+          "description": "Unit circumcenter y.",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "circ_z": {
+          "description": "Unit circumcenter z.",
+          "shape": [
+            "faces"
+          ],
+          "type": "state"
+        },
+        "dc_dot": {
+          "description": "Cosine of the cell-centre\u2194cell-centre arc (\u03a3 over space of the two end-vertex unit coords).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "dc_edge": {
+          "description": "Cell-center-to-cell-center great-circle distance R\u00b7acos(dc_dot); equals the DUO Tier-U edge_length (vertex-to-vertex arc).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "dv_dot": {
+          "description": "Cosine of the Voronoi vertex\u2194vertex arc (dot of the edge's two face circumcenters).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "dv_edge": {
+          "description": "Voronoi vertex-to-vertex great-circle arc length R\u00b7acos(dv_dot).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "edge_cell": {
+          "description": "The two MPAS cell ids (DUO end vertices) of each edge = cells_on_edge (CONST). Endpoints of the dc_edge arc and the edge midpoint.",
+          "shape": [
+            "edges",
+            "ends"
+          ],
+          "type": "parameter"
+        },
+        "edge_face": {
+          "description": "The two DUO face ids (MPAS dual vertices) incident on each edge (CONST). Endpoints of the dv_edge arc (their circumcenters) and the cell_distance arc (their centroids).",
+          "shape": [
+            "edges",
+            "ends"
+          ],
+          "type": "parameter"
+        },
+        "emid_nrm2": {
+          "description": "Squared norm of the edge midpoint.",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "emid_x": {
+          "description": "Un-normalized edge-midpoint x (sum of the two end-vertex x).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "emid_y": {
+          "description": "Un-normalized edge-midpoint y.",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "emid_z": {
+          "description": "Un-normalized edge-midpoint z.",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "face_vert": {
+          "description": "DUO vertex id (= MPAS cell id) of each face's three corners (the primal face\u2192vertex connectivity, CONST). Gathers vert_coord for the circumcenter cross product.",
+          "shape": [
+            "faces",
+            "corners"
+          ],
+          "type": "parameter"
+        },
+        "fan_da": {
+          "description": "Arc opposite the cell centre = acos(fan_dot_bc).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_db": {
+          "description": "Arc = acos(fan_dot_ca).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_dc": {
+          "description": "Arc = acos(fan_dot_ab).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_dot_ab": {
+          "description": "A\u00b7B cosine (cell centre \u00b7 circumcenter).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_dot_bc": {
+          "description": "B\u00b7C cosine for fan triangle s (the two consecutive circumcenters).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_dot_ca": {
+          "description": "C\u00b7A cosine (next circumcenter \u00b7 cell centre).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_excess": {
+          "description": "L'Huilier spherical excess of fan triangle s (no R\u00b2).",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "fan_semi": {
+          "description": "Half-perimeter of fan triangle s.",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "state"
+        },
+        "lat_cell": {
+          "description": "MPAS cell-centre latitude asin(vert_coord_z).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "lat_edge": {
+          "description": "Edge-midpoint latitude asin(emid_z/|emid|).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "lon_cell": {
+          "description": "MPAS cell-centre longitude atan2(vert_coord_y, vert_coord_x).",
+          "shape": [
+            "cells"
+          ],
+          "type": "state"
+        },
+        "lon_edge": {
+          "description": "Edge-midpoint longitude atan2(emid_y/|emid|, emid_x/|emid|).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state"
+        },
+        "ring_face": {
+          "description": "Angularly-ordered incident DUO faces of each dual cell (D1b sorted_vertex_faces, esd-heg.2), ragged to the valence (5 at the 12 pentagonal seeds, 6 elsewhere). Slot s of the spherical-excess fan. CONST.",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "parameter"
+        },
+        "ring_face_next": {
+          "description": "The cyclic successor of ring_face \u2014 ring_face[c, (s mod k)+1] \u2014 the other circumcenter of fan triangle s. Supplied alongside ring_face so the wrap needs no modular index arithmetic in the AST. CONST.",
+          "shape": [
+            "cells",
+            "ring"
+          ],
+          "type": "parameter"
+        },
+        "vert_coord": {
+          "description": "Recovered-unit cartesian direction of each MPAS cell centre = DUO vertex position (the imperative duo.vertices[:,v]/R). CONST mesh geometry, supplied by the topology/subdivision passes (esd-heg.1/.3).",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "type": "parameter"
+        }
+      }
+    }
+  }
+}

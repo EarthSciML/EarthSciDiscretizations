@@ -151,3 +151,73 @@ bit-identical to imperative, identical vertex coordinate set (coords to ULP),
 identical triangles **position-for-position with winding preserved**,
 `icos_level{0,1,2}` counts (`20·4^L` cells), the canonical full-mesh byte contract,
 and seed-face permutation/winding-independence of the canonical labeling.
+
+---
+
+# DUO edge + MPAS Voronoi-dual geometry as a FAQ (esd-heg.7 / D2b)
+
+`edge_dual_geometry.esm` expresses the **GEOMETRY half** of the imperative
+`_duo_voronoi_dual` ([`src/grids/mpas.jl`](../../../../src/grids/mpas.jl), steps
+1 / circumcenters / 5 / area) and the **DUO Tier-U** `edge_length` / `cell_distance`
+([`src/grids/duo.jl`](../../../../src/grids/duo.jl)) as a semiring-FAQ geometry pass
+(RFC `semiring-faq-unified-ir` §8.1). It is the **companion** of
+`../rules/voronoi_dual_topology.esm` (D1b): that document produces the dual
+**topology** and the angularly-ordered incident-face ring (`sorted_vertex_faces`);
+this one **consumes** that ring (`ring_face` / `ring_face_next`) and produces every
+dual geometric metric. The MPAS cell **is** the DUO vertex; the MPAS dual vertex
+**is** the DUO face. Inputs (all `CONST`): `vert_coord` (recovered-unit cell
+direction = `duo.vertices/R`), `centroid` (DUO face centroid = D2a `cell_cart/R`),
+the `face_vert` / `edge_cell` / `edge_face` / `ring_face` connectivity, and `R`.
+
+Outputs:
+
+1. **`circ_x/y/z`** — the DUO face **circumcenter** (MPAS dual vertex): the
+   normalized cross-product sum `a×b + b×c + c×a`. The imperative outward-orientation
+   flip (`cc·centroid < 0 → negate`, which fires for **every** face on the
+   consistently-wound mesh) is reproduced as the **standard cross sum × −1.0** — so
+   even a zero component keeps the imperative's `−0.0` (reversing the operand order
+   would give `x−x = +0.0` and break byte-identity on the symmetric faces).
+2. **`dc_edge`** — cell-center-to-cell-center great-circle arc `R·acos(·)`; the same
+   formula and inputs as the DUO Tier-U **`edge_length`** (vertex-to-vertex arc).
+3. **`dv_edge`** — Voronoi vertex-to-vertex arc `R·acos(·)` over the two incident
+   circumcenters.
+4. **`cell_distance`** — the DUO Tier-U centroid-to-centroid arc (distinct from
+   `dv_edge`, which uses circumcenters).
+5. **`lon_cell` / `lat_cell`**, **`lon_edge` / `lat_edge`** — geographic coordinates
+   of the cell centres and the normalized edge midpoints (`atan2` / `asin`).
+6. **`area_cell`** — the Voronoi dual-cell area as the spherical-excess (L'Huilier)
+   **fan** from the cell centre over consecutive circumcenter pairs in the D1b angular
+   ring, summed and scaled by `R²`.
+
+Like the other passes, the document is a **value-free structural spec** and
+validates against the ESS `esm-schema.json`. Index sizes are the canonical level-0
+dual instance (the icosahedron→dodecahedron dual: cells=12, faces=20, edges=30,
+ring=5); the pass shape is identical at any level (the ring becomes ragged 5/6 once
+subdivision introduces hexagons).
+
+## What "byte-identical; matches the imperative step" means here
+
+The FAQ mirrors the imperative float ops exactly — squares are products (`x*x`, not
+`^`); dot products and the centroid/midpoint sums fold in space order; the L'Huilier
+tan-product is left-folded; the circumcenter is the standard cross sum negated (the
+universal flip, `−0.0` preserved). The **only** intentional divergence is dropping
+the `clamp`/`max` clipping guards (the acceptance asks for deterministic formulas,
+**no clipping**): on a valid icosahedral mesh every `acos` argument and the
+L'Huilier radicand already lie in range, so clipping never fires and the result
+matches `_duo_voronoi_dual` / `edge_length` / `cell_distance` **bit-for-bit**.
+`fixtures/canonical/edge_dual_geometry_level1.json` pins the exact dual-level-1
+Float64 values (circumcenter, `dc_edge` / `dv_edge` / `cell_distance`, `area_cell`,
+cell/edge lon-lat) every binding must reproduce.
+
+## Proof
+
+[`test/test_duo_edge_dual_geometry_faq.jl`](../../../../test/test_duo_edge_dual_geometry_faq.jl)
+drives the **landed ESS engine** (`eval_coeff` — the single-pathway passthrough, no
+shadow evaluator) on the geometry expressions and proves they reproduce the
+imperative `_duo_voronoi_dual` circumcenters / `dc_edge` / `dv_edge` / `area_cell` /
+cell-and-edge lon-lat **plus** the DUO `edge_length` / `cell_distance` **bit-for-bit**
+(strict Float64 bit identity, including `±0.0`) across dual levels 1, 2, 3 — consuming
+the D1b `voronoi_dual_topology_faq(...).sorted_vertex_faces` ring for the area fan —
+plus the physical invariant (dual areas sum to 4πR²), the schema-valid declarative
+document, and the cross-binding canonical-byte contract (reproduced bit-for-bit by
+both the imperative builder and the FAQ).
