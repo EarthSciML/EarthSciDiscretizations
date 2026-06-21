@@ -18,3 +18,12 @@ pub mod vertical;
 pub(crate) mod duo_primal_geometry_faq;
 pub(crate) mod duo_subdivide_faq;
 pub(crate) mod duo_topology_faq;
+
+// Structured-grid construction FAQ bridges (esd-dru — the py/rust W-step of the
+// esd-3we structured-grid epic). Each `<family>_construction_faq` re-derives a
+// built grid's construction arrays through the ESS evaluator (`eval_coeff`),
+// byte-identical to the imperative builder and to the committed Julia-reference
+// `tests/conformance/grids/<family>/construction/golden.json`. Public because
+// they are a parallel construction oracle (imperative stays the front-door until
+// the S5 reroute, esd-3we.5); exercised by `rust/tests/*_construction_*.rs`.
+pub mod cartesian_faq;
