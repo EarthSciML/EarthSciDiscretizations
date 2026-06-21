@@ -1,0 +1,171 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "mpas_scvt_background_quadrature",
+    "description": "MPAS-SCVT background quadrature mesh + density sampling, expressed as a declarative CONST integrand set (RFC semiring-faq-unified-ir; bead esd-e5m.1 / D1). This is the FIXED point set the SCVT Lloyd step (esd-e5m.2 / D2) integrates over: ONE iteration computes, per generator g, the density-weighted centroid c_g = (sum_{p->g} rho_p dA_p x_p) / (sum_{p->g} rho_p dA_p) over the background quadrature points p assigned to g (D2's E2 grouped aggregate), then moves g to c_g (re-normalized). This document declares the static, generator-independent half of that integral. The background point set is DUO-subdivision-based, reusing the esd-heg.3 icosahedral subdivision idiom: each quadrature point IS one DUO icosahedral primal cell (face) of the level-N mesh (subdivide_fold.esm / esd-heg.4 folds subdivide_refine.esm / esd-heg.3 over the base seed N times); its position bg_coord is the unit-sphere primal-cell centroid and its weight area is the spherical-triangle area dA, both produced by primal_geometry.esm (esd-heg.6). So bg_coord and area are CONST parameters fed by the upstream subdivision+geometry passes (value-free shape; concrete data fed by the conformance harness, mirroring subdivide_fold.esm's vert_raw/face_vert seed). DENSITY SAMPLING: rho is the density evaluated at each quadrature point (a CONST parameter): rho_p = f(bg_coord_p) for a user density function f, sampled through the single-pathway evaluator exactly as the expression-IC rule samples its RHS at grid cells (discretizations/ic/expression_ic.json). The rho-const regression sets rho == 1 (uniform density => SCVT reduces to a CVT => the quasi-uniform icosahedral-dual MPAS mesh); variable resolution feeds the sampled f. THE FAQ (the new declarative content): the per-point density-weighted integrand the step sums -- bg_mass = rho * area (the density-weighted area measure; the centroid denominator integrand) and bg_moment = bg_mass * bg_coord = rho * area * bg_coord (the density-weighted position; the centroid numerator integrand). Both are elementwise sum_product aggregates (no contraction) over the cell set; products use *, not ^, so the float ops are bit-stable. The grouped reduction over generators is NOT here -- it depends on the moving generators and lives in the per-iteration step (D2). Value-free structural spec; index sizes are the canonical level-0 instance (n_cells = 20). Byte/numeric contract pinned at levels 0 and 1 by test/test_mpas_scvt_background_faq.jl (fixtures/canonical/background_quadrature_level{0,1}.json): rho==1 => bg_mass == area and sum bg_mass == 4 pi R^2 (the quadrature weights tile the sphere), bg_moment == area * centroid; plus a sampled-density (rho = 2 + z) case proving the density-weighted centroid shifts toward the dense hemisphere.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.nux"
+    ],
+    "tags": [
+      "mpas",
+      "scvt",
+      "icosahedral",
+      "quadrature",
+      "density",
+      "centroidal-voronoi",
+      "faq",
+      "esd-e5m.1"
+    ]
+  },
+  "models": {
+    "ScvtBackgroundQuadrature": {
+      "index_sets": {
+        "cells": {
+          "kind": "interval",
+          "size": 20
+        },
+        "space": {
+          "kind": "interval",
+          "size": 3
+        }
+      },
+      "variables": {
+        "bg_coord": {
+          "type": "parameter",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "description": "Background quadrature point coordinate on the unit sphere = the DUO icosahedral primal-cell centroid (primal_geometry.esm cell_cart / R; esd-heg.6). One point per primal cell of the level-N mesh (subdivide_fold.esm / esd-heg.4, reusing the esd-heg.3 subdivision idiom). CONST: value-free shape, concrete coordinates fed by the upstream subdivision+geometry passes / conformance harness."
+        },
+        "area": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Quadrature weight of each background point = the DUO primal-cell spherical-triangle area dA (primal_geometry.esm area, L'Huilier spherical excess scaled by R^2; esd-heg.6), the area element of the midpoint quadrature rule. CONST, fed by the upstream geometry pass. The weights tile the sphere: sum_c area = 4 pi R^2."
+        },
+        "rho": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Density sampled at each background quadrature point: rho[c] = f(bg_coord[c]) for the user density function f, evaluated through the single-pathway evaluator (same sampling mechanism as the expression-IC rule, discretizations/ic/expression_ic.json). CONST. rho == 1 is the uniform-density regression (SCVT -> CVT -> quasi-uniform icosahedral dual); a non-constant rho drives variable-resolution refinement. Supplied by the D4 host driver."
+        },
+        "bg_mass": {
+          "type": "state",
+          "shape": [
+            "cells"
+          ],
+          "description": "Density-weighted quadrature measure of each background point = rho * area (the dimensionless-per-point mass element rho_p dA_p). The denominator integrand of the density-weighted centroid: the SCVT step (D2) sums bg_mass over the points assigned to each generator to form sum_{p->g} rho_p dA_p."
+        },
+        "bg_moment": {
+          "type": "state",
+          "shape": [
+            "cells",
+            "space"
+          ],
+          "description": "Density-weighted position of each background point = bg_mass * bg_coord = rho * area * bg_coord (the moment element rho_p dA_p x_p). The numerator integrand of the density-weighted centroid: the SCVT step (D2) sums bg_moment over the points assigned to each generator to form sum_{p->g} rho_p dA_p x_p; c_g = (sum bg_moment) / (sum bg_mass)."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(q-1) bg_mass[c] = rho[c] * area[c] -- the density-weighted quadrature measure (the centroid denominator integrand). Elementwise sum_product aggregate over the cell set (output index c spans the only range, no contraction); the product is `*` so rho==1 reproduces `area` bit-for-bit.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "bg_mass",
+              "c"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "rho",
+              "area"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "rho",
+                    "c"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "area",
+                    "c"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(q-2) bg_moment[c,d] = bg_mass[c] * bg_coord[c,d] = rho[c] * area[c] * bg_coord[c,d] -- the density-weighted position (the centroid numerator integrand). Elementwise sum_product aggregate over cell x space (no contraction). Reusing bg_mass keeps the rho*area product byte-identical between numerator and denominator.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "bg_moment",
+              "c",
+              "d"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "bg_mass",
+              "bg_coord"
+            ],
+            "semiring": "sum_product",
+            "output_idx": [
+              "c",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "d": {
+                "from": "space"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "bg_mass",
+                    "c"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "bg_coord",
+                    "c",
+                    "d"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
