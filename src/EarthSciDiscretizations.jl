@@ -82,6 +82,9 @@ export eval_coeff
 # Exports: DUO primal topology value-invention FAQ bridge (esd-heg.1 / D1a)
 export primal_topology_faq
 
+# Exports: DUO→MPAS Voronoi-dual topology value-invention FAQ bridge (esd-heg.2 / D1b)
+export voronoi_dual_topology_faq
+
 # Exports: ESM → ODEProblem constructor (esd-3ck)
 export build_ode_problem
 

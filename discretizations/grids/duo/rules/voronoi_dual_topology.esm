@@ -1,0 +1,178 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "duo_voronoi_dual_topology",
+    "description": "MPAS Voronoi-dual topology of the DUO icosahedral primal, expressed as a value-invention FAQ (RFC semiring-faq-unified-ir §7.3 / §5.5; bead esd-heg.2 / D1b). The MPAS dual cell `c` IS the primal vertex `c`; its neighbours are the ring of primal faces and bridge vertices around it. This replaces the topology half of the imperative `_duo_voronoi_dual` (src/grids/mpas.jl, steps 3-4) and its per-binding equivalents, producing `cells_on_cell` / `edges_on_cell` / `n_edges_on_cell`. Two stages compose. (A) ANGULAR ORDERING — the one GEOMETRIC step: the faces incident on each dual cell (= primal vertex, the D1a `vertex_face` group-by `incident_face`) are ordered by the tangent-plane `atan2` bearing of their centroids. The orthonormal tangent frame (`tan_e1_unit`, `tan_e2`) at the unit vertex direction `vert_coord[c,:]` is built by Gram-Schmidt of a reference axis against P_v (ref = ẑ when |z|<0.9 else x̂ — the pole guard so ẑ is never near-parallel to P_v), normalization, then the cross product P_v × tan_e1_unit; that branch+cross construction is a CONST per-cell geometric pre-step (documented; supplied here as the `tan_e1_unit`/`tan_e2` parameters, exactly as `vert_coord` is supplied by the topology/geometry passes). The four FAQ equations below are the declarative content of the ordering KEY: each incident face centroid `face_centroid[f,:]` (gathered through `incident_face`) is projected into that plane (`proj_e1`, `proj_e2`) and `angle[c,j] = atan2(proj_e2, proj_e1)`. Because the §5.5.1 determinism contract FORBIDS floats in relational keys (rule 1), the per-cell ORDER itself is NOT a `Relational.rank` — it is the stable sort by this numeric `atan2` angle, materialized in the evaluation bridge (src/topology_faq.jl `sortperm`), exactly as the imperative `_duo_voronoi_dual`; its cross-binding byte-identity rides the geometry pipeline's fixed evaluation order (pinned in tests/conformance/grids/duo/voronoi_dual_topology/). (B) BRIDGE-VERTEX SET-INTERSECTION — the relational step (materialized in the bridge like D1a's `cell_neighbors`, not the numeric AST, because the join keys on index equality rather than a Skolem expression): for each consecutive face pair `(f_i, f_{i+1})` in the angular order around `c`, the dual neighbour `cells_on_cell[c, r]` is the BRIDGE vertex `w` — the unique vertex shared by both faces other than `c`, i.e. the relational intersection `V(f_i) ∩ V(f_{i+1}) ∖ {c}` over the (vertex, face) incidence via `EarthSciSerialization.Relational.equijoin`; `edges_on_cell[c, r] = rank(skolem_edge(c, w))` is the D1a CANONICAL dense id of the shared primal edge `{c, w}` (NOT the imperative `_build_connectivity` Dict-insertion id). Because the connectivity is build-time-constant (CONST cadence) the whole pass folds into the setup artifact off the per-step hot path (cadence-partition §6.1): a value-invention document, not a dynamical model. Index sizes are the canonical level-0 instance — the icosahedron→dodecahedron dual, where every cell is a pentagon (`ring`=5); the pass shape is identical at any level (the ring becomes ragged 5/6 once subdivision introduces hexagons). Cross-binding byte-identity is guaranteed by the ESS determinism contract (CONFORMANCE_SPEC.md §5.5) and pinned for dual levels 1/2/3.",
+    "authors": [
+      "EarthSciDiscretizations/gastown.nux"
+    ],
+    "tags": [
+      "duo",
+      "mpas",
+      "icosahedral",
+      "voronoi-dual",
+      "dual-topology",
+      "cells-on-cell",
+      "edges-on-cell",
+      "angular-ordering",
+      "atan2",
+      "bridge-vertex",
+      "set-intersection",
+      "equijoin",
+      "skolem",
+      "rank",
+      "value-invention",
+      "cadence-partition",
+      "declarativization",
+      "esd-heg.2"
+    ]
+  },
+  "models": {
+    "DuoVoronoiDualTopology": {
+      "index_sets": {
+        "cells": { "kind": "interval", "size": 12 },
+        "faces": { "kind": "interval", "size": 20 },
+        "ring": { "kind": "interval", "size": 5 },
+        "space": { "kind": "interval", "size": 3 }
+      },
+      "variables": {
+        "R": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Sphere radius (CONST). The angular ordering is scale-invariant; R appears only because the bridge divides the stored R-scaled `vert_coord` / `face_centroid` by it to recover the unit directions the imperative `_duo_voronoi_dual` projects, matching its float ops bit-for-bit."
+        },
+        "vert_coord": {
+          "type": "parameter",
+          "shape": ["cells", "space"],
+          "description": "Unit-sphere direction of each dual cell center = the primal VERTEX position P_v (mesh geometry, CONST). The dual cell `c` is primal vertex `c`. Supplied by the topology/geometry passes (esd-heg.1 / esd-heg.6)."
+        },
+        "face_centroid": {
+          "type": "parameter",
+          "shape": ["faces", "space"],
+          "description": "Unit-sphere direction of each primal face centroid = `cell_cart` of the DUO grid = the MPAS dual VERTEX position (mesh geometry, CONST). Projected into each incident cell's tangent plane to form the ordering angle."
+        },
+        "incident_face": {
+          "type": "parameter",
+          "shape": ["cells", "ring"],
+          "description": "The primal faces incident on each dual cell (= primal vertex), the D1a `vertex_face` group-by basis (esd-heg.1), in ascending face id (the pre-sort order). At the level-0 instance every cell has exactly 5 incident faces (the dodecahedron's pentagons); stage (A) RE-ORDERS these `ring` slots by `angle`. CONST connectivity."
+        },
+        "tan_e1_unit": {
+          "type": "parameter",
+          "shape": ["cells", "space"],
+          "description": "First unit tangent-plane axis at P_v (CONST). The reference axis (ẑ when |vert_coord[c,3]|<0.9 else x̂) Gram-Schmidt-orthogonalized against P_v and normalized: e1 = ref − (ref·P_v) P_v, then e1/‖e1‖. The branch is the imperative pole guard. Supplied by the per-cell tangent-frame construction (a CONST geometric pre-step, materialized in the bridge)."
+        },
+        "tan_e2": {
+          "type": "parameter",
+          "shape": ["cells", "space"],
+          "description": "Second unit tangent-plane axis at P_v (CONST) = P_v × tan_e1_unit (unit, since P_v ⊥ tan_e1_unit and both are unit). Completes the right-handed orthonormal tangent frame in which the incident-face centroids are angularly ordered."
+        },
+        "proj_dot_pv": {
+          "type": "state",
+          "shape": ["cells", "ring"],
+          "description": "Dot product of incident_face[c,j]'s centroid with P_v (sum_product over space) — the normal component removed in the tangent-plane projection."
+        },
+        "proj_e1": {
+          "type": "state",
+          "shape": ["cells", "ring"],
+          "description": "Tangent-plane coordinate along tan_e1_unit of incident_face[c,j]'s centroid: (centroid − proj_dot_pv·P_v) · tan_e1_unit. The x of the ordering atan2."
+        },
+        "proj_e2": {
+          "type": "state",
+          "shape": ["cells", "ring"],
+          "description": "Tangent-plane coordinate along tan_e2 of incident_face[c,j]'s centroid: (centroid − proj_dot_pv·P_v) · tan_e2. The y of the ordering atan2."
+        },
+        "angle": {
+          "type": "state",
+          "shape": ["cells", "ring"],
+          "description": "The ANGULAR-ORDERING KEY: angle[c,j] = atan2(proj_e2[c,j], proj_e1[c,j]) — the tangent-plane bearing of incident face j around dual cell c. The per-cell STABLE SORT by this numeric angle (a NON-key float operation, materialized in the bridge — §5.5.1 rule 1 forbids float relational keys) yields the CCW ring order of `cells_on_cell` / `edges_on_cell`. Declared `state` for a balanced system; CONST-folded out of the (empty) hot path by the cadence partition."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(A1) proj_dot_pv[c,j] = sum_d face_centroid[incident_face[c,j], d] * vert_coord[c,d] — the centroid's normal component along P_v (gathered through the CONST incident_face connectivity, the face->vertex-group-by basis). sum_product reduces over the space index d.",
+          "lhs": { "op": "index", "args": ["proj_dot_pv", "c", "j"] },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": ["c", "j"],
+            "ranges": { "c": { "from": "cells" }, "j": { "from": "ring" }, "d": { "from": "space" } },
+            "semiring": "sum_product",
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["face_centroid", { "op": "index", "args": ["incident_face", "c", "j"] }, "d"] },
+                { "op": "index", "args": ["vert_coord", "c", "d"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(A2) proj_e1[c,j] = sum_d (face_centroid[incident_face[c,j],d] − proj_dot_pv[c,j]*vert_coord[c,d]) * tan_e1_unit[c,d] — the tangent-plane x of the projected centroid (project out the P_v component, then dot with tan_e1_unit). The atan2 abscissa.",
+          "lhs": { "op": "index", "args": ["proj_e1", "c", "j"] },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": ["c", "j"],
+            "ranges": { "c": { "from": "cells" }, "j": { "from": "ring" }, "d": { "from": "space" } },
+            "semiring": "sum_product",
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["face_centroid", { "op": "index", "args": ["incident_face", "c", "j"] }, "d"] },
+                    { "op": "*", "args": [{ "op": "index", "args": ["proj_dot_pv", "c", "j"] }, { "op": "index", "args": ["vert_coord", "c", "d"] }] }
+                  ]
+                },
+                { "op": "index", "args": ["tan_e1_unit", "c", "d"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(A3) proj_e2[c,j] = sum_d (face_centroid[incident_face[c,j],d] − proj_dot_pv[c,j]*vert_coord[c,d]) * tan_e2[c,d] — the tangent-plane y of the projected centroid. The atan2 ordinate.",
+          "lhs": { "op": "index", "args": ["proj_e2", "c", "j"] },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": ["c", "j"],
+            "ranges": { "c": { "from": "cells" }, "j": { "from": "ring" }, "d": { "from": "space" } },
+            "semiring": "sum_product",
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["face_centroid", { "op": "index", "args": ["incident_face", "c", "j"] }, "d"] },
+                    { "op": "*", "args": [{ "op": "index", "args": ["proj_dot_pv", "c", "j"] }, { "op": "index", "args": ["vert_coord", "c", "d"] }] }
+                  ]
+                },
+                { "op": "index", "args": ["tan_e2", "c", "d"] }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(A4) angle[c,j] = atan2(proj_e2[c,j], proj_e1[c,j]) — the tangent-plane bearing of incident face j around dual cell c, the ANGULAR-ORDERING KEY (atan2 idiom, cf. the lon=atan2(y,x) geometry FAQ). The per-cell stable sort by this numeric angle is the angular ordering; because §5.5.1 rule 1 forbids floats in relational keys, that sort and the consequent consecutive-pair BRIDGE-VERTEX intersection (cells_on_cell) and skolem_edge rank (edges_on_cell) are materialized by the relational engine in the bridge (src/topology_faq.jl), not the numeric AST — exactly as D1a's cell_neighbors equijoin. Byte-identity across bindings is pinned by the conformance golden.",
+          "lhs": { "op": "index", "args": ["angle", "c", "j"] },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": ["c", "j"],
+            "ranges": { "c": { "from": "cells" }, "j": { "from": "ring" } },
+            "semiring": "sum_product",
+            "expr": {
+              "op": "atan2",
+              "args": [
+                { "op": "index", "args": ["proj_e2", "c", "j"] },
+                { "op": "index", "args": ["proj_e1", "c", "j"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
