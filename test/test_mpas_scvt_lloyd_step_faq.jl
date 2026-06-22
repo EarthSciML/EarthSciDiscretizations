@@ -35,10 +35,12 @@
     ESM_PATH = joinpath(SCVT_DIR, "lloyd_step.esm")
 
     load_model() = ESS._select_model_json(
-        JSON.parsefile(ESM_PATH; dicttype = Dict{String, Any}), "ScvtLloydStep")
+        JSON.parsefile(ESM_PATH; dicttype = Dict{String, Any}), "ScvtLloydStep"
+    )
     run_step(mj, bg_coord, bg_mass, gen) = ESS.materialize_value_invention(
         mj, Dict("bg_coord" => bg_coord, "bg_mass" => bg_mass, "gen" => gen),
-        Dict{String, Float64}())
+        Dict{String, Float64}()
+    )
 
     # ── (A) Planar regression: the 3-D step reduces EXACTLY to the landed ESS E2
     #        fixture (nearest_generator_centroid.esm). Generators on the x-axis at
@@ -60,8 +62,12 @@
         @test vi.groups["centroid_y"] == [0.0, 0.0, 0.0]
         @test vi.groups["centroid_z"] == [0.0, 0.0, 0.0]
         # All step buffers are value-invention (materialised at setup, off the ODE).
-        @test vi.vi_var_names == Set(["assign", "den", "num_x", "num_y", "num_z",
-                                      "centroid_x", "centroid_y", "centroid_z"])
+        @test vi.vi_var_names == Set(
+            [
+                "assign", "den", "num_x", "num_y", "num_z",
+                "centroid_x", "centroid_y", "centroid_z",
+            ]
+        )
         # Pure function of inputs — a fresh build is identical.
         mj2 = load_model()
         mj2["index_sets"]["cells"]["size"] = 4
@@ -81,7 +87,8 @@
     cb(V, i, j, k) = Dict{String, Float64}(
         "a1" => V[1, i], "a2" => V[2, i], "a3" => V[3, i],
         "b1" => V[1, j], "b2" => V[2, j], "b3" => V[3, j],
-        "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k])
+        "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k]
+    )
 
     function level_geometry(level)
         g = build_duo_grid(loader = (path = "builtin://icosahedral/$level", reader = "builtin_icosahedral"))
@@ -126,8 +133,10 @@
         _, bg, area = level_geometry(0)
         @test size(bg, 1) == 20 && size(GEN, 1) == 12
 
-        for (rho, label) in ((ones(20), "uniform"),
-                             ([ESD.eval_coeff(rho_ast, Dict("z" => bg[c, 3])) for c in 1:20], "sampled"))
+        for (rho, label) in (
+                (ones(20), "uniform"),
+                ([ESD.eval_coeff(rho_ast, Dict("z" => bg[c, 3])) for c in 1:20], "sampled"),
+            )
             bg_mass = [ESD.eval_coeff(mass_ast, Dict("rho" => rho[c], "area" => area[c])) for c in 1:20]
             vi = run_step(mj, bg, bg_mass, GEN)
             assign = vi.assignments["assign"]
@@ -138,25 +147,25 @@
             @test all(1 .<= assign .<= 12)
 
             # E2: mass conservation — the grouped reduction partitions ALL the mass.
-            @test sum(vi.groups["den"]) ≈ sum(bg_mass) rtol = 1e-12
+            @test sum(vi.groups["den"]) ≈ sum(bg_mass) rtol = 1.0e-12
             # Independent recompute of den / num / centroid from assign + factors.
             for g in 1:12
                 cells_g = findall(==(g), assign)
                 den_g = isempty(cells_g) ? 0.0 : sum(bg_mass[c] for c in cells_g)
-                @test vi.groups["den"][g] ≈ den_g rtol = 1e-12
+                @test vi.groups["den"][g] ≈ den_g rtol = 1.0e-12
                 for (axis, key) in ((1, "num_x"), (2, "num_y"), (3, "num_z"))
                     num_g = isempty(cells_g) ? 0.0 : sum(bg_mass[c] * bg[c, axis] for c in cells_g)
-                    @test vi.groups[key][g] ≈ num_g atol = 1e-3 * (sum(bg_mass) + 1)
+                    @test vi.groups[key][g] ≈ num_g atol = 1.0e-3 * (sum(bg_mass) + 1)
                 end
                 cen = (vi.groups["centroid_x"][g], vi.groups["centroid_y"][g], vi.groups["centroid_z"][g])
                 if den_g == 0.0
                     # Unattended generator: empty-group 0̄ denominator → NaN centroid.
                     @test all(isnan, cen)
                 else
-                    @test vi.groups["centroid_x"][g] ≈ vi.groups["num_x"][g] / vi.groups["den"][g] rtol = 1e-12
+                    @test vi.groups["centroid_x"][g] ≈ vi.groups["num_x"][g] / vi.groups["den"][g] rtol = 1.0e-12
                     # The density-weighted centroid is a convex combination of
                     # unit-sphere points → inside the unit ball.
-                    @test norm(collect(cen)) <= 1 + 1e-12
+                    @test norm(collect(cen)) <= 1 + 1.0e-12
                 end
             end
         end
@@ -274,8 +283,10 @@ end
     # --- Cross-binding contract: the canonical level-0 golden is reproduced by the
     #     front-door — `assign` byte-identical (§5.7), the grouped/derived floats
     #     bit-for-bit by the Julia reference (tolerance contract across bindings).
-    golden = JSON.parsefile(joinpath(SCVT_DIR, "fixtures", "canonical", "lloyd_step_level0.json");
-        dicttype = Dict{String, Any})
+    golden = JSON.parsefile(
+        joinpath(SCVT_DIR, "fixtures", "canonical", "lloyd_step_level0.json");
+        dicttype = Dict{String, Any}
+    )
     bits(x) = reinterpret(Int64, Float64(x))
 
     mk(op, args...) = Dict{String, Any}("op" => op, "args" => collect(Any, args))
@@ -286,7 +297,8 @@ end
     cb(V, i, j, k) = Dict{String, Float64}(
         "a1" => V[1, i], "a2" => V[2, i], "a3" => V[3, i],
         "b1" => V[1, j], "b2" => V[2, j], "b3" => V[3, j],
-        "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k])
+        "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k]
+    )
 
     g = build_duo_grid(loader = (path = "builtin://icosahedral/0", reader = "builtin_icosahedral"))
     V, F = ESD.duo_subdivide_faq(Float64, 0)
@@ -318,11 +330,15 @@ end
     # A golden value of `null` marks an unattended generator (NaN centroid).
     eq_or_nan(actual, want) = want === nothing ? isnan(actual) : bits(actual) == bits(Float64(want))
 
-    for (key, rho) in (("uniform", ones(Nc)),
-                       ("sampled", [ESD.eval_coeff(rho_ast, Dict("z" => bg[c, 3])) for c in 1:Nc]))
+    for (key, rho) in (
+            ("uniform", ones(Nc)),
+            ("sampled", [ESD.eval_coeff(rho_ast, Dict("z" => bg[c, 3])) for c in 1:Nc]),
+        )
         bg_mass = [ESD.eval_coeff(mass_ast, Dict("rho" => rho[c], "area" => area[c])) for c in 1:Nc]
-        vi = ESS.materialize_value_invention(mj,
-            Dict("bg_coord" => bg, "bg_mass" => bg_mass, "gen" => gen), Dict{String, Float64}())
+        vi = ESS.materialize_value_invention(
+            mj,
+            Dict("bg_coord" => bg, "bg_mass" => bg_mass, "gen" => gen), Dict{String, Float64}()
+        )
         block = golden[key]
         # assign — byte-identical integer buffer (§5.7), shared by both densities.
         @test vi.assignments["assign"] == Int.(golden["assign"])

@@ -42,7 +42,7 @@ using JSON
 const R_EARTH = 6.371e6
 const SEED_LEVEL = 1            # 42-generator icosahedral seed
 const BG_LEVEL = 3             # 1280 background quadrature points (attends all 42)
-const TOL = 1e-12
+const TOL = 1.0e-12
 const MAX_ITERS = 2000
 
 # The canonical variable-resolution density: smooth, latitude-graded, ρ ∈ [1, 3].
@@ -50,13 +50,17 @@ density(x, y, z) = 2.0 + z
 
 function build_reference()
     V, _ = ESD.duo_subdivide_faq(Float64, SEED_LEVEL)        # (3, 42) seed generators
-    mesh = build_scvt_mesh(; generators = V, density = density,
-        background_level = BG_LEVEL, R = R_EARTH, tol = TOL, max_iters = MAX_ITERS)
+    mesh = build_scvt_mesh(;
+        generators = V, density = density,
+        background_level = BG_LEVEL, R = R_EARTH, tol = TOL, max_iters = MAX_ITERS
+    )
     # Uniform-density (ρ ≡ 1 → CVT) companion: the same seed/background WITHOUT the
     # density, pinned alongside so the test can assert the density genuinely moved
     # the mesh (var-res ≠ uniform) against fixed reference numbers, not just "≠".
-    mesh_u = build_scvt_mesh(; generators = V, density = nothing,
-        background_level = BG_LEVEL, R = R_EARTH, tol = TOL, max_iters = MAX_ITERS)
+    mesh_u = build_scvt_mesh(;
+        generators = V, density = nothing,
+        background_level = BG_LEVEL, R = R_EARTH, tol = TOL, max_iters = MAX_ITERS
+    )
     return mesh, mesh_u
 end
 
@@ -107,7 +111,7 @@ function main()
         JSON.print(io, out, 2)
         write(io, "\n")
     end
-    println("wrote ", path)
+    return println("wrote ", path)
 end
 
 main()

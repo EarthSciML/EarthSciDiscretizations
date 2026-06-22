@@ -151,10 +151,10 @@ function _build_evaluator_gj4(disc, numeric_ics, const_arrays, const_array_bound
     end
     isempty(const_array_boundaries) || error(
         "build_ode_problem: a loaded grid requested a const_array boundary " *
-        "policy ($(collect(keys(const_array_boundaries)))) but the resolved " *
-        "EarthSciSerialization.build_evaluator does not accept the " *
-        "`const_array_boundaries` kwarg (pre-ess-gj4). Update ESS to " *
-        "origin/main ≥ 78b6a577.",
+            "policy ($(collect(keys(const_array_boundaries)))) but the resolved " *
+            "EarthSciSerialization.build_evaluator does not accept the " *
+            "`const_array_boundaries` kwarg (pre-ess-gj4). Update ESS to " *
+            "origin/main ≥ 78b6a577.",
     )
     return EarthSciSerialization.build_evaluator(
         disc;

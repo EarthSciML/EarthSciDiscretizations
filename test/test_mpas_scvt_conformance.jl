@@ -33,10 +33,14 @@
     imp = ESD._duo_voronoi_dual(1; R = R)                  # the DUO-dual "x1.*" reference
 
     # Full Lloyd driver at two background refinements (uniform density → CVT).
-    m_coarse = build_scvt_mesh(; generators = V1, density = nothing,
-        background_level = 2, R = R, tol = 1e-10, max_iters = 2000)
-    m_fine = build_scvt_mesh(; generators = V1, density = nothing,
-        background_level = 3, R = R, tol = 1e-10, max_iters = 2000)
+    m_coarse = build_scvt_mesh(;
+        generators = V1, density = nothing,
+        background_level = 2, R = R, tol = 1.0e-10, max_iters = 2000
+    )
+    m_fine = build_scvt_mesh(;
+        generators = V1, density = nothing,
+        background_level = 3, R = R, tol = 1.0e-10, max_iters = 2000
+    )
 
     # (1) SAME mesh family as the DUO-dual — exact integer structure at every level.
     for m in (m_coarse, m_fine)
@@ -49,7 +53,7 @@
         @test count(==(6), m.n_edges_on_cell) == 30
         @test sort(m.n_edges_on_cell) == sort(imp.n_edges_on_cell)
         # Mass conservation: the Voronoi cells tile the whole sphere.
-        @test sum(m.area_cell) ≈ 4 * pi * R^2 rtol = 1e-12
+        @test sum(m.area_cell) ≈ 4 * pi * R^2 rtol = 1.0e-12
         @test all(>(0), m.area_cell)
         @test ESD.check_mesh(m, true) === nothing
     end
@@ -131,15 +135,15 @@ end
 
     for density in (nothing, (x, y, z) -> 2.0 + z)         # uniform CVT and variable-resolution SCVT
         bgc, bgm = scvt_background_quadrature(3; density = density, R = R)
-        sol = scvt_lloyd_solve(V1, bgc, bgm; R = R, tol = 1e-12, max_iters = 2000)
+        sol = scvt_lloyd_solve(V1, bgc, bgm; R = R, tol = 1.0e-12, max_iters = 2000)
         @test sol.converged
         gu = sol.generators ./ R                            # converged generators, unit sphere
 
         # Through the DECLARATIVE D2 step: one more Lloyd iteration on the converged
         # generators is `max_g ‖normalize(centroid_g) − gen_g‖` — the CVT residual.
         # ≈ 0 means each generator already IS its cell's density-weighted centroid.
-        step1 = scvt_lloyd_solve(gu, bgc, bgm; R = R, tol = 1e-16, max_iters = 1)
-        @test step1.displacement < 1e-9
+        step1 = scvt_lloyd_solve(gu, bgc, bgm; R = R, tol = 1.0e-16, max_iters = 1)
+        @test step1.displacement < 1.0e-9
 
         # And against the independent test-local centroid oracle (summation order
         # differs from the relational group-aggregate, hence a looser threshold). The
@@ -147,7 +151,7 @@ end
         # attended (none held at its seed) — the CVT property covers the whole mesh.
         resid, n_attended = centroid_residual(gu, bgc, bgm)
         @test n_attended == 42
-        @test resid < 1e-6
+        @test resid < 1.0e-6
     end
 end
 
@@ -166,14 +170,20 @@ end
     end
 
     R = 6.371e6
-    GOLDEN = JSON.parsefile(joinpath(@__DIR__, "..", "tests", "conformance", "grids",
-        "mpas", "scvt", "variable_resolution", "golden.json"))
+    GOLDEN = JSON.parsefile(
+        joinpath(
+            @__DIR__, "..", "tests", "conformance", "grids",
+            "mpas", "scvt", "variable_resolution", "golden.json"
+        )
+    )
     gref = GOLDEN["variable_resolution"]
     uref = GOLDEN["uniform_density"]
 
     V1, _ = ESD.duo_subdivide_faq(Float64, 1)
-    mesh = build_scvt_mesh(; generators = V1, density = (x, y, z) -> 2.0 + z,
-        background_level = 3, R = R, tol = 1e-12, max_iters = 2000)
+    mesh = build_scvt_mesh(;
+        generators = V1, density = (x, y, z) -> 2.0 + z,
+        background_level = 3, R = R, tol = 1.0e-12, max_iters = 2000
+    )
 
     # Exact integer structure.
     @test mesh.n_cells == gref["n_cells"] == 42
@@ -184,13 +194,13 @@ end
 
     # Geometry to the §5.8 tolerance contract (the reference is bitwise reproducible,
     # so the tolerance is generous margin, not slop).
-    approx_vec(a, b; rtol = 1e-8, atol = 1e-6) = all(isapprox.(a, Float64.(b); rtol = rtol, atol = atol))
-    @test approx_vec(mesh.area_cell, gref["area_cell"]; atol = 1e-3)   # m² — atol vs R²-scale
+    approx_vec(a, b; rtol = 1.0e-8, atol = 1.0e-6) = all(isapprox.(a, Float64.(b); rtol = rtol, atol = atol))
+    @test approx_vec(mesh.area_cell, gref["area_cell"]; atol = 1.0e-3)   # m² — atol vs R²-scale
     @test approx_vec(mesh.lat_cell, gref["lat_cell"])
     @test approx_vec(mesh.lon_cell, gref["lon_cell"])
-    @test approx_vec(mesh.x_cell, gref["x_cell"]; atol = 1e-3)
-    @test approx_vec(mesh.y_cell, gref["y_cell"]; atol = 1e-3)
-    @test approx_vec(mesh.z_cell, gref["z_cell"]; atol = 1e-3)
+    @test approx_vec(mesh.x_cell, gref["x_cell"]; atol = 1.0e-3)
+    @test approx_vec(mesh.y_cell, gref["y_cell"]; atol = 1.0e-3)
+    @test approx_vec(mesh.z_cell, gref["z_cell"]; atol = 1.0e-3)
 
     # Correctness — the variable-resolution SIGNAL: ρ = 2 + z is largest toward the
     # north pole (z → 1), so the converged mesh has SMALLER cells there — area is
@@ -204,7 +214,7 @@ end
     @test maximum(abs.(mesh.area_cell .- Float64.(uref["area_cell"])) ./ Float64.(uref["area_cell"])) > 0.05
 
     # Still a valid, mass-conserving tiling of the whole sphere.
-    @test sum(mesh.area_cell) ≈ 4 * pi * R^2 rtol = 1e-12
+    @test sum(mesh.area_cell) ≈ 4 * pi * R^2 rtol = 1.0e-12
     @test all(>(0), mesh.area_cell)
     @test ESD.check_mesh(mesh, true) === nothing
 end

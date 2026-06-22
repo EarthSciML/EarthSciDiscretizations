@@ -43,18 +43,25 @@ _scvt_mk(op, args...) = Dict{String, Any}("op" => op, "args" => collect(Any, arg
 const _SCVT_MX = _scvt_mk("+", "a1", "b1", "c1")
 const _SCVT_MY = _scvt_mk("+", "a2", "b2", "c2")
 const _SCVT_MZ = _scvt_mk("+", "a3", "b3", "c3")
-const _SCVT_NRM = _scvt_mk("sqrt",
-    _scvt_mk("+", _scvt_mk("*", _SCVT_MX, _SCVT_MX),
-        _scvt_mk("*", _SCVT_MY, _SCVT_MY), _scvt_mk("*", _SCVT_MZ, _SCVT_MZ)))
-const _SCVT_UCOMP = (_scvt_mk("/", _SCVT_MX, _SCVT_NRM),
-    _scvt_mk("/", _SCVT_MY, _SCVT_NRM), _scvt_mk("/", _SCVT_MZ, _SCVT_NRM))
+const _SCVT_NRM = _scvt_mk(
+    "sqrt",
+    _scvt_mk(
+        "+", _scvt_mk("*", _SCVT_MX, _SCVT_MX),
+        _scvt_mk("*", _SCVT_MY, _SCVT_MY), _scvt_mk("*", _SCVT_MZ, _SCVT_MZ)
+    )
+)
+const _SCVT_UCOMP = (
+    _scvt_mk("/", _SCVT_MX, _SCVT_NRM),
+    _scvt_mk("/", _SCVT_MY, _SCVT_NRM), _scvt_mk("/", _SCVT_MZ, _SCVT_NRM),
+)
 # FAQ q-1 integrand: bg_mass = ρ · area (background_quadrature.esm).
 const _SCVT_MASS_AST = _scvt_mk("*", "rho", "area")
 
 _scvt_corner_binding(V, i, j, k) = Dict{String, Float64}(
     "a1" => V[1, i], "a2" => V[2, i], "a3" => V[3, i],
     "b1" => V[1, j], "b2" => V[2, j], "b3" => V[3, j],
-    "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k])
+    "c1" => V[1, k], "c2" => V[2, k], "c3" => V[3, k]
+)
 
 """
     scvt_background_quadrature(level; density=nothing, R=6.371e6)
@@ -79,10 +86,15 @@ the loop as a held generator).
 """
 function scvt_background_quadrature(level::Integer; density = nothing, R::Real = 6.371e6)
     level >= 0 || throw(DomainError(level, "scvt_background_quadrature: level must be ≥ 0"))
-    (R > 0 && isfinite(R)) || throw(DomainError(R,
-        "scvt_background_quadrature: R must be a positive finite number"))
+    (R > 0 && isfinite(R)) || throw(
+        DomainError(
+            R,
+            "scvt_background_quadrature: R must be a positive finite number"
+        )
+    )
     g = build_duo_grid(;
-        loader = (path = "builtin://icosahedral/$(level)", reader = "builtin_icosahedral"), R = R)
+        loader = (path = "builtin://icosahedral/$(level)", reader = "builtin_icosahedral"), R = R
+    )
     V, F = duo_subdivide_faq(Float64, Int(level))
     Nc = n_cells(g)
     bg_coord = Matrix{Float64}(undef, Nc, 3)
@@ -136,17 +148,32 @@ host convergence test:
 Returns `(; generators, iterations, displacement, converged)` with the converged
 generators as `(3, Nc)` on the sphere of radius `R`.
 """
-function scvt_lloyd_solve(generators::AbstractMatrix{<:Real}, bg_coord::AbstractMatrix{<:Real},
-        bg_mass::AbstractVector{<:Real}; R::Real = 6.371e6, tol::Real = 1e-10,
-        max_iters::Integer = 1000, verbose::Bool = false)
-    size(generators, 1) == 3 || throw(ArgumentError(
-        "scvt_lloyd_solve: generators must be (3, Nc); got $(size(generators))"))
-    size(bg_coord, 2) == 3 || throw(ArgumentError(
-        "scvt_lloyd_solve: bg_coord must be (Nc_bg, 3); got $(size(bg_coord))"))
-    size(bg_coord, 1) == length(bg_mass) || throw(ArgumentError(
-        "scvt_lloyd_solve: bg_coord rows $(size(bg_coord, 1)) must match bg_mass length $(length(bg_mass))"))
-    (R > 0 && isfinite(R)) || throw(DomainError(R,
-        "scvt_lloyd_solve: R must be a positive finite number"))
+function scvt_lloyd_solve(
+        generators::AbstractMatrix{<:Real}, bg_coord::AbstractMatrix{<:Real},
+        bg_mass::AbstractVector{<:Real}; R::Real = 6.371e6, tol::Real = 1.0e-10,
+        max_iters::Integer = 1000, verbose::Bool = false
+    )
+    size(generators, 1) == 3 || throw(
+        ArgumentError(
+            "scvt_lloyd_solve: generators must be (3, Nc); got $(size(generators))"
+        )
+    )
+    size(bg_coord, 2) == 3 || throw(
+        ArgumentError(
+            "scvt_lloyd_solve: bg_coord must be (Nc_bg, 3); got $(size(bg_coord))"
+        )
+    )
+    size(bg_coord, 1) == length(bg_mass) || throw(
+        ArgumentError(
+            "scvt_lloyd_solve: bg_coord rows $(size(bg_coord, 1)) must match bg_mass length $(length(bg_mass))"
+        )
+    )
+    (R > 0 && isfinite(R)) || throw(
+        DomainError(
+            R,
+            "scvt_lloyd_solve: R must be a positive finite number"
+        )
+    )
     (tol > 0) || throw(DomainError(tol, "scvt_lloyd_solve: tol must be positive"))
     max_iters >= 1 || throw(DomainError(max_iters, "scvt_lloyd_solve: max_iters must be ≥ 1"))
     Nc = size(generators, 2)
@@ -175,7 +202,8 @@ function scvt_lloyd_solve(generators::AbstractMatrix{<:Real}, bg_coord::Abstract
         iters = it
         vi = EarthSciSerialization.materialize_value_invention(
             mj, Dict("bg_coord" => bgc, "bg_mass" => bgm, "gen" => gen),
-            Dict{String, Float64}())
+            Dict{String, Float64}()
+        )
         cx = vi.groups["centroid_x"]; cy = vi.groups["centroid_y"]; cz = vi.groups["centroid_z"]
         maxd = 0.0
         @inbounds for g in 1:Nc
@@ -259,28 +287,40 @@ DUO Voronoi dual (`_duo_voronoi_dual`): cells = generators, dual vertices = the
 spherical-Delaunay circumcentres, edges = the Delaunay edges. For `Nc` generators
 forming a closed mesh, `n_edges = 3·Nc − 6` and `n_vertices = 2·Nc − 4` (Euler).
 """
-function build_scvt_mesh(; generators::AbstractMatrix{<:Real}, density = nothing,
-        background_level::Integer, R::Real = 6.371e6, tol::Real = 1e-10,
-        max_iters::Integer = 1000, verbose::Bool = false)
-    size(generators, 1) == 3 || throw(ArgumentError(
-        "build_scvt_mesh: generators must be (3, Nc); got $(size(generators))"))
+function build_scvt_mesh(;
+        generators::AbstractMatrix{<:Real}, density = nothing,
+        background_level::Integer, R::Real = 6.371e6, tol::Real = 1.0e-10,
+        max_iters::Integer = 1000, verbose::Bool = false
+    )
+    size(generators, 1) == 3 || throw(
+        ArgumentError(
+            "build_scvt_mesh: generators must be (3, Nc); got $(size(generators))"
+        )
+    )
     Nc = size(generators, 2)
-    Nc >= 4 || throw(ArgumentError(
-        "build_scvt_mesh: need ≥ 4 generators for a closed spherical mesh; got $Nc"))
+    Nc >= 4 || throw(
+        ArgumentError(
+            "build_scvt_mesh: need ≥ 4 generators for a closed spherical mesh; got $Nc"
+        )
+    )
     R_f = Float64(R)
 
     # --- D1: the fixed background quadrature (the integration measure) ----------
     bg_coord, bg_mass = scvt_background_quadrature(background_level; density = density, R = R_f)
     size(bg_coord, 1) >= Nc || @warn(
         "build_scvt_mesh: background ($(size(bg_coord, 1)) points) is not finer than the " *
-        "generators ($Nc); some generators may be unattended (held at their seed).")
+            "generators ($Nc); some generators may be unattended (held at their seed)."
+    )
 
     # --- D2 step driven by the host fixed-point LOOP (RHS-only) -----------------
-    sol = scvt_lloyd_solve(generators, bg_coord, bg_mass;
-        R = R_f, tol = tol, max_iters = max_iters, verbose = verbose)
+    sol = scvt_lloyd_solve(
+        generators, bg_coord, bg_mass;
+        R = R_f, tol = tol, max_iters = max_iters, verbose = verbose
+    )
     sol.converged || @warn(
         "build_scvt_mesh: Lloyd loop did not converge in $(sol.iterations) iterations " *
-        "(displacement $(sol.displacement) ≥ tol $tol); emitting the last iterate.")
+            "(displacement $(sol.displacement) ≥ tol $tol); emitting the last iterate."
+    )
     gen = sol.generators                       # (3, Nc), on the sphere of radius R
 
     # --- D3 topology LEAF, ONCE at convergence ----------------------------------
@@ -299,8 +339,10 @@ function build_scvt_mesh(; generators::AbstractMatrix{<:Real}, density = nothing
         k = conn.n_edges_on_cell[c]
         sorted_vertex_faces[c] = Int[conn.vertices_on_cell[i, c] for i in 1:k]
     end
-    geo = duo_dual_geometry_faq(Float64, gen, conn.faces, conn.circumcenters,
-        prim.edges, edge_cells, sorted_vertex_faces, R_f)
+    geo = duo_dual_geometry_faq(
+        Float64, gen, conn.faces, conn.circumcenters,
+        prim.edges, edge_cells, sorted_vertex_faces, R_f
+    )
 
     # MPAS edge ↔ Delaunay edge: the two cells are the edge's generator pair.
     Ne = size(prim.edges, 2)
