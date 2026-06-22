@@ -89,6 +89,12 @@ function build_ode_problem(
     numeric_ics, coord_arrays = _prepare_expression_ics!(esm)
     merge!(numeric_ics, extra_ics)
 
+    # Wire the declarative ghost-cell rules for the model's Robin / nonzero-Neumann
+    # BCs into esm["rules"] so ESS's `_discretize_bc!` fires them and the
+    # makearray-region BC lowering (ess-hjg) splices the rewritten ghost into the
+    # boundary regions (esd-6k1). No imperative ghost math here — host wiring only.
+    _inject_bc_rules!(esm)
+
     disc = EarthSciSerialization.discretize(esm; lift_1d_arrayop = true)
 
     # Bind unstructured (MPAS/DUO) grid geometry declaratively: the authored
@@ -739,6 +745,57 @@ function _inject_grids_duo(domain_spec, gdd_path::AbstractString)
 
     spacing_vals = Dict{String, Float64}()
     return dims, spacing_vals, grid
+end
+
+# BC kinds whose declarative ghost rule (discretizations/finite_difference/
+# <kind>_bc.json) is wired into the Path-A integration pipeline (esd-6k1).
+# `_discretize_bc!` fires the rule on the synthetic `bc` node and stashes the
+# rewritten ghost on `bc["value"]`; the makearray-region BC lowering (ess-hjg)
+# splices it into the boundary regions. dirichlet is intentionally excluded: it
+# stays on the legacy 1st-order raw-value ghost, since migrating it to the
+# declarative 2·value−u[0] rule would change the pinned esd-7i3 Dirichlet
+# goldens and the vertical-diffusion integration fixtures (separate work).
+const _DECLARATIVE_BC_KINDS = ("neumann", "robin")
+
+# Append the declarative ghost rule(s) from each <kind>_bc.json whose `kind`
+# appears in a model's `boundary_conditions` to `esm["rules"]`, so ESS's rule
+# engine fires them during `discretize`. Idempotent-by-construction (each kind's
+# file is loaded once). This is host wiring of DECLARATIVE rules — no ghost
+# arithmetic is computed here — mirroring `_inject_rules!` for interior stencils.
+function _inject_bc_rules!(esm::Dict{String, Any})
+    models = get(esm, "models", nothing)
+    models isa AbstractDict || return
+    kinds = Set{String}()
+    for (_, model) in models
+        model isa AbstractDict || continue
+        bcs = get(model, "boundary_conditions", nothing)
+        bcs isa AbstractDict || continue
+        for (_, bc) in bcs
+            bc isa AbstractDict || continue
+            k = get(bc, "kind", nothing)
+            k isa AbstractString && String(k) in _DECLARATIVE_BC_KINDS && push!(kinds, String(k))
+        end
+    end
+    isempty(kinds) && return
+    rules = get!(esm, "rules", Any[])
+    bc_dir = joinpath(pkgdir(@__MODULE__), "discretizations", "finite_difference")
+    for kind in sort!(collect(kinds))
+        rule_path = joinpath(bc_dir, "$(kind)_bc.json")
+        isfile(rule_path) || continue
+        rule_doc = _load_json_mutable(rule_path)
+        rules_obj = get(rule_doc, "rules", nothing)
+        rules_obj isa AbstractDict || continue
+        for rname in sort!(collect(keys(rules_obj)))
+            body = rules_obj[rname]
+            body isa AbstractDict || continue
+            entry = Dict{String, Any}("name" => String(rname))
+            for (bk, bv) in body
+                entry[String(bk)] = bv
+            end
+            push!(rules, entry)
+        end
+    end
+    return
 end
 
 function _inject_rules!(esm::Dict{String, Any}, gdd_discs, gdd_path::AbstractString)

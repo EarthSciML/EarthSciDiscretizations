@@ -1,16 +1,20 @@
 {
-  "applicable": false,
-  "skip_reason": "DECLARATIVE-INFEASIBLE over the existing ESS engine — see discretizations/finite_difference/ROBIN_BC_INFEASIBILITY.md (verdict for esd-6g4.8/G9) + ESS bead ess-lhi. G8 (ess-tox) DID land kind/side discrimination (kind->fn, side->dim), but Robin still cannot fire: (1) ESS OpExpr has no slot for robin_alpha/beta/gamma and parse_expression drops them, and _discretize_bc! forwards only variable/kind/side/value, so the 3 coefficients never reach a pattern; (2) the production non-periodic lift (_apply_nonperiodic_bcs!/_instantiate_bc_cell, restored by ess-1nm) hard-codes dirichlet+zero-flux-neumann and throws E_BC_UNSUPPORTED otherwise — no general/coefficient-parameterized ghost; (3) $h is not threaded into the bc-wrapper rewrite for bind_side_spacing. Stays applicable:false pending ess-lhi. Ghost-cell formula: u_ghost = (2*h*g + (2*b - a*h)*u[0]) / (a*h + 2*b) (h = grid spacing for the side's axis). Analytic cases (h=0.1): {a:1, b:0, g:1.0, u_0:0.5, ghost:1.5, check:'(1.5+0.5)/2=1.0=g (Dirichlet limit)'}, {a:0, b:1, g:0.5, u_0:0.7, ghost:0.75, check:'(0.75-0.7)/0.1=0.5=g (Neumann limit)'}, {a:1, b:1, g:1.5, u_0:1.0, ghost:1.04762, check:'1*(1.04762+1.0)/2+1*(1.04762-1.0)/0.1=1.02381+0.4762=1.5=g'}.",
+  "applicable": true,
   "kind": "rewrite",
   "rule": "robin_bc",
-  "context": {},
+  "note": "Robin ghost rewrite at xmin (esd-6k1, supersedes the esd-6g4.8/G9 infeasibility verdict). Fires through the ESS rule engine via the fn/dim BC-kind matcher (ess-bps/ess-tox, G8) plus the makearray-region BC lowering (ess-hjg): `_discretize_bc!` encodes the BC kind->fn, side->dim, variable->arg, and the three Robin coefficients ride as trailing args [$u, $a, $b, $g] (α, β, γ). The `where` clause binds $gr = u's grid (var_has_grid) and $h = 1/N for that side's spatial dim (bind_side_spacing). Grid g1 has spatial_dims=[x], dim_sizes={x:4}, so xmin -> axis 1 -> dim x -> N=4 -> h=0.25. Coefficients are carried SYMBOLICALLY (α=a, β=b, γ=g) so the golden pins the full Robin structure with the $h=0.25 binding visible. Ghost formula: u_ghost = (2·h·γ + (2·β - α·h)·u[0]) / (α·h + 2·β) = (2·0.25·g + (2·b - a·0.25)·index(u,0)) / (a·0.25 + 2·b). The LOCAL 0-based index(u,0) is re-indexed into the grid frame per side by ess-hjg (min: u[1]; max: u[N]). This Layer-A rewrite UNIT pins that the declarative rule fires; the numeric INTEGRATION path is exercised by test/test_bc_ic_goldens.jl (bc_robin_1d.esm).",
+  "context": {
+    "grids": {
+      "g1": { "spatial_dims": ["x"], "dim_sizes": { "x": 4 } }
+    },
+    "variables": {
+      "u": { "grid": "g1" }
+    }
+  },
   "expression": {
     "op": "bc",
-    "kind": "robin",
-    "side": "xmin",
-    "args": ["u"],
-    "robin_alpha": 1.0,
-    "robin_beta": 1.0,
-    "robin_gamma": 1.5
+    "fn": "robin",
+    "dim": "xmin",
+    "args": ["u", "a", "b", "g"]
   }
 }

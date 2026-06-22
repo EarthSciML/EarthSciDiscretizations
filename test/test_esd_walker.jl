@@ -152,23 +152,19 @@ using TestItems
             # pending the kind/side discrimination flip (layer-A SKIP) and carries
             # no convergence fixture (layer-B SKIP "no convergence fixtures").
             ("finite_difference", "dirichlet_bc"),
-            # neumann_bc (esd-6g4.9 / G10): PROMOTED out of this set. The ESS
-            # fn/dim BC-kind matcher (ess-bps/ess-tox, G8) landed, so the rewrite
-            # fixture is now applicable:true — bc(neumann, xmin, [u, g]) fires the
-            # neumann_bc_xmin rule (bind_side_spacing binds $h = 1/N). Layer-A
-            # PASSes; see the explicit elseif below. The numeric INTEGRATION path
-            # stays blocked on the same imperative shadow as robin (ess-lhi) —
-            # discretizations/finite_difference/neumann_bc/INTEGRATION_GAP.md.
-            # robin_bc (esd-m9v, esd-6g4.8/G9): rewrite fixture ships
-            # `applicable:false` — DECLARATIVE-INFEASIBLE over the existing ESS
-            # engine. G8 (ess-tox) landed kind/side discrimination, but Robin
-            # still cannot fire: ESS has no slot to transport robin_alpha/beta/
-            # gamma, and the production non-periodic lift hard-codes dirichlet+
-            # zero-neumann (throws E_BC_UNSUPPORTED otherwise). Verdict +
-            # precise gaps: discretizations/finite_difference/
-            # ROBIN_BC_INFEASIBILITY.md; engine work tracked in ESS bead ess-lhi.
-            # Layer-A SKIP; no convergence fixture (layer-B SKIP).
-            ("finite_difference", "robin_bc"),
+            # neumann_bc (esd-6g4.9 / G10, esd-6k1): PROMOTED out of this set. The
+            # ESS fn/dim BC-kind matcher (ess-bps/ess-tox, G8) landed, so the
+            # rewrite fixture is applicable:true — bc(neumann, xmin, [u, g]) fires
+            # the single side-generic neumann_bc rule (bind_side_spacing binds
+            # $h = 1/N). Layer-A PASSes; see the explicit elseif below. The numeric
+            # INTEGRATION path now solves too (esd-6k1) via the ess-hjg makearray
+            # lowering — see test/test_bc_ic_goldens.jl.
+            # robin_bc (esd-m9v, esd-6g4.8/G9, esd-6k1): PROMOTED out of this set.
+            # The fn/dim+args firing encoding (the three Robin coefficients ride as
+            # trailing args [$u, $a, $b, $g]) + the ess-hjg makearray lowering make
+            # the rewrite fixture applicable:true and the INTEGRATION path solve.
+            # Layer-A PASSes; see the explicit elseif below. Supersedes the
+            # esd-6g4.8 ROBIN_BC_INFEASIBILITY verdict.
             # staggered_1st_uniform (esd-6g4.13): promoted out of this set. The
             # arrayop replacement (EINSUM-4) now drives end-to-end through ESS
             # `discretize` once the rule's `applies_to` carries `dim: $x` (the
@@ -676,20 +672,38 @@ using TestItems
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
         elseif r.family === :finite_difference && r.name == "neumann_bc"
-            # neumann_bc (esd-6g4.9 / G10): the nonzero-flux generalization of
-            # zero_gradient_bc, firing through the same ESS fn/dim BC-kind matcher
-            # (ess-bps/ess-tox, G8). The rewrite fixture lifts a `bc` node with
-            # fn="neumann", dim="xmin" and the flux value as the second arg, then
-            # rewrites to index(u, 1) + h*value — the nearest interior cell plus
-            # the grid-spacing-scaled flux, with $h = 1/N bound by
-            # `bind_side_spacing` (N=4 -> 0.25*g). At value=0 it collapses to
-            # zero_gradient_bc_xmin's index(u, 1). Layer-A PASSes via the rewrite
-            # canonical-form byte match; Layer-B SKIPs (a ghost-cell rewrite
-            # carries no MMS convergence fixture). The numeric INTEGRATION path
-            # (build_ode_problem) is DECLARATIVE-INFEASIBLE here: it throws
-            # E_BC_UNSUPPORTED via the imperative _apply_nonperiodic_bcs! shadow,
-            # whose retirement is mayor-sequenced ESS work (makearray-bc-lowering,
-            # ess-lhi) — see neumann_bc/INTEGRATION_GAP.md.
+            # neumann_bc (esd-6g4.9 / G10, re-based by esd-6k1): the nonzero-flux
+            # generalization of zero_gradient_bc, firing through the same ESS
+            # fn/dim BC-kind matcher (ess-bps/ess-tox, G8). The rewrite fixture
+            # lifts a `bc` node with fn="neumann", dim="xmin" and the flux value as
+            # the second arg, then rewrites to index(u, 0) + h*value — the LOCAL
+            # 0-based first interior cell plus the grid-spacing-scaled flux, with
+            # $h = 1/N bound by `bind_side_spacing` (N=4 -> 0.25*g). One
+            # side-generic rule (dim=$side) serves both sides; the makearray
+            # lowering (ess-hjg) re-indexes index(u,0) per side (min: u[1];
+            # max: u[N]). Layer-A PASSes via the rewrite canonical-form byte match;
+            # Layer-B SKIPs (a ghost-cell rewrite carries no MMS convergence
+            # fixture). The numeric INTEGRATION path (build_ode_problem) now solves
+            # too (esd-6k1) via the ess-hjg makearray lowering — see
+            # test/test_bc_ic_goldens.jl (nonzero-Neumann 1D du).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("rewrite canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "robin_bc"
+            # robin_bc (esd-m9v, esd-6g4.8/G9, activated by esd-6k1): the Robin BC
+            # kind αu + β∂u/∂n = γ, firing through the ESS fn/dim BC-kind matcher
+            # (ess-bps/ess-tox, G8) plus the makearray-region lowering (ess-hjg).
+            # The rewrite fixture lifts a `bc` node with fn="robin", dim="xmin" and
+            # the three coefficients riding as trailing args [u, a, b, g], then
+            # rewrites to the ghost (2·h·γ + (2·β − α·h)·index(u,0)) / (α·h + 2·β),
+            # with $h = 1/N bound by `bind_side_spacing` (N=4 -> 0.25). The LOCAL
+            # 0-based index(u,0) is re-indexed per side by ess-hjg. Layer-A PASSes
+            # via the rewrite canonical-form byte match; Layer-B SKIPs (a ghost-cell
+            # rewrite carries no MMS convergence fixture). The numeric INTEGRATION
+            # path (build_ode_problem) solves too (esd-6k1) — see
+            # test/test_bc_ic_goldens.jl (Robin 1D du). Supersedes the esd-6g4.8
+            # ROBIN_BC_INFEASIBILITY verdict.
             @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
             @test occursin("rewrite canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
@@ -1037,11 +1051,13 @@ end
 end
 
 @testitem "walker: neumann_bc nonzero-flux rule fires both sides + discriminates via fn/dim" begin
-    # esd-6g4.9 / G10: exercises BOTH sides of the real neumann_bc rule file
-    # through the ESS engine. The walker's rewrite/ fixture only covers xmin;
-    # this also pins xmax (the guarded side, which binds N via bind_side_dim_size
-    # AND h via bind_side_spacing), and — the point of the fn/dim matcher (G8) —
-    # proves the neumann rules do NOT touch a dirichlet or zero_gradient bc node.
+    # esd-6g4.9 / G10, re-based by esd-6k1: exercises BOTH sides of the real
+    # neumann_bc rule file through the ESS engine. The walker's rewrite/ fixture
+    # only covers xmin; this also pins xmax. The single side-generic rule
+    # (dim=$side, 0-based index(u,0)) fires on both sides — the makearray lowering
+    # (ess-hjg) re-indexes per side at integration time — and — the point of the
+    # fn/dim matcher (G8) — proves the neumann rule does NOT touch a dirichlet or
+    # zero_gradient bc node.
     include(joinpath(@__DIR__, "walk_esd_tests.jl"))
     using .WalkESDTests
     using EarthSciDiscretizations
@@ -1072,24 +1088,26 @@ end
         "variables" => Dict("u" => Dict("grid" => "g1"))
     )
 
-    # nonzero-Neumann ghost = nearest interior cell + h*flux. xmin -> index(u,1)
-    # (nearest is the constant 1); xmax -> index(u,N) with N bound from the grid
-    # (here 4). Both carry the grid-spacing-scaled flux 0.25*g (h = 1/4). At
-    # value=0 each collapses to zero_gradient_bc's homogeneous-Neumann ghost.
+    # nonzero-Neumann ghost = local 0-based first interior cell + h*flux. One
+    # side-generic rule (dim=$side) emits index(u,0) for BOTH sides; the ess-hjg
+    # makearray lowering re-indexes it into the grid frame per side at
+    # integration time (min -> u[1]; max -> u[N]). Both carry the grid-spacing-
+    # scaled flux 0.25*g (h = 1/4). At value=0 each folds to the homogeneous-
+    # Neumann mirror.
     @test rw(
         nm, Dict(
             "op" => "bc", "fn" => "neumann", "dim" => "xmin",
             "args" => ["u", "g"]
         ), ctx4
     ) ==
-        "{\"args\":[{\"args\":[\"u\",1],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+        "{\"args\":[{\"args\":[\"u\",0],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
     @test rw(
         nm, Dict(
             "op" => "bc", "fn" => "neumann", "dim" => "xmax",
             "args" => ["u", "g"]
         ), ctx4
     ) ==
-        "{\"args\":[{\"args\":[\"u\",4],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
+        "{\"args\":[{\"args\":[\"u\",0],\"op\":\"index\"},{\"args\":[0.25,\"g\"],\"op\":\"*\"}],\"op\":\"+\"}"
 
     # Discrimination: the neumann rules must NOT touch a dirichlet or a
     # zero_gradient bc node (different fn). Each passes through unchanged.

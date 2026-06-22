@@ -232,19 +232,19 @@ per-side block looks like:
 }
 ```
 
-<div class="callout callout-pending">
+<div class="callout callout-note">
 <strong>Which BC kinds work today.</strong>
-As of the current trunk, <strong>periodic</strong> and
-<strong>zero-value Dirichlet</strong> BCs are supported end-to-end (see
-the <code>bc_ic</code> goldens in <code>test/test_bc_ic_goldens.jl</code>).
-<strong>Nonzero-Neumann</strong> and <strong>Robin</strong> BCs are
-<em>not yet supported</em> — <code>build_ode_problem</code> raises
-<code>EarthSciSerialization.RuleEngineError</code> (code
-<code>E_BC_UNSUPPORTED</code>) for them. The analytic ghost formulas are
-documented in
-<code>discretizations/finite_difference/{neumann_bc,robin_bc}.json</code>
-and the goldens carry the expected <code>du</code> so the tests flip from
-<code>@test_throws</code> to a numeric check once ESS gains support.
+As of the current trunk, <strong>periodic</strong>, <strong>zero-value
+Dirichlet</strong>, <strong>nonzero-Neumann</strong>, and
+<strong>Robin</strong> BCs all solve end-to-end through
+<code>build_ode_problem</code> (see the <code>bc_ic</code> goldens in
+<code>test/test_bc_ic_goldens.jl</code>). The nonzero-Neumann and Robin
+ghost rules
+(<code>discretizations/finite_difference/{neumann_bc,robin_bc}.json</code>)
+are wired into the integration pipeline by <code>_inject_bc_rules!</code>;
+the ESS rule engine fires them on the synthetic <code>bc</code> node and the
+makearray-region BC lowering (ess-hjg) splices the rewritten ghost into the
+boundary regions (esd-6k1).
 </div>
 
 ## Integral / PIDE terms

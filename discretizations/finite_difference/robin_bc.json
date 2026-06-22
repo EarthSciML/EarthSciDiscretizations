@@ -1,16 +1,17 @@
 {
   "rules": {
     "robin_bc": {
-      "description": "Robin ghost-cell prescription for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). Robin BC: a·u + b·∂u/∂n = g, where ∂u/∂n is the outward normal derivative; the ghost cell is determined by centered diff across the boundary face: u_ghost = (2·h·g + (2·b - a·h)·u[0]) / (a·h + 2·b). Pattern matches the synthetic `bc` node (§9.2) with `$side` bound to the boundary side (xmin, xmax, ymin, ymax, …) and `$h` bound to the grid spacing for that side's axis via ESS bind_side_spacing guard; `robin_alpha/beta/gamma` carry the Robin coefficients. `produces` declares the ghost variable per §9.4. Pure Dirichlet limit (b=0, a=1, g=u_bc): u_ghost = 2*u_bc - u[0]. Pure Neumann limit (a=0, b=1): u_ghost = u[0] + h*g.",
+      "description": "Robin ghost-cell prescription for cell-centered uniform Cartesian grids (ESS §9.2 / §9.4). Robin BC: α·u + β·∂u/∂n = γ, where ∂u/∂n is the outward normal derivative; the ghost cell is determined by centered diff across the boundary face: u_ghost = (2·h·γ + (2·β - α·h)·u[0]) / (α·h + 2·β). Encoding (ess-hjg, esd-6k1): the synthetic `bc` node (§9.2) carries `fn`=robin and `dim`=$side, and the three Robin coefficients ride as trailing args after the variable — `args: [$u, $a, $b, $g]` (α, β, γ) — because ESS's OpExpr has no scalar slot for them; `_discretize_bc!` appends them in that fixed order. `$h` is the grid spacing for the side's axis, bound by `bind_side_spacing` (`var_has_grid` first resolves the variable's grid `$gr`; named `$gr` not `$g` to avoid colliding with γ). The ghost reads the LOCAL 0-based first-interior cell `index($u, 0)`; the makearray-region BC lowering (ess-hjg) re-indexes it into the absolute grid frame per side (min: 1+0 → u[1]; max: N-0 → u[N]). Pure Dirichlet limit (β=0, α=1, γ=u_bc): u_ghost = 2·u_bc - u[0]. Pure Neumann limit (α=0, β=1): u_ghost = u[0] + h·γ. Mirrors ESS discretize_test.jl's reference `_robin_rule()` and ESD's neumann_bc.json sibling.",
       "pattern": {
         "op": "bc",
-        "kind": "robin",
-        "side": "$side",
-        "args": ["$u"],
-        "robin_alpha": "$a",
-        "robin_beta": "$b",
-        "robin_gamma": "$g"
+        "fn": "robin",
+        "dim": "$side",
+        "args": ["$u", "$a", "$b", "$g"]
       },
+      "where": [
+        { "guard": "var_has_grid", "pvar": "$u", "grid": "$gr" },
+        { "guard": "bind_side_spacing", "pvar": "$h", "side": "$side", "grid": "$gr" }
+      ],
       "replacement": {
         "op": "/",
         "args": [
@@ -47,50 +48,7 @@
             ]
           }
         ]
-      },
-      "produces": [
-        {
-          "kind": "ghost_var",
-          "name": "robin_bc__$u__$side",
-          "emit": {
-            "op": "/",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      { "op": "*", "args": [2, "$h"] },
-                      "$g"
-                    ]
-                  },
-                  {
-                    "op": "*",
-                    "args": [
-                      {
-                        "op": "-",
-                        "args": [
-                          { "op": "*", "args": [2, "$b"] },
-                          { "op": "*", "args": ["$a", "$h"] }
-                        ]
-                      },
-                      { "op": "index", "args": ["$u", 0] }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "+",
-                "args": [
-                  { "op": "*", "args": ["$a", "$h"] },
-                  { "op": "*", "args": [2, "$b"] }
-                ]
-              }
-            ]
-          }
-        }
-      ]
+      }
     }
   }
 }

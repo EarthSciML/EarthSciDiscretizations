@@ -196,33 +196,31 @@ end
     @test isfile(rule.path)
 
     content = read(rule.path, String)
-    # Neumann BC is a rewrite rule (§5.2 / §9.2), rebuilt as two side-split
-    # rules `neumann_bc_xmin` / `neumann_bc_xmax` (esd-6g4.9 / G10) mirroring the
-    # zero_gradient_bc template. Each `pattern` matches the synthetic `bc` node
-    # by the G8 fn/dim encoding (`fn:"neumann"`, `dim:"xmin"`/`"xmax"` — NOT the
-    # raw kind/side keys the OpExpr parser drops), and the `replacement` gives
-    # the ghost-cell value index(u, nearest) + $h*value (value = du/dn; $h = 1/N
-    # bound via ESS bind_side_spacing; N via bind_side_dim_size for xmax).
+    # Neumann BC is a rewrite rule (§5.2 / §9.2), one side-generic rule
+    # `neumann_bc` (esd-6k1, re-based from the esd-6g4.9 split xmin/xmax form to
+    # the ess-hjg makearray lowering). The `pattern` matches the synthetic `bc`
+    # node by the G8 fn/dim encoding (`fn:"neumann"`, `dim:"$side"` — NOT the raw
+    # kind/side keys the OpExpr parser drops), and the `replacement` gives the
+    # ghost-cell value index(u, 0) + $h*value (value = du/dn; the LOCAL 0-based
+    # first interior cell, re-indexed into the grid frame per side by the ess-hjg
+    # makearray lowering; $h = 1/N bound via ESS bind_side_spacing).
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
-    @test occursin("\"neumann_bc_xmin\"", content)
-    @test occursin("\"neumann_bc_xmax\"", content)
+    @test occursin("\"neumann_bc\"", content)
     @test occursin("\"fn\": \"neumann\"", content)
-    @test occursin("\"dim\": \"xmin\"", content)
-    @test occursin("\"dim\": \"xmax\"", content)
+    @test occursin("\"dim\": \"\$side\"", content)
     @test occursin("\"op\": \"bc\"", content)
-    # Ghost-cell formula: u_ghost = index(u, nearest) + $h*value.
+    # Ghost-cell formula: u_ghost = index(u, 0) + $h*value.
     @test occursin("\"op\": \"+\"", content)
     @test occursin("\"op\": \"*\"", content)
     @test occursin("\"op\": \"index\"", content)
     @test occursin("\"\$h\"", content)
-    # The `where` clause binds the grid, spacing, and (xmax) dim size.
+    # The `where` clause binds the grid and the side spacing.
     @test occursin("\"var_has_grid\"", content)
     @test occursin("\"bind_side_spacing\"", content)
-    @test occursin("\"bind_side_dim_size\"", content)
 end
 
-@testitem "robin_bc rule is discoverable and well-formed (esd-m9v, generalized esd-klj)" begin
+@testitem "robin_bc rule is discoverable and well-formed (esd-m9v, generalized esd-klj, esd-6k1)" begin
     using EarthSciDiscretizations: load_rules
 
     repo_root = dirname(dirname(pathof(EarthSciDiscretizations)))
@@ -235,22 +233,25 @@ end
     @test isfile(rule.path)
 
     content = read(rule.path, String)
-    # Robin BC is a rewrite rule (§5.2 / §9.2): carries `pattern` with
-    # `kind:"robin"` and `side:"$side"` (generalized from xmin — esd-klj),
-    # `robin_alpha/beta/gamma` coefficients for αu + β∂u/∂n = γ,
-    # `replacement` giving the ghost-cell value
-    # u_ghost = (2·$h·γ + (2·β - α·$h)·u[0]) / (α·$h + 2·β),
-    # where $h is the grid spacing for the side's axis (bound via ESS
-    # bind_side_spacing), and `produces` declaring the ghost_var per §9.4.
+    # Robin BC is a rewrite rule (§5.2 / §9.2): `pattern` carries the FIRING
+    # fn/dim+args encoding (esd-6k1, supersedes the kind/side+robin_alpha keys the
+    # OpExpr parser dropped) — `fn:"robin"`, `dim:"$side"`, and the three Robin
+    # coefficients riding as trailing pattern args [$u, $a, $b, $g] (α, β, γ for
+    # αu + β∂u/∂n = γ) since ESS's OpExpr has no scalar slot for them. The
+    # `replacement` gives the ghost-cell value
+    # u_ghost = (2·$h·γ + (2·β - α·$h)·u[0]) / (α·$h + 2·β), where $h is the grid
+    # spacing for the side's axis (bound via ESS bind_side_spacing; the grid binds
+    # to $gr so it does not collide with γ=$g). The local 0-based index(u,0) is
+    # re-indexed into the grid frame per side by the ess-hjg makearray lowering.
     @test occursin("\"pattern\"", content)
     @test occursin("\"replacement\"", content)
-    @test occursin("\"kind\": \"robin\"", content)
-    @test occursin("\"side\": \"\$side\"", content)
+    @test occursin("\"fn\": \"robin\"", content)
+    @test occursin("\"dim\": \"\$side\"", content)
     @test occursin("\"op\": \"bc\"", content)
-    # Coefficients: robin_alpha (α), robin_beta (β), robin_gamma (γ).
-    @test occursin("\"robin_alpha\"", content)
-    @test occursin("\"robin_beta\"", content)
-    @test occursin("\"robin_gamma\"", content)
+    # Coefficients ride as trailing pattern args: α=$a, β=$b, γ=$g.
+    @test occursin("\"\$a\"", content)
+    @test occursin("\"\$b\"", content)
+    @test occursin("\"\$g\"", content)
     # Ghost-cell formula uses division, addition, subtraction, multiplication,
     # index into u[0], and the side-axis spacing $h.
     @test occursin("\"op\": \"/\"", content)
@@ -259,12 +260,9 @@ end
     @test occursin("\"op\": \"*\"", content)
     @test occursin("\"op\": \"index\"", content)
     @test occursin("\"\$h\"", content)
-    # §9.4 ghost_var produces declaration.
-    @test occursin("\"produces\"", content)
-    @test occursin("\"ghost_var\"", content)
-    # Ghost variable named per §9.4 scheme__logical__side convention.
-    @test occursin("robin_bc__", content)
-    @test occursin("__\$side", content)
+    # The `where` clause binds the variable's grid ($gr) and the side spacing ($h).
+    @test occursin("\"var_has_grid\"", content)
+    @test occursin("\"bind_side_spacing\"", content)
 end
 
 @testitem "centered_2nd_uniform_vertical scheme is discoverable and well-formed" begin
