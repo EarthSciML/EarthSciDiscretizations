@@ -33,11 +33,16 @@ using TestItems
     rules = EarthSciSerialization.parse_rules(rules_obj)
 
     function ghost(side, dim_sizes, spatial)
-        ctx = WalkESDTests._build_rule_context(Dict{String, Any}(
-            "grids" => Dict{String, Any}("g1" => Dict{String, Any}(
-                "spatial_dims" => spatial, "dim_sizes" => dim_sizes)),
-            "variables" => Dict{String, Any}("u" => Dict{String, Any}("grid" => "g1")),
-        ))
+        ctx = WalkESDTests._build_rule_context(
+            Dict{String, Any}(
+                "grids" => Dict{String, Any}(
+                    "g1" => Dict{String, Any}(
+                        "spatial_dims" => spatial, "dim_sizes" => dim_sizes
+                    )
+                ),
+                "variables" => Dict{String, Any}("u" => Dict{String, Any}("grid" => "g1")),
+            )
+        )
         bc = Dict{String, Any}("op" => "bc", "fn" => "periodic", "dim" => side, "args" => ["u"])
         out = EarthSciSerialization.rewrite(WalkESDTests._expr_from_json(bc), rules, ctx)
         return EarthSciSerialization.canonical_json(out)
