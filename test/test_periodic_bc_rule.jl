@@ -107,21 +107,18 @@ end
 end
 
 # ---------------------------------------------------------------------------
-# Per-axis SMOKE (2D + CORNERS): both x and y periodic. The periodic RULE is
-# correct (the 1-D test above wraps byte-exact), but the 2-D INTEGRATION is
-# blocked by a PRE-EXISTING ESS bug in `_scan_stencil_reach!`, unrelated to the
-# periodic rule — see discretizations/finite_difference/periodic_bc/
-# MAKEARRAY_2D_REACH_GAP.md. The `laplacian_2nd_uniform_cartesian` rule authors
-# additive offsets `index(u, i + (-1), j)`; ESS canonicalize reorders the
-# commutative `+` to constant-first `[-1, "i"]`, which `_scan_stencil_reach!`
-# only detects in the variable-first form. Reach scans to 0, so
-# `_apply_makearray_bcs!` emits NO boundary regions and every boundary read
-# falls back to the zero-ghost convention. (The 1-D `d2` rule escapes this
-# because it authors one neighbour as a non-commutative SUBTRACTION.) The fix is
-# a two-arm reach scan in ESS (bead ess-wg0) — verified locally to make this 2-D
-# wrap byte-exact. INTERIOR cells (no out-of-range read) wrap correctly today; the
-# boundary/corner assertions are `@test_broken` and flip to a hard failure the
-# moment the ESS reach fix lands (signalling the follow-up to un-break them).
+# Per-axis SMOKE (2D + CORNERS): both x and y periodic. The 5-point Laplacian
+# wraps on both axes, corners included. This exercises the makearray ghost path
+# end to end: the `laplacian_2nd_uniform_cartesian` rule authors additive offsets
+# `index(u, i + (-1), j)`; ESS canonicalize reorders the commutative `+` to
+# constant-first `[-1, "i"]`. ESS `_scan_stencil_reach!` now detects that form via
+# its two-arm scan (bead ess-wg0). Before that fix the per-axis reach scanned to
+# 0, `_apply_makearray_bcs!` emitted NO boundary regions, and every boundary read
+# fell back to the zero-ghost convention (the 1-D `d2` rule escaped only because
+# it authors one neighbour as a non-commutative SUBTRACTION). With ess-wg0 landed
+# the boundary/corner reads splice the periodic ghost, so the wrap is byte-exact
+# against the grid-periodic ground truth — see discretizations/finite_difference/
+# periodic_bc/MAKEARRAY_2D_REACH_GAP.md.
 # ---------------------------------------------------------------------------
 @testitem "periodic_bc integration: 2D 5-point Laplacian wraps both axes + corners (esd-7mj)" tags = [:bc, :periodic] begin
     using EarthSciDiscretizations: build_ode_problem
@@ -159,13 +156,12 @@ end
         @test du[var_map["u[$i,$j]"]] ≈ analytic(i, j) atol = 1.0e-10
     end
 
-    # Boundary + corner wrap: BLOCKED by the ESS _scan_stencil_reach! gap above.
-    # The periodic rule fires correctly (all four BCs receive index(u, N-1)); the
-    # makearray box-shrink drops the boundary regions. @test_broken until the ESS
-    # reach fix lands.
+    # Boundary + corner wrap: enabled by the ESS _scan_stencil_reach! two-arm scan
+    # (ess-wg0). The periodic rule fires (all four BCs receive index(u, N-1)) and
+    # the makearray box-shrink now keeps the boundary regions, so the ghost splices.
     boundary = [(i, j) for i in 1:N for j in 1:N if i == 1 || i == N || j == 1 || j == N]
     max_boundary_err = maximum(abs(du[var_map["u[$i,$j]"]] - analytic(i, j)) for (i, j) in boundary)
-    @test_broken max_boundary_err < 1.0e-10
+    @test max_boundary_err < 1.0e-10
     # Corner (1,1) must wrap on BOTH axes (x-neighbour u[N,1], y-neighbour u[1,N]).
-    @test_broken du[var_map["u[1,1]"]] ≈ analytic(1, 1) atol = 1.0e-10
+    @test du[var_map["u[1,1]"]] ≈ analytic(1, 1) atol = 1.0e-10
 end

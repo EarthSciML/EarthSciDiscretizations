@@ -1,10 +1,13 @@
-# periodic_bc 2-D makearray reach gap (esd-7mj)
+# periodic_bc 2-D makearray reach gap (esd-7mj) — RESOLVED by ess-wg0
 
-**Status:** the `periodic_bc` rule is COMPLETE and CORRECT. The 1-D integration
-wrap is byte-exact (`test/test_periodic_bc_rule.jl`, `maxerr == 0.0`). The 2-D
-corner integration is blocked by a **pre-existing ESS bug** in
-`_scan_stencil_reach!`, unrelated to the periodic rule. This document is the
-stop-and-report finding for the 2-D portion (DECLARATIVE-OR-FAIL Gate D).
+**Status: RESOLVED.** The `periodic_bc` rule is COMPLETE and CORRECT. The 1-D
+integration wrap is byte-exact (`test/test_periodic_bc_rule.jl`, `maxerr == 0.0`).
+The 2-D corner integration was blocked by a **pre-existing ESS bug** in
+`_scan_stencil_reach!`, unrelated to the periodic rule; that bug was fixed in ESS
+**ess-wg0** (the two-arm reach scan below), which is now on ESS `main`. The 2-D
+corner assertions in `test/test_periodic_bc_rule.jl` are now plain `@test` (they
+wrap byte-exact, corners included). This document is retained as the historical
+finding for the 2-D portion (DECLARATIVE-OR-FAIL Gate D).
 
 ## What works
 
@@ -57,9 +60,9 @@ ghost EQUALS the zero-ghost fallback, and `bc_dirichlet_2d_periodic_x` wraps x
 through the grid-level periodic-folding path (`_apply_periodic_folding!`), not
 the makearray ghost path.
 
-## Fix (ESS, filed separately)
+## Fix (ESS bead ess-wg0 — LANDED)
 
-Make `_scan_stencil_reach!` canonicalization-robust by detecting the
+`_scan_stencil_reach!` was made canonicalization-robust by detecting the
 constant-first offset symmetrically:
 
 ```julia
@@ -68,12 +71,11 @@ elseif length(aa) == 2 && aa[1] isa Number && aa[2] isa AbstractString
     haskey(reach, v) && (reach[v] = max(reach[v], k))
 ```
 
-Verified locally against a patched ESS: with this two-arm reach scan the 2-D
-periodic Laplacian wraps byte-exactly against the grid-periodic ground truth
-(corners included), through the periodic rule unchanged. The fix is general — it
-also unblocks nonzero-Dirichlet / Neumann / Robin ghosts on any 2-D stencil whose
-rule authors additive offsets.
+With this two-arm reach scan the 2-D periodic Laplacian wraps byte-exactly against
+the grid-periodic ground truth (corners included), through the periodic rule
+unchanged. The fix is general — it also unblocks nonzero-Dirichlet / Neumann /
+Robin ghosts on any 2-D stencil whose rule authors additive offsets.
 
-Tracked by ESS bead **ess-wg0**. Until it lands, the 2-D corner assertion in
-`test/test_periodic_bc_rule.jl` is `@test_broken`; it flips to a hard failure
-(alerting to un-break it) the moment the ESS reach fix is merged.
+Landed in ESS bead **ess-wg0** (now on ESS `main`). The 2-D corner assertions in
+`test/test_periodic_bc_rule.jl` are now plain `@test` (esd-2bo flipped them from
+`@test_broken` once the ESS reach fix merged).
