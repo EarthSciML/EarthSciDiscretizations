@@ -1,22 +1,20 @@
 {
+  "applicable": true,
   "kind": "rewrite",
+  "rule": "periodic_bc",
+  "note": "Periodic-wrap ghost rewrite at xmin, authored fresh as a makearray-region BC rule in the LANDED neumann/robin encoding (esd-7mj; supersedes the stale esd-agh symbolic-`Nx`/`mod` index-rewrite rule). Fires through the ESS rule engine via the fn/dim BC-kind matcher (ess-bps/ess-tox, G8): `_discretize_bc!` encodes the BC kind->fn and side->dim onto the synthetic `bc` node, so the periodic pattern discriminates from neumann/robin/dirichlet. One side-generic rule (dim=$side) serves both xmin and xmax. The `where` clause binds $g = u's grid (var_has_grid) and $N = the side's axis size (bind_side_dim_size). Grid g1 has spatial_dims=[x], dim_sizes={x:4}, so xmin -> axis 1 -> dim x -> N=4. Ghost formula: u_ghost = index(u, N-1) — the LOCAL 0-based offset L=N-1. The makearray-region BC lowering (ess-hjg, _reindex_ghost) re-indexes a 0-based offset per side (min: 1+L, max: N-L), so this SAME offset L=N-1 lands on the wrapped OPPOSITE end on both sides: xmin -> 1+(N-1)=N -> u[N] (last cell); xmax -> N-(N-1)=1 -> u[1] (first cell). NO symbolic Nx, NO mod — N is concrete via the existing bind_side_dim_size binding. This Layer-A rewrite UNIT pins that the declarative rule fires; the numeric INTEGRATION path (build_ode_problem) is exercised live by test/test_periodic_bc_rule.jl (per-axis smoke tests) — the makearray lowering splices the opposite-end ghost.",
   "context": {
     "grids": {
-      "g1": {
-        "spatial_dims": ["x", "y"],
-        "periodic_dims": ["x"]
-      }
+      "g1": { "spatial_dims": ["x"], "dim_sizes": { "x": 4 } }
     },
     "variables": {
-      "T": { "grid": "g1" }
+      "u": { "grid": "g1" }
     }
   },
   "expression": {
-    "op": "index",
-    "args": [
-      "T",
-      { "op": "-", "args": ["i", 1] },
-      "j"
-    ]
+    "op": "bc",
+    "fn": "periodic",
+    "dim": "xmin",
+    "args": ["u"]
   }
 }

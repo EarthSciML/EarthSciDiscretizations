@@ -1,39 +1,19 @@
 {
   "rules": {
-    "periodic_wrap": {
-      "pattern": {
-        "op": "index",
-        "args": [
-          "$u",
-          { "op": "-", "args": ["$i", "$offset"] },
-          "$rest"
-        ]
-      },
+    "periodic_bc": {
+      "description": "Periodic-wrap ghost-cell prescription for cell-centered structured grids (esm-spec §9.2 / §11.5), authored as a makearray-region BC rule in the LANDED neumann/robin encoding (ess-bps/ess-tox G8 matcher + ess-hjg makearray lowering, esd-6k1; supersedes the stale esd-agh symbolic-`Nx`/`mod` index-rewrite rule). ESS's `_discretize_bc!` builds the synthetic `bc` wrapper encoding kind->fn, side->dim, variable->arg; the fn/dim sibling fields are matched by `_match_sibling_name`. A single side-generic rule (dim=$side): the ghost reflects the LOCAL 0-based cell `index($u, N-1)`, where `$N` is the side's axis size bound by `bind_side_dim_size` (`var_has_grid` first resolves the variable's grid). The makearray-region BC lowering (ess-hjg, `_reindex_ghost`) re-indexes a 0-based offset L into the absolute grid frame per side — min: 1+L, max: N-L — so the SAME authored offset L=N-1 lands on the WRAPPED OPPOSITE end on both sides: at xmin the i-1 ghost of the first cell becomes 1+(N-1)=N (reads the LAST interior cell u[N]); at xmax the i+1 ghost of the last cell becomes N-(N-1)=1 (reads the FIRST interior cell u[1]). The axis size N is concrete at build time (an existing `bind_side_dim_size` binding, NOT the symbolic `Nx` of the retired rule), so the emitted boundary region carries a concrete wrapped index — NO symbolic Nx, NO mod/mod1, NO new guard/op/canonicalize arm. Analytic check: a stencil reading u[0] at the low boundary and u[N+1] at the high boundary instead reads u[N] and u[1], closing the domain into a torus. Mirrors ESD's neumann_bc.json / robin_bc.json siblings (same fn/dim wrapper, same 0-based ghost re-indexed by ess-hjg) and interface_bc.json's opposite-end coupling (xmin->last cell, xmax->first cell) — differing only in that periodic reads its OWN field (no coupled variable, no prescribed value).",
+      "pattern": { "op": "bc", "fn": "periodic", "dim": "$side", "args": ["$u"] },
       "where": [
         { "guard": "var_has_grid", "pvar": "$u", "grid": "$g" },
-        { "guard": "dim_is_periodic", "pvar": "x", "grid": "$g" }
+        { "guard": "bind_side_dim_size", "pvar": "$N", "grid": "$g", "side": "$side" }
       ],
       "replacement": {
         "op": "index",
         "args": [
           "$u",
-          {
-            "op": "mod",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  { "op": "-", "args": ["$i", "$offset"] },
-                  "Nx"
-                ]
-              },
-              "Nx"
-            ]
-          },
-          "$rest"
+          { "op": "-", "args": ["$N", 1] }
         ]
-      },
-      "region": "$side"
+      }
     }
   }
 }

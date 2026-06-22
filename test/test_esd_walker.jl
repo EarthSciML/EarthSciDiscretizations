@@ -115,7 +115,6 @@ using TestItems
             # loads the replacement from a canonical/ fixture (absent here) and
             # binds uniform h only — per-cell dz[k] bindings pending dsc-yz0m.
             ("finite_difference", "centered_2nd_nonuniform_vertical"),
-            ("finite_difference", "periodic_bc"),
             ("finite_volume", "flux_limiter_minmod"),
             ("finite_volume", "flux_limiter_superbee"),
             ("finite_volume", "lax_friedrichs_flux"),
@@ -708,6 +707,26 @@ using TestItems
             @test occursin("rewrite canonical-form match", r.layer_a.reason)
             @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
             @test occursin("no convergence fixtures", r.layer_b.reason)
+        elseif r.family === :finite_difference && r.name == "periodic_bc"
+            # periodic_bc (esd-7mj): the periodic-wrap BC kind, authored fresh as
+            # a makearray-region ghost rule in the LANDED neumann/robin fn/dim
+            # `bc`-wrapper encoding (supersedes the stale esd-agh symbolic-Nx/mod
+            # index-rewrite rule). The rewrite fixture lifts a `bc` node with
+            # fn="periodic", dim="xmin" and rewrites it to index(u, N-1) — the
+            # 0-based offset L=N-1 that the ess-hjg makearray lowering re-indexes
+            # to the WRAPPED OPPOSITE end per side (min: 1+(N-1)=N -> u[N];
+            # max: N-(N-1)=1 -> u[1]), with $N bound by the existing
+            # `bind_side_dim_size` guard — NO symbolic Nx, NO mod, NO new engine
+            # primitive. Layer-A PASSes via the rewrite canonical-form byte match;
+            # Layer-B SKIPs (a ghost-cell rewrite carries no MMS convergence
+            # target; the convergence/ fixture ships applicable:false). The numeric
+            # INTEGRATION path (build_ode_problem with model-level kind="periodic"
+            # BCs) is exercised live by test/test_periodic_bc_rule.jl (1D + 2D
+            # per-axis smoke tests with corner composition).
+            @test r.layer_a.outcome == WalkESDTests.LAYER_PASS
+            @test occursin("rewrite canonical-form match", r.layer_a.reason)
+            @test r.layer_b.outcome == WalkESDTests.LAYER_SKIP
+            @test occursin("fixture-declared not applicable", r.layer_b.reason)
         elseif key in pass_layer_a_canonical_only_g14
             # esd-6g4.13 (G14): vertical / latlon high-order grad + upwind.
             # Layer-A passes via the canonical byte contract; Layer-B SKIPs (no

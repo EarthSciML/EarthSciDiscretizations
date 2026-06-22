@@ -140,13 +140,26 @@ end
     @test isfile(rule.path)
 
     content = read(rule.path, String)
-    # Periodic BC is a rewrite rule (§5.2), not a scheme (§7): it carries
-    # `pattern`/`where`/`replacement` rather than `applies_to`/`stencil`.
+    # Periodic BC is authored as a makearray-region BC rule in the LANDED
+    # neumann/robin fn/dim `bc`-wrapper encoding (esd-7mj, supersedes the stale
+    # esd-agh symbolic-`Nx`/`mod` index-rewrite rule): it carries
+    # `pattern`/`where`/`replacement`, matches the synthetic `bc` node by
+    # fn="periodic" + dim=$side, and binds the side axis size with the EXISTING
+    # `bind_side_dim_size` guard to read the wrapped opposite-end cell
+    # index(u, N-1) (re-indexed per side to u[N] at xmin and u[1] at xmax by the
+    # ess-hjg makearray lowering).
     @test occursin("\"pattern\"", content)
     @test occursin("\"where\"", content)
     @test occursin("\"replacement\"", content)
-    @test occursin("\"dim_is_periodic\"", content)
-    @test occursin("\"mod\"", content)
+    @test occursin("\"periodic\"", content)
+    @test occursin("\"bind_side_dim_size\"", content)
+    # DECLARATIVE-OR-FAIL: the retired symbolic-mod form is gone. Assert the
+    # rule uses NO `mod` op and NO symbolic `Nx` OPERAND (quoted-string forms, so
+    # the description may still name them to explain what it supersedes), and no
+    # `dim_is_periodic` guard.
+    @test !occursin("\"mod\"", content)
+    @test !occursin("\"Nx\"", content)
+    @test !occursin("dim_is_periodic", content)
 end
 
 @testitem "dirichlet_bc rule is discoverable and well-formed" begin

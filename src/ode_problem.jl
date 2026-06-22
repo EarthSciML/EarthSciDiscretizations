@@ -751,11 +751,17 @@ end
 # <kind>_bc.json) is wired into the Path-A integration pipeline (esd-6k1).
 # `_discretize_bc!` fires the rule on the synthetic `bc` node and stashes the
 # rewritten ghost on `bc["value"]`; the makearray-region BC lowering (ess-hjg)
-# splices it into the boundary regions. dirichlet is intentionally excluded: it
-# stays on the legacy 1st-order raw-value ghost, since migrating it to the
-# declarative 2·value−u[0] rule would change the pinned esd-7i3 Dirichlet
+# splices it into the boundary regions. periodic (esd-7mj) joins via the SAME
+# fn/dim wrapper + makearray splice: its ghost reads the wrapped OPPOSITE-end
+# cell (index(u, N−1), re-indexed per side to u[N] at xmin and u[1] at xmax),
+# closing the axis into a torus with NO symbolic Nx / mod / new engine primitive
+# — a concrete `bind_side_dim_size` binding only. It is opt-in via a model-level
+# `kind:"periodic"` BC and does not touch the grid-level periodic-folding path,
+# so no existing periodic-grid golden changes. dirichlet is intentionally
+# excluded: it stays on the legacy 1st-order raw-value ghost, since migrating it
+# to the declarative 2·value−u[0] rule would change the pinned esd-7i3 Dirichlet
 # goldens and the vertical-diffusion integration fixtures (separate work).
-const _DECLARATIVE_BC_KINDS = ("neumann", "robin")
+const _DECLARATIVE_BC_KINDS = ("neumann", "periodic", "robin")
 
 # Append the declarative ghost rule(s) from each <kind>_bc.json whose `kind`
 # appears in a model's `boundary_conditions` to `esm["rules"]`, so ESS's rule
