@@ -1,0 +1,499 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "point_cell_average_regrid",
+    "description": "RFC pure-io-data-loaders \u00a75.2 POINT regridder (bead esd-47z.4): the EarthSciData OpenAQ cell-averaging method as one declarative .esm \u2014 average the scattered source-station values that fall within each target cell; a cell with NO contributing station gets a configurable `missing_value` (the point analogue of a no-data fill, NOT interpolation). Composed entirely from EXISTING aggregates (sum_product / bool_and_or) and the bin-Skolem idiom of conservative_regrid_overlap_join.esm \u2014 NO new mean/count semiring, NO per-cell averaging kernel. The pipeline: (1) BROAD PHASE assigns stations to cells \u2014 each station's (lon,lat) and each cell's representative (lower-left corner) (lon,lat) is quantized to an INTEGER lat-lon bin via `floor` and minted into a content-addressed bin key via `skolem`; the assignment set is the bin-Skolem EQUI-join (a `distinct` bool_and_or index-set-producing aggregate, id `assignment_set`), so a station belongs to the cell it shares a bin with (dx/dy = the target grid resolution, so the bin IS the cell \u2014 EarthSciData.jl's `_build_cell_station_map`). Integer bin keys keep the assignment byte-identical across bindings (\u00a75.8.5). (2) COUNT \u2014 count[j] = \u03a3_i 1 over the buffer-gated join (sum_product with a constant body), the per-cell number of contributing stations; it reproduces the build-once `count_denom` exactly the way conservative_regrid's A_j FAQ reproduces `dst_areas`. (3) AVERAGE + FILL \u2014 F_tgt[j] = ifelse(count_denom[j] > 0, \u03a3_i station_val[i]/count_denom[j], missing_value). The divide rides INSIDE the group-by-`j` sum_product (uniform weight W_ij = 1/count_denom[j], \u03a3_i W_ij = 1 \u2014 the mean is a partition of unity over contributing stations), EXACTLY like conservative's normalize-by-`dst_areas`; the missing_value fill rides AFTER as a cell-level ifelse on the build-once count. An empty cell contributes no terms (\u03a3 = 0) and is short-circuited to missing_value \u2014 never 0/0. NO new physical operator: floor, skolem, join.on, distinct, sum_product, ifelse only.",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.nux"
+    ],
+    "tags": [
+      "regridding",
+      "point",
+      "cell-average",
+      "openaq",
+      "scattered-points",
+      "bin-skolem",
+      "spatial-join",
+      "floor",
+      "skolem",
+      "join",
+      "distinct",
+      "sum_product",
+      "missing-value",
+      "value-invention",
+      "partition-of-unity",
+      "conformance",
+      "esd-47z.4"
+    ]
+  },
+  "models": {
+    "PointCellAverageRegrid": {
+      "index_sets": {
+        "stations": {
+          "kind": "interval",
+          "size": 3
+        },
+        "cells": {
+          "kind": "interval",
+          "size": 3
+        },
+        "assignments": {
+          "kind": "derived",
+          "from_faq": "assignment_set"
+        }
+      },
+      "variables": {
+        "station_lon": {
+          "type": "parameter",
+          "shape": [
+            "stations"
+          ],
+          "description": "Source-station longitude (degrees). A float coordinate that enters ONLY the integer binning via `floor`, never a raw join comparison (\u00a75.8.5)."
+        },
+        "station_lat": {
+          "type": "parameter",
+          "shape": [
+            "stations"
+          ],
+          "description": "Source-station latitude (degrees) \u2014 the other binning coordinate."
+        },
+        "cell_lon": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Target-cell representative longitude \u2014 the cell's lower-left corner, grid-aligned so floor(cell_lon/dx) is the cell's integer column and a station sharing that bin falls in the cell."
+        },
+        "cell_lat": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Target-cell representative latitude (lower-left corner)."
+        },
+        "dx": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Target grid longitude resolution (degrees) \u2014 the exactly-defined integer quantization step. Shared by stations and cells so a common bin key means the station falls in the cell."
+        },
+        "dy": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Target grid latitude resolution (degrees)."
+        },
+        "station_val": {
+          "type": "parameter",
+          "shape": [
+            "stations"
+          ],
+          "description": "The scattered source field being remapped (one value per station). A `parameter` here (static field); in the time-varying case it is `state`/`discrete` and the AVERAGE FAQ becomes CONTINUOUS-cadence \u2014 the build-once assignment/count vs apply-many average split is exactly the static/dynamic partition (\u00a76.1)."
+        },
+        "count_denom": {
+          "type": "parameter",
+          "shape": [
+            "cells"
+          ],
+          "description": "Build-once per-cell contributing-station count A_j-analogue stored at regridder-build time (EarthSciData.jl's per-cell station tally). The NORMALIZE denominator the average body divides by, supplied as a const_array. The `count` FAQ recomputes the same group-by tally to prove the buffer-gated join reproduces it (mean partition-of-unity by construction); the AVERAGE equation gates on count_denom[j] > 0 to return missing_value for empty cells."
+        },
+        "missing_value": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Configurable no-data fill returned for a target cell with NO contributing station (RFC \u00a75.2). Declared in the JSON / supplied from the ESS per-variable regrid config; a point cell with zero stations is 'absent', distinct from a real averaged value."
+        },
+        "station_bin": {
+          "type": "state",
+          "shape": [
+            "stations"
+          ],
+          "description": "Integer bin key of each station: skolem(\"bin\", floor(lon/dx), floor(lat/dy)). `floor` does the integer quantization, `skolem` mints the content-addressed key. The equi-join column the assignment set joins on."
+        },
+        "cell_bin": {
+          "type": "state",
+          "shape": [
+            "cells"
+          ],
+          "description": "Integer bin key of each target cell \u2014 identically quantized from its lower-left corner, so a shared key means a station falls in this cell."
+        },
+        "pair_exists": {
+          "type": "state",
+          "shape": [
+            "assignments"
+          ],
+          "description": "Membership over the station-to-cell ASSIGNMENT set produced by the bin-Skolem equi-join (the broad phase) \u2014 the byte-identical integer candidate set of \u00a75.8.5, materialized as the derived `assignments` index set via from_faq:\"assignment_set\"."
+        },
+        "count": {
+          "type": "state",
+          "shape": [
+            "cells"
+          ],
+          "description": "Per-cell contributing-station count count[j] = \u03a3_i 1 over the bin-Skolem assignment join (join.on [[station_bin,cell_bin]] on the MATERIALISED bin buffers, the F3 buffer-gated join \u00a75.3; sum_product with a constant body). d(count[j])/dt from a zero IC \u21d2 du = count[j]; the test asserts it reproduces the supplied `count_denom` (the join is not a no-op)."
+        },
+        "F_tgt": {
+          "type": "state",
+          "shape": [
+            "cells"
+          ],
+          "description": "Regridded field F_tgt[j] = ifelse(count_denom[j] > 0, \u03a3_i station_val[i]/count_denom[j], missing_value) = the mean of the stations assigned to cell j, or missing_value if none. The divide rides INSIDE the buffer-gated sum_product (uniform weight W_ij = 1/count_denom[j], \u03a3_i W_ij = 1), the missing fill rides AFTER. d(F_tgt[j])/dt from a zero IC \u21d2 du = F_tgt[j]."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "(1a) BROAD PHASE \u2014 bin each STATION to an integer lat-lon bin key. floor(lon/dx), floor(lat/dy) are integer bin coordinates (existing `floor` op); skolem mints the content-addressed key. Per-element map (output i, no contraction).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "station_bin",
+              "i"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "stations"
+              }
+            },
+            "args": [
+              "station_lon",
+              "station_lat",
+              "dx",
+              "dy"
+            ],
+            "expr": {
+              "op": "skolem",
+              "args": [
+                "bin",
+                {
+                  "op": "floor",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "station_lon",
+                            "i"
+                          ]
+                        },
+                        "dx"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "floor",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "station_lat",
+                            "i"
+                          ]
+                        },
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(1b) BROAD PHASE \u2014 bin each target CELL identically from its lower-left corner (same dx/dy quantization), so a station and the cell it lands in share a bin key.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "cell_bin",
+              "j"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "j"
+            ],
+            "ranges": {
+              "j": {
+                "from": "cells"
+              }
+            },
+            "args": [
+              "cell_lon",
+              "cell_lat",
+              "dx",
+              "dy"
+            ],
+            "expr": {
+              "op": "skolem",
+              "args": [
+                "bin",
+                {
+                  "op": "floor",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "cell_lon",
+                            "j"
+                          ]
+                        },
+                        "dx"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "floor",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "cell_lat",
+                            "j"
+                          ]
+                        },
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(1c) BROAD PHASE \u2014 the station-to-cell ASSIGNMENT set = the bin-Skolem EQUI-join. The index-set-producing aggregate (bool_and_or, distinct:true, id `assignment_set` referenced by assignments.from_faq) ranges station i and cell j, the join keeps only (i,j) whose bin keys are EQUAL, skolem(\"pair\", i, j) names each assignment, the `true` body marks membership. Integer bin keys \u21d2 the assignment set is byte-identical across bindings in the \u00a75.7 sorted order. No spatial-index op in the IR (acceleration is a physical-operator concern).",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "pair_exists",
+              "p"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "bool_and_or",
+            "output_idx": [
+              "p"
+            ],
+            "ranges": {
+              "i": {
+                "from": "stations"
+              },
+              "j": {
+                "from": "cells"
+              }
+            },
+            "args": [
+              "station_bin",
+              "cell_bin"
+            ],
+            "expr": {
+              "op": "true",
+              "args": []
+            },
+            "id": "assignment_set",
+            "distinct": true,
+            "join": [
+              {
+                "on": [
+                  [
+                    "station_bin",
+                    "cell_bin"
+                  ]
+                ]
+              }
+            ],
+            "key": {
+              "op": "skolem",
+              "args": [
+                "pair",
+                "i",
+                "j"
+              ]
+            }
+          }
+        },
+        {
+          "_comment": "(2) COUNT \u2014 count[j] = \u03a3_i 1 over the buffer-gated assignment join (sum_product with a constant 1.0 body): the per-cell number of contributing stations. join.on [[station_bin,cell_bin]] admits (i,j) iff station_bin[i] == cell_bin[j] (the F3 buffer-gated join, \u00a75.3). Zero IC \u21d2 du[count[j]] = count[j]; the test asserts it reproduces the build-once count_denom.",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "j"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "count",
+                    "j"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "j": [
+                1,
+                3
+              ]
+            }
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "j"
+            ],
+            "ranges": {
+              "i": {
+                "from": "stations"
+              },
+              "j": {
+                "from": "cells"
+              }
+            },
+            "args": [
+              "station_bin",
+              "cell_bin"
+            ],
+            "expr": 1.0,
+            "join": [
+              {
+                "on": [
+                  [
+                    "station_bin",
+                    "cell_bin"
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "(3) AVERAGE + FILL \u2014 F_tgt[j] = ifelse(count_denom[j] > 0, \u03a3_i station_val[i]/count_denom[j], missing_value). The divide rides INSIDE the group-by-`j` sum_product over the SAME bin-Skolem buffer-gated join (uniform weight 1/count_denom[j], \u03a3_i W_ij = 1 \u2014 EXACTLY like conservative's normalize-by-dst_areas); the missing_value fill rides AFTER as a cell-level ifelse on the build-once count. An empty cell contributes no terms (\u03a3 = 0) and short-circuits to missing_value \u2014 never 0/0. Zero IC \u21d2 du[F_tgt[j]] = F_tgt[j].",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "j"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "j": [
+                1,
+                3
+              ]
+            }
+          },
+          "rhs": {
+            "op": "ifelse",
+            "args": [
+              {
+                "op": ">",
+                "args": [
+                  {
+                    "op": "index",
+                    "args": [
+                      "count_denom",
+                      "j"
+                    ]
+                  },
+                  0.0
+                ]
+              },
+              {
+                "op": "index",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "semiring": "sum_product",
+                    "output_idx": [
+                      "j"
+                    ],
+                    "ranges": {
+                      "i": {
+                        "from": "stations"
+                      },
+                      "j": {
+                        "from": "cells"
+                      }
+                    },
+                    "args": [
+                      "station_val",
+                      "count_denom",
+                      "station_bin",
+                      "cell_bin"
+                    ],
+                    "expr": {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "station_val",
+                            "i"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "count_denom",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "join": [
+                      {
+                        "on": [
+                          [
+                            "station_bin",
+                            "cell_bin"
+                          ]
+                        ]
+                      }
+                    ]
+                  },
+                  "j"
+                ]
+              },
+              "missing_value"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
