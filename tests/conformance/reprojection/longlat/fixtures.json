@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "family": "reprojection",
+  "model": "longlat",
+  "esm": "reprojection/longlat.esm",
+  "esm_model_name": "LongLat",
+  "reference_binding": "julia",
+  "tolerance": {
+    "forward_absolute": 1e-12,
+    "roundtrip_absolute": 1e-12,
+    "notes": "longlat is the geographic WGS84 identity: forward x = lon - lon_0, forward y = lat; inverse-of-forward = identity. The maps are exact subtractions/additions of Float64 degrees, so at the integer-valued coords/lon_0 below every value is byte-exact; the 1e-12 absolute band is a conservative cross-binding floor (RFC pure-io-data-loaders §8: 'cross-binding byte-identical where the closed-form is exact'). The reference binding drives reprojection/longlat.esm through the ESS engine via the zero-IC surfacing idiom (d(forward_x)/dt = proj_x from a zero IC, so du = the map value)."
+  },
+  "coords": [
+    [-120.0, -45.0],
+    [0.0, 0.0],
+    [75.0, 60.0],
+    [180.0, -90.0],
+    [-179.0, 89.0]
+  ],
+  "cases": [
+    {
+      "name": "wgs84_lon0_0",
+      "lon_0": 0.0,
+      "notes": "WGS84 default central meridian: the forward map IS the geographic identity (x = lon) and the round-trip equals the input EXACTLY."
+    },
+    {
+      "name": "shifted_lon0_10",
+      "lon_0": 10.0,
+      "notes": "Non-zero central meridian: lon_0 is LOAD-BEARING (forward x = lon - 10 != lon), the declarative-or-fail proof the format binds a parameterized transform; the inverse-of-forward round-trip stays the identity."
+    },
+    {
+      "name": "shifted_lon0_neg73p5",
+      "lon_0": -73.5,
+      "notes": "Fractional central meridian (still exactly representable): forward x = lon + 73.5."
+    },
+    {
+      "name": "shifted_lon0_180",
+      "lon_0": 180.0,
+      "notes": "Antimeridian central meridian: forward x = lon - 180 (no longitude wrapping in the identity projection)."
+    }
+  ]
+}

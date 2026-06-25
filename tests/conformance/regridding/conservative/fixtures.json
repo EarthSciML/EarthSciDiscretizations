@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "family": "regridding",
+  "model": "conservative",
+  "esm": "regridding/conservative_regrid_overlap_join.esm",
+  "esm_model_name": "ConservativeRegridOverlapJoin",
+  "reference_binding": "julia",
+  "manifold": "spherical",
+  "tolerance": {
+    "partition_of_unity_absolute": 1e-12,
+    "conservation_relative": 1e-12,
+    "area_relative": 1e-9,
+    "notes": "Conservative overlap regridder (RFC pure-io-data-loaders §8 + CONFORMANCE_SPEC §5.8). The PRIMARY cross-binding gate is the two PHYSICAL INVARIANTS — global conservation (Σ_j A_j·F_tgt = Σ_i A_i·F_src) and partition-of-unity (Σ_i W_ij = 1) — which are exact BY CONSTRUCTION (both sides from the same engine-computed overlap areas) and therefore binding-independent. Per §5.8 the per-pair overlap areas A_ij are floating-point polygon-clip results (GeometryOps/Julia, S2/Python+Rust) and are tolerance-based, NOT byte-identical; the golden A_j/F_tgt are the reference-binding (Julia/GeometryOps) values, compared only to area_relative. The integer bin-Skolem candidate set is byte-identical per §5.5 (verified by the co-located kernel test)."
+  },
+  "dx": 2.0,
+  "dy": 2.0,
+  "atol": 1e-15,
+  "F_src": [10.0, 20.0, 30.0],
+  "src_rep_lon": [0.0, 1.0, 2.0],
+  "src_rep_lat": [0.0, 0.0, 0.0],
+  "tgt_rep_lon": [0.0, 1.5, 2.0],
+  "tgt_rep_lat": [0.0, 0.0, 0.0],
+  "src_polys": [
+    [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+    [[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0]],
+    [[2.0, 0.0], [3.0, 0.0], [3.0, 1.0], [2.0, 1.0]]
+  ],
+  "tgt_polys": [
+    [[0.0, 0.0], [1.5, 0.0], [1.5, 1.0], [0.0, 1.0]],
+    [[1.5, 0.0], [2.0, 0.0], [2.0, 1.0], [1.5, 1.0]],
+    [[2.0, 0.0], [3.0, 0.0], [3.0, 1.0], [2.0, 1.0]]
+  ],
+  "narrow_phase_rep": { "src": 2, "tgt": 1, "note": "1-based src 2 ∩ tgt 1 = lon[1,1.5]×lat[0,1], the fractional representative overlap" },
+  "notes": "3 source + 3 target axis-aligned spherical cells (CCW lon/lat rings, degrees) in a thin equatorial band lat∈[0,1]°; the target grid refines the source within each lon-bin. With dx=dy=2 the bins are (floor(rep_lon/2),floor(rep_lat/2)): src/tgt cells 1,2 in lon-bin 0, cell 3 in lon-bin 1 — so the broad phase is load-bearing."
+}
