@@ -1,0 +1,779 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "bspline_regrid",
+    "description": "Staggered-grid B-spline interpolating regridder (the EarthSciData InterpolatingRegridder), RFC pure-io-data-loaders \u00a75.2 / \u00a78 / bead esd-47z.3. The kernel for cell-edge / face-staggered fields (e.g. Arakawa-C wind components U,V) regridded from a uniform source grid onto staggered target locations. It is a `sum_product` interpolation FAQ over a fixed-offset B-spline stencil whose interpolation-weight factor is the STATIC-UNROLL degree-d Lagrange cardinal polynomial in the per-target local coordinate `s` \u2014 closed-form, no transcendentals, no iterative/recursive de-Boor prefilter solve, no per-binding kernel (the same polynomial-reconstruction-as-arrayop idiom as discretizations/finite_volume/flux_1d_ppm.json). The degree is build-time-constant, so the (d+1)-term weighted sum is fully unrolled. Degree-1 is the linear/bilinear special case (a separate `bilinear` kernel is therefore NOT added \u2014 it is redundant). The weights partition unity and REPRODUCE POLYNOMIALS OF THE SPLINE DEGREE EXACTLY on the staggered target locations (the Lagrange property \u2014 the \u00a78 B-spline conformance invariant). Each target value is F_tgt[j] = SUM_k w_k(s[j]) * F_src[base[j]+k]: an index-gather (F_src at the host-derived base[j]+k offsets, folded at build time) and a polynomial weighted sum. Models: BSplineRegridLinear1D (degree 1, 1-D), BSplineRegridCubic1D (degree 3, 1-D), BSplineRegridBilinear2D (degree-1 tensor product, the Arakawa-C staggered case). Each is a zero-IC constant-RHS D-equation so du = f!(u0) is the regridded field, evaluated through the ESS build_evaluator (the conservative_regrid_overlap_join.esm assembly precedent). The host derives base/s from the source and target grid geometry (the structural plumbing the engine coordinates rather than subsumes); a UNIFORM source grid is assumed so the local-coordinate node positions are 0..d."
+  },
+  "models": {
+    "BSplineRegridLinear1D": {
+      "index_sets": {
+        "src_nodes": {
+          "kind": "interval",
+          "size": 5
+        },
+        "tgt_locs": {
+          "kind": "interval",
+          "size": 4
+        }
+      },
+      "variables": {
+        "F_tgt": {
+          "type": "state",
+          "shape": [
+            "tgt_locs"
+          ],
+          "description": "Regridded field (the only declared variable \u2014 the integrated state). Zero IC + constant RHS => du[F_tgt[j]] = the interpolated value (the conservative-regridder assembly precedent)."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "Degree-1 (LINEAR) B-spline interpolation = the linear B-spline with data as control points = exact linear interpolation. F_tgt[j] = (1-s)*F_src[base] + s*F_src[base+1]. The two weights {1-s, s} are the degree-1 Lagrange cardinal polynomials; they partition unity (sum to 1) and reproduce linear fields EXACTLY. At s=0.5 they are {1/2, 1/2} \u2014 the cell-face average. This is the kernel `bilinear` (the 2-D model) is the tensor product of. INPUTS (host-supplied const_arrays, referenced in the equation but NOT declared as variables \u2014 the integral_probe Check-4 idiom: a non-geometry / non-value-invention model supplies its backing arrays through the build_evaluator `const_arrays` kwarg rather than as shaped `parameter`s, which the tree-walk reserves for the geometry/VI path): F_src[i] \u2014 source field on a UNIFORM 1-D grid of 5 nodes (node i at x0+(i-1)*h); base[j] \u2014 1-based index of the LEFT stencil node for target j (the index-gather origin, host-derived from the two grids' geometry, folds to an Int at build time); s[j] \u2014 LOCAL fractional coordinate in [0,1) of the staggered target within its source interval [base, base+1] (s=0.5 = a cell face exactly midway between two source nodes, the Arakawa-C staggering point).",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "j"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "j": [
+                1,
+                4
+              ]
+            }
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "j"
+            ],
+            "ranges": {
+              "j": {
+                "from": "tgt_locs"
+              }
+            },
+            "args": [
+              "F_src",
+              "base",
+              "s"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "s",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "index",
+                          "args": [
+                            "base",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "s",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "BSplineRegridCubic1D": {
+      "index_sets": {
+        "src_nodes": {
+          "kind": "interval",
+          "size": 7
+        },
+        "tgt_locs": {
+          "kind": "interval",
+          "size": 4
+        }
+      },
+      "variables": {
+        "F_tgt": {
+          "type": "state",
+          "shape": [
+            "tgt_locs"
+          ],
+          "description": "Regridded field (the only declared variable). Zero IC + constant RHS => du[F_tgt[j]] = the cubic-interpolated value."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "Degree-3 (CUBIC) local B-spline interpolation. F_tgt[j] = SUM_k w_k(s)*F_src[base+k], k=0..3. The four w_k are the STATIC-UNROLL degree-3 Lagrange cardinal polynomials in the local coordinate s (closed form, no de-Boor prefilter solve; the degree is build-time-constant so the 4-term sum is fully unrolled \u2014 exactly the flux_1d_ppm.json polynomial-reconstruction idiom). They partition unity and reproduce cubic fields EXACTLY. w0=-s(s-1)(s-2)/6, w1=(s+1)(s-1)(s-2)/2, w2=-(s+1)s(s-2)/2, w3=(s+1)s(s-1)/6. INPUTS (host const_arrays, referenced not declared \u2014 see the linear model's note): F_src[i] \u2014 source field on a UNIFORM 1-D grid of 7 nodes; the 4-node stencil reads F_src[base..base+3] (index-gather, folded at build time). base[j] \u2014 1-based index of the LEFTMOST of the 4 centered stencil nodes; the target sits in the central interval [base+1, base+2], so base+3 must stay in range (host clamps near boundaries). s[j] \u2014 LOCAL fractional coordinate in [0,1) within [base+1, base+2] (s=0.5 => the {-1/16,9/16,9/16,-1/16} face weights).",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "j"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "j": [
+                1,
+                4
+              ]
+            }
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "j"
+            ],
+            "ranges": {
+              "j": {
+                "from": "tgt_locs"
+              }
+            },
+            "args": [
+              "F_src",
+              "base",
+              "s"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            -1,
+                            6
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "s",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "index",
+                          "args": [
+                            "base",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            2
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            -1,
+                            2
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "s",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base",
+                                "j"
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            6
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "s",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "s",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base",
+                                "j"
+                              ]
+                            },
+                            3
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "BSplineRegridBilinear2D": {
+      "index_sets": {
+        "src_x": {
+          "kind": "interval",
+          "size": 4
+        },
+        "src_y": {
+          "kind": "interval",
+          "size": 4
+        },
+        "tgt_locs": {
+          "kind": "interval",
+          "size": 4
+        }
+      },
+      "variables": {
+        "F_tgt": {
+          "type": "state",
+          "shape": [
+            "tgt_locs"
+          ],
+          "description": "Regridded staggered field (the only declared variable). Zero IC + constant RHS => du[F_tgt[j]] = the bilinear-interpolated value."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "BILINEAR = the degree-1 B-spline TENSOR PRODUCT (RFC: 'a plain bilinear kernel is the degree-1 special case of this B-spline and would be redundant'). F_tgt[j] = SUM_{ax,ay} Wx_ax(s_x)*Wy_ay(s_y)*F_src[base_x+ax, base_y+ay]; Wx = {1-s_x, s_x}, Wy = {1-s_y, s_y}. Each axis weight is the degree-1 Lagrange polynomial; the product partitions unity and reproduces BILINEAR fields (a + b*x + c*y + d*x*y) EXACTLY. At s_x=s_y=0.5 the four weights are {1/4,1/4,1/4,1/4} \u2014 the cell-center average a C-grid staggering uses. INPUTS (host const_arrays, referenced not declared \u2014 see the linear model's note): F_src[i,k] \u2014 source field on a UNIFORM 2-D grid (4x4, e.g. a C-grid wind component); the 2x2 stencil reads F_src[base_x+ax, base_y+ay], ax,ay in {0,1} (tensor-product index-gather). base_x[j], base_y[j] \u2014 1-based left-node indices in x / y for each target (gather origins). s_x[j], s_y[j] \u2014 LOCAL fractional coordinates in [0,1) (s_x=s_y=0.5 => the 4-point average, cell-center staggering).",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "j"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "j": [
+                1,
+                4
+              ]
+            }
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "j"
+            ],
+            "ranges": {
+              "j": {
+                "from": "tgt_locs"
+              }
+            },
+            "args": [
+              "F_src",
+              "base_x",
+              "base_y",
+              "s_x",
+              "s_y"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "s_x",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "s_y",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "index",
+                          "args": [
+                            "base_x",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "base_y",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "s_x",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "s_y",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base_x",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "base_y",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "s_x",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "s_y",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "index",
+                          "args": [
+                            "base_x",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base_y",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "s_x",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "s_y",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base_x",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "base_y",
+                                "j"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
