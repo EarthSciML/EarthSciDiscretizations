@@ -1,0 +1,870 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "lambert_conformal_construction",
+    "description": "Projected-grid construction for the GDD Grid `crs` family (RFC pure-io-data-loaders §5.3, bead esd-47z.5): the cell-corner geographic coordinates of a projected native grid, produced by applying the spherical Lambert Conformal Conic INVERSE (reprojection/lambert_conformal.esm, esd-47z.2) to a regular projected (x,y) lattice. A projected grid is topologically `cartesian` (a uniform lattice in projected metres) carrying a `crs` descriptor (projection=lambert_conformal, the WRF/NEI2016 {lat_1, lat_2, lat_0, lon_0, R} parameters, ess-v9a.2); CONSTRUCTING it means recovering the (lon, lat) of every cell corner — the grid's geographic geometry — by inverting the projection at each lattice node. The inverse is CLOSED-FORM (Snyder 1987 eqs. 15-5..15-9 = PROJ `+proj=lcc +R=...` for the sphere), NO iteration: from the projected corner (x, y) and the cone constants (n, F, R·F, ρ₀) the same crs parameters fix, ρ = sign(n)·sqrt(x²+(ρ₀−y)²); θ = atan2(x, ρ₀−y); lon = lon_0 + (θ/n)·180/π; lat = (2·atan((R·F/ρ)^(1/n)) − π/2)·180/π. Like the rest of the reprojection/ family this is a plain declarative .esm over the EXISTING expression operator set (sin/cos/tan/atan/atan2/log/^/sqrt/sign + the built-in `pi` op) with NO new rule-schema, scaffold, validation, resolver, or per-binding code — and, like longlat.esm and lambert_conformal.esm, a SCALAR point-wise kernel: the projected corner (proj_x, proj_y) is a scalar `parameter` pair and the recovered (geo_lon, geo_lat) are scalar `observed`s, because a coordinate transform is a point-wise formula (the tree-walk evaluator admits array-shaped parameters/observeds only under an active geometry/value-invention kernel, which a pure transform has not; a binding sweeps the kernel over the lattice's corner array at the runtime layer — here the conformance harness walks the (Nx+1)×(Ny+1) corner grid). The cone constants depend ONLY on the crs parameters, so the WRF (30/60/38.999996/−97/6370000, n≈0.7156) and NEI2016 (33/45/40/−97/6370997, n≈0.6305) grids flow through this ONE construction rule with different geographic geometry — the declarative-or-fail proof that the .esm binds a genuinely parameterized construction, not a hard-coded grid. The corner (geo_lon, geo_lat) are surfaced through build_evaluator via the reprojection family's zero-IC state idiom: a state whose D-equation is d(state)/dt = <observed> from a zero IC, so du = f!(u0) IS the recovered coordinate (corner_lon/corner_lat). The construction is the INVERSE half of the projection; the round-trip the acceptance checks — that forward∘inverse restores the projected lattice — is closed by composing this construction with the EXISTING reprojection/lambert_conformal.esm FORWARD map (the two reprojection-family members compose to the identity because they share the cone constants by construction). NO NEW PHYSICAL OPERATOR: composes from +,−,*,/,^,atan,atan2,log,cos,tan,sqrt,sign,pi over scalar parameter/observed/state — all already landed. The first member of the grids/lambert_conformal/ projected-grid family, and the GDD Grid `crs` descriptor's first consumer.",
+    "authors": [
+      "earthscidiscretizations/gastown.furiosa"
+    ],
+    "tags": [
+      "grids",
+      "projected-grid",
+      "grid-construction",
+      "crs",
+      "lambert-conformal-conic",
+      "lcc",
+      "inverse-projection",
+      "spherical",
+      "cartesian",
+      "wrf",
+      "nei2016",
+      "cell-corner",
+      "closed-form",
+      "parameterized-construction",
+      "observed",
+      "declarative",
+      "pure-io-data-loaders",
+      "esd-47z.5"
+    ]
+  },
+  "models": {
+    "LambertConformalGridConstruction": {
+      "variables": {
+        "proj_x": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Projected easting (metres) of the grid CORNER being inverted — the x of a node of the regular projected lattice (x = x0 + (i−1)·dx). Scalar parameter driven via parameter_overrides; the conformance harness sweeps the kernel over the (Nx+1)×(Ny+1) corner array (the longlat/lambert_conformal scalar-kernel precedent — a binding applies the point map over the lattice at the runtime layer)."
+        },
+        "proj_y": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Projected northing (metres) of the grid CORNER being inverted — the y of a node of the regular projected lattice (y = y0 + (j−1)·dy)."
+        },
+        "lat_1": {
+          "type": "parameter",
+          "shape": [],
+          "description": "First standard parallel (degrees) of the grid's crs, PROJ `+lat_1`. WRF=30, NEI2016=33. A crs PARAMETER consumed verbatim from the Grid `crs.parameters` descriptor (ess-v9a.2); the two real grids drive the one construction with different values."
+        },
+        "lat_2": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Second standard parallel (degrees) of the grid's crs, PROJ `+lat_2`. WRF=60, NEI2016=45."
+        },
+        "lat_0": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Latitude of origin (degrees) of the grid's crs, PROJ `+lat_0`. WRF=38.999996, NEI2016=40. The latitude whose parallel maps to projected northing y=0; sets ρ₀."
+        },
+        "lon_0": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Central meridian / longitude of origin (degrees) of the grid's crs, PROJ `+lon_0`. Both grids use −97. The projected easting x=0 column inverts back to this longitude."
+        },
+        "R": {
+          "type": "parameter",
+          "shape": [],
+          "description": "Sphere radius (metres) of the grid's crs datum (`datum: sphere`, PROJ `+R`). WRF=6370000, NEI2016=6370997. Sets the absolute scale R·F of every radius."
+        },
+        "deg2rad": {
+          "type": "observed",
+          "shape": [],
+          "description": "Degrees→radians conversion factor π/180. The crs standard parallels and origin (lat_1/lat_2/lat_0/lon_0) are in DEGREES; Snyder's cone trigonometry is in radians. A constant observed (π is the built-in `pi` op).",
+          "expression": {
+            "op": "/",
+            "args": [
+              3.141592653589793,
+              180.0
+            ]
+          }
+        },
+        "rad2deg": {
+          "type": "observed",
+          "shape": [],
+          "description": "Radians→degrees conversion factor 180/π — the inverse of deg2rad. Converts the closed-form inverse's radian longitude/latitude back to the degrees the corner geometry is reported in.",
+          "expression": {
+            "op": "/",
+            "args": [
+              180.0,
+              3.141592653589793
+            ]
+          }
+        },
+        "phi1": {
+          "type": "observed",
+          "shape": [],
+          "description": "First standard parallel φ₁ in radians (lat_1·π/180). Snyder's φ₁; drives the cone constant n and the scale factor F.",
+          "expression": {
+            "op": "*",
+            "args": [
+              "lat_1",
+              "deg2rad"
+            ]
+          }
+        },
+        "phi2": {
+          "type": "observed",
+          "shape": [],
+          "description": "Second standard parallel φ₂ in radians (lat_2·π/180). With φ₁ it fixes the cone constant n.",
+          "expression": {
+            "op": "*",
+            "args": [
+              "lat_2",
+              "deg2rad"
+            ]
+          }
+        },
+        "phi0": {
+          "type": "observed",
+          "shape": [],
+          "description": "Origin latitude φ₀ in radians (lat_0·π/180). Sets ρ₀, the radius from the cone apex to the latitude that maps to projected northing y=0.",
+          "expression": {
+            "op": "*",
+            "args": [
+              "lat_0",
+              "deg2rad"
+            ]
+          }
+        },
+        "t1": {
+          "type": "observed",
+          "shape": [],
+          "description": "Conformal tangent at φ₁: tan(π/4 + φ₁/2). Appears in both n and F; named once so the cone-constant chain stays readable.",
+          "expression": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi1",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "t2": {
+          "type": "observed",
+          "shape": [],
+          "description": "Conformal tangent at φ₂: tan(π/4 + φ₂/2). The φ₂ term of the cone constant.",
+          "expression": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi2",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "t0": {
+          "type": "observed",
+          "shape": [],
+          "description": "Conformal tangent at the origin latitude: tan(π/4 + φ₀/2). Sets ρ₀.",
+          "expression": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi0",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "n": {
+          "type": "observed",
+          "shape": [],
+          "description": "Cone constant n = log(cos φ₁ / cos φ₂) / log( tan(π/4+φ₂/2) / tan(π/4+φ₁/2) ) (Snyder). Depends only on the two standard parallels of the grid's crs, so it differs between the WRF (≈0.7156) and NEI2016 (≈0.6305) grids — what makes the construction genuinely parameterized rather than a hard-coded grid.",
+          "expression": {
+            "op": "/",
+            "args": [
+              {
+                "op": "log",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "cos",
+                        "args": [
+                          "phi1"
+                        ]
+                      },
+                      {
+                        "op": "cos",
+                        "args": [
+                          "phi2"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "log",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      "t2",
+                      "t1"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "F": {
+          "type": "observed",
+          "shape": [],
+          "description": "Scale factor F = cos φ₁ · tan(π/4+φ₁/2)^n / n (Snyder). The constant tying the cone to the sphere; combined with R it sets every radius.",
+          "expression": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "cos",
+                    "args": [
+                      "phi1"
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      "t1",
+                      "n"
+                    ]
+                  }
+                ]
+              },
+              "n"
+            ]
+          }
+        },
+        "RF": {
+          "type": "observed",
+          "shape": [],
+          "description": "R·F — the radius scale in metres (R is the crs sphere radius). A convenience observed: ρ₀ and the recovered latitude both read R·F, so naming it keeps them simple.",
+          "expression": {
+            "op": "*",
+            "args": [
+              "R",
+              "F"
+            ]
+          }
+        },
+        "rho0": {
+          "type": "observed",
+          "shape": [],
+          "description": "ρ₀ = R·F / tan(π/4+φ₀/2)^n (Snyder). Radius from the cone apex to the origin parallel; projected northing y is measured down from here, so ρ₀−y is the corner's distance up from the apex.",
+          "expression": {
+            "op": "/",
+            "args": [
+              "RF",
+              {
+                "op": "^",
+                "args": [
+                  "t0",
+                  "n"
+                ]
+              }
+            ]
+          }
+        },
+        "rho0_my": {
+          "type": "observed",
+          "shape": [],
+          "description": "ρ₀ − y, the corner's projected northing measured UP from the cone apex (y is the input proj_y). The second argument of the polar-angle atan2 and a leg of the radius hypotenuse. Equals ρ·cos θ at the true corner.",
+          "expression": {
+            "op": "-",
+            "args": [
+              "rho0",
+              "proj_y"
+            ]
+          }
+        },
+        "rho_inv": {
+          "type": "observed",
+          "shape": [],
+          "description": "INVERSE radius ρ = sign(n)·sqrt(x² + (ρ₀−y)²) (Snyder eq. 15-7), x = proj_x. Recovers the cone radius of the corner from its projected coordinates; sign(n) keeps ρ on the correct side for either hemisphere's cone.",
+          "expression": {
+            "op": "*",
+            "args": [
+              {
+                "op": "sign",
+                "args": [
+                  "n"
+                ]
+              },
+              {
+                "op": "sqrt",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "^",
+                        "args": [
+                          "proj_x",
+                          2.0
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          "rho0_my",
+                          2.0
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "theta_inv": {
+          "type": "observed",
+          "shape": [],
+          "description": "INVERSE polar angle θ = atan2(x, ρ₀−y) (Snyder eq. 15-9), x = proj_x. The cone angle of the corner; lon recovers as lon_0 + θ/n.",
+          "expression": {
+            "op": "atan2",
+            "args": [
+              "proj_x",
+              "rho0_my"
+            ]
+          }
+        },
+        "geo_lon": {
+          "type": "observed",
+          "shape": [],
+          "description": "RECOVERED corner longitude (degrees): lon = lon_0 + (θ/n)·180/π (Snyder eq. 15-5). The x=0 corner column inverts to exactly lon_0 (θ=0). This IS the inverse longitude of reprojection/lambert_conformal.esm, here applied to a lattice corner instead of a round-tripped forward point.",
+          "expression": {
+            "op": "+",
+            "args": [
+              "lon_0",
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      "theta_inv",
+                      "n"
+                    ]
+                  },
+                  "rad2deg"
+                ]
+              }
+            ]
+          }
+        },
+        "geo_lat": {
+          "type": "observed",
+          "shape": [],
+          "description": "RECOVERED corner latitude (degrees): lat = (2·atan( (R·F/ρ)^(1/n) ) − π/2)·180/π (Snyder eq. 15-8). Since R·F/ρ = tan(π/4+φ/2)^n at the true corner, this returns the corner's geographic latitude. The inverse latitude of reprojection/lambert_conformal.esm applied to the lattice corner.",
+          "expression": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      2.0,
+                      {
+                        "op": "atan",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "/",
+                                "args": [
+                                  "RF",
+                                  "rho_inv"
+                                ]
+                              },
+                              {
+                                "op": "/",
+                                "args": [
+                                  1.0,
+                                  "n"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      2.0
+                    ]
+                  }
+                ]
+              },
+              "rad2deg"
+            ]
+          }
+        },
+        "corner_lon": {
+          "type": "state",
+          "shape": [],
+          "description": "SURFACING state for the recovered corner longitude: d(corner_lon)/dt = geo_lon from a zero IC ⇒ du = geo_lon. The constructed grid's cell-corner longitude (degrees) at the projected node (proj_x, proj_y). Acceptance: matches the proj4/Snyder native geometry, and forward-projects back to proj_x."
+        },
+        "corner_lat": {
+          "type": "state",
+          "shape": [],
+          "description": "SURFACING state for the recovered corner latitude: d(corner_lat)/dt = geo_lat ⇒ du = geo_lat. The constructed grid's cell-corner latitude (degrees). Acceptance: matches the native geometry, and forward-projects back to proj_y."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "Degrees→radians conversion factor π/180. The crs angles (standard parallels, origin) are in DEGREES; Snyder's cone trigonometry is in radians.",
+          "lhs": "deg2rad",
+          "rhs": {
+            "op": "/",
+            "args": [
+              3.141592653589793,
+              180.0
+            ]
+          }
+        },
+        {
+          "_comment": "Radians→degrees conversion factor 180/π — the inverse of deg2rad. Converts the recovered radian lon/lat back to degrees.",
+          "lhs": "rad2deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              180.0,
+              3.141592653589793
+            ]
+          }
+        },
+        {
+          "_comment": "First standard parallel φ₁ in radians (lat_1·π/180). Drives the cone constant n and the scale factor F.",
+          "lhs": "phi1",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "lat_1",
+              "deg2rad"
+            ]
+          }
+        },
+        {
+          "_comment": "Second standard parallel φ₂ in radians (lat_2·π/180). With φ₁ it fixes the cone constant n.",
+          "lhs": "phi2",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "lat_2",
+              "deg2rad"
+            ]
+          }
+        },
+        {
+          "_comment": "Origin latitude φ₀ in radians (lat_0·π/180). Sets ρ₀.",
+          "lhs": "phi0",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "lat_0",
+              "deg2rad"
+            ]
+          }
+        },
+        {
+          "_comment": "Conformal tangent at φ₁: tan(π/4 + φ₁/2). Appears in both n and F.",
+          "lhs": "t1",
+          "rhs": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi1",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "Conformal tangent at φ₂: tan(π/4 + φ₂/2). The φ₂ term of the cone constant.",
+          "lhs": "t2",
+          "rhs": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi2",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "Conformal tangent at the origin latitude: tan(π/4 + φ₀/2). Sets ρ₀.",
+          "lhs": "t0",
+          "rhs": {
+            "op": "tan",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      4.0
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      "phi0",
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "Cone constant n = log(cos φ₁ / cos φ₂) / log( tan(π/4+φ₂/2) / tan(π/4+φ₁/2) ) (Snyder). Depends only on the crs standard parallels; differs WRF (≈0.7156) vs NEI2016 (≈0.6305).",
+          "lhs": "n",
+          "rhs": {
+            "op": "/",
+            "args": [
+              {
+                "op": "log",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "cos",
+                        "args": [
+                          "phi1"
+                        ]
+                      },
+                      {
+                        "op": "cos",
+                        "args": [
+                          "phi2"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "log",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      "t2",
+                      "t1"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "Scale factor F = cos φ₁ · tan(π/4+φ₁/2)^n / n (Snyder). Combined with R it sets every radius.",
+          "lhs": "F",
+          "rhs": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "cos",
+                    "args": [
+                      "phi1"
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      "t1",
+                      "n"
+                    ]
+                  }
+                ]
+              },
+              "n"
+            ]
+          }
+        },
+        {
+          "_comment": "R·F — the radius scale in metres (R is the crs sphere radius). ρ₀ and the recovered latitude both read it.",
+          "lhs": "RF",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "R",
+              "F"
+            ]
+          }
+        },
+        {
+          "_comment": "ρ₀ = R·F / tan(π/4+φ₀/2)^n (Snyder). Radius from the cone apex to the origin parallel; projected northing y is measured down from here.",
+          "lhs": "rho0",
+          "rhs": {
+            "op": "/",
+            "args": [
+              "RF",
+              {
+                "op": "^",
+                "args": [
+                  "t0",
+                  "n"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "ρ₀ − y, the corner's projected northing measured UP from the cone apex (y = proj_y). Second argument of the polar-angle atan2 and a leg of the radius hypotenuse.",
+          "lhs": "rho0_my",
+          "rhs": {
+            "op": "-",
+            "args": [
+              "rho0",
+              "proj_y"
+            ]
+          }
+        },
+        {
+          "_comment": "INVERSE radius ρ = sign(n)·sqrt(x² + (ρ₀−y)²) (Snyder eq. 15-7), x = proj_x. sign(n) keeps ρ on the correct side for either hemisphere's cone.",
+          "lhs": "rho_inv",
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "sign",
+                "args": [
+                  "n"
+                ]
+              },
+              {
+                "op": "sqrt",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "^",
+                        "args": [
+                          "proj_x",
+                          2.0
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          "rho0_my",
+                          2.0
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "INVERSE polar angle θ = atan2(x, ρ₀−y) (Snyder eq. 15-9), x = proj_x.",
+          "lhs": "theta_inv",
+          "rhs": {
+            "op": "atan2",
+            "args": [
+              "proj_x",
+              "rho0_my"
+            ]
+          }
+        },
+        {
+          "_comment": "RECOVERED corner longitude (degrees): lon = lon_0 + (θ/n)·180/π (Snyder eq. 15-5). The x=0 corner column inverts to exactly lon_0.",
+          "lhs": "geo_lon",
+          "rhs": {
+            "op": "+",
+            "args": [
+              "lon_0",
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      "theta_inv",
+                      "n"
+                    ]
+                  },
+                  "rad2deg"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "_comment": "RECOVERED corner latitude (degrees): lat = (2·atan( (R·F/ρ)^(1/n) ) − π/2)·180/π (Snyder eq. 15-8). R·F/ρ = tan(π/4+φ/2)^n at the true corner, so this returns the corner latitude.",
+          "lhs": "geo_lat",
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      2.0,
+                      {
+                        "op": "atan",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "/",
+                                "args": [
+                                  "RF",
+                                  "rho_inv"
+                                ]
+                              },
+                              {
+                                "op": "/",
+                                "args": [
+                                  1.0,
+                                  "n"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      2.0
+                    ]
+                  }
+                ]
+              },
+              "rad2deg"
+            ]
+          }
+        },
+        {
+          "_comment": "SURFACING state for the recovered corner longitude: d(corner_lon)/dt = geo_lon from a zero IC ⇒ du = geo_lon (the reprojection family's zero-IC read-off idiom).",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "corner_lon"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "geo_lon"
+        },
+        {
+          "_comment": "SURFACING state for the recovered corner latitude: d(corner_lat)/dt = geo_lat ⇒ du = geo_lat.",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "corner_lat"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "geo_lat"
+        }
+      ]
+    }
+  }
+}
