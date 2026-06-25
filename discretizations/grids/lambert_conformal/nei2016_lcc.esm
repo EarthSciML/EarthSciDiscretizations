@@ -1,0 +1,75 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "nei2016_lcc",
+    "description": "NEI2016 native Lambert Conformal Conic projected GDD Grid (RFC pure-io-data-loaders §4.2 + §5.3, bead esd-47z.5). The SECOND projected native grid in the grids/lambert_conformal/ family: topologically `cartesian` with the GDD Grid `crs` descriptor (ess-v9a.2) projection=lambert_conformal on a spherical datum and the real NEI2016 emissions-grid parameters {lat_1=33, lat_2=45, lat_0=40, lon_0=−97, R=6370997}. It shares the SAME projected lattice extent as wrf_lcc.esm (x0=−2.0e6, dx=1.0e6, Nx=4; y0=−1.5e6, dy=1.0e6, Ny=3) but a DIFFERENT crs — so applying the construction (rules/lambert_conformal_construction.esm) recovers DIFFERENT cell-corner geographic geometry from the identical (x,y) corner mesh. That is the declarative-or-fail proof the construction binds a genuinely PARAMETERIZED grid: WRF and NEI2016 share lon_0=−97 (so the x=0 corner column inverts to −97° in both) but differ in standard parallels (cone constant n≈0.7156 vs ≈0.6305), origin latitude, and radius, so every off-meridian corner lands at a different (lon, lat). The crs is orthogonal to the topological family (both grids are family=cartesian). ACCEPTANCE (esd-47z.5): this projected grid validates and round-trips (crs preserved), the construction matches the proj4/Snyder NEI2016 native geometry, forward∘inverse restores the lattice, and its corner geometry differs from wrf_lcc's off the shared central meridian. The placeholder model satisfies the 'models or reaction_systems required' constraint.",
+    "authors": [
+      "earthscidiscretizations/gastown.furiosa"
+    ],
+    "created": "2026-06-25T00:00:00Z",
+    "tags": [
+      "grids",
+      "projected-grid",
+      "crs",
+      "cartesian",
+      "lambert_conformal",
+      "lcc",
+      "spherical",
+      "nei2016",
+      "native-grid",
+      "pure-io-data-loaders",
+      "esd-47z.5"
+    ]
+  },
+  "models": {
+    "GridCarrier": {
+      "reference": {
+        "notes": "Placeholder model so the fixture satisfies the 'models or reaction_systems required' constraint; the projected grid `nei2016_lcc` is the subject of this fixture."
+      },
+      "variables": {
+        "T": {
+          "type": "state",
+          "units": "K",
+          "default": 273.15
+        }
+      },
+      "equations": [
+        {
+          "lhs": "D(T)",
+          "rhs": "0"
+        }
+      ]
+    }
+  },
+  "grids": {
+    "nei2016_lcc": {
+      "family": "cartesian",
+      "crs": {
+        "projection": "lambert_conformal",
+        "datum": "sphere",
+        "R": 6370997.0,
+        "parameters": {
+          "lat_1": 33.0,
+          "lat_2": 45.0,
+          "lat_0": 40.0,
+          "lon_0": -97.0
+        }
+      },
+      "description": "NEI2016 native Lambert Conformal Conic grid on a spherical datum (R=6370997 m). Topologically cartesian; same projected lattice as wrf_lcc, different crs parameters, so the construction recovers a different geographic geometry — the parameterization proof.",
+      "dimensions": ["x", "y"],
+      "extents": {
+        "x": {"n": "Nx", "spacing": "uniform"},
+        "y": {"n": "Ny", "spacing": "uniform"}
+      },
+      "locations": ["cell_center", "corner"],
+      "parameters": {
+        "Nx": {"default": 4, "description": "Number of grid cells along x (so Nx+1 = 5 corner nodes)."},
+        "Ny": {"default": 3, "description": "Number of grid cells along y (so Ny+1 = 4 corner nodes)."},
+        "x0": {"default": -2000000.0, "units": "m", "description": "Projected easting of the western corner column (lattice node i=1): x[i] = x0 + (i-1)*dx."},
+        "dx": {"default": 1000000.0, "units": "m", "description": "Uniform projected cell width along x (metres)."},
+        "y0": {"default": -1500000.0, "units": "m", "description": "Projected northing of the southern corner row (lattice node j=1): y[j] = y0 + (j-1)*dy."},
+        "dy": {"default": 1000000.0, "units": "m", "description": "Uniform projected cell width along y (metres)."}
+      }
+    }
+  }
+}

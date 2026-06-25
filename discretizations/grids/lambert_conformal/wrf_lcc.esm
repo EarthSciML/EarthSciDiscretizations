@@ -1,0 +1,75 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "wrf_lcc",
+    "description": "WRF native Lambert Conformal Conic projected GDD Grid (RFC pure-io-data-loaders §4.2 + §5.3, bead esd-47z.5). A PROJECTED native grid: topologically `cartesian` (a uniform lattice in projected metres) carrying the GDD Grid `crs` descriptor (ess-v9a.2) with projection=lambert_conformal on a spherical datum and the real WRF parameters {lat_1=30, lat_2=60, lat_0=38.999996, lon_0=−97, R=6370000}. The crs descriptor NAMES the projection and the parameters a downstream reprojection rule consumes; the grid itself performs no reprojection. CONSTRUCTING the grid's geographic geometry — the (lon, lat) of every cell corner — means applying the spherical-LCC INVERSE (rules/lambert_conformal_construction.esm) to this lattice's projected (x, y) corner nodes (closed-form, no iteration). The lattice is specified by the grid `parameters`: a regular (Nx+1)×(Ny+1) corner mesh with western/southern corner (x0, y0), uniform spacing (dx, dy), and Nx×Ny cells. Here a representative CONUS extent (x0=−2.0e6, dx=1.0e6, Nx=4; y0=−1.5e6, dy=1.0e6, Ny=3) — corners spanning lon∈[−126°,−68°], lat∈[23°,53°], well away from the singular far (south) pole. The GDD Grid `crs` descriptor is orthogonal to the topological family: this WRF grid and a plain lat-lon grid both have family=cartesian and differ only in crs. ACCEPTANCE (esd-47z.5): this projected grid VALIDATES and round-trips through the engine (crs preserved), the construction recovers cell-corner geometry that matches the proj4/Snyder WRF native geometry, and forward∘inverse (composing the construction with reprojection/lambert_conformal.esm) restores the projected lattice. The placeholder model satisfies the document's 'models or reaction_systems required' constraint; the grid is the subject of the fixture.",
+    "authors": [
+      "earthscidiscretizations/gastown.furiosa"
+    ],
+    "created": "2026-06-25T00:00:00Z",
+    "tags": [
+      "grids",
+      "projected-grid",
+      "crs",
+      "cartesian",
+      "lambert_conformal",
+      "lcc",
+      "spherical",
+      "wrf",
+      "native-grid",
+      "pure-io-data-loaders",
+      "esd-47z.5"
+    ]
+  },
+  "models": {
+    "GridCarrier": {
+      "reference": {
+        "notes": "Placeholder model so the fixture satisfies the 'models or reaction_systems required' constraint; the projected grid `wrf_lcc` is the subject of this fixture."
+      },
+      "variables": {
+        "T": {
+          "type": "state",
+          "units": "K",
+          "default": 273.15
+        }
+      },
+      "equations": [
+        {
+          "lhs": "D(T)",
+          "rhs": "0"
+        }
+      ]
+    }
+  },
+  "grids": {
+    "wrf_lcc": {
+      "family": "cartesian",
+      "crs": {
+        "projection": "lambert_conformal",
+        "datum": "sphere",
+        "R": 6370000.0,
+        "parameters": {
+          "lat_1": 30.0,
+          "lat_2": 60.0,
+          "lat_0": 38.999996,
+          "lon_0": -97.0
+        }
+      },
+      "description": "WRF native Lambert Conformal Conic grid on a spherical datum (R=6370000 m). Topologically cartesian; the crs descriptor names the projection and parameters the construction rule consumes to recover the cell-corner geographic geometry. The lattice parameters (x0, dx, Nx, y0, dy, Ny) define the regular projected (x,y) corner mesh the inverse is applied to.",
+      "dimensions": ["x", "y"],
+      "extents": {
+        "x": {"n": "Nx", "spacing": "uniform"},
+        "y": {"n": "Ny", "spacing": "uniform"}
+      },
+      "locations": ["cell_center", "corner"],
+      "parameters": {
+        "Nx": {"default": 4, "description": "Number of grid cells along x (so Nx+1 = 5 corner nodes)."},
+        "Ny": {"default": 3, "description": "Number of grid cells along y (so Ny+1 = 4 corner nodes)."},
+        "x0": {"default": -2000000.0, "units": "m", "description": "Projected easting of the western corner column (lattice node i=1): x[i] = x0 + (i-1)*dx."},
+        "dx": {"default": 1000000.0, "units": "m", "description": "Uniform projected cell width along x (metres)."},
+        "y0": {"default": -1500000.0, "units": "m", "description": "Projected northing of the southern corner row (lattice node j=1): y[j] = y0 + (j-1)*dy."},
+        "dy": {"default": 1000000.0, "units": "m", "description": "Uniform projected cell width along y (metres)."}
+      }
+    }
+  }
+}
