@@ -1,0 +1,161 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "lev_min_surface_reduce",
+    "description": "Declarative lev=min 3D->surface reduction (bead esd-khv, campfire-e2e C4 design spike 2026-06-26). Collapses a 3-D field F_3d[x,y,lev] to the 2-D surface field F_surf[x,y] at the level where the vertical coordinate is MINIMUM -- the ground_surface interface's dimension_mapping.constraints.lev={value:min}. Composed ENTIRELY from EXISTING aggregate vocab (sum_product + an inline min_sum reduction + ifelse + ==): NO new engine op, NO argmin/slice primitive -- the declarative-or-fail gate of the C4 spike PASSES (lev=min reduces to `aggregate`). The reduction is the value-at-argmin idiom: F_surf[x,y] = SUM_lev ifelse(lev_coord[lev] == lev_min, F_3d[x,y,lev], 0), where lev_min = MIN_k lev_coord[k] is an INLINE `min_sum` semiring aggregate (the closed registry's min reducer, identity +Inf). The equality indicator keeps exactly the one term whose coordinate equals the minimum (all other terms contribute the sum_product 0-identity), so the sum_product collapses lev to the argmin slice -- a genuine reduction the engine performs, not a host-supplied slice index. EXACTNESS: `min` returns one of the lev_coord elements bit-for-bit, so `lev_coord[lev] == lev_min` is a byte-exact float compare (true exactly at the argmin level), and the surfaced value is a verbatim F_3d gather -- the reduction is binding-INDEPENDENT and 0-ULP across bindings (the bspline_regrid family's closed-form-oracle tier, NOT the value-invention/geometry tiers). GENERALITY: `lev_coord` is the interface dimension's coordinate supplied by the host (the C4 driver). A monotone ascending coordinate (1..N or an ascending height) puts the min at lev 1 = the first slice; a descending/permuted coordinate puts it elsewhere -- the rule selects value:min wherever the minimum lands (the cross-binding fixture deliberately places it at an INTERIOR level so a first-slice shortcut fails the golden). PRECONDITION: a UNIQUE minimum (a strictly-monotone vertical coordinate, physically the case for pressure / height / model-level); a tie would surface the SUM of the tied levels (documented, not handled -- interfaces declare a single value:min level). The horizontal regrid (interfaces.<name>.regridding.method) is a SEPARATE, orthogonal step in the C4 driver (regridding/{bspline,conservative,point}_*.esm), NOT part of this lev reduction. INPUTS are host const_arrays referenced (not declared as shaped parameters -- the bspline_regrid / integral_probe Check-4 idiom: a non-geometry / non-value-invention model supplies its backing arrays through build_evaluator `const_arrays`, which the tree-walk reserves array shapes for the geometry/VI path): F_3d[x,y,lev] -- the 3-D source field; lev_coord[lev] -- the vertical-dimension coordinate. The single declared variable is the surfaced state F_surf, a zero-IC constant-RHS D-equation so du = f!(u0) IS the reduced field (the regridding-assembly precedent).",
+    "authors": [
+      "EarthSciDiscretizations/polecats/gastown.furiosa"
+    ],
+    "tags": [
+      "reduction",
+      "lev-min",
+      "ground-surface",
+      "3d-to-surface",
+      "dimension-mapping",
+      "value-min",
+      "argmin",
+      "aggregate",
+      "min_sum",
+      "sum_product",
+      "ifelse",
+      "campfire-e2e",
+      "conformance",
+      "esd-khv"
+    ]
+  },
+  "models": {
+    "LevMinSurfaceReduce": {
+      "index_sets": {
+        "x": {
+          "kind": "interval",
+          "size": 2
+        },
+        "y": {
+          "kind": "interval",
+          "size": 2
+        },
+        "levels": {
+          "kind": "interval",
+          "size": 3
+        }
+      },
+      "variables": {
+        "F_surf": {
+          "type": "state",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "The surfaced 2-D field: F_surf[x,y] = F_3d[x,y, argmin_lev lev_coord], the value of the 3-D field at the minimum-coordinate (ground_surface) level. The ONLY declared variable -- a zero-IC constant-RHS D-equation, so du[F_surf[x,y]] = f!(u0) IS the reduced surface field (the regridding-assembly zero-IC precedent). F_3d[x,y,lev] (the 3-D source field) and lev_coord[lev] (the vertical coordinate) are host const_arrays referenced in the equation but NOT declared as shaped parameters: a non-geometry / non-value-invention model supplies its backing arrays through build_evaluator's `const_arrays` kwarg (the bspline_regrid idiom), since the tree-walk evaluator reserves array-shaped parameters for the geometry / value-invention path."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "lev=min 3D->surface reduction. F_surf[x,y] = SUM_lev ifelse(lev_coord[lev] == lev_min, F_3d[x,y,lev], 0), an outer sum_product that CARRIES the spatial output (x,y) and CONTRACTS lev. The body's ifelse keeps the F_3d value only at the level whose coordinate equals lev_min (the inline min_sum aggregate MIN_k lev_coord[k], a scalar with no output index, ranging the levels); every other level contributes the sum_product additive identity 0, so the contraction collapses to the single argmin (ground_surface) slice. The min IS computed by the engine (reduce-to-aggregate, the declarative-or-fail gate), not supplied. `min` returns a lev_coord element verbatim, so the == picks exactly one level bit-exactly (unique-minimum precondition). Zero IC + constant RHS => du[F_surf[x,y]] = the surfaced value.",
+          "lhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "a",
+              "b"
+            ],
+            "expr": {
+              "op": "D",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F_surf",
+                    "a",
+                    "b"
+                  ]
+                }
+              ],
+              "wrt": "t"
+            },
+            "ranges": {
+              "a": [
+                1,
+                2
+              ],
+              "b": [
+                1,
+                2
+              ]
+            }
+          },
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [
+              "a",
+              "b"
+            ],
+            "ranges": {
+              "a": {
+                "from": "x"
+              },
+              "b": {
+                "from": "y"
+              },
+              "lev": {
+                "from": "levels"
+              }
+            },
+            "args": [
+              "F_3d",
+              "lev_coord"
+            ],
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "lev_coord",
+                        "lev"
+                      ]
+                    },
+                    {
+                      "op": "aggregate",
+                      "semiring": "min_sum",
+                      "output_idx": [],
+                      "ranges": {
+                        "k": {
+                          "from": "levels"
+                        }
+                      },
+                      "args": [
+                        "lev_coord"
+                      ],
+                      "expr": {
+                        "op": "index",
+                        "args": [
+                          "lev_coord",
+                          "k"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_3d",
+                    "a",
+                    "b",
+                    "lev"
+                  ]
+                },
+                0.0
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

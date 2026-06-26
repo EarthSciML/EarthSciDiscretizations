@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "family": "reduction",
+  "model": "lev_min",
+  "esm": "reduction/lev_min_surface_reduce.esm",
+  "esm_model_name": "LevMinSurfaceReduce",
+  "reference_binding": "julia",
+  "cross_binding": "binding-independent",
+  "tolerance": {
+    "absolute": 1e-12,
+    "notes": "lev=min 3D->surface reduction (campfire-e2e C4 spike: the ground_surface interface's dimension_mapping.constraints.lev={value:min}). golden is the ANALYTIC oracle: per spatial cell, the F_3d value at the level whose lev_coord is the unique minimum (an argmin gather). Like bspline (the family's closed-form tier), the reduction is binding-INDEPENDENT and EXACT: `min` returns a lev_coord element bit-for-bit, so the engine's equality indicator selects the argmin level byte-exactly and surfaces a verbatim F_3d gather (0-ULP, no real tolerance consumed -- absolute is a guard band). The shared cross-binding disposition is documented in tests/conformance/reduction/README.md."
+  },
+  "dims": {
+    "x": 2,
+    "y": 2,
+    "levels": 3
+  },
+  "lev_coord": [3.0, 1.0, 2.0],
+  "F_3d": [
+    [[111.0, 112.0, 113.0], [121.0, 122.0, 123.0]],
+    [[211.0, 212.0, 213.0], [221.0, 222.0, 223.0]]
+  ],
+  "notes": "F_3d is indexed F_3d[x][y][lev] (outer=x, middle=y, inner=lev); F_3d[a][b][l] = 100a+10b+l so the last decimal digit is the level index and the surfaced slice is human-readable. lev_coord = [3,1,2] has its UNIQUE minimum at lev index 2 (1-based) -- an INTERIOR level, deliberately NOT the first or last, so a binding that shortcuts lev=min to a first-slice (lev 1) or last-slice (lev 3) produces a DIFFERENT field and fails the golden: the argmin search is load-bearing. Expected surface = the lev=2 slice = [[112,122],[212,222]]."
+}
