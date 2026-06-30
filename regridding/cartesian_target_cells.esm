@@ -1,0 +1,158 @@
+{
+  "esm": "0.6.0",
+  "metadata": {
+    "name": "cartesian_target_cells",
+    "description": "Declarative target-cell GEOMETRY for a uniform cartesian grid: given the grid spec (per-axis origin/spacing/size), it emits the per-cell representative centers (`tgt_lon`/`tgt_lat`) and the per-cell corner rings (`tgt_poly[x,y,cell_verts,coord]`) that a conservative regridder consumes as its TARGET geometry — the inputs `conservative_regrid_overlap_join{,_computed}.esm` otherwise take as host-supplied parameters. This is the 2-D per-cell counterpart of grids/cartesian/rules/cartesian_construction.esm (which emits the per-AXIS affine edges/centers/widths): the same affine map `c = x0 + (x-1)*dx`, lifted to the cartesian product of the two axes and to the four-corner closed ring per cell. All values are CONST (build-time): the geometry folds into the setup artifact (the regridder's overlap matrix A_ij = clip(src_poly, tgt_poly) -> polygon_area is itself a build-once setup const), off any per-step hot path. Coordinates are in the grid's OWN frame (projected metres for an LCC fire grid); reprojection to lon/lat for a spherical regridder composes via reprojection/lambert_conformal.esm. The four vertices are the CCW ring (W,S)->(E,S)->(E,N)->(W,N) = cell-verts 1..4. Defaults pin the Camp Fire 19x21 @ 2 km LCC grid (x0=xmin-dx/2, y0=ymin-dy/2); the per-axis index-set sizes + x0/y0/dx/dy generalize to any uniform cartesian grid.",
+    "authors": [
+      "EarthSciDiscretizations/cartesian-target-cells"
+    ],
+    "tags": [
+      "cartesian",
+      "structured-grid",
+      "target-geometry",
+      "cell-polygon",
+      "regridding",
+      "conservative-regridding",
+      "affine",
+      "arrayop",
+      "elementwise",
+      "interval-index-set",
+      "cadence-partition",
+      "build-once",
+      "declarativization"
+    ]
+  },
+  "models": {
+    "CartesianTargetCells": {
+      "index_sets": {
+        "gx": { "kind": "interval", "size": 19 },
+        "gy": { "kind": "interval", "size": 21 },
+        "cell_verts": { "kind": "interval", "size": 4 },
+        "coord": { "kind": "interval", "size": 2 }
+      },
+      "variables": {
+        "x0": {
+          "type": "parameter",
+          "default": -2027020.2,
+          "description": "Affine origin of the x axis = the WEST-most cell-edge coordinate = xmin - dx/2. CONST."
+        },
+        "y0": {
+          "type": "parameter",
+          "default": 373725.0,
+          "description": "Affine origin of the y axis = the SOUTH-most cell-edge coordinate = ymin - dy/2. CONST."
+        },
+        "dx": {
+          "type": "parameter",
+          "default": 2000.0,
+          "description": "Uniform x-axis cell spacing (metres in the grid frame). CONST."
+        },
+        "dy": {
+          "type": "parameter",
+          "default": 2000.0,
+          "description": "Uniform y-axis cell spacing. CONST."
+        },
+        "tgt_lon": {
+          "type": "observed",
+          "shape": ["gx", "gy"],
+          "description": "Per-cell representative x-coordinate (cell centre): x0 + (x-1)*dx + dx/2 = xmin + (x-1)*dx. The regridder's `tgt_lon` (representative coordinate; projected metres for an LCC grid). CONST.",
+          "expression": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["x", "y"],
+            "ranges": { "x": { "from": "gx" }, "y": { "from": "gy" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "x0",
+                { "op": "*", "args": [{ "op": "-", "args": ["x", 1] }, "dx"] },
+                { "op": "/", "args": ["dx", 2] }
+              ]
+            }
+          }
+        },
+        "tgt_lat": {
+          "type": "observed",
+          "shape": ["gx", "gy"],
+          "description": "Per-cell representative y-coordinate (cell centre): y0 + (y-1)*dy + dy/2 = ymin + (y-1)*dy. CONST.",
+          "expression": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["x", "y"],
+            "ranges": { "x": { "from": "gx" }, "y": { "from": "gy" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                "y0",
+                { "op": "*", "args": [{ "op": "-", "args": ["y", 1] }, "dy"] },
+                { "op": "/", "args": ["dy", 2] }
+              ]
+            }
+          }
+        },
+        "tgt_poly": {
+          "type": "observed",
+          "shape": ["gx", "gy", "cell_verts", "coord"],
+          "description": "Per-cell closed corner ring, CCW (W,S)->(E,S)->(E,N)->(W,N) = cell_verts 1..4, coord 1=x 2=y. Vertex x = x0 + (x-1)*dx + dx*[v in {2,3}]; vertex y = y0 + (y-1)*dy + dy*[v in {3,4}]. The regridder's TARGET `tgt_poly[tgt_cells, cell_verts, coord]` (here the tgt_cells axis is the cartesian product gx*gy). CONST; folds into the overlap-matrix setup.",
+          "expression": {
+            "op": "arrayop",
+            "args": [],
+            "output_idx": ["x", "y", "v", "c"],
+            "ranges": {
+              "x": { "from": "gx" },
+              "y": { "from": "gy" },
+              "v": { "from": "cell_verts" },
+              "c": { "from": "coord" }
+            },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": "==", "args": ["c", 1] },
+                {
+                  "op": "+",
+                  "args": [
+                    "x0",
+                    { "op": "*", "args": [{ "op": "-", "args": ["x", 1] }, "dx"] },
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "==", "args": ["v", 2] },
+                            { "op": "==", "args": ["v", 3] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    "y0",
+                    { "op": "*", "args": [{ "op": "-", "args": ["y", 1] }, "dy"] },
+                    {
+                      "op": "*",
+                      "args": [
+                        "dy",
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "==", "args": ["v", 3] },
+                            { "op": "==", "args": ["v", 4] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": []
+    }
+  }
+}
