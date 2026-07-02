@@ -102,11 +102,17 @@ mechanism is being misused.
 ## Phasing (bootstrap)
 
 1. ✅ Skeleton + validation harness (this document, `validate-library.py`, lint fixtures)
-2. Grids + stencils + rules + `ast/` conformance (Julia/Python runners first)
-3. Remaining AST runners (Rust/TypeScript/Go)
-4. Problems + MMS + convergence
-5. Regridding + reprojection
-6. Docs pipeline · 7. Full CI matrix
+2. ✅ Grids + stencils + rules + `ast/` conformance (Julia/Python runners)
+3. ✅ Remaining AST runners (Rust/TypeScript/Go) — five-way byte-identical goldens
+4. ✅ Problems + MMS + convergence (Julia reference + Python; Rust
+   blocked-upstream per the manifests' `blocked_upstream_bindings` notes)
+5. ✅ Regridding + reprojection (exact invariants + analytic point gates;
+   per-pair regrid weights blocked-upstream per the case manifest)
+6. ✅ Docs pipeline · 7. ✅ Full CI matrix (per-binding jobs + cross-binding
+   compare in `.github/workflows/conformance.yml`)
 
-Steps 2+ require the ESS §9.7 template-import + metaparameter implementation in the
-corresponding binding.
+The bootstrap is complete; the archive migration (`archive/` → `grids/` et al.)
+proceeds rule-by-rule on top of these patterns. Each §9.7-capable binding runs
+the categories in its scope (CONFORMANCE_SPEC.md §5.9); scope gaps are recorded
+in the manifests (`scope_excluded`, `blocked_upstream_bindings`), never papered
+over locally.

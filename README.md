@@ -75,7 +75,17 @@ python scripts/validate-library.py
 
 ## Status
 
-Infrastructure phase: the repo carries exemplar content (uniform 1-D cartesian, lat-lon,
-and MPAS grids; centered/upwind rules; a conservative regridder; Lambert conformal
-reprojection) establishing the layering, testing, and docs patterns. The pre-0.8.0
-catalog in `archive/` migrates rule-by-rule on top of these patterns.
+The conformance infrastructure is complete. All five ESS binding runners are
+registered in `scripts/test-conformance.sh` and CI: the `ast` category is
+**byte-identical across Julia, Python, Rust, TypeScript, and Go** (including the
+end-to-end consuming-model gate at N=64); Julia (reference) and Python run every
+category — MMS simulation, convergence sweeps (error norms within rtol 1e-4 of
+the committed Julia goldens), regridding invariants, and reprojection point
+gates. Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript
+are rewrite-only ports (`scope_excluded`), and the Rust §6.6.5 simulation
+pathway is `blocked_upstream_bindings` pending its `run_pde_tests` port.
+
+The repo carries exemplar content (uniform 1-D cartesian, lat-lon, and MPAS
+grids; centered/upwind rules; a conservative regridder; Lambert conformal
+reprojection) establishing the layering, testing, and docs patterns. The
+pre-0.8.0 catalog in `archive/` migrates rule-by-rule on top of these patterns.

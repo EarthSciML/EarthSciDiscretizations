@@ -241,6 +241,10 @@ def compare_regridding(results_root, bindings, rep):
                 rep.add("regridding", case, binding, "scope", "skip",
                         manifest["scope_excluded"][binding])
                 continue
+            if binding in manifest.get("blocked_upstream_bindings", {}):
+                rep.add("regridding", case, binding, "blocked-upstream", "skip",
+                        manifest["blocked_upstream_bindings"][binding])
+                continue
             rec = case_rec(binding_results(results_root, binding, "regridding"), case)
             if rec is None:
                 rep.add("regridding", case, binding, "runner-output", "skip",
