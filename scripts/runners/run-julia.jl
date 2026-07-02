@@ -58,6 +58,12 @@ using EarthSciSerialization: resolve_template_machinery, lower_expression_templa
     JSONLikeDict
 using JSON3
 import OrdinaryDiffEqTsit5
+# The spherical geometry kernel (manifold "spherical" on intersect_polygon /
+# polygon_intersection_area) lives in the EarthSciSerializationGeometryOpsExt
+# package extension, which loads only when GeometryOps + GeoInterface are in
+# the session (both are pinned deps of the pde_sim_adapter environment). The
+# planar path never needs them; the spherical regridding conformance case does.
+import GeometryOps, GeoInterface
 const ODE = OrdinaryDiffEqTsit5
 const ESS = EarthSciSerialization
 
