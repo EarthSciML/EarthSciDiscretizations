@@ -1,0 +1,57 @@
+name: Nightly upstream drift
+
+# Runs the full validate + conformance suite against EarthSciSerialization main
+# HEAD (instead of the pinned PR-time checkout) so upstream lowering or
+# canonicalization changes surface here before they break a PR. Opens an issue
+# on failure.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: EarthSciML/EarthSciSerialization
+          ref: main
+          path: ess
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install jsonschema
+        run: pip install jsonschema
+      - name: Validate library against upstream HEAD schema
+        run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py
+      - name: Lint-fixture expectations
+        run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py --invalid
+      - name: Convergence order check
+        run: python scripts/check_convergence_order.py
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - name: Instantiate upstream Julia binding
+        run: julia --project=ess/packages/EarthSciSerialization.jl -e 'using Pkg; Pkg.instantiate()'
+      - name: Julia conformance against upstream HEAD
+        run: ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh --bindings julia
+      - name: Open issue on drift
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Nightly upstream drift: conformance vs EarthSciSerialization main failed (${new Date().toISOString().slice(0,10)})`;
+            const open = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, state: "open", labels: "upstream-drift" });
+            if (open.data.some(i => i.title.startsWith("Nightly upstream drift"))) return;
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo, title,
+              labels: ["upstream-drift"],
+              body: `The nightly run against EarthSciSerialization main HEAD failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nEither upstream changed lowering/canonicalization (regenerate goldens with a stated cause per AGENTS.md) or a real regression landed upstream (file it there).`
+            });
