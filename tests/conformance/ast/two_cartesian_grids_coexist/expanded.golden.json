@@ -1,0 +1,783 @@
+{
+  "esm": "0.8.0",
+  "index_sets": {
+    "meshA.x": {
+      "kind": "interval",
+      "size": 8
+    },
+    "meshB.x": {
+      "kind": "interval",
+      "size": 16
+    }
+  },
+  "metadata": {
+    "description": "Two-instance coexistence driver: ONE grid+rule family (grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc, which transitively pulls the interior stencil and the grid) imported TWICE into one model under distinct namespace prefixes (esm-spec 9.7.7) — the composition that was inexpressible before import-renaming + match-scoping landed. Edge A: prefix meshA, N closed to 8 at the edge, free spacing name dx rebound to meshA_dx. Edge B: prefix meshB, N closed to 16, dx rebound to meshB_dx. Renaming is transitive and simultaneous: the index set x arrives as meshA.x / meshB.x, the rule instance's compound match wrt follows it (D(D(f, meshA.x), meshA.x)), the metaparameter N was folded per edge into the makearray regions and ranges, and — the point of this case — each instance's `where: {f: {shape: [x]}}` shape constraint (esm-spec 9.6.1) is rewritten to [meshA.x] / [meshB.x], so instance A is eligible ONLY on second derivatives of fields declared over meshA.x and instance B only over meshB.x. The two 8- and 16-cell heat fields evolve completely independently, each lowered by its own mesh's rule with its own spacing, with no first-declared-wins collision and no priority arbitration. The free-name rebind of dx is the same mechanism the MPAS keyed-factor family uses to point two meshes at their own arrays; here it lets each grid instance carry its own physical spacing (1/8 vs 1/16). MMS: each field solves the 1-D heat equation u_t = alpha u_xx on the unit interval [0,1] with zero-gradient (homogeneous Neumann) boundaries and manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) (alpha = 0.01): cos(pi x) has u_x = 0 at x=0 and x=1, so it is compatible with the zero-gradient rule and needs no forcing, and u_xx = -pi^2 u gives u_t = alpha u_xx exactly (the same manufactured solution as problems/heat_1d_zero_grad.esm, run here at two resolutions in one document). Initial condition and test references spell the grid's index-to-coordinate conversion x_i = (i - 1/2) dx inline with load-foldable scalars ((i - 0.5)*0.125 and (i - 0.5)*0.0625), never invoking the renamed x_coord templates: build-time cellwise evaluation is scope-free (model parameters/observeds out of scope), so build-time coordinate expressions fold from literals alone. The spacing factor inside each coordinate aggregate is spelled as the exact non-integral decimal 1/N (0.125 = 1/8, 0.0625 = 1/16) rather than the integer ratio {op:/,args:[1,N]}: Julia's aggregate lowering promotes integer `/` operands to Float64 (1 -> 1.0) while the finite-difference and other bindings preserve the integer literals, so an integer ratio inside an aggregate expr would not serialize byte-identically across the five bindings, whereas a non-integral decimal is carried verbatim by every binding (the ast conformance requirement). The physical-spacing observeds meshA_dx/meshB_dx keep the integer-ratio 1/N spelling because they sit outside any aggregate (the rule body's free dx resolves to them) and render identically as integers. The zero-gradient D2 stencil telescopes, so the discrete mean of each field is conserved exactly (and equals 0, since cos(pi x) is antisymmetric about the cell-center-symmetric x=1/2 for both even cell counts) — the mean assertions pin that conservation independently of the truncation-bounded L2 assertions.",
+    "license": "MIT",
+    "name": "two_cartesian_grids_coexist",
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (Neumann boundary conditions by ghost-point elimination)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:heat",
+      "mms",
+      "spec:9.7.7",
+      "spec:9.6.1"
+    ]
+  },
+  "models": {
+    "TwoGrids": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "uA"
+            ],
+            "op": "ic"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  3.141592653589793,
+                  {
+                    "args": [],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            "i",
+                            0.5
+                          ],
+                          "op": "-"
+                        },
+                        0.125
+                      ],
+                      "op": "*"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "ranges": {
+                      "i": {
+                        "from": "meshA.x"
+                      }
+                    }
+                  }
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "cos"
+          }
+        },
+        {
+          "lhs": {
+            "args": [
+              "uB"
+            ],
+            "op": "ic"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  3.141592653589793,
+                  {
+                    "args": [],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            "i",
+                            0.5
+                          ],
+                          "op": "-"
+                        },
+                        0.0625
+                      ],
+                      "op": "*"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "ranges": {
+                      "i": {
+                        "from": "meshB.x"
+                      }
+                    }
+                  }
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "cos"
+          }
+        },
+        {
+          "lhs": {
+            "args": [
+              "uA"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              "alpha",
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      2,
+                      7
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      8,
+                      8
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [
+                      "uA"
+                    ],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "uA",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "+"
+                                }
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                -2,
+                                {
+                                  "args": [
+                                    "uA",
+                                    "i"
+                                  ],
+                                  "op": "index"
+                                }
+                              ],
+                              "op": "*"
+                            },
+                            {
+                              "args": [
+                                "uA",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "-"
+                                }
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "+"
+                        },
+                        {
+                          "args": [
+                            "meshA_dx",
+                            "meshA_dx"
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "/"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "ranges": {
+                      "i": [
+                        2,
+                        7
+                      ]
+                    }
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "uA",
+                              2
+                            ],
+                            "op": "index"
+                          },
+                          {
+                            "args": [
+                              "uA",
+                              1
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      {
+                        "args": [
+                          "meshA_dx",
+                          "meshA_dx"
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "/"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "uA",
+                              {
+                                "args": [
+                                  8,
+                                  1
+                                ],
+                                "op": "-"
+                              }
+                            ],
+                            "op": "index"
+                          },
+                          {
+                            "args": [
+                              "uA",
+                              8
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      {
+                        "args": [
+                          "meshA_dx",
+                          "meshA_dx"
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "/"
+                  }
+                ]
+              }
+            ],
+            "op": "*"
+          }
+        },
+        {
+          "lhs": {
+            "args": [
+              "uB"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              "alpha",
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      2,
+                      15
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      16,
+                      16
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [
+                      "uB"
+                    ],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "uB",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "+"
+                                }
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                -2,
+                                {
+                                  "args": [
+                                    "uB",
+                                    "i"
+                                  ],
+                                  "op": "index"
+                                }
+                              ],
+                              "op": "*"
+                            },
+                            {
+                              "args": [
+                                "uB",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "-"
+                                }
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "+"
+                        },
+                        {
+                          "args": [
+                            "meshB_dx",
+                            "meshB_dx"
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "/"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "ranges": {
+                      "i": [
+                        2,
+                        15
+                      ]
+                    }
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "uB",
+                              2
+                            ],
+                            "op": "index"
+                          },
+                          {
+                            "args": [
+                              "uB",
+                              1
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      {
+                        "args": [
+                          "meshB_dx",
+                          "meshB_dx"
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "/"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "uB",
+                              {
+                                "args": [
+                                  16,
+                                  1
+                                ],
+                                "op": "-"
+                              }
+                            ],
+                            "op": "index"
+                          },
+                          {
+                            "args": [
+                              "uB",
+                              16
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      {
+                        "args": [
+                          "meshB_dx",
+                          "meshB_dx"
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "/"
+                  }
+                ]
+              }
+            ],
+            "op": "*"
+          }
+        }
+      ],
+      "tests": [
+        {
+          "assertions": [
+            {
+              "expected": 0,
+              "reduce": "L2_error",
+              "reference": {
+                "args": [
+                  {
+                    "args": [
+                      3.141592653589793,
+                      {
+                        "args": [],
+                        "expr": {
+                          "args": [
+                            {
+                              "args": [
+                                "i",
+                                0.5
+                              ],
+                              "op": "-"
+                            },
+                            0.125
+                          ],
+                          "op": "*"
+                        },
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "ranges": {
+                          "i": {
+                            "from": "meshA.x"
+                          }
+                        }
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "cos"
+              },
+              "time": 0,
+              "tolerance": {
+                "abs": 1.0e-9
+              },
+              "variable": "uA"
+            },
+            {
+              "expected": 0,
+              "reduce": "L2_error",
+              "reference": {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          -0.01,
+                          9.869604401089358,
+                          0.1
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "exp"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "args": [],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ],
+                                  "op": "-"
+                                },
+                                0.125
+                              ],
+                              "op": "*"
+                            },
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "ranges": {
+                              "i": {
+                                "from": "meshA.x"
+                              }
+                            }
+                          }
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "cos"
+                  }
+                ],
+                "op": "*"
+              },
+              "time": 0.1,
+              "tolerance": {
+                "abs": 0.001
+              },
+              "variable": "uA"
+            },
+            {
+              "expected": 0,
+              "reduce": "mean",
+              "time": 0.1,
+              "tolerance": {
+                "abs": 1.0e-9
+              },
+              "variable": "uA"
+            },
+            {
+              "expected": 0,
+              "reduce": "L2_error",
+              "reference": {
+                "args": [
+                  {
+                    "args": [
+                      3.141592653589793,
+                      {
+                        "args": [],
+                        "expr": {
+                          "args": [
+                            {
+                              "args": [
+                                "i",
+                                0.5
+                              ],
+                              "op": "-"
+                            },
+                            0.0625
+                          ],
+                          "op": "*"
+                        },
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "ranges": {
+                          "i": {
+                            "from": "meshB.x"
+                          }
+                        }
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "cos"
+              },
+              "time": 0,
+              "tolerance": {
+                "abs": 1.0e-9
+              },
+              "variable": "uB"
+            },
+            {
+              "expected": 0,
+              "reduce": "L2_error",
+              "reference": {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          -0.01,
+                          9.869604401089358,
+                          0.1
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "exp"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "args": [],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ],
+                                  "op": "-"
+                                },
+                                0.0625
+                              ],
+                              "op": "*"
+                            },
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "ranges": {
+                              "i": {
+                                "from": "meshB.x"
+                              }
+                            }
+                          }
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "cos"
+                  }
+                ],
+                "op": "*"
+              },
+              "time": 0.1,
+              "tolerance": {
+                "abs": 0.001
+              },
+              "variable": "uB"
+            },
+            {
+              "expected": 0,
+              "reduce": "mean",
+              "time": 0.1,
+              "tolerance": {
+                "abs": 1.0e-9
+              },
+              "variable": "uB"
+            }
+          ],
+          "description": "Each instance's heat field decays as its own manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x), alpha = 0.01, proving the two renamed rule instances lowered correctly on their own axes with their own rebound spacing (meshA_dx = 1/8, meshB_dx = 1/16). For each field: the t=0 assertion pins the coordinate-expression ic wiring (reference = the initial field, abs 1e-9); the t=0.1 assertion bounds the zero-gradient heat truncation error against the exact decayed solution; the mean assertion pins the exact conservation of the telescoping zero-gradient D2 stencil (the discrete mean stays 0 to rounding for both even cell counts). If the two instances collided (first-wins), uB would be lowered with meshA's 8-cell stencil and its L2 assertion would fail by orders of magnitude.",
+          "id": "two_grids_heat_decay",
+          "time_span": {
+            "end": 0.1,
+            "start": 0
+          }
+        }
+      ],
+      "variables": {
+        "alpha": {
+          "default": 0.01,
+          "description": "Thermal diffusivity (shared by both fields).",
+          "type": "parameter",
+          "units": "m^2/s"
+        },
+        "meshA_dx": {
+          "description": "Grid spacing of the meshA instance, 1/N = 1/8: the target of the edge-A rebind of the grid's free name dx. Spelled with the literal 8 because the edge binding closes N before this document's scope.",
+          "expression": {
+            "args": [
+              1,
+              8
+            ],
+            "op": "/"
+          },
+          "type": "observed",
+          "units": "m"
+        },
+        "meshB_dx": {
+          "description": "Grid spacing of the meshB instance, 1/N = 1/16: the target of the edge-B rebind of the grid's free name dx. Spelled with the literal 16 because the edge binding closes N before this document's scope.",
+          "expression": {
+            "args": [
+              1,
+              16
+            ],
+            "op": "/"
+          },
+          "type": "observed",
+          "units": "m"
+        },
+        "uA": {
+          "description": "Temperature field on the 8-cell instance (index set meshA.x).",
+          "shape": [
+            "meshA.x"
+          ],
+          "type": "state",
+          "units": "K"
+        },
+        "uB": {
+          "description": "Temperature field on the 16-cell instance (index set meshB.x).",
+          "shape": [
+            "meshB.x"
+          ],
+          "type": "state",
+          "units": "K"
+        }
+      }
+    }
+  }
+}

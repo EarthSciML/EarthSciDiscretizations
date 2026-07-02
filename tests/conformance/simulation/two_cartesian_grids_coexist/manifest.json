@@ -1,0 +1,21 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "two_cartesian_grids_coexist",
+  "description": "Two-instance coexistence MMS gate: run the inline esm-spec 6.6/6.6.5 test of problems/two_cartesian_grids_coexist.esm (model TwoGrids, test two_grids_heat_decay) through each binding's official simulation pathway. ONE grid+rule family (grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc) is imported TWICE under prefix meshA (N=8, dx->meshA_dx) and meshB (N=16, dx->meshB_dx); two heat fields uA/uB evolve completely independently, each lowered by its OWN mesh's rule at its OWN resolution and spacing. Both solve u_t = alpha u_xx on [0,1] with zero-gradient boundaries and manufactured solution u(x,t)=exp(-alpha pi^2 t)cos(pi x), alpha=0.01. The t=0 assertions pin the per-mesh coordinate-expression ic wiring; the t=0.1 L2_error assertions bound each field's truncation error against its exact decayed solution; the mean assertions pin the exact conservation of the telescoping zero-gradient D2 stencil. Independence proof: the N=8 field's L2 error is ~4x the N=16 field's (the second-order convergence ratio), which can only hold if meshB used its own 16-cell stencil — a first-declared-wins collision would lower uB with meshA's 8-cell stencil and make the two errors equal (and blow uB's 1e-3 bound). Assertions and tolerances live in the problem file; this manifest only routes the runners.",
+  "problem": "../../../../problems/two_cartesian_grids_coexist.esm",
+  "model": "TwoGrids",
+  "tests": ["two_grids_heat_decay"],
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14, "_doc": "Pinned identically to simulation/heat_1d_zero_grad: scipy explicit RK leaves ~1e-3 residue on the stiff heat sweep, while LSODA at 1e-12/1e-14 agrees with the Julia Tsit5 reference to well under the cross-binding band on both the 8- and 16-cell fields." },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "status": "active"
+}
