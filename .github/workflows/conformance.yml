@@ -53,7 +53,9 @@ jobs:
         uses: crate-ci/typos@v1
 
   # The Julia reference binding: runs the official runner
-  # (scripts/runners/run-julia.jl) for ast + simulation + convergence and gates
+  # (scripts/runners/run-julia.jl) for every category — ast + simulation +
+  # convergence plus the julia-scoped regridding (per-pair A_ij/A_j/W_ij via
+  # the BuildInspection surface) and reprojection point gates — and gates
   # every output against the committed goldens with scripts/compare-outputs.py.
   julia:
     runs-on: ubuntu-latest
@@ -71,10 +73,11 @@ jobs:
         run: |
           julia --project=ess/packages/EarthSciSerialization.jl \
             -e 'using Pkg; Pkg.instantiate()'
-      - name: Conformance (julia; ast + simulation + convergence)
+      - name: Conformance (julia; all categories)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
-            --bindings julia --categories ast,simulation,convergence
+            --bindings julia \
+            --categories ast,simulation,convergence,regridding,reprojection
       - name: Upload runner outputs
         if: always()
         uses: actions/upload-artifact@v4
