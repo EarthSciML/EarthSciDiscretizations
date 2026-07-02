@@ -1,0 +1,55 @@
+name: Conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/conformance.yml"
+  pull_request:
+    paths:
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/conformance.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast checks that need no language bindings: schema validation of every
+  # library file, the policy lint (AGENTS.md tags contract), lint-fixture
+  # expectations, and spellcheck.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: EarthSciML/EarthSciSerialization
+          path: ess
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install jsonschema
+        run: pip install jsonschema
+      - name: Validate library (schema + policy lint)
+        run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py
+      - name: Lint-fixture expectations
+        run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py --invalid
+      - name: Spellcheck
+        uses: crate-ci/typos@v1
+
+  # Per-binding conformance matrix and the cross-binding compare job land with
+  # the runner work packages (see AGENTS.md "Phasing"); the validate job above
+  # is the always-on gate.
