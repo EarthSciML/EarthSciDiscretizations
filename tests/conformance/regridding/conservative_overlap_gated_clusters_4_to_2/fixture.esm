@@ -435,145 +435,6 @@
             }
           }
         },
-        "ident_A": {
-          "type": "observed",
-          "units": "1",
-          "description": "L1 residual of the gated vs dense overlap matrices: sum_{i,j} |A_ij - A_ij_dense|. Exactly 0.0.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "i": {
-                "from": "src_cells"
-              },
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "A_ij",
-              "A_ij_dense"
-            ],
-            "expr": {
-              "op": "abs",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    {
-                      "op": "index",
-                      "args": [
-                        "A_ij",
-                        "i",
-                        "j"
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "A_ij_dense",
-                        "i",
-                        "j"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "ident_Aj": {
-          "type": "observed",
-          "units": "1",
-          "description": "L1 residual of the gated vs dense denominators: sum_j |A_j - A_j_dense|. Exactly 0.0.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "A_j",
-              "A_j_dense"
-            ],
-            "expr": {
-              "op": "abs",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    {
-                      "op": "index",
-                      "args": [
-                        "A_j",
-                        "j"
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "A_j_dense",
-                        "j"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "ident_W": {
-          "type": "observed",
-          "units": "1",
-          "description": "L1 residual of the gated vs dense weight matrices: sum_{i,j} |W_ij - W_ij_dense|. Exactly 0.0.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "i": {
-                "from": "src_cells"
-              },
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "W_ij",
-              "W_ij_dense"
-            ],
-            "expr": {
-              "op": "abs",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    {
-                      "op": "index",
-                      "args": [
-                        "W_ij",
-                        "i",
-                        "j"
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "W_ij_dense",
-                        "i",
-                        "j"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
         "F_tgt": {
           "type": "observed",
           "units": "1",
@@ -616,82 +477,6 @@
             }
           }
         },
-        "mass_src": {
-          "type": "observed",
-          "units": "1",
-          "description": "Source-side mass sum_i A_i*F_src[i] = 10.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "i": {
-                "from": "src_cells"
-              }
-            },
-            "args": [
-              "src_area",
-              "F_src"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "src_area",
-                    "i"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_src",
-                    "i"
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "mass_tgt": {
-          "type": "observed",
-          "units": "1",
-          "description": "Target-side mass sum_j A_j*F_tgt[j] = 2*1.5 + 2*3.5 = 10, exactly mass_src (the targets tile the source domain).",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "A_j",
-              "F_tgt"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "A_j",
-                    "j"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_tgt",
-                    "j"
-                  ]
-                }
-              ]
-            }
-          }
-        },
         "pou_state": {
           "type": "state",
           "units": "1",
@@ -708,7 +493,7 @@
             "tgt_cells"
           ],
           "default": 0.0,
-          "description": "Surfacing state for the conservation residual: cons_state(1) = mass_tgt - mass_src = 0."
+          "description": "Surfacing state for the conservation residual: d(cons_state[j])/dt = sum_j A_j*F_tgt[j] - sum_i A_i*F_src[i] (both mass reductions INLINE in the equation RHS for the same python bin-pre-pass ordering reason as ident_state) = 0 from a zero IC."
         },
         "regrid_state": {
           "type": "state",
@@ -726,7 +511,7 @@
             "tgt_cells"
           ],
           "default": 0.0,
-          "description": "Surfacing state for the gated-vs-dense VALUE-IDENTITY residual under genuine pruning: ident_state(1) = sum of the three L1 residuals, asserted EXACTLY zero (abs 0.0)."
+          "description": "Surfacing state for the gated-vs-dense VALUE-IDENTITY residual: d(ident_state[j])/dt = sum|A_ij - A_ij_dense| + sum|A_j - A_j_dense| + sum|W_ij - W_ij_dense| (three scalar aggregates INLINE in the equation RHS, broadcast over tgt_cells), asserted EXACTLY zero (tolerance abs 0.0). The reductions live in the state equation rather than intermediate scalar observeds because a join-FREE observed reading a join-CARRYING observed is not materializable in the python binding's bin pre-pass (the join-carrying chain is deferred to the buffered runtime context, which state RHS evaluation uses -- the ESS cross_domain_coupling pattern)."
         }
       },
       "equations": [
@@ -820,7 +605,7 @@
           "rhs": "F_unit_tgt"
         },
         {
-          "_comment": "d(cons_state)/dt = mass_tgt - mass_src, the conservation residual.",
+          "_comment": "d(cons_state)/dt = mass_tgt - mass_src, both reductions inline (see cons_state _doc).",
           "lhs": {
             "op": "D",
             "args": [
@@ -831,8 +616,72 @@
           "rhs": {
             "op": "-",
             "args": [
-              "mass_tgt",
-              "mass_src"
+              {
+                "op": "aggregate",
+                "semiring": "sum_product",
+                "output_idx": [],
+                "ranges": {
+                  "j": {
+                    "from": "tgt_cells"
+                  }
+                },
+                "args": [
+                  "A_j",
+                  "F_tgt"
+                ],
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "A_j",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_tgt",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "aggregate",
+                "semiring": "sum_product",
+                "output_idx": [],
+                "ranges": {
+                  "i": {
+                    "from": "src_cells"
+                  }
+                },
+                "args": [
+                  "src_area",
+                  "F_src"
+                ],
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "src_area",
+                        "i"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F_src",
+                        "i"
+                      ]
+                    }
+                  ]
+                }
+              }
             ]
           }
         },
@@ -848,7 +697,7 @@
           "rhs": "F_tgt"
         },
         {
-          "_comment": "d(ident_state)/dt = the total gated-vs-dense L1 residual, exactly 0 under the admissible pruning binning.",
+          "_comment": "d(ident_state)/dt = the total gated-vs-dense L1 residual, three reductions inline (see ident_state _doc), exactly 0.",
           "lhs": {
             "op": "D",
             "args": [
@@ -859,9 +708,130 @@
           "rhs": {
             "op": "+",
             "args": [
-              "ident_A",
-              "ident_Aj",
-              "ident_W"
+              {
+                "op": "aggregate",
+                "semiring": "sum_product",
+                "output_idx": [],
+                "ranges": {
+                  "i": {
+                    "from": "src_cells"
+                  },
+                  "j": {
+                    "from": "tgt_cells"
+                  }
+                },
+                "args": [
+                  "A_ij",
+                  "A_ij_dense"
+                ],
+                "expr": {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "A_ij",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "A_ij_dense",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "aggregate",
+                "semiring": "sum_product",
+                "output_idx": [],
+                "ranges": {
+                  "j": {
+                    "from": "tgt_cells"
+                  }
+                },
+                "args": [
+                  "A_j",
+                  "A_j_dense"
+                ],
+                "expr": {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "A_j",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "A_j_dense",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "aggregate",
+                "semiring": "sum_product",
+                "output_idx": [],
+                "ranges": {
+                  "i": {
+                    "from": "src_cells"
+                  },
+                  "j": {
+                    "from": "tgt_cells"
+                  }
+                },
+                "args": [
+                  "W_ij",
+                  "W_ij_dense"
+                ],
+                "expr": {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "W_ij",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "W_ij_dense",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             ]
           }
         }
