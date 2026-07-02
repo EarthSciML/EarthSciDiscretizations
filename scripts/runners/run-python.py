@@ -53,7 +53,7 @@ from earthsci_toolkit.lower_expression_templates import lower_expression_templat
 from earthsci_toolkit.template_imports import resolve_template_machinery
 
 CONF = ESD_ROOT / "tests" / "conformance"
-ALL_CATEGORIES = ["ast", "simulation", "convergence"]
+ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
 INT64_MIN, INT64_MAX = -(2**63), 2**63 - 1
 
 # ---------------------------------------------------------------------------
@@ -334,7 +334,8 @@ def run_convergence(output_dir: Path, files, verbose):
                     raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
                 state = sim.states[-1]
                 field = [float(state[slot]) for _, slot in cells]
-                ref = evaluate_cellwise(a.reference, [c for c, _ in cells])
+                ref = evaluate_cellwise(a.reference, [c for c, _ in cells],
+                                        index_sets=file.index_sets)
                 row = {"n": n}
                 for norm in manifest["norms"]:
                     row[norm] = field_reduce(norm, field, reference=ref)
@@ -351,6 +352,142 @@ def run_convergence(output_dir: Path, files, verbose):
             print(f"  convergence/{case}: {rec['status']}")
         cases[case] = rec
     return {"binding": "python", "category": "convergence", "cases": cases}
+
+
+# ---------------------------------------------------------------------------
+# regridding — the fixture's exact-invariant inline tests + the regridded field
+# (mirrors run-julia.jl's run_regridding; per-pair weights stay blocked-upstream
+# per the case manifest).
+# ---------------------------------------------------------------------------
+
+
+def run_regridding(output_dir: Path, files, verbose):
+    from earthsci_toolkit.parse import load
+    from earthsci_toolkit.pde_inline_tests import (
+        run_pde_tests, simulate_states, state_cells)
+
+    cases = {}
+    for case_dir, manifest in discover_manifests("regridding", files):
+        case = manifest["case"]
+        rec = {"case": case, "status": "ok"}
+        try:
+            fixture = (case_dir / manifest["fixture"]).resolve()
+            model = manifest["model"]
+            results = run_pde_tests(str(fixture), model_name=model,
+                                    method="LSODA", rtol=1e-12, atol=1e-14)
+            rec["assertions"] = assertion_dicts(results)
+            rec["passed"] = bool(results) and all(r.passed for r in results)
+            # regrid_state integrates the constant regridded field from 0 over
+            # [0,1], so state(1) IS the regridded field F_tgt.
+            file = load(str(fixture))
+            sim = simulate_states(file, (0.0, 1.0), method="LSODA",
+                                  rtol=1e-12, atol=1e-14, saveat=[1.0])
+            for var in ("regrid_state", "pou_state", "cons_state"):
+                cells = state_cells(sim.var_map, var, model)
+                rec[var + "_at_1"] = [float(sim.states[-1][slot])
+                                      for _, slot in cells]
+            rec["status"] = "ok" if rec["passed"] else "failed"
+            rec["blocked_upstream"] = str(manifest.get("blocked_upstream", ""))
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = f"{type(err).__name__}: {err}"
+        if verbose:
+            print(f"  regridding/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "python", "category": "regridding", "cases": cases}
+
+
+# ---------------------------------------------------------------------------
+# reprojection — evaluate the library's public templates at every golden point
+# through the official pathway: a runner-BUILT invocation document (the
+# manifest's `fixture: null` contract) importing the library, loaded so §9.7.3
+# body composition inlines the template bodies, then `evaluate` per point
+# (mirrors run-julia.jl's _reproj_wrapper_doc scheme).
+# ---------------------------------------------------------------------------
+
+
+def _reproj_wrapper_doc(params):
+    crs = {k: float(params[k]) for k in ("lat_1", "lat_2", "lat_0", "lon_0", "R")}
+
+    def mkapply(tpl, *args):
+        return {"op": "apply_expression_template", "args": [], "name": tpl,
+                "bindings": {**{a: a for a in args}, **crs}}
+
+    variables = {
+        "lon": {"type": "parameter", "units": "deg", "default": 0.0},
+        "lat": {"type": "parameter", "units": "deg", "default": 0.0},
+        "x": {"type": "parameter", "units": "m", "default": 0.0},
+        "y": {"type": "parameter", "units": "m", "default": 0.0},
+        "fwd_x": {"type": "observed", "units": "m",
+                  "expression": mkapply("lambert_conformal_forward_x", "lon", "lat")},
+        "fwd_y": {"type": "observed", "units": "m",
+                  "expression": mkapply("lambert_conformal_forward_y", "lon", "lat")},
+        "inv_lon": {"type": "observed", "units": "deg",
+                    "expression": mkapply("lambert_conformal_inverse_lon", "x", "y")},
+        "inv_lat": {"type": "observed", "units": "deg",
+                    "expression": mkapply("lambert_conformal_inverse_lat", "x", "y")},
+    }
+    return {"esm": "0.8.0",
+            "metadata": {"name": "lambert_conformal_eval",
+                         "description": "Runner-built template invocation "
+                                        "(manifest fixture: null)."},
+            "models": {"Reproject": {
+                "expression_template_imports": [{"ref": "lambert_conformal.esm"}],
+                "variables": variables, "equations": []}}}
+
+
+def run_reprojection(output_dir: Path, files, verbose):
+    from earthsci_toolkit.numpy_interpreter import evaluate
+    from earthsci_toolkit.parse import load
+
+    cases = {}
+    for case_dir, manifest in discover_manifests("reprojection", files):
+        case = manifest["case"]
+        rec = {"case": case, "status": "ok"}
+        try:
+            lib = (case_dir / manifest["library"]).resolve()
+            gold = json.loads((case_dir / manifest["golden"]).read_text())
+            exprs = {}
+            for setname, params in gold["parameter_sets"].items():
+                doc = _reproj_wrapper_doc(params)
+                file = load(json.dumps(doc), base_path=str(lib.parent))
+                m = file.models["Reproject"]
+                exprs[setname] = {k: m.variables[k].expression
+                                  for k in ("fwd_x", "fwd_y", "inv_lon", "inv_lat")}
+            fwd = []
+            for pt in gold["forward"]:
+                e = exprs[pt["set"]]
+                b = {"lon": float(pt["lon"]), "lat": float(pt["lat"])}
+                fwd.append({"set": pt["set"], "lon": b["lon"], "lat": b["lat"],
+                            "x": evaluate(e["fwd_x"], b),
+                            "y": evaluate(e["fwd_y"], b)})
+            inv = []
+            for pt in gold["inverse"]:
+                e = exprs[pt["set"]]
+                b = {"x": float(pt["x"]), "y": float(pt["y"])}
+                inv.append({"set": pt["set"], "x": b["x"], "y": b["y"],
+                            "lon": evaluate(e["inv_lon"], b),
+                            "lat": evaluate(e["inv_lat"], b)})
+            rt = []
+            for pt in gold["roundtrip"]:
+                e = exprs[pt["set"]]
+                b = {"lon": float(pt["lon"]), "lat": float(pt["lat"])}
+                xa = evaluate(e["fwd_x"], b)
+                ya = evaluate(e["fwd_y"], b)
+                b2 = {"x": xa, "y": ya}
+                rt.append({"set": pt["set"], "lon": b["lon"], "lat": b["lat"],
+                           "lon_rt": evaluate(e["inv_lon"], b2),
+                           "lat_rt": evaluate(e["inv_lat"], b2)})
+            rec["forward"] = fwd
+            rec["inverse"] = inv
+            rec["roundtrip"] = rt
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = f"{type(err).__name__}: {err}"
+        if verbose:
+            print(f"  reprojection/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "python", "category": "reprojection", "cases": cases}
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +513,8 @@ def main() -> int:
         categories = [c for c in categories if c in file_cats]
 
     runners = {"ast": run_ast, "simulation": run_simulation,
-               "convergence": run_convergence}
+               "convergence": run_convergence, "regridding": run_regridding,
+               "reprojection": run_reprojection}
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     summary = {"binding": "python", "runner": "scripts/runners/run-python.py",

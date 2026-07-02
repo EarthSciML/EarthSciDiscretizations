@@ -141,6 +141,10 @@ def compare_simulation(results_root, bindings, rep):
                 rep.add("simulation", case, binding, "scope", "skip",
                         manifest["scope_excluded"][binding])
                 continue
+            if binding in manifest.get("blocked_upstream_bindings", {}):
+                rep.add("simulation", case, binding, "blocked-upstream", "skip",
+                        manifest["blocked_upstream_bindings"][binding])
+                continue
             rec = case_rec(binding_results(results_root, binding, "simulation"), case)
             if rec is None:
                 rep.add("simulation", case, binding, "runner-output", "skip",
@@ -186,6 +190,10 @@ def compare_convergence(results_root, bindings, rep):
             if binding in manifest.get("scope_excluded", {}):
                 rep.add("convergence", case, binding, "scope", "skip",
                         manifest["scope_excluded"][binding])
+                continue
+            if binding in manifest.get("blocked_upstream_bindings", {}):
+                rep.add("convergence", case, binding, "blocked-upstream", "skip",
+                        manifest["blocked_upstream_bindings"][binding])
                 continue
             rec = case_rec(binding_results(results_root, binding, "convergence"), case)
             if rec is None:
