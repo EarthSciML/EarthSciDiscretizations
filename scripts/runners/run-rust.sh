@@ -1,20 +1,32 @@
 #!/usr/bin/env bash
 # run-rust.sh — the official Rust conformance runner for EarthSciDiscretizations.
 #
-# Thin shell over the earthsci-toolkit-rs `canonical_expand` example (the
-# official raw §9.7 pipeline resolve_template_machinery →
-# lower_expression_templates with the reference canonical-byte writer,
-# upstream in $ESS_ROOT/packages/earthsci-toolkit-rs/examples/). This wrapper
-# implements the §4.2 CLI: manifest discovery, per-case invocation, artifact
-# and result-JSON assembly (stdlib-python structural I/O only — every byte in
-# every artifact comes from the cargo example; AGENTS.md §2).
+# Thin shell over two earthsci-toolkit-rs examples (upstream in
+# $ESS_ROOT/packages/earthsci-toolkit-rs/examples/):
 #
-# Usage: scripts/runners/run-rust.sh --output-dir <path> [--categories ast]
-#                                    [--files <manifest.json>[,…]] [--verbose]
+#   canonical_expand   the official raw §9.7 pipeline
+#                      (resolve_template_machinery → lower_expression_templates)
+#                      with the reference canonical-byte writer        [ast]
+#   pde_conformance    the official simulation / evaluation pathways:
+#                      run_pde_tests (§6.6/§6.6.5 inline tests over
+#                      simulate, solver pinned by the manifest)        [simulation]
+#                      per-resolution loader-API metaparameter load →
+#                      simulate → evaluate_cellwise → field_reduce     [convergence]
+#                      runner-built wrapper doc importing the library,
+#                      §9.7.3 body composition, evaluate per point     [reprojection]
 #
-# Scope: ast. The Rust binding's simulator (simulate_array) does not yet
-# execute §6.6.5 reduction assertions or coordinate-expression ic seeding —
-# the simulation/convergence manifests carry the blocked-upstream notes.
+# This wrapper implements the §4.2 CLI: manifest discovery, per-case
+# invocation, artifact and result-JSON assembly (stdlib-python structural I/O
+# only — every number and byte in every artifact comes from the cargo
+# examples; AGENTS.md §2).
+#
+# Usage: scripts/runners/run-rust.sh --output-dir <path>
+#            [--categories ast,simulation,convergence,reprojection]
+#            [--files <manifest.json>[,…]] [--verbose]
+#
+# Scope: ast, simulation, convergence, reprojection. regridding stays
+# blocked-upstream (the per-pair geometry kernel; see the regridding
+# manifest's markers).
 
 set -euo pipefail
 
@@ -28,7 +40,12 @@ MANIFEST_PATH="$ESS_ROOT/packages/earthsci-toolkit-rs/Cargo.toml"
 }
 
 # Build once up front so per-case `cargo run --quiet` is silent and fast.
-cargo build --quiet --manifest-path "$MANIFEST_PATH" --example canonical_expand
+# Dev profile, matching the upstream crate's own test/CI builds (the release
+# profile would rebuild the vendored s2 geometry kernel from scratch, which
+# needs a full OpenSSL dev environment; the numbers are profile-independent —
+# Rust f64 arithmetic is IEEE-strict at every opt level).
+cargo build --quiet --manifest-path "$MANIFEST_PATH" \
+  --example canonical_expand --example pde_conformance
 
 ESD_ROOT="$REPO" ESS_ROOT="$ESS_ROOT" RUST_MANIFEST_PATH="$MANIFEST_PATH" \
   python3 - "$@" <<'PY'
@@ -41,6 +58,7 @@ from pathlib import Path
 ESD_ROOT = Path(os.environ["ESD_ROOT"])
 MANIFEST_PATH = os.environ["RUST_MANIFEST_PATH"]
 CONF = ESD_ROOT / "tests" / "conformance"
+CATEGORIES_SUPPORTED = ["ast", "simulation", "convergence", "reprojection"]
 
 args = sys.argv[1:]
 output_dir = None
@@ -63,7 +81,7 @@ while i < len(args):
 if output_dir is None:
     sys.exit("error: --output-dir is required (CONFORMANCE_SPEC.md §4.2)")
 if not categories:
-    categories = ["ast"]
+    categories = list(CATEGORIES_SUPPORTED)
 if files:
     file_cats = {json.loads((Path(f) if os.path.isabs(f) else ESD_ROOT / f)
                             .read_text())["category"] for f in files}
@@ -87,6 +105,34 @@ def discover(category):
         return []
     return [(d, json.loads((d / "manifest.json").read_text()))
             for d in sorted(root.iterdir()) if (d / "manifest.json").is_file()]
+
+
+def rust_out_of_scope(manifest):
+    """Manifest-declared reasons this binding must not run the case (the
+    same markers compare-outputs.py keys its SKIP rows on)."""
+    for key in ("scope_excluded", "blocked_upstream_bindings"):
+        if "rust" in manifest.get(key, {}):
+            return manifest[key]["rust"]
+    return None
+
+
+def cargo_example(example, *argv):
+    """Run one upstream cargo example; return parsed-JSON stdout."""
+    proc = subprocess.run(
+        ["cargo", "run", "--quiet", "--manifest-path",
+         MANIFEST_PATH, "--example", example, "--", *argv],
+        capture_output=True)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip())
+    return proc.stdout
+
+
+def integrator_opts(manifest):
+    j = manifest.get("integrators", {}).get("rust")
+    if j is None:
+        return "Erk", 1e-10, 1e-12
+    return (str(j.get("solver", "Erk")), float(j.get("reltol", 1e-10)),
+            float(j.get("abstol", 1e-12)))
 
 
 def unlowered_violations(node, acc):
@@ -115,13 +161,7 @@ def run_ast():
         rec = {"case": case, "status": "ok"}
         try:
             fixture = case_dir / manifest["fixture"]
-            proc = subprocess.run(
-                ["cargo", "run", "--quiet", "--manifest-path", MANIFEST_PATH,
-                 "--example", "canonical_expand", "--", str(fixture)],
-                capture_output=True)
-            if proc.returncode != 0:
-                raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip())
-            data = proc.stdout
+            data = cargo_example("canonical_expand", str(fixture))
             doc = json.loads(data)
             violations = []
             for model in doc.get("models", {}).values():
@@ -147,17 +187,117 @@ def run_ast():
     return {"binding": "rust", "category": "ast", "cases": cases}
 
 
+def run_simulation():
+    cases = {}
+    for case_dir, manifest in discover("simulation"):
+        case = manifest["case"]
+        reason = rust_out_of_scope(manifest)
+        if reason is not None:
+            if verbose:
+                print(f"  simulation/{case}: skipped ({reason})")
+            continue
+        rec = {"case": case, "status": "ok"}
+        try:
+            problem = (case_dir / manifest["problem"]).resolve()
+            solver, reltol, abstol = integrator_opts(manifest)
+            out = json.loads(cargo_example(
+                "pde_conformance", "pde-tests", str(problem),
+                "--model", manifest["model"], "--solver", solver,
+                "--reltol", repr(reltol), "--abstol", repr(abstol)))
+            wanted = set(manifest["tests"])
+            assertions = [a for a in out["assertions"] if a["test_id"] in wanted]
+            if not assertions:
+                raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
+            rec["assertions"] = assertions
+            rec["passed"] = all(a["passed"] for a in assertions)
+            rec["status"] = "ok" if rec["passed"] else "failed"
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = str(err)
+        if verbose:
+            print(f"  simulation/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "rust", "category": "simulation", "cases": cases}
+
+
+def run_convergence():
+    cases = {}
+    for case_dir, manifest in discover("convergence"):
+        case = manifest["case"]
+        reason = rust_out_of_scope(manifest)
+        if reason is not None:
+            if verbose:
+                print(f"  convergence/{case}: skipped ({reason})")
+            continue
+        rec = {"case": case, "status": "ok"}
+        try:
+            problem = (case_dir / manifest["problem"]).resolve()
+            solver, reltol, abstol = integrator_opts(manifest)
+            out = json.loads(cargo_example(
+                "pde_conformance", "convergence", str(problem),
+                "--model", manifest["model"],
+                "--assert-time", repr(float(manifest["assert_time"])),
+                "--solver", solver,
+                "--reltol", repr(reltol), "--abstol", repr(abstol),
+                "--norms", ",".join(manifest["norms"]),
+                "--resolutions", json.dumps(manifest["resolutions"])))
+            rec["assert_time"] = out["assert_time"]
+            rec["errors"] = out["errors"]
+            if verbose:
+                for row in out["errors"]:
+                    print(f"  convergence/{case} n={row['n']}: " + " ".join(
+                        f"{k}={row[k]}" for k in sorted(row) if k != "n"))
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = str(err)
+        if verbose:
+            print(f"  convergence/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "rust", "category": "convergence", "cases": cases}
+
+
+def run_reprojection():
+    cases = {}
+    for case_dir, manifest in discover("reprojection"):
+        case = manifest["case"]
+        reason = rust_out_of_scope(manifest)
+        if reason is not None:
+            if verbose:
+                print(f"  reprojection/{case}: skipped ({reason})")
+            continue
+        rec = {"case": case, "status": "ok"}
+        try:
+            library = (case_dir / manifest["library"]).resolve()
+            points = (case_dir / manifest["golden"]).resolve()
+            out = json.loads(cargo_example(
+                "pde_conformance", "reproject", str(library), str(points)))
+            rec["forward"] = out["forward"]
+            rec["inverse"] = out["inverse"]
+            rec["roundtrip"] = out["roundtrip"]
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = str(err)
+        if verbose:
+            print(f"  reprojection/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "rust", "category": "reprojection", "cases": cases}
+
+
+RUNNERS = {"ast": run_ast, "simulation": run_simulation,
+           "convergence": run_convergence, "reprojection": run_reprojection}
+
 summary = {"binding": "rust", "runner": "scripts/runners/run-rust.sh",
            "categories": {}}
 exit_code = 0
 for cat in categories:
-    if cat != "ast":
-        print(f"rust/{cat}: unsupported category (skipping; see the manifests' "
-              "blocked-upstream notes for the Rust simulation pathway)")
+    if cat not in RUNNERS:
+        print(f"rust/{cat}: unsupported category (skipping; this runner "
+              f"implements {CATEGORIES_SUPPORTED}; see the regridding "
+              "manifest's blocked-upstream notes)")
         continue
     if verbose:
         print(f"category: {cat}")
-    res = run_ast()
+    res = RUNNERS[cat]()
     (output / f"rust_{cat}_results.json").write_text(
         json.dumps(res, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
     n_bad = sum(1 for r in res["cases"].values() if r["status"] != "ok")
