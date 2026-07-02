@@ -1,0 +1,621 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "mpas_l0_to_octants_sphere",
+    "description": "SMOKE conformance fixture: MPAS cell rings DERIVED IN-DOCUMENT feeding the conservative regridder on the SPHERE -- the unstructured half of the end-to-end declarative regridding story. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem; the mesh file is the library's one allowed precomputation, with derivation provenance in its own _doc). The source rings are NOT authored here: src_poly comes from the grid's mpas_cell_rings_deg template over the widened mesh contract (latVertex/lonVertex/verticesOnCell aliased bare-name from the subsystem), which gathers each cell's CCW vertex ring and converts radians to the degrees the geometry kernels take; at level 0 every cell has exactly MAXEDGES = 5 vertices, so the template's min(k, nEdgesOnCell) pad clamp never fires (padding tolerance of the kernels is pinned separately -- see the grid _doc). Target: the 8 spherical OCTANTS as an inline const ring stack (NVERT = 3; every edge a 90-degree great-circle arc; all octants share the pole and equator vertices under IDENTICAL coordinate spellings, so seams are exact and the octants tile the sphere: sum A_j = 4*pi). MIXED VERTEX COUNTS, deliberately: the narrow phase slices whole rings per cell (index(src_poly, i) / index(tgt_poly, j)), so a pentagon source and a triangle target compose without a shared vertex-count axis -- the production MPAS-to-latlon shape. DENSE narrow phase at manifold 'spherical' (great-circle-edge clipping, areas in steradians): the candidate-gated broad phase rides the planar gated cases; lon-lat floor-binning is the wrong broad phase near poles and the level-0 mesh has only 96 pairs. Exact gates (CONFORMANCE_SPEC 5.8.3): partition-of-unity is exact by construction (the A_j denominator row-sums the SAME computed areas under the SAME sliver filter); conservation is gated at 1e-9 sr -- the octants tile the sphere and the seams are shared arcs, so the residual sum_j A_j*F_tgt[j] - sum_i areaCell[i]*F_src[i] is pure clip noise (mass_src uses the mesh file's committed areaCell as the true source areas; with F_src = [1..12] and areaCell = pi/3 each, mass_src = 26*pi = 81.68140899333463). Several dodecahedron vertices lie EXACTLY on octant boundary great circles (the x = 0 and z = 0 coordinate planes pass through (0, +/-1/phi, +/-phi)-family vertices), so boundary-degenerate clips are part of what this case smokes out -- the sliver filter (atol 1e-12 sr against true overlaps of order 0.1 sr) is the 5.8.2 mechanism that absorbs them identically in numerator and denominator. Golden per-pair A_ij/A_j/W_ij from the official Julia runner (GeometryOps spherical backend) via scripts/regenerate-goldens.sh; rust gates the same arrays through s2geometry (5.8.4: different kernels, same manifold declaration).",
+    "tags": [
+      "conformance",
+      "regridding",
+      "mpas",
+      "unstructured",
+      "mesh-derived-rings",
+      "conservative_overlap",
+      "spherical",
+      "template-import",
+      "partition-of-unity",
+      "conservation"
+    ]
+  },
+  "models": {
+    "Regrid": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/mpas/grid.esm",
+          "bindings": {
+            "NCELLS": 12,
+            "NEDGES": 30,
+            "NVERTICES": 20,
+            "MAXEDGES": 5
+          }
+        },
+        {
+          "ref": "../../../../regridding/conservative_overlap.esm",
+          "bindings": {
+            "NSRC": 12,
+            "NTGT": 8,
+            "NVERT": 3
+          }
+        }
+      ],
+      "subsystems": {
+        "mesh": {
+          "ref": "../../../../grids/mpas/mesh/level0.esm"
+        }
+      },
+      "variables": {
+        "atol": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1e-12,
+          "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2): 1e-12 sr against true pentagon-octant overlaps of order 0.1 sr, and far above any snap-rounding sliver a spherical backend can emit for the measure-zero boundary contacts (several dodecahedron vertices lie exactly on the octant boundary planes)."
+        },
+        "nEdgesOnCell": {
+          "type": "observed",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.nEdgesOnCell (all 5 at level 0): the ring template's pad clamp bound and the ragged edges_of_cell offsets factor.",
+          "expression": "mesh.nEdgesOnCell"
+        },
+        "edgesOnCell": {
+          "type": "observed",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the grid's ragged edges_of_cell index set (unused by the regridder but part of the grid's factor contract).",
+          "expression": "mesh.edgesOnCell"
+        },
+        "verticesOnCell": {
+          "type": "observed",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.verticesOnCell (widened contract): vertex ids around each cell, CCW viewed from outside -- the ring template's gather indices.",
+          "expression": "mesh.verticesOnCell"
+        },
+        "latVertex": {
+          "type": "observed",
+          "units": "rad",
+          "shape": [
+            "vertices"
+          ],
+          "description": "Bare-name alias of mesh.latVertex (widened contract): vertex latitudes, radians.",
+          "expression": "mesh.latVertex"
+        },
+        "lonVertex": {
+          "type": "observed",
+          "units": "rad",
+          "shape": [
+            "vertices"
+          ],
+          "description": "Bare-name alias of mesh.lonVertex (widened contract): vertex longitudes, radians, in (-pi, pi].",
+          "expression": "mesh.lonVertex"
+        },
+        "areaCell": {
+          "type": "observed",
+          "units": "sr",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.areaCell: the TRUE source-cell areas (pi/3 each at level 0; they sum to 4*pi exactly) for the conservation invariant.",
+          "expression": "mesh.areaCell"
+        },
+        "src_poly": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "cells",
+            "maxEdges",
+            "ring_coord"
+          ],
+          "description": "MESH-DERIVED source rings: the grid's mpas_cell_rings_deg template gathers each pentagon's CCW vertex ring from the widened mesh contract and converts radians to degrees -- [12, 5, 2], nothing hand-authored. The factor params are bound to the mesh subsystem's const factors DIRECTLY under their subsystem-scoped names (mesh.latVertex etc.), keeping the build-time geometry-setup closure const-backed (see the grid template's _doc); the bare-name aliases below re-expose the same factors for the grid's rule-body/index-set contract and for readers.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "mpas_cell_rings_deg",
+            "args": [],
+            "bindings": {
+              "latVertex": "mesh.latVertex",
+              "lonVertex": "mesh.lonVertex",
+              "verticesOnCell": "mesh.verticesOnCell",
+              "nEdgesOnCell": "mesh.nEdgesOnCell"
+            }
+          }
+        },
+        "tgt_poly": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Target-cell geometry: the 8 spherical octants as closed CCW lon-lat-degree triangles (NVERT = 3). Every edge is a 90-degree great-circle arc; the north/south poles are spelled (0, +/-90) IDENTICALLY in every ring that touches them and shared equator vertices reuse identical spellings (270 stays 270, the wrap vertex is 0), so adjacent octants share seams exactly and the eight tile the sphere: expected A_j = pi/2 each, sum 4*pi.",
+          "expression": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  180.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  270.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        "F_src": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "cells"
+          ],
+          "description": "The source field being remapped, F[i] = i over the level-0 cell enumeration; mass_src = (pi/3) * (1+...+12) = 26*pi.",
+          "expression": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              6.0,
+              7.0,
+              8.0,
+              9.0,
+              10.0,
+              11.0,
+              12.0
+            ],
+            "args": []
+          }
+        },
+        "unit_src": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "cells"
+          ],
+          "description": "The constant-1 source field whose regrid surfaces partition-of-unity.",
+          "expression": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        "A_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "cells",
+            "tgt_cells"
+          ],
+          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), manifold 'spherical' bound at the invocation: great-circle-edge clipping on the unit sphere, areas in steradians.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "spherical"
+            }
+          }
+        },
+        "A_j": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Row normalization: the denominator is the row-sum of the SAME computed areas under the SAME sliver filter, so partition-of-unity is exact by construction regardless of the boundary-degenerate clips. Expected pi/2 = 1.5707963267948966 sr per octant up to clip noise.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        "W_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "cells",
+            "tgt_cells"
+          ],
+          "description": "Normalized weights over the surviving set (same filter as A_j/apply); the per-pair golden gate.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "atol": "atol"
+            }
+          }
+        },
+        "F_tgt": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "The regridded field: per-octant area-weighted mean of the pentagon values.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_src",
+              "atol": "atol"
+            }
+          }
+        },
+        "F_unit_tgt": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "The constant-1 field through the same apply: partition-of-unity as an ordinary field, exactly 1 by construction.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "unit_src",
+              "atol": "atol"
+            }
+          }
+        },
+        "mass_src": {
+          "type": "observed",
+          "units": "1",
+          "description": "Source-side mass sum_i areaCell[i]*F_src[i] = 26*pi = 81.68140899333463 (committed true areas from the mesh file).",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "args": [
+              "areaCell",
+              "F_src"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "areaCell",
+                    "i"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "mass_tgt": {
+          "type": "observed",
+          "units": "1",
+          "description": "Target-side mass sum_j A_j*F_tgt[j] with the computed denominators as the target areas (the 5.8.3 construction). Equals mass_src up to clip noise because the octants tile the sphere with exactly-shared seams.",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "F_tgt"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_j",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "pou_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for partition-of-unity: pou_state(1) = sum_i W_ij, exactly 1 per octant."
+        },
+        "cons_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for the conservation residual: cons_state(1) = mass_tgt - mass_src, pure clip noise."
+        },
+        "regrid_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for the regridded field: regrid_state(1) = F_tgt, gated against the golden and cross-binding."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "pou_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "cons_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "regrid_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "_comment": "d(pou_state)/dt = F_unit_tgt (the regridded constant-1 field).",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "pou_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F_unit_tgt"
+        },
+        {
+          "_comment": "d(cons_state)/dt = mass_tgt - mass_src, the conservation residual over the sphere-tiling octants.",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "cons_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              "mass_tgt",
+              "mass_src"
+            ]
+          }
+        },
+        {
+          "_comment": "d(regrid_state)/dt = F_tgt.",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "regrid_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F_tgt"
+        }
+      ],
+      "tests": [
+        {
+          "id": "exact_invariants",
+          "description": "The 5.8.3 gates on the sphere with mesh-derived source rings: partition-of-unity pou_state(1) = 1 per octant (exact by construction, tight epsilon) and conservation cons_state(1) = 0 at 1e-9 sr (the octants tile the sphere; mass_src = 26*pi from the committed areaCell).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "min"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "min"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
