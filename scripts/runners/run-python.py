@@ -395,16 +395,40 @@ def run_convergence(output_dir: Path, files, verbose):
 
 
 # ---------------------------------------------------------------------------
-# regridding — the fixture's exact-invariant inline tests + the regridded field
-# (mirrors run-julia.jl's run_regridding; per-pair weights stay blocked-upstream
-# per the case manifest).
+# regridding — the fixture's exact-invariant inline tests, the regridded field,
+# and the per-pair build-time setup arrays (A_ij / A_j / W_ij) read from the
+# official BuildInspection surface (`simulate_states(...; inspect=…)` →
+# `simulate` setup-array observability) — the §5.8 per-pair gates (mirrors
+# run-julia.jl's run_regridding).
 # ---------------------------------------------------------------------------
+
+
+def _setup_array(insp, model: str, name: str):
+    """Fetch one named setup array from the build inspection. Flattening
+    prefixes each observed with its owning model ("Regrid.A_ij"), so try the
+    qualified name, then the bare name, then a unique ".<name>" suffix match
+    (identical to run-julia.jl's _setup_array)."""
+    for key in (f"{model}.{name}", name):
+        if key in insp.setup_arrays:
+            return insp.setup_arrays[key]
+    hits = [k for k in insp.setup_arrays if k.endswith("." + name)]
+    if len(hits) == 1:
+        return insp.setup_arrays[hits[0]]
+    raise RuntimeError(f"setup array '{name}' not exposed by the build "
+                       f"(have: {sorted(insp.setup_arrays)})")
+
+
+def _rows(m):
+    """Row-major nested float lists for JSON emission ([i][j] like the
+    manifest triples)."""
+    return [[float(v) for v in row] for row in m]
 
 
 def run_regridding(output_dir: Path, files, verbose):
     from earthsci_toolkit.parse import load
     from earthsci_toolkit.pde_inline_tests import (
         run_pde_tests, simulate_states, state_cells)
+    from earthsci_toolkit.simulation import BuildInspection
 
     cases = {}
     for case_dir, manifest in discover_manifests("regridding", files):
@@ -428,12 +452,21 @@ def run_regridding(output_dir: Path, files, verbose):
             # regrid_state integrates the constant regridded field from 0 over
             # [0,1], so state(1) IS the regridded field F_tgt.
             file = load(str(fixture))
+            insp = BuildInspection()
             sim = simulate_states(file, (0.0, 1.0), method="LSODA",
-                                  rtol=1e-12, atol=1e-14, saveat=[1.0])
+                                  rtol=1e-12, atol=1e-14, saveat=[1.0],
+                                  inspect=insp)
             for var in ("regrid_state", "pou_state", "cons_state"):
                 cells = state_cells(sim.var_map, var, model)
                 rec[var + "_at_1"] = [float(sim.states[-1][slot])
                                       for _, slot in cells]
+            # Per-pair setup arrays (manifest §5.8 gates): the raw overlap-area
+            # matrix, its filtered row-sums, and the normalized weights — the
+            # build-once geometry the evaluator materializes at setup, emitted
+            # verbatim (row-major [i][j], 1-based like the manifest triples).
+            rec["A_ij"] = _rows(_setup_array(insp, model, "A_ij"))
+            rec["A_j"] = [float(v) for v in _setup_array(insp, model, "A_j")]
+            rec["W_ij"] = _rows(_setup_array(insp, model, "W_ij"))
             rec["status"] = "ok" if rec["passed"] else "failed"
             rec["blocked_upstream"] = str(manifest.get("blocked_upstream", ""))
         except Exception as err:  # noqa: BLE001
