@@ -1,0 +1,115 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_periodic",
+    "description": "MMS driver: 1-D linear advection u_t = -c u_x on the periodic unit interval, discretized by grids/cartesian_uniform_1d/rules/upwind1_D_periodic (first-order upwind, non-negative speed). Exact solution u(x,t) = sin(2 pi (x - c t)) — the initial profile transported at speed c with no change of shape, so no forcing term is required. First-order upwind is diffusive: the dominant error is amplitude damping exp(-c t (1 - cos(2 pi dx)) / dx), roughly 12% relative L2 at N=16 and 3% at N=64 for c=1, t=0.1, halving with each refinement (order 1). Initial condition and references are written explicitly over the grid's x_coord geometry template.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 8 (modified equations and numerical diffusion of the upwind method)."
+      }
+    ]
+  },
+  "models": {
+    "Advection": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_1d/rules/upwind1_D_periodic.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": ["x"],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; the upwind rule assumes flow in +x)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "sin",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  6.283185307179586,
+                  { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["c"] },
+              { "op": "D", "args": ["u"], "wrt": "x" }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_transport",
+          "description": "Exact solution u(x,t) = sin(2 pi (x - c t)) with c = 1. Derivation: u_t = -2 pi c cos(2 pi (x - c t)) = -c u_x exactly, periodic on [0,1]; no forcing term. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the first-order upwind damping (about 12% relative L2 at N=16, shrinking with refinement — the 0.2 bound holds across the convergence sweep). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_periodic/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.2 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} },
+                          0.1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
