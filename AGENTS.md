@@ -40,6 +40,32 @@ fixpoint → official runner`.
 - Everything is resolution-generic via metaparameters (esm-spec §9.7.6). Never bake a
   concrete size into a rule; bind sizes at import/subsystem edges (convergence wrappers)
   or defaults (the grid file).
+- **Extent convention (integers-are-metaparameters, reals-are-consumer-supplied).** Only
+  the integer *counts* are metaparameters (`N`, `NLON`/`NLAT`, `NCELLS`…). The
+  real-valued geometry — origins and spacings — is NOT baked into a grid file: it is
+  supplied by the consuming model as *free names* resolved in its own scope at evaluation
+  (`x0`/`dx` on cartesian, `lon0_deg`/`dlon_deg`/`lat0_deg`/`dlat_deg` + `R_sphere` on
+  latlon), the same keyed-factor pattern MPAS uses for `areaCell`/`dvEdge`. A grid file
+  therefore serves any *extent*, not merely any resolution. Spell a spacing as an
+  observed dividing by the metaparameter *name* (`dx = (b − a)/N`), which §9.7.6
+  substitutes as an integer literal at load, so a loader-API rebinding of `N` keeps it
+  consistent; a model that closes `N` at the import edge instead spells the matching
+  literal.
+- **IMPORTANT — build-time scope caveat.** Free-name geometry templates (`x_coord`,
+  `lon_coord`) resolve in RUNTIME expression positions (rule bodies, equation RHS) but
+  NOT in `ic` equations or §6.6.5 test `reference`s. Those are evaluated build-time and
+  cellwise, and that evaluation is scope-free in every binding (the consumer's model
+  parameters/observeds are out of scope). There, coordinates must fold from literals plus
+  the metaparameter name — spell `x_i = a + (i − 1/2)·((b − a)/N)` inline; never invoke
+  the free-name `x_coord` template. (`problems/heat_1d_zero_grad*.esm` and
+  `two_cartesian_grids_coexist.esm` all follow this.)
+- **`where`-constraint authoring.** Every rule carries a §9.6.1 `where` shape constraint
+  (`{f: {shape: [x]}}`, `{F: {shape: [edges]}}`) so it fires only on *this* grid's fields
+  and so it survives §9.7.7 import renaming (the shape follows the renamed axis, enabling
+  multi-instance coexistence). A shape-constrained rule needs a **bare declared shaped
+  field**, not a compound inline flux: write the match over a plain parameter, and require
+  a consumer differentiating a compound expression (`div(u*h)`) to bind it to a declared
+  shaped observed first.
 - A rule author commits exactly: the library file(s), the `tests/conformance/ast/<rule>/`
   fixture + golden, a `tests/conformance/convergence/` case when an order claim is made,
   and nothing else.

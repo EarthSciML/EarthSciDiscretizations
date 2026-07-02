@@ -45,6 +45,18 @@ boundary-face regions = the BC); there is no separate boundary-condition declara
 anywhere (esm-spec §9.6.8). Rebinding the metaparameters at the import edge is the whole
 convergence story — the same files serve every resolution.
 
+The *extent* is yours too. A grid's real-valued geometry is not baked in: the origins
+and spacings are consumer-supplied free names (`x0`/`dx` on `cartesian_uniform_1d`,
+`lon0_deg`/`dlon_deg`/`lat0_deg`/`dlat_deg` + `R_sphere` on `latlon`) that you define as
+ordinary model variables — the MPAS keyed-factor pattern. For a domain `[a, b]` you set
+`x0 = a` and `dx = (b − a)/N` (an observed dividing by the metaparameter name `N`, so a
+convergence sweep stays consistent). The same rule file that runs on the unit interval
+runs on `x ∈ [−1.5, 2.5]` at observed order 2.00
+(`problems/heat_1d_zero_grad_nonunit.esm`). And because every rule carries a §9.6.1
+`where` shape constraint that travels with §9.7.7 import renaming, you can import one
+grid+rule family **twice** in one model — each instance scoped to its own mesh with its
+own spacing (`problems/two_cartesian_grids_coexist.esm`).
+
 ## Layout
 
 | Directory | Contents |
@@ -75,22 +87,39 @@ python scripts/validate-library.py
 
 ## Status
 
-The conformance infrastructure is complete. All five ESS binding runners are
-registered in `scripts/test-conformance.sh` and CI: the `ast` category is
-**byte-identical across Julia, Python, Rust, TypeScript, and Go** (including the
-end-to-end consuming-model gate at N=64); Julia (reference), Python, and Rust
-run the numeric categories — MMS simulation, convergence sweeps (error norms
-within rtol 1e-4 of the committed Julia goldens), regridding (exact invariants
-plus the per-pair A_ij/A_j/W_ij weights golden, bit-exact against the
-hand-derived rationals), reprojection point gates, and the ragged-MPAS
-divergence simulation (Julia; div∘curl exact to ~3e-14). Scope gaps are
-recorded in the manifests, never shimmed: Go/TypeScript are rewrite-only ports
-(`scope_excluded`), and the remaining `blocked_upstream_bindings` entries name
-their precise upstream sites (Python's bare-name keyed-factor resolution for
-ragged meshes; the missing Rust/Python inspection surface for per-pair
-weights).
+The conformance suite is green at **192 passed / 0 failed / 46 scope-skipped**,
+with `validate-library.py` reporting 0 findings. All five ESS binding runners
+are registered in `scripts/test-conformance.sh` and CI.
 
-The repo carries exemplar content (uniform 1-D cartesian, lat-lon, and MPAS
-grids; centered/upwind rules; a conservative regridder; Lambert conformal
-reprojection) establishing the layering, testing, and docs patterns. The
-pre-0.8.0 catalog in `archive/` migrates rule-by-rule on top of these patterns.
+The `ast` category is **byte-identical across Julia, Python, Rust, TypeScript,
+and Go** — including the end-to-end consuming-model gate at N=64 and the two
+newest spec mechanisms the library now leans on: §9.7.7 import
+renaming/rebinding plus §9.6.1 `where` scoping (`two_cartesian_grids_coexist` —
+one grid+rule imported twice, each instance rewritten to its own renamed axis
+and shape) and §9.6.2 aggregate-mapped template expansion (`lcc_grid_roundtrip`
+— reprojection templates inlined inside an `aggregate`).
+
+Julia (reference), Python, and Rust run the numeric categories — MMS
+simulation, convergence sweeps (error norms within rtol 1e-4 of the committed
+Julia goldens, including the arbitrary-extent `heat_1d_zero_grad_nonunit` and
+both lat-lon MMS drivers at observed order ~2), regridding, reprojection point
+gates and the in-model LCC round-trip, and the ragged-MPAS divergence
+simulation (Julia; div∘curl exact to ~3e-14). Regridding is now **end-to-end
+declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →
+candidate-gated overlap → apply — with the gated path value-identical to the
+dense path (tol 0.0) and conservation / partition-of-unity as the exact gates.
+
+Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript are
+rewrite-only ports (`scope_excluded` from the numeric categories), and the
+`blocked_upstream_bindings` entries name their precise upstream sites — notably
+**Python spherical regridding stays gated on the optional `spherely` dependency**
+(planar regrid runs on Julia + Python + Rust; spherical on Julia + Rust, and
+activates for Python the moment the pinned wheel installs).
+
+The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent),
+the lat-lon production kit (coordinate/metric templates; periodic-lon and
+zero-gradient-lat rules; global and regional recipes), and the MPAS unstructured
+grid; centered/upwind/finite-volume rules; the conservative overlap regridder
+with in-library cell-ring constructors; and Lambert conformal reprojection —
+establishing the layering, testing, and docs patterns. The pre-0.8.0 catalog in
+`archive/` migrates rule-by-rule on top of these patterns.

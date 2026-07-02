@@ -58,6 +58,7 @@ import html
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -272,7 +273,16 @@ class MathRenderer:
                 return text
         return self.render(node, 0)
 
-    REDUCTION_SYMBOL = {"sum_product": "Σ", "prod": "Π", "min_plus": "min", "max_plus": "max"}
+    REDUCTION_SYMBOL = {
+        "sum_product": "Σ",
+        "sum": "Σ",
+        "prod": "Π",
+        "product": "Π",
+        "min_plus": "min",
+        "max_plus": "max",
+        "min": "min",
+        "max": "max",
+    }
 
     def render_aggregate(self, node) -> tuple[str, str, list[str]]:
         """-> (kernel expression, range description, output indices).
@@ -288,7 +298,13 @@ class MathRenderer:
         out_ranges = {k: v for k, v in ranges.items() if k in output_idx}
         contracted = {k: v for k, v in ranges.items() if k not in output_idx}
         if contracted:
-            sym = self.REDUCTION_SYMBOL.get(node.get("semiring", "sum_product"), node.get("semiring", "Σ"))
+            # A `reduce` key names the contraction directly (min/max/sum/prod);
+            # otherwise the additive part of the semiring does (sum_product -> Σ).
+            reduce_key = node.get("reduce")
+            if reduce_key:
+                sym = self.REDUCTION_SYMBOL.get(reduce_key, reduce_key)
+            else:
+                sym = self.REDUCTION_SYMBOL.get(node.get("semiring", "sum_product"), node.get("semiring", "Σ"))
             under = self.render_ranges(contracted)
             if cond:
                 under += f" | {cond}"
@@ -532,6 +548,91 @@ def sole_template(doc: dict, path: Path):
     if name not in templates:
         name = next(iter(templates))
     return name, templates[name]
+
+
+# ---------------------------------------------------------------------------
+# Consumer-supplied free names (the keyed-factor / free-name geometry contract).
+#
+# A grid's real-valued geometry is NOT baked into its .esm files: names like
+# `x0`/`dx` (cartesian), `lon0_deg`/`dlon_deg` (latlon), or `areaCell`/`dvEdge`
+# (mpas) appear as bare references in the geometry-template, stencil, and rule
+# bodies and resolve in the CONSUMING model's scope at evaluation (esm-spec §9.6
+# scalar-field substitution / the keyed-factor contract). They are neither
+# metaparameters (load-time integers) nor template parameters (bound per apply
+# site) nor loop variables — so we surface them structurally by walking the
+# bodies and subtracting everything that IS bound. Presentation only; nothing
+# here evaluates library math.
+# ---------------------------------------------------------------------------
+
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# Dict keys whose string values are NOT expression name references (op names,
+# axis/label metadata, template refs, reduction tags).
+_NON_REF_KEYS = {
+    "op", "wrt", "dim", "name", "semiring", "reduce", "manifold",
+    "output_idx", "kind", "type", "units", "description", "priority",
+}
+
+
+def _walk_name_refs(node, bound: set, out: set) -> None:
+    """Collect bare identifier references in expression positions not in `bound`."""
+    if isinstance(node, str):
+        if _IDENT.match(node) and node not in bound:
+            out.add(node)
+        return
+    if isinstance(node, list):
+        for item in node:
+            _walk_name_refs(item, bound, out)
+        return
+    if not isinstance(node, dict):
+        return
+    local = bound
+    if node.get("op") == "aggregate":
+        # output_idx + range keys bind loop variables in this subtree.
+        loop = set(node.get("output_idx") or []) | set((node.get("ranges") or {}).keys())
+        local = bound | loop
+    for key, value in node.items():
+        if key in _NON_REF_KEYS:
+            continue
+        _walk_name_refs(value, local, out)
+
+
+def free_names_for_grid(grid_doc: dict, sub_docs: list) -> list:
+    """Consumer-supplied free names across a grid's geometry, stencils, and rules.
+
+    `sub_docs` is the list of (path, doc) for the grid's stencils + rules.
+    """
+    bound: set = set()
+    bound |= set((grid_doc.get("metaparameters") or {}).keys())
+    index_sets = grid_doc.get("index_sets") or {}
+    bound |= set(index_sets.keys())
+
+    docs = [grid_doc] + [d for _, d in sub_docs]
+    for doc in docs:
+        templates = doc.get("expression_templates") or {}
+        bound |= set(templates.keys())
+        for tmpl in templates.values():
+            bound |= set(tmpl.get("params") or [])
+
+    # Ragged index sets name their keyed-factor arrays (offsets/values) — always
+    # part of the consumer contract, even when they double as a template param
+    # elsewhere (e.g. mpas nEdgesOnCell) or a body never spells them.
+    keyed_factors: set = set()
+    for spec in index_sets.values():
+        if isinstance(spec, dict) and spec.get("kind") == "ragged":
+            for k in ("offsets", "values"):
+                v = spec.get(k)
+                if isinstance(v, str) and _IDENT.match(v):
+                    keyed_factors.add(v)
+
+    body_refs: set = set()
+    for doc in docs:
+        for tmpl in (doc.get("expression_templates") or {}).values():
+            body = tmpl.get("body")
+            if body is not None:
+                _walk_name_refs(body, bound, out=body_refs)
+    body_free = {n for n in body_refs if n not in bound}
+    return sorted(keyed_factors | body_free)
 
 
 def index_conformance():
@@ -821,6 +922,30 @@ def rule_section(
     else:
         warn(f"{rel(rule_path)}: rule template has no match pattern")
 
+    # Match-scoping `where` shape constraint (esm-spec §9.6.1): the rule fires
+    # only on a bare field of the named shape, which is also the mechanism that
+    # lets the rule be imported multiple times (renamed) without collision.
+    where = template.get("where")
+    if where:
+        clauses = []
+        for var, spec in where.items():
+            shape = spec.get("shape") if isinstance(spec, dict) else None
+            if isinstance(shape, list):
+                axes_s = ", ".join(str(a) for a in shape)
+                clauses.append(f"<code>{html.escape(str(var))}</code> is a bare field shaped <code>[{html.escape(axes_s)}]</code>")
+            else:
+                clauses.append(f"<code>{html.escape(str(var))}</code>: <code>{html.escape(json.dumps(spec, ensure_ascii=False))}</code>")
+        out.append(
+            '<div class="callout callout-scope"><strong>Match scope</strong> '
+            "(esm-spec §9.6.1 <code>where</code>): fires only when " + "; ".join(clauses) + ". "
+            "Under import-edge renaming (§9.7.7) the <code>wrt</code> literal and this shape "
+            "follow the renamed axis together, so the rule can be imported more than once "
+            "(each instance scoped to its own grid) without a first-declared-wins collision. "
+            "A consumer differentiating a compound inline expression must bind it to a "
+            "declared shaped observed first.</div>"
+        )
+        out.append("")
+
     # Discretization: the makearray region table (interior vs boundary faces).
     body = template.get("body")
     if isinstance(body, dict) and body.get("op") == "makearray":
@@ -1010,6 +1135,50 @@ def grid_page(
             "",
         ]
 
+    free_names = free_names_for_grid(doc, stencil_docs + rule_docs)
+    if free_names:
+        recipe = {
+            "cartesian": "The geometry is consumer-supplied so the same files serve any "
+            "**domain extent**, not just any resolution. For a domain [a, b] the consuming "
+            "model defines `x0 = a` (a parameter) and `dx = (b − a)/N` (an observed whose "
+            "expression divides by the metaparameter name `N`, so a loader-API rebinding of "
+            "`N` — a convergence sweep — keeps `dx` consistent). A model that instead closes "
+            "`N` at the import edge spells the matching literal (`{op: /, args: [1, 8]}` for "
+            "N = 8 on the unit interval). See the extent proof "
+            "`problems/heat_1d_zero_grad_nonunit.esm` (x ∈ [−1.5, 2.5], observed order 2.00).",
+            "latlon": "Region-generic: the same files serve a **global** or a **regional** "
+            "grid depending on the free-name values the consumer supplies. GLOBAL recipe — "
+            "`lon0_deg = 0`, `dlon_deg = 360/NLON`, `lat0_deg = −90`, `dlat_deg = "
+            "180/(NLAT − 1)` (pole-to-pole; the zonal circle closes, so the periodic-lon rule "
+            "applies). REGIONAL recipe — any other origin/spacing (e.g. `lon0_deg = −130`, "
+            "`dlon_deg = 0.25` over CONUS); the circle does not close, so use the "
+            "zero-gradient lon rule. Spell the spacings as observeds dividing by the "
+            "metaparameter names (`NLON`/`NLAT`) so a convergence sweep stays consistent. A "
+            "further free name `R_sphere` (sphere radius, m) enters only the consumer's "
+            "physical-units metric composition (per-degree derivatives → per-metre; the "
+            "`coslat` template supplies cos(lat)).",
+            "mpas": "The mesh geometry arrives as **data**, not formula: these are the "
+            "keyed-factor arrays a consuming model must expose under exactly these bare names, "
+            "normally as observed aliases of a mounted `grids/mpas/mesh/` subsystem's `const` "
+            "data (see `problems/divergence_mpas.esm`). The 2026-07 regridding wave widened "
+            "the contract with the vertex-geometry factors so cell polygon rings derive "
+            "in-document via `mpas_cell_rings_deg`.",
+        }.get(
+            family,
+            "These names are supplied by the consuming model's scope at evaluation (the "
+            "keyed-factor / free-name geometry contract); they are neither metaparameters "
+            "(load-time integers) nor template parameters (bound per apply site).",
+        )
+        chips_html = " ".join(f"<code>{html.escape(n)}</code>" for n in free_names)
+        lines += [
+            "## Consumer-supplied free names",
+            "",
+            f'<p class="rule-meta">{chips_html}</p>',
+            "",
+            recipe,
+            "",
+        ]
+
     index_sets = doc.get("index_sets") or {}
     if index_sets:
         lines += ["## Index sets", "", "| Name | Kind | Size |", "|---|---|---|"]
@@ -1080,6 +1249,45 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
         "conformal, …) for use inside regridding and coupling expressions.",
     }[kind]
 
+    capability = {
+        "regrid": [
+            "The conservative overlap regridder is **end-to-end declarative**: a consumer "
+            "constructs source and target cell rings, derives the broad-phase bin keys, and "
+            "runs the candidate-gated overlap → normalize → apply, all from `.esm` templates "
+            "with no host glue.",
+            "",
+            "- **Cell-ring constructors** turn a grid spec into the `[cells, verts, coord]` "
+            "vertex rings the regridder consumes — `cartesian_cell_rings.esm` from a uniform "
+            "cartesian spec, and `grids/mpas/grid.esm`'s `mpas_cell_rings_deg` from MPAS mesh "
+            "vertex data (the widened contract).",
+            "- **Broad phase in-library**: representative binning coordinates derived from the "
+            "rings themselves plus integer `skolem` bin keys, so the candidate set is "
+            "byte-identical across bindings.",
+            "- **Gated == dense** value-identically under an admissible binning (the gated "
+            "denominator broad-phases like the numerator, so partition-of-unity stays exact).",
+            "- **One file, every manifold**: `planar` or `spherical` is a per-invocation "
+            "template parameter. Spherical clip runs on Julia + Rust today; the Python "
+            "spherical case is gated on the optional `spherely` dependency (planar cases run "
+            "on Julia + Python + Rust), and the two rewrite-only ports (Go, TypeScript) are "
+            "scope-excluded — recorded in each case manifest, never shimmed.",
+            "",
+            "End-to-end exemplars: `tests/conformance/regridding/"
+            "cartesian_rings_regrid_gated_3x3_to_2x2` (grid spec → rings → broad phase → "
+            "gated overlap → regrid) and `mpas_l0_to_octants_sphere` (MPAS mesh-derived rings "
+            "on the sphere).",
+        ],
+        "reproject": [
+            "These are forward/inverse **scalar** templates over the evaluable core — but they "
+            "also apply **in-model over coordinate arrays**: invoke them inside an `aggregate` "
+            "whose bindings mix indexed reads, literals, and parameter references, and every "
+            "`apply_expression_template` inlines (esm-spec §9.6.2 Option A) into a closed "
+            "scalar AST at each cell. The `tests/conformance/reprojection/lcc_grid_roundtrip` "
+            "case pins exactly this aggregate-mapped lowering: byte-identical expanded AST "
+            "across all five bindings, and a working round-trip simulation on Julia + Python "
+            "+ Rust.",
+        ],
+    }[kind]
+
     entries = esm_files(directory)
     lines = [
         "---",
@@ -1089,7 +1297,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
         "",
         intro,
         "",
-    ]
+    ] + capability + [""]
     if not directory.is_dir() or not entries:
         lines += [
             f'<div class="callout callout-pending">No <code>{directory.name}/</code> entries are '

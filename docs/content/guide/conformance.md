@@ -37,7 +37,13 @@ but never numerically evaluate library math.
   post-lowering AST. All five bindings must reproduce it **byte-identically**
   (esm-spec §9.6.8: two bindings expanding the same file must produce
   byte-identical post-lowering ASTs, or the same rejection). This category
-  needs no simulator, so it is the first gate a new binding port clears.
+  needs no simulator, so it is the first gate a new binding port clears. It also
+  pins the newer spec mechanisms the library now uses: §9.7.7 import
+  renaming/rebinding + §9.6.1 `where` scoping (`two_cartesian_grids_coexist` —
+  one grid+rule imported twice, each instance rewritten to its own renamed
+  axis and shape) and §9.6.2 aggregate-mapped template expansion
+  (`lcc_grid_roundtrip` — reprojection templates inlined inside an `aggregate`),
+  both byte-identical across all five bindings.
 
 - **`simulation/`** — correctness. Each case routes a problem's inline
   §6.6.5 MMS tests through each binding's official simulation pathway at the
@@ -54,7 +60,16 @@ but never numerically evaluate library math.
 
 - **`regridding/` and `reprojection/`** — the cross-grid entries' own gates:
   conservation and partition-of-unity as exact invariants, per-pair
-  areas/weights and projected points toleranced against goldens.
+  areas/weights and projected points toleranced against goldens, plus
+  **dense == gated value-identity** where both broad-phase paths are computed
+  and **end-to-end** grid-spec → rings → broad phase → gated overlap → apply
+  (`cartesian_rings_regrid_gated_3x3_to_2x2`, `mpas_l0_to_octants_sphere`).
+  Scope is recorded honestly per case: planar regrid runs on Julia + Python +
+  Rust, but **spherical regrid runs on Julia + Rust only** — the Python
+  spherical case is `blocked_upstream_bindings` on the optional `spherely`
+  dependency (no installable wheel in the conformance venv today; it activates
+  for Python as soon as the dep installs). Go and TypeScript are rewrite-only
+  ports, `scope_excluded` (no aggregate/makearray lowering or simulator).
 
 Manifests declare scope honestly: `reference_binding` (always `julia`),
 `bindings_required`, and `scope_excluded` with a reason per excluded binding

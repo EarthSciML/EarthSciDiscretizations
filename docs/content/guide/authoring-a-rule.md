@@ -65,6 +65,20 @@ target operator and whose body is one `makearray`:
   (esm-spec §4.3.2).
 - A compound scheme (e.g. matching `D(D(f,x),x)` whole) sets `priority` so it
   out-ranks plain-D rules (§9.6.3).
+- A **`where` shape constraint** (§9.6.1) scopes the match to *this* grid:
+  `"where": { "f": { "shape": ["x"] } }` (or `{"F": {"shape": ["edges"]}}` for
+  the MPAS div rule). Every library rule carries one — it stops an axis-name
+  collision from firing the rule on an unrelated derivative, and it is what lets
+  the rule be imported twice (renamed) without a first-declared-wins tie-break:
+  the shape names an index set, so §9.7.7 renaming rewrites it to `[meshA.x]` /
+  `[meshB.x]` along with the `wrt` literal. See
+  [the layering](/guide/layering/#two-instances-of-one-grid-rename-and-where).
+
+  **Authoring convention:** a `where` shape requires a *bare declared shaped
+  field*. Write the constraint over a plain parameter (`f`, `F`), and document
+  that a consumer differentiating a compound inline expression (`div(u*h)`,
+  `D(D(u*v,x),x)`) must first bind it to a declared shaped observed — the
+  constraint will not match a compound inline argument.
 
 Tags: `esd:rule` + `family:`, `grid:`, `op:`, `order:`, `bc:`, `axes:` (L002);
 `axes:` lists the output dimensions in order, comma-separated. The filename

@@ -38,6 +38,13 @@ boundary-condition declaration anywhere (esm-spec §9.6.8). Rebinding the
 metaparameters at the import edge is the whole convergence story — the same
 files serve every resolution.
 
+The physical *extent* is the consumer's too: a grid's origins and spacings are
+supplied as free names (`x0`/`dx`, `lon0_deg`/`dlon_deg`/…) resolved in your
+model's scope, so one grid file serves any domain, not just any resolution. And
+because every rule carries a §9.6.1 `where` shape constraint that travels with
+§9.7.7 import renaming, you can import one grid+rule family twice in a single
+model — two meshes, each scoped to its own axis and spacing.
+
 ## Quickstart
 
 A consuming model needs one import and one `D`:
@@ -64,8 +71,11 @@ simulation pathway takes it from there.
 - **[Grids](/grids/)** — one page per grid: index sets, geometry,
   stencils, and every rule published for it (match pattern, discretization,
   boundary treatment, observed convergence orders from the committed goldens).
-- **[Regridding](/regridding/)** — conservative/interpolating remap expressions.
-- **[Reprojection](/reprojection/)** — coordinate-transform template fragments.
+- **[Regridding](/regridding/)** — conservative/interpolating remap expressions,
+  end-to-end declarative: cell-ring constructors, an in-library broad phase, and
+  candidate-gated overlap (gated == dense).
+- **[Reprojection](/reprojection/)** — coordinate-transform template fragments,
+  usable in-model over coordinate arrays via aggregates.
 - **[Guide](/guide/)** — the layering, authoring a rule, MMS + convergence
   testing, and the conformance suite.
 - Facets: [families](/families/), [operators](/ops/),

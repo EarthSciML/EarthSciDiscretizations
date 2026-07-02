@@ -21,11 +21,20 @@ grids/<grid>/grid.esm             the grid constructor
 
 **`grid.esm`** owns the axes and the geometry. It declares the grid's
 `index_sets` (e.g. `x` of size `N`, or `lon`/`lat` of sizes `NLON`/`NLAT`),
-its `metaparameters` (those sizes, with defaults), and zero-parameter geometry
-templates — `dx = 1/N`, cell-center coordinates, spacings in degrees. Geometry
-is ordinary expressions, resolution-generic through the metaparameters; on
-unstructured grids (MPAS) geometry is mesh *data* instead, and the grid file
-documents the keyed-factor contract a consumer must satisfy.
+its `metaparameters` (those *sizes*, with defaults), and geometry templates
+that give the index-to-coordinate map (`x_coord`, `lon_coord`/`lat_coord`, the
+`coslat` metric, …). The **real-valued extent is not baked in**: the origins
+and spacings are *consumer-supplied free names* — `x0`/`dx` on
+`cartesian_uniform_1d`, `lon0_deg`/`dlon_deg`/`lat0_deg`/`dlat_deg` (and
+`R_sphere` for physical-units metrics) on `latlon` — that resolve in the
+consuming model's scope at evaluation, the same keyed-factor contract MPAS uses
+for `areaCell`/`dvEdge`. Only the integer *counts* are metaparameters; the
+geometry itself is the consumer's, so one grid file serves any domain extent,
+not merely any resolution (see [arbitrary extents](#arbitrary-extents-via-consumer-free-names)
+below). On unstructured grids (MPAS) the whole geometry is mesh *data* — the
+keyed factors `nEdgesOnCell`, `edgesOnCell`, `areaCell`, and (since the
+regridding wave widened the contract) the vertex-geometry factors that let cell
+polygon rings derive in-document.
 
 **`stencils/<name>.esm`** is the interior operator only: a **match-less** named
 template importing `grid.esm`, e.g. the 3-point centered second difference over
@@ -76,6 +85,76 @@ Bindings flow down the reference DAG; open metaparameters flow up:
 Never bake a concrete size into a rule. If you feel the need for a fixture
 generator, the metaparameter mechanism is being misused (AGENTS.md §6).
 
+## Arbitrary extents via consumer free names
+
+Metaparameters give you every *resolution*; consumer-supplied free names give
+you every *extent*. A grid file never fixes the physical domain — its geometry
+templates and rule bodies reference bare names (`x0`, `dx`, `lon0_deg`, …) that
+the consuming model must define as ordinary variables. On
+`cartesian_uniform_1d`, for a domain `[a, b]`:
+
+```json
+"x0": { "type": "parameter",  "default": -1.5 },
+"dx": { "type": "observed",   "expression": { "op": "/", "args": [4, "N"] } }
+```
+
+`dx = (b − a)/N` is written **dividing by the metaparameter name `N`**, which
+§9.7.6 substitutes as an integer literal at load — so a convergence sweep that
+rebinds `N` through the loader API keeps `dx` consistent automatically, with no
+per-resolution files. `problems/heat_1d_zero_grad_nonunit.esm` proves it: the
+*same* rule file that runs on the unit interval runs on `x ∈ [−1.5, 2.5]` at
+observed order 2.00. A model that instead closes `N` at the import edge spells
+the matching literal (`{op: /, args: [1, 8]}` for N = 8).
+
+The `latlon` kit takes the same shape, region-generically: the **global** recipe
+(`lon0_deg = 0`, `dlon_deg = 360/NLON`, `lat0_deg = −90`, `dlat_deg =
+180/(NLAT − 1)`) closes the zonal circle so the periodic-lon rule applies; a
+**regional** recipe (any other origin/spacing) does not close, so the
+zero-gradient lon rule is used instead.
+
+**Build-time scope caveat.** Free-name geometry templates (`x_coord`,
+`lon_coord`) resolve only in *runtime* expression positions — rule bodies and
+equation right-hand sides. They do **not** resolve in `ic` equations or §6.6.5
+test `reference`s, whose build-time cellwise evaluation is scope-free in every
+binding (model parameters/observeds are out of scope there). In those positions
+spell the coordinate inline from literals and the metaparameter name — e.g.
+`x_i = 0 + (i − 1/2)·(1/N)` — never `apply_expression_template x_coord`. See
+[MMS and convergence](/guide/mms-and-convergence/).
+
+## Two instances of one grid: rename and where
+
+A rule fires by matching an operator (`D(D(f,x),x)`, `div(F)`, …). The `wrt`
+literal and the operator alone are not enough to keep two grids apart when both
+reuse an axis name, so every library rule also carries a §9.6.1 **`where`**
+shape constraint — `{"f": {"shape": ["x"]}}`, `{"F": {"shape": ["edges"]}}`.
+The rule then fires **only** on a bare field declared over *that* grid's index
+sets, not on any unrelated derivative reusing the axis name.
+
+Because the shape names an index set, it travels with §9.7.7 **import
+renaming**. Import one grid+rule family twice under distinct prefixes and each
+instance is scoped to its own mesh:
+
+```json
+"expression_template_imports": [
+  { "ref": ".../rules/central_D2_zero_grad_bc.esm",
+    "prefix": "meshA", "bindings": { "N": 8 },  "rebind": { "dx": "meshA_dx" } },
+  { "ref": ".../rules/central_D2_zero_grad_bc.esm",
+    "prefix": "meshB", "bindings": { "N": 16 }, "rebind": { "dx": "meshB_dx" } }
+]
+```
+
+Renaming is transitive and simultaneous: the index set `x` arrives as
+`meshA.x` / `meshB.x`, the match `wrt` follows it, `N` folds per edge into the
+`makearray` regions, and each instance's `where` shape is rewritten to
+`[meshA.x]` / `[meshB.x]`. The `rebind` retargets the free spacing name `dx` to
+each mesh's own observed (`meshA_dx = 1/8`, `meshB_dx = 1/16`), so the two
+fields evolve completely independently with no first-declared-wins collision and
+no priority arbitration. `problems/two_cartesian_grids_coexist.esm` is the
+worked driver — the composition that was inexpressible before renaming +
+match-scoping landed. When you author a `where`-constrained rule, the consumer
+must present a **bare declared shaped field**; a compound inline flux
+(`div(u*h)`) must first be bound to a declared shaped observed.
+
 ## What resolves when
 
 Per document, innermost-first (esm-spec §9.7.6): resolve imports (instantiating
@@ -92,5 +171,16 @@ byte-identical post-lowering ASTs — that determinism contract is what the
 `regridding/` and `reprojection/` are top-level because they connect grids
 rather than belonging to one. They follow the same template-library form:
 match-less templates (overlap-area matrices, projection formulas) that a
-coupling or model invokes with `apply_expression_template`. See the generated
-[Regridding](/regridding/) and [Reprojection](/reprojection/) pages.
+coupling or model invokes with `apply_expression_template`.
+
+Both are now **end-to-end declarative**. The conservative regridder ships its
+whole pipeline in-library — cell-ring constructors (`cartesian_cell_rings.esm`
+from a grid spec; MPAS `mpas_cell_rings_deg` from mesh vertex data), a broad
+phase of geometry-derived integer `skolem` bin keys, and candidate-gated
+overlap → normalize → apply templates whose gated form is value-identical to the
+dense form under an admissible binning. Reprojection templates apply not only at
+scalar points but **in-model over coordinate arrays**, by invoking the
+forward/inverse templates inside an `aggregate` (§9.6.2 Option A expansion; the
+`lcc_grid_roundtrip` case pins byte-identical lowering across all five
+bindings). See the generated [Regridding](/regridding/) and
+[Reprojection](/reprojection/) pages.

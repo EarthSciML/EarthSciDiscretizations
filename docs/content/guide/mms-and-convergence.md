@@ -24,7 +24,9 @@ given time under a `reduce` norm:
   "reference": { "op": "*", "args": [
     { "op": "exp", "args": [ { "op": "*", "args": [-0.01, 9.869604401089358, 0.1] } ] },
     { "op": "cos", "args": [ { "op": "*", "args": [3.141592653589793,
-      { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} } ] } ] } ] }
+      { "op": "aggregate", "output_idx": ["i"], "args": [], "ranges": { "i": { "from": "x" } },
+        "expr": { "op": "+", "args": [0, { "op": "*", "args": [
+          { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] } ] }] } } ] } ] } ] }
 }
 ```
 
@@ -37,8 +39,19 @@ every recorded error is pure spatial-discretization error. The derivation and
 the BC-compatibility argument live in the test's `description` (that is the
 required home for them, per AGENTS.md §4).
 
-References are written explicitly over the grid's geometry templates
-(`x_coord`), so no implicit index-to-coordinate mapping is assumed anywhere.
+**Build-time scope caveat — spell coordinates inline, not via `x_coord`.**
+The reference above writes the cell center `x_i = 0 + (i − 1/2)·(1/N)` inline as
+a load-foldable aggregate, dividing by the metaparameter name `N`. It does *not*
+invoke the grid's free-name `x_coord` template, and neither do the `ic`
+equations. The reason is scope: the official §6.6.5 / `ic` build-time cellwise
+evaluation is scope-free in every binding — the consumer's `x0`/`dx` model
+variables are not visible there — so a build-time coordinate expression must fold
+from literals and metaparameters alone. Free-name geometry templates (`x_coord`,
+`lon_coord`) resolve only in *runtime* positions (rule bodies, equation RHS).
+On a non-unit domain the same inline spelling carries the origin as a literal:
+`problems/heat_1d_zero_grad_nonunit.esm` writes `x_i = −1.5 + (i − 1/2)·(4/N)`.
+Still, no *implicit* index-to-coordinate mapping is ever assumed — the mapping
+is spelled out, just from literals rather than the template.
 
 A `tests/conformance/simulation/<case>/manifest.json` routes each binding's
 official simulation pathway at the problem's default resolution; the
