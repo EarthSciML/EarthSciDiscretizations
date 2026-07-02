@@ -1,0 +1,37 @@
+{
+  "category": "regridding",
+  "version": "1.0",
+  "case": "conservative_overlap_gated_3x3_to_2x2",
+  "description": "Cross-binding conformance for the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm on exactly the dense exemplar's geometry (nine 1x1-degree source cells -> four 1.5x1.5-degree target cells tiling [0,3]x[0,3], planar manifold). The fixture runs the full in-library broad phase -- bbox-min binning coordinates DERIVED from the polygon stacks by the conservative_overlap_{src,tgt}_rep_{lon,lat} reduce-min templates, integer bin keys minted by conservative_overlap_{src,tgt}_bin (skolem('bin', floor(coord/4.0)); CONFORMANCE_SPEC 5.8.5 byte-identity governs the key construction), and the _gated narrow phase/assembly (join.on [[src_bin, tgt_bin]]) -- then computes the DENSE path side by side on the same rings and gates VALUE-IDENTITY exactly: the inline test gated_equals_dense asserts the total L1 residual across A_ij/A_j/W_ij is 0.0 at tolerance abs 0.0 (bit-identical, not merely close: under the fixture's admissible binning the gated contraction visits the identical surviving set, and appending exact-zero terms to a nonnegative-area sum is FP-exact). bin_dx = bin_dy = 4.0 is the DELIBERATE degenerate-safe binning: on this compact tiling every cell lands in bin (0,0) and the candidate set is the full 9x4 cross product -- single-representative-point binning cannot prune anything here without dropping genuine overlaps (any floor boundary inside [0,3] separates some touching representatives), which is the documented admissibility limit; genuine pruning is demonstrated by the sibling case conservative_overlap_gated_clusters_4_to_2 on cluster geometry where a separating width exists. The two 5.8.3 EXACT invariants (partition-of-unity, conservation) gate the gated pipeline; the golden per-pair weights (official Julia runner via scripts/regenerate-goldens.sh, BuildInspection setup arrays A_ij/A_j/W_ij -- here the GATED matrices) must equal the dense exemplar conservative_overlap_3x3_to_2x2's committed golden numbers, the cross-case face of the same value-identity. reference_weights: see the dense exemplar's manifest (identical exact rationals: A_ij corner 1.0 / edge 0.5 / center 0.25 deg^2, A_j = 2.25, W corner 4/9 / edge 2/9 / center 1/9, F_tgt = [7/3, 11/3, 19/3, 23/3], mass 45).",
+  "fixture": "fixture.esm",
+  "library": "../../../../regridding/conservative_overlap.esm",
+  "model": "Regrid",
+  "tests": [
+    "exact_invariants",
+    "gated_equals_dense"
+  ],
+  "manifold": "planar",
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "_doc": "Identical to the dense exemplar conservative_overlap_3x3_to_2x2 (same geometry, same 5.8 contract): sliver floor atol = area_atol_factor * characteristic_length^2; partition-of-unity exact by construction; conservation exact because the target tiles the source domain. The gated-vs-dense value identity is gated in-fixture at abs 0.0 (see tests), not here.",
+    "area_rtol": 1e-09,
+    "area_atol_factor": 1e-15,
+    "characteristic_length": 1.0,
+    "weight_rtol": 1e-09,
+    "weight_atol": 1e-12,
+    "partition_of_unity_atol": 1e-12,
+    "conservation_atol": 1e-09,
+    "conservation_exact": true
+  },
+  "golden": "golden/weights.json",
+  "status": "pending-golden"
+}

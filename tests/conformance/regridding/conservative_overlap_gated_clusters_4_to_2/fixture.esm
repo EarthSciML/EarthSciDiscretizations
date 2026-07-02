@@ -1,0 +1,947 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "conservative_overlap_gated_clusters_4_to_2",
+    "description": "Conformance fixture: the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm with GENUINE broad-phase pruning. Geometry: two disjoint cell clusters ten degrees apart -- cluster A: source cells [0,1]x[0,1] and [1,2]x[0,1] coarsened into target [0,2]x[0,1]; cluster B: source cells [10,11]x[0,1] and [11,12]x[0,1] coarsened into target [10,12]x[0,1] (planar manifold, all cells unit-height 2:1 coarsenings). BROAD PHASE with bin_dx = bin_dy = 4.0 and bbox-min-corner representatives (derived in-library by the reduce-min templates): cluster-A representatives (lon 0, 1) quantize to floor bin 0, cluster-B representatives (lon 10, 11) to floor bin 2 -- so the bin-Skolem equi-join admits only the four same-cluster pairs and PRUNES the four cross-cluster pairs, which the gated narrow phase NEVER CLIPS (this is the O(#candidates) saving made observable: 4 clips instead of 8). The binning is ADMISSIBLE because the pruned pairs have zero true overlap (the clusters are disjoint), so the dense path -- computed side by side on the same rings -- reaches the identical surviving set: it clips all 8 pairs, gets exactly 0 for the cross-cluster four, and the sliver filter drops them. The inline test gated_equals_dense asserts the total L1 residual across A_ij/A_j/W_ij is 0.0 EXACTLY (tolerance abs 0.0), which is the esm-spec 8.6.1 dense/gated value-identity under an admissible binning, on geometry where the candidate set is a PROPER SUBSET of the cross product (unlike the degenerate-safe sibling conservative_overlap_gated_3x3_to_2x2 where the candidate set is full). Hand geometry: each target is tiled by exactly its two cluster's source cells, A_ij = 1.0 deg^2 for the four surviving pairs, A_j = 2.0, W_ij = 1/2, F_tgt = [(1+2)/2, (3+4)/2] = [1.5, 3.5] with F_src = [1..4], both masses 10 (unit source areas). Partition-of-unity and conservation are the 5.8.3 EXACT gates (the targets tile the source domain); the golden per-pair weights come from the official Julia runner via scripts/regenerate-goldens.sh.",
+    "tags": [
+      "conformance",
+      "regridding",
+      "conservative_overlap",
+      "broad-phase",
+      "bin-skolem",
+      "candidate-gated",
+      "candidate-pruning",
+      "join",
+      "value-identity",
+      "template-import",
+      "partition-of-unity",
+      "conservation"
+    ]
+  },
+  "models": {
+    "Regrid": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../regridding/conservative_overlap.esm",
+          "bindings": {
+            "NSRC": 4,
+            "NTGT": 2,
+            "NVERT": 4
+          }
+        }
+      ],
+      "variables": {
+        "atol": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1e-12,
+          "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2): 1e-12 deg^2 against true overlaps of 1.0 deg^2. Shared by the gated and dense assembly templates so the surviving sets coincide."
+        },
+        "bin_dx": {
+          "type": "parameter",
+          "units": "1",
+          "default": 4.0,
+          "description": "Broad-phase bin width (degrees lon): 4.0 separates the clusters (representatives 0,1 -> bin 0; 10,11 -> bin 2) while keeping each cluster's source and target representatives in a common bin -- an ADMISSIBLE, genuinely PRUNING binning."
+        },
+        "bin_dy": {
+          "type": "parameter",
+          "units": "1",
+          "default": 4.0,
+          "description": "Broad-phase bin height (degrees lat): all representatives at lat 0 -> bin 0."
+        },
+        "src_poly": {
+          "type": "observed",
+          "shape": [
+            "src_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Source-cell geometry: four closed CCW lon-lat rings in two disjoint clusters -- [0,1] and [1,2] (cluster A), [10,11] and [11,12] (cluster B), all x [0,1] in lat.",
+          "expression": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  0.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  10.0,
+                  0.0
+                ],
+                [
+                  11.0,
+                  0.0
+                ],
+                [
+                  11.0,
+                  1.0
+                ],
+                [
+                  10.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  11.0,
+                  0.0
+                ],
+                [
+                  12.0,
+                  0.0
+                ],
+                [
+                  12.0,
+                  1.0
+                ],
+                [
+                  11.0,
+                  1.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        "tgt_poly": {
+          "type": "observed",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Target-cell geometry: one 2:1 coarsened cell per cluster -- [0,2]x[0,1] and [10,12]x[0,1].",
+          "expression": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  0.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  10.0,
+                  0.0
+                ],
+                [
+                  12.0,
+                  0.0
+                ],
+                [
+                  12.0,
+                  1.0
+                ],
+                [
+                  10.0,
+                  1.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        "src_area": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "True source-cell areas A_i (1 deg^2 each) for the conservation invariant.",
+          "expression": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        "F_src": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "The source field being remapped, F[i] = i, so F_tgt = [1.5, 3.5] and the conserved mass is 10.",
+          "expression": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0
+            ],
+            "args": []
+          }
+        },
+        "unit_src": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "The constant-1 source field whose gated regrid surfaces partition-of-unity.",
+          "expression": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        "src_lon": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Source binning longitude: bbox-min ring corner derived from src_poly by the library's reduce-min template. Values [0, 1, 10, 11].",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_rep_lon",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly"
+            }
+          }
+        },
+        "src_lat": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Source binning latitude (bbox-min corner). Values [0, 0, 0, 0].",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_rep_lat",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly"
+            }
+          }
+        },
+        "tgt_lon": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Target binning longitude (bbox-min corner). Values [0, 10].",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_rep_lon",
+            "args": [],
+            "bindings": {
+              "tgt_poly": "tgt_poly"
+            }
+          }
+        },
+        "tgt_lat": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Target binning latitude (bbox-min corner). Values [0, 0].",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_rep_lat",
+            "args": [],
+            "bindings": {
+              "tgt_poly": "tgt_poly"
+            }
+          }
+        },
+        "src_bin": {
+          "type": "state",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Integer bin keys skolem('bin', floor(lon/4), floor(lat/4)): cluster A -> ('bin', 0, 0), cluster B -> ('bin', 2, 0). Byte-identical across bindings (integer components only, CONFORMANCE_SPEC 5.8.5). Spelled per the upstream-supported value-invention pathway (ESS tests/coupling/cross_domain_coupling.esm rg_src_bin): a STATE variable assigned by a per-element skolem-aggregate equation -- the bindings' relational front-doors detect skolem maps on state equations, materialize the buffer once at build time, and drop the equation from the ODE."
+        },
+        "tgt_bin": {
+          "type": "state",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Integer bin keys, identically quantized: [('bin', 0, 0), ('bin', 2, 0)]. STATE + skolem-aggregate equation, as src_bin."
+        },
+        "A_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "CANDIDATE-GATED narrow phase: only the four same-cluster pairs are clipped (the join prunes the cross-cluster four, which stay the additive identity 0 without ever being visited). Expected 1.0 deg^2 on the surviving pairs, 0 elsewhere.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij_gated",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin"
+            }
+          }
+        },
+        "A_j": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "CANDIDATE-GATED row normalization (same join gate, same sliver filter as the numerator -- the denominator broad-phases like the numerator). Expected 2.0 for both targets.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
+              "atol": "atol"
+            }
+          }
+        },
+        "W_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "CANDIDATE-GATED normalized weights. Expected exactly 1/2 on the four surviving pairs, 0 elsewhere.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
+              "atol": "atol"
+            }
+          }
+        },
+        "A_ij_dense": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "DENSE REFERENCE PATH: clips all 8 pairs; the cross-cluster four come back exactly 0 (disjoint cells), so the filtered surviving set is identical to the gated path's.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        "A_j_dense": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "DENSE REFERENCE PATH: the ungated filtered row-sum.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij_dense",
+              "atol": "atol"
+            }
+          }
+        },
+        "W_ij_dense": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "DENSE REFERENCE PATH: the ungated normalized weights.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij_dense",
+              "A_j": "A_j_dense",
+              "atol": "atol"
+            }
+          }
+        },
+        "ident_A": {
+          "type": "observed",
+          "units": "1",
+          "description": "L1 residual of the gated vs dense overlap matrices: sum_{i,j} |A_ij - A_ij_dense|. Exactly 0.0.",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "src_cells"
+              },
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_ij",
+              "A_ij_dense"
+            ],
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "A_ij",
+                        "i",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "A_ij_dense",
+                        "i",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "ident_Aj": {
+          "type": "observed",
+          "units": "1",
+          "description": "L1 residual of the gated vs dense denominators: sum_j |A_j - A_j_dense|. Exactly 0.0.",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "A_j_dense"
+            ],
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "A_j",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "A_j_dense",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "ident_W": {
+          "type": "observed",
+          "units": "1",
+          "description": "L1 residual of the gated vs dense weight matrices: sum_{i,j} |W_ij - W_ij_dense|. Exactly 0.0.",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "src_cells"
+              },
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "W_ij",
+              "W_ij_dense"
+            ],
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "W_ij",
+                        "i",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "W_ij_dense",
+                        "i",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_tgt": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "The regridded field through the CANDIDATE-GATED apply. Expected [1.5, 3.5].",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_src",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
+              "atol": "atol"
+            }
+          }
+        },
+        "F_unit_tgt": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "The constant-1 field through the gated apply: partition-of-unity surfaced as an ordinary field, exactly 1 by construction.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "unit_src",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
+              "atol": "atol"
+            }
+          }
+        },
+        "mass_src": {
+          "type": "observed",
+          "units": "1",
+          "description": "Source-side mass sum_i A_i*F_src[i] = 10.",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "src_cells"
+              }
+            },
+            "args": [
+              "src_area",
+              "F_src"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "src_area",
+                    "i"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "mass_tgt": {
+          "type": "observed",
+          "units": "1",
+          "description": "Target-side mass sum_j A_j*F_tgt[j] = 2*1.5 + 2*3.5 = 10, exactly mass_src (the targets tile the source domain).",
+          "expression": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "F_tgt"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_j",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "pou_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for partition-of-unity: pou_state(1) = sum_i W_ij."
+        },
+        "cons_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for the conservation residual: cons_state(1) = mass_tgt - mass_src = 0."
+        },
+        "regrid_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for the gated regridded field: regrid_state(1) = F_tgt = [1.5, 3.5]."
+        },
+        "ident_state": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "default": 0.0,
+          "description": "Surfacing state for the gated-vs-dense VALUE-IDENTITY residual under genuine pruning: ident_state(1) = sum of the three L1 residuals, asserted EXACTLY zero (abs 0.0)."
+        }
+      },
+      "equations": [
+        {
+          "_comment": "BROAD PHASE bin buffers (value-invention, build-time): src_bin[i] = skolem('bin', floor(src_lon[i]/bin_dx), floor(src_lat[i]/bin_dy)) via the library template. A per-element skolem map on a state LHS is the relational front-door's :map classification; the buffer is materialized once at setup and this equation never enters the ODE.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "src_bin",
+              "i"
+            ]
+          },
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_bin",
+            "args": [],
+            "bindings": {
+              "src_lon": "src_lon",
+              "src_lat": "src_lat",
+              "bin_dx": "bin_dx",
+              "bin_dy": "bin_dy"
+            }
+          }
+        },
+        {
+          "_comment": "BROAD PHASE bin buffers: tgt_bin[j], identically quantized.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "tgt_bin",
+              "j"
+            ]
+          },
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_bin",
+            "args": [],
+            "bindings": {
+              "tgt_lon": "tgt_lon",
+              "tgt_lat": "tgt_lat",
+              "bin_dx": "bin_dx",
+              "bin_dy": "bin_dy"
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "pou_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "cons_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "regrid_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "ident_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "_comment": "d(pou_state)/dt = F_unit_tgt (the gated regrid of the constant-1 field).",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "pou_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F_unit_tgt"
+        },
+        {
+          "_comment": "d(cons_state)/dt = mass_tgt - mass_src, the conservation residual.",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "cons_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              "mass_tgt",
+              "mass_src"
+            ]
+          }
+        },
+        {
+          "_comment": "d(regrid_state)/dt = F_tgt (the gated regridded field).",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "regrid_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F_tgt"
+        },
+        {
+          "_comment": "d(ident_state)/dt = the total gated-vs-dense L1 residual, exactly 0 under the admissible pruning binning.",
+          "lhs": {
+            "op": "D",
+            "args": [
+              "ident_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              "ident_A",
+              "ident_Aj",
+              "ident_W"
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "exact_invariants",
+          "description": "The two EXACT gates of CONFORMANCE_SPEC 5.8.3 on the gated pipeline with genuine pruning: partition-of-unity (pou_state(1) = 1 for both targets) and conservation (cons_state(1) = 0; both masses equal 10).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "min"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "min"
+            }
+          ]
+        },
+        {
+          "id": "gated_equals_dense",
+          "description": "VALUE-IDENTITY of the candidate-gated and dense paths where the candidate set is a PROPER SUBSET of the cross product (4 of 8 pairs pruned): ident_state(1) = 0.0 EXACTLY (abs 0.0) -- the pruned pairs are precisely the zero-overlap ones the dense path's sliver filter drops, so the two contractions sum identical terms.",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "ident_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "ident_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0
+              },
+              "reduce": "min"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
