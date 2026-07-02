@@ -1,0 +1,116 @@
+name: docs
+
+# Ported from the archive docs workflow (archive/.github/workflows/docs.yml).
+# The generate → Hugo build → deploy ordering is the contract: generated
+# content pages and convergence plots MUST be produced before Hugo runs,
+# otherwise pages under docs/content/grids/ and PNGs under docs/static/plots/
+# never ship. Generated files are never committed (.gitignore pins this —
+# see AGENTS.md "Generated files").
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/conformance/convergence/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/conformance/convergence/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# Single deploy at a time; cancel in-flight superseded runs.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: "0.131.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps (plots)
+        run: python -m pip install --upgrade matplotlib
+
+      # Official ESS display path for math pretty-printing. Best-effort:
+      # generate_catalog.py falls back to structural rendering (with a
+      # warning) when the toolkit is unavailable, so an upstream breakage
+      # cannot take the docs build down with it.
+      - name: Install earthsci_toolkit (official display path, best-effort)
+        continue-on-error: true
+        run: |
+          python -m pip install \
+            "git+https://github.com/EarthSciML/EarthSciSerialization.git#subdirectory=packages/earthsci_toolkit"
+
+      - name: Install Hugo extended
+        run: |
+          curl -sSL \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin hugo
+
+      - name: Generate catalog pages and convergence plots
+        run: python docs/generate_catalog.py
+
+      - name: Build site with Hugo
+        run: hugo --source docs --minify --destination public
+
+      - name: Link-check built site (internal links only)
+        uses: lycheeverse/lychee-action@v1
+        with:
+          # --offline ignores all network URLs (no third-party flake); --base
+          # resolves root-relative paths like /grids/ against docs/public/ so
+          # a broken internal link — e.g. a generated page referencing a plot
+          # that was never rendered — fails the build.
+          args: >-
+            --offline
+            --base
+            docs/public
+            --no-progress
+            docs/public
+          fail: true
+
+      - name: Upload built site (PR preview artifact)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: docs/public
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
