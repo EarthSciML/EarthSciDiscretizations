@@ -1,0 +1,51 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D_lon_interior",
+    "description": "Interior-only centered first derivative along longitude on the latlon grid: (f[i+1,j] - f[i-1,j]) / (2 dlon) over i in [2, NLON-1], all j. Match-less named template consumed by boundary-condition layers. O(dlon^2).",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:latlon", "op:D", "order:2", "stencil_width:3"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "central_D_lon_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j"],
+        "args": ["f"],
+        "ranges": {
+          "i": [2, { "op": "-", "args": ["NLON", 1] }],
+          "j": { "from": "lat" }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["f", { "op": "+", "args": ["i", 1] }, "j"] },
+                { "op": "index", "args": ["f", { "op": "-", "args": ["i", 1] }, "j"] }
+              ]
+            },
+            {
+              "op": "*",
+              "args": [
+                2,
+                { "op": "apply_expression_template", "args": [], "name": "dlon_deg", "bindings": {} }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

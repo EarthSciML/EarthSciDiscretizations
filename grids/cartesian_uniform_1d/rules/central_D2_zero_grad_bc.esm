@@ -1,0 +1,83 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_zero_grad_bc",
+    "description": "Second-order centered second derivative with zero-gradient (homogeneous Neumann) boundary conditions on cartesian_uniform_1d. Compound match on D(D(f,x),x) at priority 10, so it fires on the whole second derivative before any plain-D rule lowers the inner derivative (esm-spec 9.6.3 compound precedence). Interior [2, N-1]: the imported 3-point stencil. Faces i=1 and i=N: ghost elimination with f[0]=f[1] and f[N+1]=f[N], giving (f[2]-f[1])/dx^2 and (f[N-1]-f[N])/dx^2. Interior O(dx^2); the one-sided faces are O(dx) locally, which preserves global 2nd-order convergence for zero-gradient-compatible solutions.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "axes:x", "order:2", "stencil_width:3", "bc:zero_gradient", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (Neumann boundary conditions by ghost-point elimination)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_zero_grad_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "x" } ],
+        "wrt": "x"
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["N", 1] }]],
+          [[1, 1]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  { "op": "index", "args": ["f", 2] },
+                  { "op": "index", "args": ["f", 1] }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  { "op": "apply_expression_template", "args": [], "name": "dx", "bindings": {} },
+                  { "op": "apply_expression_template", "args": [], "name": "dx", "bindings": {} }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] },
+                  { "op": "index", "args": ["f", "N"] }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  { "op": "apply_expression_template", "args": [], "name": "dx", "bindings": {} },
+                  { "op": "apply_expression_template", "args": [], "name": "dx", "bindings": {} }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
