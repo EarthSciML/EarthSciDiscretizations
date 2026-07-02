@@ -1,0 +1,110 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "conservative_overlap",
+    "description": "Conservative overlap-area regridding, factored as a template library (esm-spec 9.7) so a coupling can invoke it instead of restating the aggregates inline. This is the library form of exactly the computation in the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm and tests/coupling/cross_domain_coupling.esm (esm-spec 8.6 / 8.6.1): F_tgt[j] = (1/A_j) * sum_i A_ij * F_src[i], with A_ij = polygon_intersection_area(src_i, tgt_j) and A_j = sum_i A_ij. Three match-less templates factor the three stages: (1) conservative_overlap_A_ij -- the NARROW PHASE as a dense evaluable aggregate over the fused polygon_intersection_area leaf (esm-spec 8.6.1: the fused leaf is what makes the narrow phase a dense tensor contraction with no ragged clip-ring intermediate); (2) conservative_overlap_A_j -- the ROW-NORMALIZATION denominator, the group-by-j row-sum of the SAME computed areas with the sliver filter A_ij > atol (CONFORMANCE_SPEC 5.8.2), which is what makes partition-of-unity sum_i W_ij = 1 EXACT BY CONSTRUCTION (5.8.3: the denominator is the row-sum of the computed areas, not the true target-cell area) -- note the denominator applies the SAME filter as the numerator, so the surviving sets coincide and the invariant is exact; (3) conservative_overlap_apply -- the weighted-sum APPLY + NORMALIZE, F_tgt[j] = sum_i A_ij*F_src[i] / A_j[j] over the same filtered set (the sparse mat-vec of ConservativeRegridding.jl, W_ij = A_ij/A_j folded in). Cell polygons ARRIVE AS TEMPLATE PARAMETERS (closed vertex rings shaped [cells, overlap_cell_verts, overlap_coord], CCW, ring vertex v = [lon, lat]), so the templates are grid-agnostic: any pair of grids that can present its cells as fixed-vertex-count rings flows through unchanged. Grid sizes are load-time metaparameters (NSRC, NTGT source/target cell counts; NVERT ring length, default quads), bound at the import edge; the defaults match the 3x3 -> 2x2 conformance exemplar. WHAT STAYS IN THE CONSUMING DOCUMENT, deliberately: (a) the BROAD PHASE -- the bin-Skolem candidate overlap-pair index set (floor-quantized integer bin keys, skolem, distinct equi-join; CONFORMANCE_SPEC 5.8.5) is build-time value invention over the consumer's own coordinate buffers and stays a model-level construct per esm-spec 8.6.1 ('only the candidate-set construction living in the build-time value-invention layer'); these templates are the dense narrow-phase spelling that 8.6.1 blesses, and the join.on gate that restricts the contraction to candidates is an O(#overlaps) physical optimization the consumer may layer on -- with the sliver filter present, the dense and candidate-gated forms are value-identical, since a non-candidate pair has zero overlap area and is dropped by the filter; (b) the MANIFOLD -- polygon_intersection_area requires a manifold flag, which is a scalar enum field of the leaf, not an expression position, so it cannot be bound through an invoked template's parameters (9.6 defines scalar-field binding for match patterns only); this library pins manifold 'planar' (clipping in the source/target coordinate plane -- exact for the lon-lat-rectangle coarsening exemplar and for any projected patch), and a spherical variant is a separate library entry once the cross-binding spherical kernel gate lands. Conformance contract for consumers: candidate set byte-identical (when the broad phase is used), conservation and partition-of-unity as the primary exact gates, per-pair areas/weights toleranced with the sliver floor (CONFORMANCE_SPEC 5.8.1-5.8.3). Exemplar: tests/conformance/regridding/conservative_overlap_3x3_to_2x2/.",
+    "license": "MIT",
+    "tags": ["esd:regrid", "method:conservative_overlap", "manifold:planar", "conservation", "partition-of-unity"],
+    "references": [
+      {
+        "citation": "Jones, P. W. (1999). First- and second-order conservative remapping schemes for grids in spherical coordinates. Monthly Weather Review 127(9), 2204-2210.",
+        "doi": "10.1175/1520-0493(1999)127<2204:FASOCR>2.0.CO;2"
+      },
+      {
+        "citation": "EarthSciSerialization esm-spec.md 8.6/8.6.1 (regridding is a coupling expression; the polygon_intersection_area fused leaf) and CONFORMANCE_SPEC.md 5.8 (geometry tolerance contract).",
+        "notes": "The library factoring mirrors the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm (equations 2-5) and tests/coupling/cross_domain_coupling.esm (rg_A / rg_At / heat_flux)."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NSRC": { "type": "integer", "default": 9, "description": "Number of source cells (the flattened source-cell enumeration the polygon ring array and F_src are shaped over). Default matches the 3x3 exemplar." },
+    "NTGT": { "type": "integer", "default": 4, "description": "Number of target cells. Default matches the 2x2 exemplar." },
+    "NVERT": { "type": "integer", "default": 4, "description": "Vertices per cell polygon ring (default: quadrilateral cells)." }
+  },
+  "index_sets": {
+    "src_cells": { "kind": "interval", "size": "NSRC" },
+    "tgt_cells": { "kind": "interval", "size": "NTGT" },
+    "overlap_cell_verts": { "kind": "interval", "size": "NVERT" },
+    "overlap_coord": { "kind": "interval", "size": 2 }
+  },
+  "expression_templates": {
+    "conservative_overlap_A_ij": {
+      "params": ["src_poly", "tgt_poly"],
+      "description": "NARROW PHASE (overlap-weight template): the raw overlap-area matrix A_ij[i,j] = polygon_intersection_area(src_poly[i], tgt_poly[j]) as a dense evaluable aggregate (esm-spec 8.6.1). src_poly is shaped [src_cells, overlap_cell_verts, overlap_coord], tgt_poly [tgt_cells, overlap_cell_verts, overlap_coord]; each cell is a closed CCW vertex ring with ring vertex v = [lon, lat] (or [x, y] on a projected patch). The fused leaf hides the clip ring, so no ragged intermediate appears and the whole matrix is a dense tensor contraction. manifold 'planar' is pinned per-file (see metadata.description). Entries for disjoint pairs are exactly 0; near-tangent slivers are dropped downstream by the atol filter of the A_j / apply templates, never here -- the raw areas are what the CONFORMANCE_SPEC 5.8.2 tolerance gates compare.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": ["i", "j"],
+        "ranges": {
+          "i": { "from": "src_cells" },
+          "j": { "from": "tgt_cells" }
+        },
+        "args": ["src_poly", "tgt_poly"],
+        "expr": {
+          "op": "polygon_intersection_area",
+          "manifold": "planar",
+          "args": [
+            { "op": "index", "args": ["src_poly", "i"] },
+            { "op": "index", "args": ["tgt_poly", "j"] }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_A_j": {
+      "params": ["A_ij", "atol"],
+      "description": "ROW NORMALIZATION (partition-of-unity template): the per-target-cell denominator A_j[j] = sum_i A_ij[i,j] over the surviving-overlap set (filter A_ij > atol -- the CONFORMANCE_SPEC 5.8.2 sliver floor; sub-atol areas are equal-to-zero and contribute the additive identity). Because the apply template divides by THIS row-sum of the SAME computed areas under the SAME filter, the weights W_ij = A_ij/A_j satisfy sum_i W_ij = 1 exactly by construction (5.8.3), regardless of edge-model or clipping error -- the exact invariant the conformance gate asserts. This is ConservativeRegridding.jl's dst_areas (row-sums of the intersections matrix), equation (3) of the ESS overlap-join fixture.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": ["j"],
+        "ranges": {
+          "i": { "from": "src_cells" },
+          "j": { "from": "tgt_cells" }
+        },
+        "filter": {
+          "op": ">",
+          "args": [
+            { "op": "index", "args": ["A_ij", "i", "j"] },
+            "atol"
+          ]
+        },
+        "args": ["A_ij"],
+        "expr": { "op": "index", "args": ["A_ij", "i", "j"] }
+      }
+    },
+    "conservative_overlap_apply": {
+      "params": ["A_ij", "A_j", "F_src", "atol"],
+      "description": "WEIGHTED-SUM APPLY (+ fold-in normalize): F_tgt[j] = sum_i A_ij[i,j]*F_src[i] / A_j[j] over the same filtered surviving set as the A_j template -- i.e. F_tgt = sum_i W_ij*F_src[i] with W_ij = A_ij/A_j, the sparse mat-vec apply of ConservativeRegridding.jl (equations (4)+(5) of the ESS overlap-join fixture, the heat_flux observed of cross_domain_coupling.esm). Bind A_j to the materialized result of conservative_overlap_A_j so the denominator is the row-sum of the same computed areas: that is what makes partition-of-unity exact and conservation sum_j A_j*F_tgt[j] = sum_i A_i*F_src[i] hold wherever the target tiles the source domain (CONFORMANCE_SPEC 5.8.3). For a time-varying F_src this template is the apply-many half of the build-once/apply-many split; A_ij and A_j are build-once.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": ["j"],
+        "ranges": {
+          "i": { "from": "src_cells" },
+          "j": { "from": "tgt_cells" }
+        },
+        "filter": {
+          "op": ">",
+          "args": [
+            { "op": "index", "args": ["A_ij", "i", "j"] },
+            "atol"
+          ]
+        },
+        "args": ["A_ij", "A_j", "F_src"],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["A_ij", "i", "j"] },
+                { "op": "index", "args": ["F_src", "i"] }
+              ]
+            },
+            { "op": "index", "args": ["A_j", "j"] }
+          ]
+        }
+      }
+    }
+  }
+}

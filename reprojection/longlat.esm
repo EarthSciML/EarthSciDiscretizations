@@ -1,0 +1,37 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "longlat",
+    "description": "Geographic lon-lat 'projection' (PROJ +proj=longlat; identity / plate carree in degrees), as a template library (esm-spec 9.7). This is the CONVENTION-ESTABLISHING degenerate base case for the reprojection/ family: every esd:reproject library declares four match-less scalar templates -- <crs>_forward_x and <crs>_forward_y taking the geographic point (lon, lat, in degrees) plus the projection constants and returning the projected coordinate (x resp. y), and <crs>_inverse_lon and <crs>_inverse_lat taking the projected point (x, y) plus the SAME constants and returning the geographic coordinate. A coordinate transform is a POINT-WISE SCALAR FORMULA, so each template body is a scalar expression; a consumer maps it over a coordinate array with an ordinary aggregate (bind lon/lat to indexed reads), or evaluates it at scalars. Projection constants are TEMPLATE PARAMETERS, not metaparameters: metaparameters are load-time integers (9.7.6) while lon_0 etc. are real-valued, and template parameters bind arbitrary expressions (numeric literals included) at each apply_expression_template site. Every template takes the full signature even where an argument is unused (longlat's y is independent of lon and lon_0) -- uniform signatures are what let a consumer swap CRS libraries without rewiring bindings; esm-spec 9.6.1 explicitly allows a parameter to occur zero times in the body. The math (archive/reprojection/longlat.esm, re-expressed in the 0.8.0 library form): FORWARD x = lon - lon_0, y = lat; INVERSE lon = x + lon_0, lat = y. inverse(forward(lon, lat)) = (lon - lon_0) + lon_0 = lon and lat = lat, so the round-trip is the identity by construction; with lon_0 = 0 the forward map degenerates to the pure geographic identity, and a non-zero lon_0 keeps the parameter load-bearing. Units convention: lon/lat and x/y are all DEGREES for this CRS (a projected CRS such as lambert_conformal returns metres -- the units are part of each library's documented contract, not of the shared signature).",
+    "license": "MIT",
+    "tags": ["esd:reproject", "crs:longlat", "forward-inverse", "identity", "plate-carree"],
+    "references": [
+      {
+        "citation": "Snyder, J. P. (1987). Map Projections -- A Working Manual. U.S. Geological Survey Professional Paper 1395, pp. 90-91 (Equirectangular projection, eqs. 12-1..12-6 with phi_1 = 0: the degenerate plate carree case, here kept in degrees).",
+        "url": "https://pubs.usgs.gov/pp/1395/report.pdf"
+      }
+    ]
+  },
+  "expression_templates": {
+    "longlat_forward_x": {
+      "params": ["lon", "lat", "lon_0"],
+      "description": "FORWARD, x component (degrees): x = lon - lon_0. lat is unused (uniform reprojection signature).",
+      "body": { "op": "-", "args": ["lon", "lon_0"] }
+    },
+    "longlat_forward_y": {
+      "params": ["lon", "lat", "lon_0"],
+      "description": "FORWARD, y component (degrees): y = lat. lon and lon_0 are unused (uniform reprojection signature).",
+      "body": "lat"
+    },
+    "longlat_inverse_lon": {
+      "params": ["x", "y", "lon_0"],
+      "description": "INVERSE, longitude (degrees): lon = x + lon_0. Composes with longlat_forward_x to the identity: (lon - lon_0) + lon_0 = lon.",
+      "body": { "op": "+", "args": ["x", "lon_0"] }
+    },
+    "longlat_inverse_lat": {
+      "params": ["x", "y", "lon_0"],
+      "description": "INVERSE, latitude (degrees): lat = y. x and lon_0 are unused (uniform reprojection signature).",
+      "body": "y"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "category": "reprojection",
+  "version": "1.0",
+  "case": "lambert_conformal",
+  "description": "Cross-binding conformance for reprojection/lambert_conformal.esm: each binding evaluates the library's four public templates (lambert_conformal_forward_x/_forward_y: lon, lat in degrees -> x, y in metres; lambert_conformal_inverse_lon/_inverse_lat: x, y -> degrees) through the official ESS pathway (parse -> import resolution -> 9.7.3 body composition -> evaluate) at every point of golden/points.json, for BOTH parameter sets, and asserts agreement with the independent analytic reference. FORMULAS (Snyder 1987, USGS PP 1395, pp. 104-110, spherical Lambert Conformal Conic; radians internally, degree conversions inlined): n = ln(cos phi_1/cos phi_2)/ln(tan(pi/4+phi_2/2)/tan(pi/4+phi_1/2)) (eq. 15-3); F = cos phi_1 tan^n(pi/4+phi_1/2)/n (15-2); rho = R F/tan^n(pi/4+phi/2) (15-1; rho_0 at phi_0); theta = n (lambda-lambda_0) (14-4); forward x = rho sin theta (14-1), y = rho_0 - rho cos theta (14-2); inverse rho = sign(n) sqrt(x^2+(rho_0-y)^2) (14-10), theta = atan2(x, rho_0-y) (14-11, n>0 branch), lambda = lambda_0 + theta/n (14-9), phi = 2 atan((R F/rho)^(1/n)) - pi/2 (15-5). PARAMETER SETS: wrf_conus {lat_1=30, lat_2=60, lat_0=40, lon_0=-97, R=6370000} (n approx. 0.715567) and nei2016 {lat_1=33, lat_2=45, lat_0=40, lon_0=-97, R=6370000} (n approx. 0.630478) -- two real CONUS modeling CRSs driving the ONE parameterized library. REFERENCE PROVENANCE (independent, analytic -- the MMS-solution analogue, not a binding output): golden/points.json was computed in double precision directly from the Snyder closed forms above, by an implementation verified against (a) Snyder's own worked numerical example (PP 1395 pp. 295-296) to all published digits and (b) the independent proj4/Snyder gold points embedded in archive/reprojection/lambert_conformal_conformance_test.jl to <= 9e-15 relative (at the archive's parameter sets; pyproj was not importable in the ESS venv, so the archive's proj4-derived points are the external cross-check). GATES: forward points compare (x, y) at rel 1e-6 (spherical closed form; combined check |v - v_ref| <= atol_m + rtol*|v_ref| with a 1e-4 m absolute floor for near-zero coordinates such as the origin); inverse points compare (lon, lat) the same way with a degree-scale floor; round-trip entries assert inverse(forward(lon, lat)) = (lon, lat) to 1e-9 radian-equivalent, i.e. abs 5.7295779513e-8 degrees -- closure is algebraic, so this gate is tight and reference-free.",
+  "fixture": null,
+  "library": "../../../../reprojection/lambert_conformal.esm",
+  "templates": [
+    "lambert_conformal_forward_x",
+    "lambert_conformal_forward_y",
+    "lambert_conformal_inverse_lon",
+    "lambert_conformal_inverse_lat"
+  ],
+  "golden": "golden/points.json",
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no template-import evaluation pathway",
+    "typescript": "rewrite-only port; no template-import evaluation pathway"
+  },
+  "tolerances": {
+    "_doc": "Forward/inverse are toleranced against the analytic reference (spherical formulas, cross-library transcendental differences); round-trip closure is algebraically exact so it is gated at 1e-9 rad expressed in the native units of each leg.",
+    "forward_rtol": 1e-6,
+    "forward_atol_m": 1e-4,
+    "inverse_rtol": 1e-6,
+    "inverse_atol_deg": 1e-9,
+    "roundtrip_atol_rad": 1e-9,
+    "roundtrip_atol_deg": 5.7295779513e-8
+  },
+  "status": "pending-runners"
+}

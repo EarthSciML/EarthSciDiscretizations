@@ -57,7 +57,10 @@ fixpoint → official runner`.
   - `esd:regrid` → `method:` · `esd:reproject` → `crs:` · `esd:problem` → `grid:`
 - Name agreement (L003): filename stem == `metadata.name` == the sole
   `expression_templates` key. Grid constructors are `grids/<name>/grid.esm` with
-  `metadata.name == <name>`.
+  `metadata.name == <name>`. Exception: `esd:regrid` / `esd:reproject` files factor
+  one operation into several templates (weight/normalize/apply stages;
+  forward/inverse pairs plus helper fragments), so they may declare multiple
+  templates — every key must be the stem or prefixed `<stem>_`.
 - `grid:<name>` resolves to `grids/<name>/grid.esm` (L004); stencils/rules live under
   that directory (L005).
 - Rule `makearray` regions tile the axes named by `axes:` exactly, verified by folding

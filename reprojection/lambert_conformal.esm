@@ -1,0 +1,288 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "lambert_conformal",
+    "description": "Spherical Lambert Conformal Conic (PROJ +proj=lcc +R=...), as a template library (esm-spec 9.7) following the reprojection signature convention established by reprojection/longlat.esm: four public scalar templates lambert_conformal_forward_x / _forward_y (inputs lon, lat in DEGREES plus the projection constants; outputs easting/northing x, y in METRES) and lambert_conformal_inverse_lon / _inverse_lat (inputs x, y in metres plus the same constants; outputs degrees), plus five stem-prefixed helper templates (_t, _n, _F, _rho, _theta) that factor Snyder's intermediate quantities -- helper invocations inline at registration time by pure substitution (9.7.3), so every public template lowers to a closed scalar AST over the evaluable core (tan, atan, atan2, log, ^, sqrt, sign, sin, cos; all esm-spec 4.2 elementary functions). The projection constants {lat_1, lat_2 (standard parallels, deg), lat_0 (origin latitude, deg), lon_0 (central meridian, deg), R (sphere radius, m)} are TEMPLATE PARAMETERS, not metaparameters: metaparameters are load-time integers (9.7.6) while these are real-valued, and template parameters bind arbitrary expressions at each apply site -- numeric literals for a fixed CRS, or parameter references so one document drives several parameter sets (the WRF CONUS and NEI2016 sets of the conformance manifest flow through this ONE library with different bindings). THE MATH (Snyder 1987, PP 1395, pp. 104-110, sphere; the same closed form as archive/reprojection/lambert_conformal.esm, re-expressed in the 0.8.0 library form): with phi = lat*pi/180 etc., cone constant n = ln(cos phi_1 / cos phi_2) / ln(tan(pi/4 + phi_2/2) / tan(pi/4 + phi_1/2)) (eq. 15-3), F = cos phi_1 * tan(pi/4 + phi_1/2)^n / n (15-2), rho = R*F / tan(pi/4 + phi/2)^n (15-1, and rho_0 = rho at phi_0), theta = n*(lambda - lambda_0) (14-4); FORWARD x = rho*sin(theta) (14-1), y = rho_0 - rho*cos(theta) (14-2); INVERSE rho = sign(n)*sqrt(x^2 + (rho_0 - y)^2) (14-10), theta = atan2(x, rho_0 - y) (14-11, n > 0 branch: for n < 0 Snyder reverses the signs of x, y, and rho_0 - y first -- both documented parameter sets have n > 0, approx. 0.7156 for WRF 30/60 and 0.6305 for NEI2016 33/45), lat = (2*atan((R*F/rho)^(1/n)) - pi/2)*180/pi (15-5), lon = lon_0 + (theta/n)*180/pi (14-9). inverse(forward(...)) is the algebraic identity wherever the forward map is defined (singular only at the far pole phi = -90 deg for n > 0). Radian-degree conversions are inlined as the double-precision literals pi/180 = 0.017453292519943295, 180/pi = 57.29577951308232, pi/4 = 0.7853981633974483, pi/360 = 0.008726646259971648, pi/2 = 1.5707963267948966. Independent analytic reference points (both parameter sets, forward + inverse + round-trip) live in tests/conformance/reprojection/lambert_conformal/golden/points.json.",
+    "license": "MIT",
+    "tags": ["esd:reproject", "crs:lambert_conformal", "forward-inverse", "spherical", "projected-crs", "wrf", "nei2016"],
+    "references": [
+      {
+        "citation": "Snyder, J. P. (1987). Map Projections -- A Working Manual. U.S. Geological Survey Professional Paper 1395, pp. 104-110: Lambert Conformal Conic, sphere. Forward eqs. 14-1, 14-2, 14-4, 15-1, 15-2, 15-3; inverse eqs. 14-9, 14-10, 14-11, 15-5; numerical check example pp. 295-296.",
+        "url": "https://pubs.usgs.gov/pp/1395/report.pdf"
+      }
+    ]
+  },
+  "expression_templates": {
+    "lambert_conformal_t": {
+      "params": ["lat"],
+      "description": "Helper: the conformal tangent t(lat) = tan(pi/4 + phi/2) with phi = lat*pi/180 (so the half-angle is lat*pi/360). The building block of Snyder eqs. 15-1..15-3.",
+      "body": {
+        "op": "tan",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              0.7853981633974483,
+              { "op": "*", "args": ["lat", 0.008726646259971648] }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_n": {
+      "params": ["lat_1", "lat_2"],
+      "description": "Helper: cone constant n = ln(cos phi_1 / cos phi_2) / ln(t(lat_2)/t(lat_1)) (Snyder eq. 15-3). Depends only on the standard parallels: approx. 0.715567 for WRF (30/60), 0.630478 for NEI2016 (33/45). Requires lat_1 != lat_2 (for equal parallels Snyder's limit is n = sin phi_1, eq. 15-4 -- not expressed here).",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "log",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  { "op": "cos", "args": [{ "op": "*", "args": ["lat_1", 0.017453292519943295] }] },
+                  { "op": "cos", "args": [{ "op": "*", "args": ["lat_2", 0.017453292519943295] }] }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "log",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_2" } },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_1" } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_F": {
+      "params": ["lat_1", "lat_2"],
+      "description": "Helper: F = cos phi_1 * t(lat_1)^n / n (Snyder eq. 15-2), the constant tying the cone to the unit sphere.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              { "op": "cos", "args": [{ "op": "*", "args": ["lat_1", 0.017453292519943295] }] },
+              {
+                "op": "^",
+                "args": [
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_1" } },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                ]
+              }
+            ]
+          },
+          { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+        ]
+      }
+    },
+    "lambert_conformal_rho": {
+      "params": ["lat", "lat_1", "lat_2", "R"],
+      "description": "Helper: rho = R*F / t(lat)^n (Snyder eq. 15-1), the cone radius of the parallel at lat (metres). rho_0 is this template invoked with lat bound to lat_0. Singular at the far pole (t -> 0 for n > 0 as lat -> -90).",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "R",
+              { "op": "apply_expression_template", "name": "lambert_conformal_F", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+            ]
+          },
+          {
+            "op": "^",
+            "args": [
+              { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat" } },
+              { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_theta": {
+      "params": ["lon", "lon_0", "lat_1", "lat_2"],
+      "description": "Helper: theta = n * (lon - lon_0) * pi/180 (Snyder eq. 14-4), the polar angle on the developed cone (radians).",
+      "body": {
+        "op": "*",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } },
+          {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["lon", "lon_0"] },
+              0.017453292519943295
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_forward_x": {
+      "params": ["lon", "lat", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "FORWARD, easting (metres): x = rho(lat) * sin(theta) (Snyder eq. 14-1). At lon = lon_0, theta = 0 so x = 0 (the central meridian is the y-axis). lat_0 is unused (x is independent of the origin latitude; uniform reprojection signature).",
+      "body": {
+        "op": "*",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+          {
+            "op": "sin",
+            "args": [
+              { "op": "apply_expression_template", "name": "lambert_conformal_theta", "args": [], "bindings": { "lon": "lon", "lon_0": "lon_0", "lat_1": "lat_1", "lat_2": "lat_2" } }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_forward_y": {
+      "params": ["lon", "lat", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "FORWARD, northing (metres): y = rho_0 - rho(lat) * cos(theta) (Snyder eq. 14-2), with rho_0 = rho at the origin latitude (the _rho helper invoked with lat bound to lat_0). At (lon_0, lat_0): theta = 0 and rho = rho_0, so y = 0 -- the projection origin maps to the false origin (0, 0).",
+      "body": {
+        "op": "-",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+          {
+            "op": "*",
+            "args": [
+              { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+              {
+                "op": "cos",
+                "args": [
+                  { "op": "apply_expression_template", "name": "lambert_conformal_theta", "args": [], "bindings": { "lon": "lon", "lon_0": "lon_0", "lat_1": "lat_1", "lat_2": "lat_2" } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_inverse_lon": {
+      "params": ["x", "y", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "INVERSE, longitude (degrees): lon = lon_0 + (theta/n)*180/pi with theta = atan2(x, rho_0 - y) (Snyder eqs. 14-11, 14-9; n > 0 branch of 14-11 -- for n < 0 Snyder reverses the signs of x, y, rho_0 - y first, a case no documented parameter set exercises). atan2(rho*sin theta, rho*cos theta) = theta for rho > 0, so this inverts the forward polar angle exactly.",
+      "body": {
+        "op": "+",
+        "args": [
+          "lon_0",
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "atan2",
+                    "args": [
+                      "x",
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+                          "y"
+                        ]
+                      }
+                    ]
+                  },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                ]
+              },
+              57.29577951308232
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_inverse_lat": {
+      "params": ["x", "y", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "INVERSE, latitude (degrees): lat = (2*atan((R*F/rho)^(1/n)) - pi/2)*180/pi (Snyder eq. 15-5), with rho = sign(n)*sqrt(x^2 + (rho_0 - y)^2) (14-10, taking the sign of n) and rho_0 = rho(lat_0). Since R*F/rho = t(lat)^n on the forward image, this recovers the input latitude: the round-trip identity. lon_0 is unused (uniform reprojection signature).",
+      "body": {
+        "op": "*",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  2.0,
+                  {
+                    "op": "atan",
+                    "args": [
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "/",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  "R",
+                                  { "op": "apply_expression_template", "name": "lambert_conformal_F", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "sign",
+                                    "args": [
+                                      { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                                    ]
+                                  },
+                                  {
+                                    "op": "sqrt",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          { "op": "^", "args": ["x", 2.0] },
+                                          {
+                                            "op": "^",
+                                            "args": [
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+                                                  "y"
+                                                ]
+                                              },
+                                              2.0
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "/",
+                            "args": [
+                              1.0,
+                              { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1.5707963267948966
+            ]
+          },
+          57.29577951308232
+        ]
+      }
+    }
+  }
+}

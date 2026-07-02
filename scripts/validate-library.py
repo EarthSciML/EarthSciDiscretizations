@@ -8,7 +8,11 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
     L001  exactly one `esd:` kind tag (grid|stencil|rule|regrid|reproject|problem)
     L002  required prefix tags present for the kind
     L003  name agreement: filename stem == metadata.name == sole expression_templates
-          key (esd:grid: file is grid.esm and metadata.name == parent directory name)
+          key (esd:grid: file is grid.esm and metadata.name == parent directory name).
+          esd:regrid / esd:reproject files factor one operation into several
+          templates (weight/normalize/apply stages; forward/inverse pairs plus
+          helper fragments), so they may declare multiple templates: every key
+          must be the stem or prefixed "<stem>_"
     L004  every `grid:` tag resolves to grids/<name>/grid.esm with matching metadata.name
     L005  stencils/rules live under the grid directory their `grid:` tag names
     L006  a rule's makearray regions tile the axes named by its `axes:` tag exactly
@@ -196,7 +200,19 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
     else:
         if name != stem:
             findings.add(path, "L003", f"metadata.name {name!r} != filename stem {stem!r}")
-        if list(templates) != [name]:
+        if kind in ("regrid", "reproject"):
+            # Multi-template libraries: a regrid factors into weight/normalize/
+            # apply stage templates and a reprojection carries forward/inverse
+            # component pairs (plus helper fragments), so these kinds may declare
+            # several templates — every key must be the stem or stem-prefixed.
+            bad = [t for t in templates if t != name and not t.startswith(name + "_")]
+            if not templates or bad:
+                findings.add(
+                    path, "L003",
+                    f"expected expression_templates keys equal to {name!r} or prefixed "
+                    f"'{name}_', got {bad or list(templates)}",
+                )
+        elif list(templates) != [name]:
             findings.add(
                 path, "L003",
                 f"expected sole expression_templates key {name!r}, got {list(templates)}",
