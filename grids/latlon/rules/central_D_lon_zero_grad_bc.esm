@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "central_D_lon_zero_grad_bc",
-    "description": "Centered first derivative along longitude with zero-gradient boundary conditions on the latlon grid — the esm-spec 9.6.8 worked example, generalized over NLON/NLAT metaparameters. Matches D(f, wrt: lon). Interior columns [2, NLON-1]: the imported centered-difference stencil. Face columns i=1 and i=NLON: one-sided differences (f[2,j]-f[1,j])/dlon and (f[NLON,j]-f[NLON-1,j])/dlon encoding the zero-gradient condition. The three regions tile the axis, so the discretized derivative is fully defined with its BC (there is nowhere else a boundary condition could live).",
+    "description": "Centered first derivative along longitude with zero-gradient boundary conditions on the latlon grid — the esm-spec 9.6.8 worked example, generalized over NLON/NLAT metaparameters and the consumer-supplied spacing free name. Matches D(f, wrt: lon), a PER-DEGREE derivative (see grids/latlon/grid.esm for the physical-units metric recipe). Interior columns [2, NLON-1]: the imported centered-difference stencil. Face columns i=1 and i=NLON: one-sided differences (f[2,j]-f[1,j])/dlon_deg and (f[NLON,j]-f[NLON-1,j])/dlon_deg encoding the zero-gradient condition. The three regions tile the axes, so the discretized derivative is fully defined with its BC (there is nowhere else a boundary condition could live). This is the REGIONAL boundary choice — a zero-gradient frame for a limited-area lon extent; on the global recipe the zonal circle closes and central_D_lon_periodic is the physical rule (a zero gradient on a closed circle is an artificial seam). `dlon_deg` is a free name resolving to the consuming model's zonal spacing variable (consumer-supplied geometry contract) — the zero-gradient faces themselves are spacing-scale-invariant, so the rule serves any extent unchanged. The face values keep the rank-reduced aggregate form of the spec's worked example (output over the lat axis only, filling the (1 x NLAT) leading-axis face regions); the lat-axis rules use full-rank faces instead because rank-reduced values only fill leading-axis faces portably across bindings. Match-pattern limitation (current spec): the pattern is the wrt literal `lon` only — it fires on ANY D(., wrt: lon) in the importing component, with no grid-membership constraint (match-scoping constraints are a pending spec extension).",
     "license": "MIT",
     "tags": ["esd:rule", "family:finite_difference", "grid:latlon", "op:D", "axes:lon,lat", "order:2", "stencil_width:3", "bc:zero_gradient", "spec:9.6.8"],
     "references": [
@@ -48,7 +48,7 @@
                     { "op": "index", "args": ["f", 1, "j"] }
                   ]
                 },
-                { "op": "apply_expression_template", "args": [], "name": "dlon_deg", "bindings": {} }
+                "dlon_deg"
               ]
             }
           },
@@ -67,7 +67,7 @@
                     { "op": "index", "args": ["f", { "op": "-", "args": ["NLON", 1] }, "j"] }
                   ]
                 },
-                { "op": "apply_expression_template", "args": [], "name": "dlon_deg", "bindings": {} }
+                "dlon_deg"
               ]
             }
           }

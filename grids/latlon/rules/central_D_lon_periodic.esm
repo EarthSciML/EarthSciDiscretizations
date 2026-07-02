@@ -1,0 +1,84 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D_lon_periodic",
+    "description": "Centered first derivative along longitude with periodic (wrap) boundary on the latlon grid — the physically natural rule for a closed zonal circle (global recipe: dlon_deg = 360/NLON; see grids/latlon/grid.esm). Matches D(f, wrt: lon), a PER-DEGREE derivative. Interior columns [2, NLON-1]: the imported centered-difference stencil. The two face columns wrap explicitly, following the cartesian upwind1_D_periodic / ESS pde_simulation fixture precedent for periodic boundaries: i=1 gathers (f[2,j] - f[NLON,j]) / (2 dlon_deg) and i=NLON gathers (f[1,j] - f[NLON-1,j]) / (2 dlon_deg), so the scheme is the same O(dlon_deg^2) centered difference at every column and conserves sum(f) exactly (the wrap telescopes). The face values are FULL-RANK aggregates (singleton output range on the lon axis) rather than the esm-spec 9.6.8 worked example's rank-reduced form, so every binding's simulator fills the (1 x NLAT) regions without rank promotion. `dlon_deg` is a free name resolving to the consuming model's zonal spacing variable (consumer-supplied geometry contract); the rule itself never assumes the global extent, but composing it with a non-closing regional grid is a modeling error — use central_D_lon_zero_grad_bc there. Match-pattern limitation (current spec): the pattern is the wrt literal `lon` only — it fires on ANY D(., wrt: lon) in the importing component, with no grid-membership constraint (match-scoping constraints are a pending spec extension).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:latlon", "op:D", "axes:lon,lat", "order:2", "stencil_width:3", "bc:periodic", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 10.4 (centered differences on periodic domains)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D_lon_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D_lon_periodic": {
+      "params": ["f"],
+      "match": { "op": "D", "args": ["f"], "wrt": "lon" },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NLON", 1] }], [1, "NLAT"]],
+          [[1, 1], [1, "NLAT"]],
+          [["NLON", "NLON"], [1, "NLAT"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D_lon_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": [1, 1], "j": { "from": "lat" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["f", 2, "j"] },
+                    { "op": "index", "args": ["f", "NLON", "j"] }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [2, "dlon_deg"]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": ["NLON", "NLON"], "j": { "from": "lat" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["f", 1, "j"] },
+                    { "op": "index", "args": ["f", { "op": "-", "args": ["NLON", 1] }, "j"] }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [2, "dlon_deg"]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
