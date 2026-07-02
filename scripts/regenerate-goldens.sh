@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# regenerate-goldens.sh [category …] — Julia-reference-only golden regeneration.
+#
+# Drives the canonical ESS pipeline through the official Julia runner
+# (scripts/runners/run-julia.jl) and installs its outputs as the committed
+# goldens (AGENTS.md §5: regeneration is Julia-reference-only; a PR that
+# changes goldens must say why):
+#
+#   ast          tests/conformance/ast/<case>/expanded.golden.json
+#                (the runner's canonical post-lowering bytes, installed
+#                verbatim — byte-compared by every other binding)
+#   convergence  tests/conformance/convergence/<case>/golden/errors.json
+#                (format per scripts/check_convergence_order.py docstring)
+#
+# Manifests whose golden this run fulfills have "status": "pending-golden"
+# updated to "active". Idempotent: a second run is byte-identical.
+#
+# Usage: scripts/regenerate-goldens.sh [ast] [convergence]
+#        (no arguments = both categories)
+
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/ess-locate.sh"
+
+CATEGORIES=("$@")
+[[ ${#CATEGORIES[@]} -eq 0 ]] && CATEGORIES=(ast convergence)
+for c in "${CATEGORIES[@]}"; do
+  case "$c" in
+    ast|convergence) ;;
+    *) echo "error: regenerate-goldens.sh handles categories 'ast' and 'convergence', got '$c'" >&2
+       exit 2 ;;
+  esac
+done
+
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/esd-goldens.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
+
+CATS_CSV="$(IFS=,; echo "${CATEGORIES[*]}")"
+echo "== running the Julia reference runner (categories: $CATS_CSV)"
+julia "$REPO/scripts/runners/run-julia.jl" --output-dir "$STAGE" --categories "$CATS_CSV"
+
+# Install artifacts + refresh manifests. Stdlib-python JSON handling only
+# (structural file I/O, no numerics — the numbers all came from the runner).
+python3 - "$REPO" "$STAGE" "${CATEGORIES[@]}" <<'PY'
+import json
+import pathlib
+import sys
+
+repo = pathlib.Path(sys.argv[1])
+stage = pathlib.Path(sys.argv[2])
+categories = sys.argv[3:]
+
+
+def activate(manifest_path: pathlib.Path) -> None:
+    """Flip "status": "pending-golden" to "active" (text-level, format-preserving)."""
+    text = manifest_path.read_text()
+    updated = text.replace('"status": "pending-golden"', '"status": "active"')
+    if updated != text:
+        manifest_path.write_text(updated)
+        print(f"   manifest: {manifest_path.relative_to(repo)} -> status: active")
+
+
+if "ast" in categories:
+    results = json.loads((stage / "julia_ast_results.json").read_text())
+    for case, rec in sorted(results["cases"].items()):
+        if rec["status"] != "ok":
+            sys.exit(f"ast/{case}: runner status {rec['status']}: {rec.get('message', '')}")
+        case_dir = repo / "tests" / "conformance" / "ast" / case
+        golden = case_dir / json.loads((case_dir / "manifest.json").read_text())["golden"]
+        golden.write_bytes((stage / rec["artifact"]).read_bytes())
+        print(f"   wrote {golden.relative_to(repo)} ({golden.stat().st_size} bytes)")
+        activate(case_dir / "manifest.json")
+
+if "convergence" in categories:
+    results = json.loads((stage / "julia_convergence_results.json").read_text())
+    for case, rec in sorted(results["cases"].items()):
+        if rec["status"] != "ok":
+            sys.exit(f"convergence/{case}: runner status {rec['status']}: {rec.get('message', '')}")
+        case_dir = repo / "tests" / "conformance" / "convergence" / case
+        manifest = json.loads((case_dir / "manifest.json").read_text())
+        golden = case_dir / manifest.get("golden", "golden/errors.json")
+        golden.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "case": case,
+            "binding": "julia",
+            "generated_by": "scripts/regenerate-goldens.sh",
+            "assert_time": rec["assert_time"],
+            "errors": sorted(rec["errors"], key=lambda r: r["n"]),
+        }
+        golden.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+        print(f"   wrote {golden.relative_to(repo)}")
+        activate(case_dir / "manifest.json")
+PY
+
+echo "== done; verify with scripts/check_convergence_order.py and scripts/test-conformance.sh"
