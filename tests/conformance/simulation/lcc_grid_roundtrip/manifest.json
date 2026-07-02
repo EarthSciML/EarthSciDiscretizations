@@ -1,0 +1,21 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "lcc_grid_roundtrip",
+  "description": "Aggregate-mapped reprojection gate: run the inline esm-spec 6.6/6.6.5 tests of tests/conformance/reprojection/lcc_grid_roundtrip/fixture.esm (model ReprojectGrid, test lcc_grid_roundtrip) through each binding's official simulation pathway. The fixture maps the reprojection/lambert_conformal.esm templates over a whole 8x6 projected coordinate array inside aggregate exprs (esm-spec 9.6.2 Option A expansion with per-site bindings: indexed reads for x/y/lon/lat, numeric literals for the WRF CONUS angle constants, a name reference for R) -- the array-consumption pattern the scalar-point case tests/conformance/reprojection/lambert_conformal (fixture: null) never exercises. Assertions and tolerances live in the fixture itself: reference-free forward(inverse) closure over the whole array (Linf via max/min of the /R-normalized residual fields at 1.6e-13, corner spot-checks of the reconstructed x/y at 1e-6 m, the drift ODE surfacing state at 2e-12) plus four independently-derived Snyder 1987 lon/lat spot-checks at 1e-9 deg. The fixture lives beside the scalar-point reprojection case (its category directory) but is ROUTED here because simulation-of-inline-tests is what the simulation category runners implement; category discovery is directory-based in all five runners.",
+  "problem": "../../reprojection/lcc_grid_roundtrip/fixture.esm",
+  "model": "ReprojectGrid",
+  "tests": ["lcc_grid_roundtrip"],
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "status": "active"
+}
