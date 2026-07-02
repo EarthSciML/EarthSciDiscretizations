@@ -21,14 +21,24 @@
 # Idempotent: a second run is byte-identical.
 #
 # Usage: scripts/regenerate-goldens.sh [ast] [convergence] [regridding]
-#        (no arguments = all three categories)
+#                                      [--files <manifest.json>[,<manifest.json>…]]
+#        (no arguments = all three categories; --files restricts regeneration to
+#        the named case manifests — passed through to the Julia runner — leaving
+#        every other case's golden untouched)
 
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO/scripts/ess-locate.sh"
 
-CATEGORIES=("$@")
+CATEGORIES=()
+FILES_CSV=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --files) FILES_CSV="$2"; shift 2 ;;
+    *) CATEGORIES+=("$1"); shift ;;
+  esac
+done
 [[ ${#CATEGORIES[@]} -eq 0 ]] && CATEGORIES=(ast convergence regridding)
 for c in "${CATEGORIES[@]}"; do
   case "$c" in
@@ -43,7 +53,12 @@ trap 'rm -rf "$STAGE"' EXIT
 
 CATS_CSV="$(IFS=,; echo "${CATEGORIES[*]}")"
 echo "== running the Julia reference runner (categories: $CATS_CSV)"
-julia "$REPO/scripts/runners/run-julia.jl" --output-dir "$STAGE" --categories "$CATS_CSV"
+if [[ -n "$FILES_CSV" ]]; then
+  julia "$REPO/scripts/runners/run-julia.jl" --output-dir "$STAGE" \
+    --categories "$CATS_CSV" --files "$FILES_CSV"
+else
+  julia "$REPO/scripts/runners/run-julia.jl" --output-dir "$STAGE" --categories "$CATS_CSV"
+fi
 
 # Install artifacts + refresh manifests. Stdlib-python JSON handling only
 # (structural file I/O, no numerics — the numbers all came from the runner).
@@ -68,7 +83,7 @@ def activate(manifest_path: pathlib.Path) -> None:
         print(f"   manifest: {manifest_path.relative_to(repo)} -> status: active")
 
 
-if "ast" in categories:
+if "ast" in categories and (stage / "julia_ast_results.json").is_file():
     results = json.loads((stage / "julia_ast_results.json").read_text())
     for case, rec in sorted(results["cases"].items()):
         if rec["status"] != "ok":
@@ -79,7 +94,7 @@ if "ast" in categories:
         print(f"   wrote {golden.relative_to(repo)} ({golden.stat().st_size} bytes)")
         activate(case_dir / "manifest.json")
 
-if "convergence" in categories:
+if "convergence" in categories and (stage / "julia_convergence_results.json").is_file():
     results = json.loads((stage / "julia_convergence_results.json").read_text())
     for case, rec in sorted(results["cases"].items()):
         if rec["status"] != "ok":
@@ -99,7 +114,7 @@ if "convergence" in categories:
         print(f"   wrote {golden.relative_to(repo)}")
         activate(case_dir / "manifest.json")
 
-if "regridding" in categories:
+if "regridding" in categories and (stage / "julia_regridding_results.json").is_file():
     results = json.loads((stage / "julia_regridding_results.json").read_text())
     for case, rec in sorted(results["cases"].items()):
         if rec["status"] != "ok":
