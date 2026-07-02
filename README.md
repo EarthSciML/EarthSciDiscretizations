@@ -78,12 +78,17 @@ python scripts/validate-library.py
 The conformance infrastructure is complete. All five ESS binding runners are
 registered in `scripts/test-conformance.sh` and CI: the `ast` category is
 **byte-identical across Julia, Python, Rust, TypeScript, and Go** (including the
-end-to-end consuming-model gate at N=64); Julia (reference) and Python run every
-category — MMS simulation, convergence sweeps (error norms within rtol 1e-4 of
-the committed Julia goldens), regridding invariants, and reprojection point
-gates. Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript
-are rewrite-only ports (`scope_excluded`), and the Rust §6.6.5 simulation
-pathway is `blocked_upstream_bindings` pending its `run_pde_tests` port.
+end-to-end consuming-model gate at N=64); Julia (reference), Python, and Rust
+run the numeric categories — MMS simulation, convergence sweeps (error norms
+within rtol 1e-4 of the committed Julia goldens), regridding (exact invariants
+plus the per-pair A_ij/A_j/W_ij weights golden, bit-exact against the
+hand-derived rationals), reprojection point gates, and the ragged-MPAS
+divergence simulation (Julia; div∘curl exact to ~3e-14). Scope gaps are
+recorded in the manifests, never shimmed: Go/TypeScript are rewrite-only ports
+(`scope_excluded`), and the remaining `blocked_upstream_bindings` entries name
+their precise upstream sites (Python's bare-name keyed-factor resolution for
+ragged meshes; the missing Rust/Python inspection surface for per-pair
+weights).
 
 The repo carries exemplar content (uniform 1-D cartesian, lat-lon, and MPAS
 grids; centered/upwind rules; a conservative regridder; Lambert conformal

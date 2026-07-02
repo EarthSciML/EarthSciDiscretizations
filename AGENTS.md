@@ -104,10 +104,10 @@ mechanism is being misused.
 1. ✅ Skeleton + validation harness (this document, `validate-library.py`, lint fixtures)
 2. ✅ Grids + stencils + rules + `ast/` conformance (Julia/Python runners)
 3. ✅ Remaining AST runners (Rust/TypeScript/Go) — five-way byte-identical goldens
-4. ✅ Problems + MMS + convergence (Julia reference + Python; Rust
-   blocked-upstream per the manifests' `blocked_upstream_bindings` notes)
-5. ✅ Regridding + reprojection (exact invariants + analytic point gates;
-   per-pair regrid weights blocked-upstream per the case manifest)
+4. ✅ Problems + MMS + convergence (Julia reference + Python + Rust; MPAS ragged
+   simulation gated in Julia, Python blocked per the case manifest's note)
+5. ✅ Regridding + reprojection (exact invariants + analytic point gates +
+   per-pair A_ij/A_j/W_ij weights golden via the Julia BuildInspection surface)
 6. ✅ Docs pipeline · 7. ✅ Full CI matrix (per-binding jobs + cross-binding
    compare in `.github/workflows/conformance.yml`)
 
