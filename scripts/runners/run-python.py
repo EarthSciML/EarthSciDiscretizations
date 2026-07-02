@@ -358,7 +358,13 @@ def run_convergence(output_dir: Path, files, verbose):
             for res in manifest["resolutions"]:
                 n = int(res["n"])
                 bindings = {str(k): int(v) for k, v in res["bindings"].items()}
-                file = load(str(problem), metaparameters=bindings)
+                # A resolution entry MAY name its own problem file (meshes are
+                # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+                # refinement family ships one thin problem file per level);
+                # mirrors run-julia.jl's per-resolution override.
+                res_problem = ((case_dir / res["problem"]).resolve()
+                               if "problem" in res else problem)
+                file = load(str(res_problem), metaparameters=bindings)
                 m = file.models[model]
                 refs = [a for t in m.tests for a in t.assertions
                         if a.time == assert_time and a.reduce == "L2_error"]

@@ -235,18 +235,36 @@ def run_convergence():
         try:
             problem = (case_dir / manifest["problem"]).resolve()
             solver, reltol, abstol = integrator_opts(manifest)
-            out = json.loads(cargo_example(
-                "pde_conformance", "convergence", str(problem),
-                "--model", manifest["model"],
-                "--assert-time", repr(float(manifest["assert_time"])),
-                "--solver", solver,
-                "--reltol", repr(reltol), "--abstol", repr(abstol),
-                "--norms", ",".join(manifest["norms"]),
-                "--resolutions", json.dumps(manifest["resolutions"])))
-            rec["assert_time"] = out["assert_time"]
-            rec["errors"] = out["errors"]
+            # A resolution entry MAY name its own problem file (meshes are
+            # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+            # refinement family ships one thin problem file per level);
+            # mirrors run-julia.jl's per-resolution override. Consecutive
+            # entries sharing a problem run as ONE upstream invocation, so a
+            # manifest without overrides keeps today's single call.
+            groups = []
+            for res in manifest["resolutions"]:
+                res_problem = ((case_dir / res["problem"]).resolve()
+                               if "problem" in res else problem)
+                entry = {k: v for k, v in res.items() if k != "problem"}
+                if groups and groups[-1][0] == res_problem:
+                    groups[-1][1].append(entry)
+                else:
+                    groups.append((res_problem, [entry]))
+            errors = []
+            for res_problem, entries in groups:
+                out = json.loads(cargo_example(
+                    "pde_conformance", "convergence", str(res_problem),
+                    "--model", manifest["model"],
+                    "--assert-time", repr(float(manifest["assert_time"])),
+                    "--solver", solver,
+                    "--reltol", repr(reltol), "--abstol", repr(abstol),
+                    "--norms", ",".join(manifest["norms"]),
+                    "--resolutions", json.dumps(entries)))
+                errors.extend(out["errors"])
+            rec["assert_time"] = float(manifest["assert_time"])
+            rec["errors"] = errors
             if verbose:
-                for row in out["errors"]:
+                for row in errors:
                     print(f"  convergence/{case} n={row['n']}: " + " ".join(
                         f"{k}={row[k]}" for k in sorted(row) if k != "n"))
         except Exception as err:  # noqa: BLE001
