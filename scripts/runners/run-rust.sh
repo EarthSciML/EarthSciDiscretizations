@@ -14,6 +14,11 @@
 #                      simulate → evaluate_cellwise → field_reduce     [convergence]
 #                      runner-built wrapper doc importing the library,
 #                      §9.7.3 body composition, evaluate per point     [reprojection]
+#                      run_pde_tests exact-invariant gates + the
+#                      regrid/pou/cons fields at t=1 + the per-pair
+#                      A_ij/A_j/W_ij setup arrays via the official
+#                      BuildInspection surface
+#                      (simulate_with_inspection)                      [regridding]
 #
 # This wrapper implements the §4.2 CLI: manifest discovery, per-case
 # invocation, artifact and result-JSON assembly (stdlib-python structural I/O
@@ -21,12 +26,8 @@
 # examples; AGENTS.md §2).
 #
 # Usage: scripts/runners/run-rust.sh --output-dir <path>
-#            [--categories ast,simulation,convergence,reprojection]
+#            [--categories ast,simulation,convergence,regridding,reprojection]
 #            [--files <manifest.json>[,…]] [--verbose]
-#
-# Scope: ast, simulation, convergence, reprojection. regridding stays
-# blocked-upstream (the per-pair geometry kernel; see the regridding
-# manifest's markers).
 
 set -euo pipefail
 
@@ -58,7 +59,8 @@ from pathlib import Path
 ESD_ROOT = Path(os.environ["ESD_ROOT"])
 MANIFEST_PATH = os.environ["RUST_MANIFEST_PATH"]
 CONF = ESD_ROOT / "tests" / "conformance"
-CATEGORIES_SUPPORTED = ["ast", "simulation", "convergence", "reprojection"]
+CATEGORIES_SUPPORTED = ["ast", "simulation", "convergence", "regridding",
+                        "reprojection"]
 
 args = sys.argv[1:]
 output_dir = None
@@ -256,6 +258,42 @@ def run_convergence():
     return {"binding": "rust", "category": "convergence", "cases": cases}
 
 
+def run_regridding():
+    # Mirrors run-julia.jl's run_regridding record field-for-field: the
+    # fixture's exact-invariant inline tests (run_pde_tests), the recorded
+    # regrid/pou/cons state fields at t=1, and the per-pair A_ij/A_j/W_ij
+    # setup arrays from the upstream BuildInspection surface — all from ONE
+    # `pde_conformance regrid` invocation (solver pinning identical to the
+    # Julia runner's hardcoded Tsit5/1e-10/1e-12 regridding setup).
+    cases = {}
+    for case_dir, manifest in discover("regridding"):
+        case = manifest["case"]
+        reason = rust_out_of_scope(manifest)
+        if reason is not None:
+            if verbose:
+                print(f"  regridding/{case}: skipped ({reason})")
+            continue
+        rec = {"case": case, "status": "ok"}
+        try:
+            fixture = (case_dir / manifest["fixture"]).resolve()
+            out = json.loads(cargo_example(
+                "pde_conformance", "regrid", str(fixture),
+                "--model", manifest["model"], "--solver", "Erk",
+                "--reltol", "1e-10", "--abstol", "1e-12"))
+            for key in ("assertions", "passed", "regrid_state_at_1",
+                        "pou_state_at_1", "cons_state_at_1",
+                        "A_ij", "A_j", "W_ij"):
+                rec[key] = out[key]
+            rec["status"] = "ok" if rec["passed"] else "failed"
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = str(err)
+        if verbose:
+            print(f"  regridding/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "rust", "category": "regridding", "cases": cases}
+
+
 def run_reprojection():
     cases = {}
     for case_dir, manifest in discover("reprojection"):
@@ -284,7 +322,8 @@ def run_reprojection():
 
 
 RUNNERS = {"ast": run_ast, "simulation": run_simulation,
-           "convergence": run_convergence, "reprojection": run_reprojection}
+           "convergence": run_convergence, "regridding": run_regridding,
+           "reprojection": run_reprojection}
 
 summary = {"binding": "rust", "runner": "scripts/runners/run-rust.sh",
            "categories": {}}
