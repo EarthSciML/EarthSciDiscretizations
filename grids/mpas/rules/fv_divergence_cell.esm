@@ -1,0 +1,50 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "fv_divergence_cell",
+    "description": "Finite-volume cell divergence of an edge-normal flux on the MPAS Voronoi grid (the TRiSK discrete divergence, Ringler et al. 2010 eq. 21): div_i = (1/A_i) * sum_{k=1..nEdgesOnCell(i)} edgeSignOnCell(i,k) * F(e) * dvEdge(e) with e = edgesOnCell(i,k) — the exact Gauss/divergence theorem on cell i with the flux integral along each edge approximated by the midpoint rule, F being the flux component along the edge's positive normal (which points from cellsOnEdge(e,1) to cellsOnEdge(e,2)) and edgeSignOnCell flipping it outward from cell i. Matches the open-namespace rewrite-target {op: div, args: [F]} (esm-spec 9.6.8: div is author sugar with no evaluable core, and a rule MAY match it directly and emit a one-shot scheme). The body is a single aggregate over the cells axis whose contracted index k runs over the RAGGED index set edges_of_cell (esm-spec 4.3.1 { from, of }; RFC semiring-faq-unified-ir 5.2): per-cell dynamic bound k <= nEdgesOnCell(i) plus a gather through the edgesOnCell values factor — this is the connectivity-based stencil form that replaces the makearray region form of the rectangular grids. The division by areaCell(i) sits inside the summand, which equals (1/A_i)*sum since A_i is constant over k. There are no boundary regions and no makearray because a closed sphere has no boundary: every edge separates exactly two cells (bc:none; a rule for a limited-area MPAS mesh would instead overwrite the boundary-cell entries, and would be a different rule). The free names nEdgesOnCell, edgesOnCell, edgeSignOnCell, dvEdge, areaCell are the grid's keyed-factor contract (see grids/mpas/grid.esm): the consuming model must expose them as bare-name arrays, normally as observed aliases of a grids/mpas/mesh/ subsystem's const data. Accuracy: exactly conservative for any F (sum_i A_i*div_i = 0, each edge cancels between its two cells) and exactly annihilates discrete curls (div of F_e = (eta(v2)-eta(v1))/dvEdge(e) is zero to rounding — the TRiSK div-curl identity; problems/divergence_mpas.esm asserts it); order tag is the guaranteed first-order bound on arbitrarily distorted Voronoi meshes, though the midpoint flux is second-order on centroidal/symmetric meshes (Ringler et al. 2010, section 3.2).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_volume", "grid:mpas", "op:div", "axes:cells", "order:1", "bc:none", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090. Eq. (21) and the div-curl mimetic identities of section 3."
+      },
+      {
+        "citation": "Thuburn, J., Ringler, T. D., Skamarock, W. C., & Klemp, J. B. (2009). Numerical representation of geostrophic modes on arbitrarily structured C-grids. Journal of Computational Physics, 228(22), 8321-8335."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "fv_divergence_cell": {
+      "params": ["F"],
+      "match": { "op": "div", "args": ["F"] },
+      "body": {
+        "op": "aggregate",
+        "args": ["F", "edgeSignOnCell", "edgesOnCell", "dvEdge", "areaCell"],
+        "output_idx": ["i"],
+        "semiring": "sum_product",
+        "ranges": {
+          "i": { "from": "cells" },
+          "k": { "from": "edges_of_cell", "of": ["i"] }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["edgeSignOnCell", "i", "k"] },
+                { "op": "index", "args": ["F", { "op": "index", "args": ["edgesOnCell", "i", "k"] }] },
+                { "op": "index", "args": ["dvEdge", { "op": "index", "args": ["edgesOnCell", "i", "k"] }] }
+              ]
+            },
+            { "op": "index", "args": ["areaCell", "i"] }
+          ]
+        }
+      }
+    }
+  }
+}

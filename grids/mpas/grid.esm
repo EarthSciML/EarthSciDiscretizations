@@ -1,0 +1,43 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "mpas",
+    "description": "MPAS unstructured spherical centroidal-Voronoi (icosahedral) C-grid on the unit sphere: NCELLS Voronoi cells, NEDGES edges, NVERTICES triangle vertices, with cell valence bounded by MAXEDGES (on a closed sphere the Euler relations give NEDGES = 3*(NCELLS - 2) and NVERTICES = 2*(NCELLS - 2), but the three counts stay independent metaparameters so planar or open meshes can reuse the file). Unlike the rectangular grids there is no coordinate axis: the iteration domains are the three entity interval sets (cells, edges, vertices) plus the ragged connectivity set `edges_of_cell` (esm-schema IndexSet kind \"ragged\"; RFC semiring-faq-unified-ir 5.2), which binds by NAME to two keyed factors the consuming document must expose as cell-shaped arrays: `nEdgesOnCell` (offsets: the valence of each cell) and `edgesOnCell` (values: the edge ids around each cell, counterclockwise, zero-padded to maxEdges). Geometry is likewise DATA, not formula: mesh files under grids/mpas/mesh/ (section-4.7 subsystem files with literal `const` arrays) supply the factors nEdgesOnCell, edgesOnCell, edgeSignOnCell, cellsOnEdge, verticesOnEdge, dvEdge, dcEdge, areaCell, latCell, lonCell under exactly those names; a consuming model mounts one as a subsystem and re-exposes the factors a rule needs as bare-name observed aliases (e.g. areaCell := mesh.areaCell), since keyed factors resolve by bare name in the model scope (see problems/divergence_mpas.esm for the pattern). The only closed-form geometry is the resolution scale: `cell_area_mean` = 4*pi/NCELLS, the mean cell area on the unit sphere (the h^2 measure for convergence sweeps, h ~ sqrt(cell_area_mean)), which is why it is the grid's sole zero-parameter template. Orientation conventions are fixed by the mesh data (positive edge normal from cellsOnEdge[e][1] to cellsOnEdge[e][2]; positive tangent v1->v2 with t = k x n; edgeSignOnCell = +1 where the positive normal leaves the cell), per Ringler et al. (2010).",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:mpas", "ndim:2", "topology:unstructured_voronoi", "staggering:c-grid", "sphere:unit"],
+    "references": [
+      {
+        "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090."
+      },
+      {
+        "citation": "Thuburn, J., Ringler, T. D., Skamarock, W. C., & Klemp, J. B. (2009). Numerical representation of geostrophic modes on arbitrarily structured C-grids. Journal of Computational Physics, 228(22), 8321-8335."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NCELLS": { "type": "integer", "default": 12, "description": "Number of Voronoi cells (generators). Default: the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm)." },
+    "NEDGES": { "type": "integer", "default": 30, "description": "Number of edges (cell-pair interfaces; 3*(NCELLS-2) on a closed sphere)." },
+    "NVERTICES": { "type": "integer", "default": 20, "description": "Number of mesh vertices (Delaunay-triangle circumcenters; 2*(NCELLS-2) on a closed sphere)." },
+    "MAXEDGES": { "type": "integer", "default": 5, "description": "Maximum cell valence: the padded row length of the per-cell connectivity arrays (5 for level0, 6 for level1 and all larger icosahedral meshes)." }
+  },
+  "index_sets": {
+    "cells": { "kind": "interval", "size": "NCELLS" },
+    "edges": { "kind": "interval", "size": "NEDGES" },
+    "vertices": { "kind": "interval", "size": "NVERTICES" },
+    "maxEdges": { "kind": "interval", "size": "MAXEDGES" },
+    "edge_ends": { "kind": "interval", "size": 2 },
+    "edges_of_cell": {
+      "kind": "ragged",
+      "of": ["cells"],
+      "offsets": "nEdgesOnCell",
+      "values": "edgesOnCell"
+    }
+  },
+  "expression_templates": {
+    "cell_area_mean": {
+      "params": [],
+      "description": "Mean Voronoi-cell area on the unit sphere, 4*pi/NCELLS: the grid's resolution measure (nominal mesh spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d.",
+      "body": { "op": "/", "args": [12.566370614359172, "NCELLS"] }
+    }
+  }
+}
