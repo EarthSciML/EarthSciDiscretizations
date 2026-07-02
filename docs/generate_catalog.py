@@ -24,6 +24,12 @@ files").
 
 Pretty-printing policy (AGENTS.md "single pathway"):
   * This script reads .esm JSON structurally and NEVER evaluates library math.
+  * Float constants display at <= 12 significant digits ("%.12g", trailing
+    zeros stripped) in BOTH display paths: that is the official
+    earthsci_toolkit.display convention (_format_number), and the structural
+    fallback here normalizes to the same so generated pages are byte-identical
+    regardless of which renderer handled an expression. Presentation-layer
+    only — full precision always lives in the .esm sources the pages link.
   * Math display prefers the OFFICIAL ESS display path
     (earthsci_toolkit.display.to_unicode), used in-process when the toolkit is
     importable (the CI docs job pip-installs it) or through
@@ -429,7 +435,20 @@ class MathRenderer:
     def _number(self, value, prec: int) -> str:
         if isinstance(value, float) and value.is_integer():
             value = int(value)
-        text = str(value)
+        if isinstance(value, float):
+            # Float display convention: at most 12 significant digits, matching
+            # the official earthsci_toolkit.display path (display.py
+            # _format_number: f"{num:.12g}" for regular-magnitude floats), so
+            # official-rendered and structurally-rendered pages agree.
+            # Presentation only — the underlying .esm bytes are untouched.
+            if 1e-4 <= abs(value) < 1e5:
+                text = f"{value:.12g}"
+                if "." in text:
+                    text = text.rstrip("0").rstrip(".")
+            else:
+                text = f"{value:.12g}"
+        else:
+            text = str(value)
         if text.startswith("-"):
             text = MINUS + text[1:]
             if prec > self.TERM:
