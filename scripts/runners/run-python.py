@@ -192,6 +192,22 @@ def integrator_opts(manifest):
             float(j.get("atol", 1e-12)))
 
 
+def python_excluded(manifest):
+    """The manifest's own scope/blocked verdict for THIS binding, or None.
+
+    A case whose manifest lists python under scope_excluded /
+    blocked_upstream_bindings is recorded as status "skipped" (with the
+    manifest's reason) instead of being run — compare-outputs.py reports the
+    same SKIP from the manifest before ever reading the runner record, and the
+    runner's exit code must not fail the orchestrator over a case the
+    conformance contract says this binding cannot run yet."""
+    for key in ("scope_excluded", "blocked_upstream_bindings"):
+        reason = manifest.get(key, {}).get("python")
+        if reason:
+            return f"{key}: {reason}"
+    return None
+
+
 def assertion_dicts(results):
     return [{
         "model": r.model, "test_id": r.test_id, "assertion_idx": r.assertion_idx,
@@ -230,6 +246,14 @@ def run_ast(output_dir: Path, files, verbose):
     for case_dir, manifest in discover_manifests("ast", files):
         case = manifest["case"]
         rec = {"case": case, "status": "ok"}
+        excluded = python_excluded(manifest)
+        if excluded is not None:
+            rec["status"] = "skipped"
+            rec["message"] = excluded
+            if verbose:
+                print(f"  {manifest['category']}/{case}: skipped ({excluded})")
+            cases[case] = rec
+            continue
         try:
             fixture = case_dir / manifest["fixture"]
             raw = json.loads(fixture.read_text())
@@ -273,6 +297,14 @@ def run_simulation(output_dir: Path, files, verbose):
     for case_dir, manifest in discover_manifests("simulation", files):
         case = manifest["case"]
         rec = {"case": case, "status": "ok"}
+        excluded = python_excluded(manifest)
+        if excluded is not None:
+            rec["status"] = "skipped"
+            rec["message"] = excluded
+            if verbose:
+                print(f"  {manifest['category']}/{case}: skipped ({excluded})")
+            cases[case] = rec
+            continue
         try:
             problem = (case_dir / manifest["problem"]).resolve()
             method, rtol, atol = integrator_opts(manifest)
@@ -309,6 +341,14 @@ def run_convergence(output_dir: Path, files, verbose):
     for case_dir, manifest in discover_manifests("convergence", files):
         case = manifest["case"]
         rec = {"case": case, "status": "ok"}
+        excluded = python_excluded(manifest)
+        if excluded is not None:
+            rec["status"] = "skipped"
+            rec["message"] = excluded
+            if verbose:
+                print(f"  {manifest['category']}/{case}: skipped ({excluded})")
+            cases[case] = rec
+            continue
         try:
             problem = (case_dir / manifest["problem"]).resolve()
             model = manifest["model"]
@@ -370,6 +410,14 @@ def run_regridding(output_dir: Path, files, verbose):
     for case_dir, manifest in discover_manifests("regridding", files):
         case = manifest["case"]
         rec = {"case": case, "status": "ok"}
+        excluded = python_excluded(manifest)
+        if excluded is not None:
+            rec["status"] = "skipped"
+            rec["message"] = excluded
+            if verbose:
+                print(f"  {manifest['category']}/{case}: skipped ({excluded})")
+            cases[case] = rec
+            continue
         try:
             fixture = (case_dir / manifest["fixture"]).resolve()
             model = manifest["model"]
@@ -444,6 +492,14 @@ def run_reprojection(output_dir: Path, files, verbose):
     for case_dir, manifest in discover_manifests("reprojection", files):
         case = manifest["case"]
         rec = {"case": case, "status": "ok"}
+        excluded = python_excluded(manifest)
+        if excluded is not None:
+            rec["status"] = "skipped"
+            rec["message"] = excluded
+            if verbose:
+                print(f"  {manifest['category']}/{case}: skipped ({excluded})")
+            cases[case] = rec
+            continue
         try:
             lib = (case_dir / manifest["library"]).resolve()
             gold = json.loads((case_dir / manifest["golden"]).read_text())
@@ -530,7 +586,8 @@ def main() -> int:
         res = runners[cat](output_dir, files, args.verbose)
         (output_dir / f"python_{cat}_results.json").write_bytes(canonical_bytes(res))
         n_cases = len(res["cases"])
-        n_bad = sum(1 for r in res["cases"].values() if r["status"] != "ok")
+        n_bad = sum(1 for r in res["cases"].values()
+                    if r["status"] not in ("ok", "skipped"))
         if n_bad:
             exit_code = 1
         summary["categories"][cat] = {"cases": n_cases, "failures": n_bad}
