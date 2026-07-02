@@ -26,7 +26,8 @@
 #   convergence  load(problem; metaparameters=…) per manifest resolution →
 #                simulate → evaluate_cellwise(reference) → field_reduce norms
 #   regridding   run_pde_tests on the fixture (exact-invariant gates) +
-#                the regrid_state(1) field
+#                the regrid_state(1) field + the per-pair A_ij/A_j/W_ij setup
+#                arrays via the BuildInspection observability surface
 #   reprojection load a runner-built template invocation (manifest fixture:
 #                null) → evaluate_expr at every golden point
 #
@@ -332,10 +333,28 @@ function run_convergence(output_dir, files, verbose)
 end
 
 # ---------------------------------------------------------------------------
-# regridding — the fixture's exact-invariant inline tests + the regridded field.
-# Per-pair A_ij/A_j/W_ij goldens are blocked-upstream (see the case manifest):
-# they live in build-time geometry setup arrays no official ESS API exposes yet.
+# regridding — the fixture's exact-invariant inline tests, the regridded field,
+# and the per-pair build-time setup arrays (A_ij / A_j / W_ij) read from the
+# official BuildInspection surface (`simulate(...; inspect=…)` →
+# `build_evaluator` setup-array observability) — the §5.8 per-pair gates.
 # ---------------------------------------------------------------------------
+
+# Fetch one named setup array from the build inspection. Flattening prefixes
+# each observed with its owning model ("Regrid.A_ij"), so try the qualified
+# name, then the bare name, then a unique ".<name>" suffix match.
+function _setup_array(insp, model::String, name::String)
+    for k in (model * "." * name, name)
+        haskey(insp.setup_arrays, k) && return insp.setup_arrays[k]
+    end
+    hits = [k for k in keys(insp.setup_arrays) if endswith(k, "." * name)]
+    length(hits) == 1 && return insp.setup_arrays[hits[1]]
+    error("setup array '$name' not exposed by the build (have: " *
+          "$(sort(collect(keys(insp.setup_arrays)))))")
+end
+
+# Row-major nested lists for JSON emission ([i][j] like the manifest triples).
+_rows(m::AbstractMatrix) = [Float64[m[i, j] for j in 1:size(m, 2)] for i in 1:size(m, 1)]
+
 function run_regridding(output_dir, files, verbose)
     cases = Dict{String,Any}()
     for (case_dir, manifest) in discover_manifests("regridding", files)
@@ -351,15 +370,23 @@ function run_regridding(output_dir, files, verbose)
             # regrid_state integrates the constant regridded field from 0 over
             # [0,1], so state(1) IS the regridded field F_tgt.
             file = ESS.load(fixture)
+            insp = ESS.BuildInspection()
             sim = ESS.simulate(file, (0.0, 1.0); alg=ODE.Tsit5(),
-                               reltol=1e-10, abstol=1e-12, saveat=[1.0])
+                               reltol=1e-10, abstol=1e-12, saveat=[1.0],
+                               inspect=insp)
             sim.success || error("solver retcode $(sim.retcode)")
             for var in ("regrid_state", "pou_state", "cons_state")
                 cells = ESS._state_cells(sim.var_map, var, model)
                 rec[var * "_at_1"] = Float64[sim.u[end][slot] for (_, slot) in cells]
             end
+            # Per-pair setup arrays (manifest §5.8 gates): the raw overlap-area
+            # matrix, its filtered row-sums, and the normalized weights — the
+            # build-once geometry the evaluator materializes at setup, emitted
+            # verbatim (row-major [i][j], 1-based like the manifest triples).
+            rec["A_ij"] = _rows(_setup_array(insp, model, "A_ij"))
+            rec["A_j"] = collect(Float64, _setup_array(insp, model, "A_j"))
+            rec["W_ij"] = _rows(_setup_array(insp, model, "W_ij"))
             rec["status"] = rec["passed"] ? "ok" : "failed"
-            rec["blocked_upstream"] = String(get(manifest, "blocked_upstream", ""))
         catch err
             rec["status"] = "error"
             rec["message"] = sprint(showerror, err)

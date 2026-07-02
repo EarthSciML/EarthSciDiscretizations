@@ -16,7 +16,11 @@ CONFORMANCE_SPEC.md §4.2/§4.4) and applies each category's comparison contract
                manifest's error_vs_golden_rtol/atol.
   regridding   every exact-invariant assertion passed; recorded fields carried
                through for cross-binding comparison at the manifest's
-               weight_rtol/weight_atol.
+               weight_rtol/weight_atol; per-pair A_ij/A_j/W_ij setup arrays vs
+               the committed golden/weights.json (areas at area_rtol + the
+               5.8.2 sliver-floor atol, weights at weight_rtol/weight_atol) for
+               every runner that emits them (SKIP, never silent pass, for a
+               binding without an upstream inspection surface).
   reprojection forward/inverse/roundtrip values vs the independent analytic
                reference (golden/points.json) at the manifest tolerances
                (combined |v - ref| <= atol + rtol*|ref| checks).
@@ -229,12 +233,32 @@ def compare_convergence(results_root, bindings, rep):
                     f"{len(rec['errors'])} resolutions within rtol={rtol}")
 
 
+def _flat_floats(x):
+    """Flatten a (possibly nested) list of numbers to a flat float list."""
+    if isinstance(x, list):
+        out = []
+        for v in x:
+            out.extend(_flat_floats(v))
+        return out
+    return [float(x)]
+
+
 def compare_regridding(results_root, bindings, rep):
-    for _case_dir, manifest in manifests("regridding"):
+    for case_dir, manifest in manifests("regridding"):
         case = manifest["case"]
         reference = manifest.get("reference_binding", "julia")
-        wr = manifest.get("tolerances", {}).get("weight_rtol", 1e-9)
-        wa = manifest.get("tolerances", {}).get("weight_atol", 1e-12)
+        tol = manifest.get("tolerances", {})
+        wr = tol.get("weight_rtol", 1e-9)
+        wa = tol.get("weight_atol", 1e-12)
+        # Areas (A_ij / A_j) are gated with the §5.8.2 area band: the calibrated
+        # rel tolerance plus the sliver floor atol = factor * L^2.
+        ar = tol.get("area_rtol", 1e-9)
+        aa = (tol.get("area_atol_factor", 1e-15)
+              * tol.get("characteristic_length", 1.0) ** 2)
+        golden_rel = manifest.get("golden", "")
+        golden_path = case_dir / golden_rel if golden_rel else None
+        gold = (json.loads(golden_path.read_text())
+                if golden_path is not None and golden_path.is_file() else None)
         ref_fields = {}
         for binding in bindings:
             if binding in manifest.get("scope_excluded", {}):
@@ -269,9 +293,43 @@ def compare_regridding(results_root, bindings, rep):
                             for a, b in zip(fields[k], ref_fields[k]))]
                 rep.add("regridding", case, binding, "cross-binding-fields",
                         "fail" if mism else "pass", ", ".join(mism))
-            if manifest.get("blocked_upstream"):
+            # Per-pair setup arrays (§5.8.1-5.8.2): gate the runner-emitted
+            # A_ij / A_j / W_ij against golden/weights.json. A runner that does
+            # not (yet) emit them — its binding lacks an upstream inspection
+            # surface — is reported as SKIP, never silently passed.
+            per_pair = {k: rec.get(k) for k in ("A_ij", "A_j", "W_ij")}
+            if all(v is not None for v in per_pair.values()):
+                if gold is None:
+                    status = ("skip" if manifest.get("status")
+                              in ("pending-golden", "active-invariants") else "fail")
+                    rep.add("regridding", case, binding, "per-pair-weights", status,
+                            "golden not yet generated" if status == "skip"
+                            else f"golden '{golden_rel}' missing and manifest not "
+                                 "marked pending-golden")
+                else:
+                    bad = []
+                    for label, rt, at in (("A_ij", ar, aa), ("A_j", ar, aa),
+                                          ("W_ij", wr, wa)):
+                        got = _flat_floats(per_pair[label])
+                        ref = _flat_floats(gold[label])
+                        if len(got) != len(ref):
+                            bad.append(f"{label}: {len(got)} entries vs golden "
+                                       f"{len(ref)}")
+                            continue
+                        for k, (a, b) in enumerate(zip(got, ref)):
+                            if not close(a, b, rt, at):
+                                bad.append(f"{label}[{k}]: {a} vs {b}")
+                    rep.add("regridding", case, binding, "per-pair-weights",
+                            "fail" if bad else "pass",
+                            "; ".join(bad[:3]) if bad else
+                            f"A_ij/A_j/W_ij within rtol={wr} (areas rtol={ar})")
+            elif manifest.get("blocked_upstream"):
                 rep.add("regridding", case, binding, "per-pair-weights", "skip",
                         "blocked-upstream: " + manifest["blocked_upstream"])
+            else:
+                rep.add("regridding", case, binding, "per-pair-weights", "skip",
+                        "runner does not emit per-pair arrays (no inspection "
+                        "surface in this binding yet)")
 
 
 def compare_reprojection(results_root, bindings, rep):

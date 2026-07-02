@@ -11,12 +11,17 @@
 #                verbatim — byte-compared by every other binding)
 #   convergence  tests/conformance/convergence/<case>/golden/errors.json
 #                (format per scripts/check_convergence_order.py docstring)
+#   regridding   tests/conformance/regridding/<case>/golden/weights.json
+#                (the per-pair A_ij/A_j/W_ij setup arrays the runner reads
+#                from the official EarthSciSerialization.jl BuildInspection
+#                surface; gated by compare-outputs.py per manifest §5.8)
 #
 # Manifests whose golden this run fulfills have "status": "pending-golden"
-# updated to "active". Idempotent: a second run is byte-identical.
+# (or the regridding interim "active-invariants") updated to "active".
+# Idempotent: a second run is byte-identical.
 #
-# Usage: scripts/regenerate-goldens.sh [ast] [convergence]
-#        (no arguments = both categories)
+# Usage: scripts/regenerate-goldens.sh [ast] [convergence] [regridding]
+#        (no arguments = all three categories)
 
 set -euo pipefail
 
@@ -24,11 +29,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO/scripts/ess-locate.sh"
 
 CATEGORIES=("$@")
-[[ ${#CATEGORIES[@]} -eq 0 ]] && CATEGORIES=(ast convergence)
+[[ ${#CATEGORIES[@]} -eq 0 ]] && CATEGORIES=(ast convergence regridding)
 for c in "${CATEGORIES[@]}"; do
   case "$c" in
-    ast|convergence) ;;
-    *) echo "error: regenerate-goldens.sh handles categories 'ast' and 'convergence', got '$c'" >&2
+    ast|convergence|regridding) ;;
+    *) echo "error: regenerate-goldens.sh handles categories 'ast', 'convergence', and 'regridding', got '$c'" >&2
        exit 2 ;;
   esac
 done
@@ -53,9 +58,11 @@ categories = sys.argv[3:]
 
 
 def activate(manifest_path: pathlib.Path) -> None:
-    """Flip "status": "pending-golden" to "active" (text-level, format-preserving)."""
+    """Flip "status": "pending-golden" (or the regridding interim
+    "active-invariants") to "active" (text-level, format-preserving)."""
     text = manifest_path.read_text()
     updated = text.replace('"status": "pending-golden"', '"status": "active"')
+    updated = updated.replace('"status": "active-invariants"', '"status": "active"')
     if updated != text:
         manifest_path.write_text(updated)
         print(f"   manifest: {manifest_path.relative_to(repo)} -> status: active")
@@ -87,6 +94,34 @@ if "convergence" in categories:
             "generated_by": "scripts/regenerate-goldens.sh",
             "assert_time": rec["assert_time"],
             "errors": sorted(rec["errors"], key=lambda r: r["n"]),
+        }
+        golden.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+        print(f"   wrote {golden.relative_to(repo)}")
+        activate(case_dir / "manifest.json")
+
+if "regridding" in categories:
+    results = json.loads((stage / "julia_regridding_results.json").read_text())
+    for case, rec in sorted(results["cases"].items()):
+        if rec["status"] != "ok":
+            sys.exit(f"regridding/{case}: runner status {rec['status']}: {rec.get('message', '')}")
+        missing = [k for k in ("A_ij", "A_j", "W_ij") if k not in rec]
+        if missing:
+            sys.exit(f"regridding/{case}: runner emitted no {missing} "
+                     "(BuildInspection setup arrays)")
+        case_dir = repo / "tests" / "conformance" / "regridding" / case
+        manifest = json.loads((case_dir / "manifest.json").read_text())
+        golden_rel = manifest.get("golden", "golden/weights.json")
+        if not golden_rel.endswith(".json"):
+            golden_rel = "golden/weights.json"
+        golden = case_dir / golden_rel
+        golden.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "case": case,
+            "binding": "julia",
+            "generated_by": "scripts/regenerate-goldens.sh",
+            "A_ij": rec["A_ij"],
+            "A_j": rec["A_j"],
+            "W_ij": rec["W_ij"],
         }
         golden.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
         print(f"   wrote {golden.relative_to(repo)}")
