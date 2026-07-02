@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "heat_1d_zero_grad",
-    "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the unit interval with zero-gradient (homogeneous Neumann) boundaries, discretized by grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc. Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x): cos(pi x) satisfies u_x = 0 at both x=0 and x=1, so it is compatible with the zero-gradient rule and needs no forcing term (contrast the esm-spec 6.6.5 worked example, whose sin(pi x) solution is zero-Dirichlet). Initial condition and test references are written explicitly over the grid's x_coord geometry template, so no implicit index-to-coordinate mapping is assumed anywhere.",
+    "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the unit interval [0, 1] with zero-gradient (homogeneous Neumann) boundaries, discretized by grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc. Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x): cos(pi x) satisfies u_x = 0 at both x=0 and x=1, so it is compatible with the zero-gradient rule and needs no forcing term (contrast the esm-spec 6.6.5 worked example, whose sin(pi x) solution is zero-Dirichlet). The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed whose expression divides by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent) resolve the rule body's free dx at evaluation. Initial condition and test references spell the grid's index-to-coordinate conversion x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)) instead of applying the free-name x_coord template: the official 6.6.5/ic build-time cellwise evaluation is scope-free (model parameters/observeds are not in scope there), so build-time coordinate expressions must fold from literals and metaparameters alone.",
     "license": "MIT",
     "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms"],
     "references": [
@@ -29,6 +29,18 @@
           "units": "m^2/s",
           "default": 0.01,
           "description": "Thermal diffusivity."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, "N"] },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter (re-exported up the import chain), substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
       "equations": [
@@ -41,7 +53,25 @@
                 "op": "*",
                 "args": [
                   3.141592653589793,
-                  { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} }
+                  {
+                    "op": "aggregate",
+                    "output_idx": ["i"],
+                    "args": [],
+                    "ranges": { "i": { "from": "x" } },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        0,
+                        {
+                          "op": "*",
+                          "args": [
+                            { "op": "-", "args": ["i", 0.5] },
+                            { "op": "/", "args": [1, "N"] }
+                          ]
+                        }
+                      ]
+                    }
+                  }
                 ]
               }
             ]
@@ -61,7 +91,7 @@
       "tests": [
         {
           "id": "mms_neumann_decay",
-          "description": "Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) with alpha = 0.01. Derivation: u_t = -alpha pi^2 u and u_xx = -pi^2 u, so u_t = alpha u_xx exactly; u_x = -pi sin(pi x) vanishes at x = 0 and x = 1, matching the zero-gradient rule; no forcing term required. The t=0 assertion pins the ic wiring (reference equals the initial field); the t=0.1 assertion bounds the relative L2 discretization error, whose leading term scales as (pi dx)^2/12 — approximately 3e-5 at N=16, so the 1e-4 bound holds for every resolution in the convergence sweep. Exact per-resolution error values are pinned in tests/conformance/convergence/heat_1d_zero_grad/golden/errors.json.",
+          "description": "Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) with alpha = 0.01. Derivation: u_t = -alpha pi^2 u and u_xx = -pi^2 u, so u_t = alpha u_xx exactly; u_x = -pi sin(pi x) vanishes at x = 0 and x = 1, matching the zero-gradient rule; no forcing term required. References evaluate at the cell centers x_i = x0 + (i - 1/2) dx = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (1-based index space; build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field); the t=0.1 assertion bounds the relative L2 discretization error, whose leading term scales as (pi dx)^2/12 — approximately 3e-5 at N=16, so the 1e-4 bound holds for every resolution in the convergence sweep. Exact per-resolution error values are pinned in tests/conformance/convergence/heat_1d_zero_grad/golden/errors.json.",
           "time_span": { "start": 0.0, "end": 0.1 },
           "assertions": [
             {
@@ -77,7 +107,25 @@
                     "op": "*",
                     "args": [
                       3.141592653589793,
-                      { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} }
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i"],
+                        "args": [],
+                        "ranges": { "i": { "from": "x" } },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["i", 0.5] },
+                                { "op": "/", "args": [1, "N"] }
+                              ]
+                            }
+                          ]
+                        }
+                      }
                     ]
                   }
                 ]
@@ -105,7 +153,25 @@
                         "op": "*",
                         "args": [
                           3.141592653589793,
-                          { "op": "apply_expression_template", "args": [], "name": "x_coord", "bindings": {} }
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i"],
+                            "args": [],
+                            "ranges": { "i": { "from": "x" } },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    { "op": "-", "args": ["i", 0.5] },
+                                    { "op": "/", "args": [1, "N"] }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
                         ]
                       }
                     ]
