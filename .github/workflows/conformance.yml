@@ -52,6 +52,34 @@ jobs:
       - name: Spellcheck
         uses: crate-ci/typos@v1
 
-  # Per-binding conformance matrix and the cross-binding compare job land with
-  # the runner work packages (see AGENTS.md "Phasing"); the validate job above
-  # is the always-on gate.
+  # The Julia reference binding: runs the official runner
+  # (scripts/runners/run-julia.jl) for ast + simulation + convergence and gates
+  # every output against the committed goldens with scripts/compare-outputs.py.
+  # Further per-binding jobs (python, rust, go, typescript) drop into the same
+  # shape as their ESS §9.7 ports land (AGENTS.md "Phasing").
+  julia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: EarthSciML/EarthSciSerialization
+          path: ess
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - name: Instantiate the ESS Julia binding
+        run: |
+          julia --project=ess/packages/EarthSciSerialization.jl \
+            -e 'using Pkg; Pkg.instantiate()'
+      - name: Conformance (julia; ast + simulation + convergence)
+        run: |
+          ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
+            --bindings julia --categories ast,simulation,convergence
+      - name: Upload runner outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-results-julia
+          path: conformance-results/
