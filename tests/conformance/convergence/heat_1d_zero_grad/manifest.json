@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_1d_zero_grad",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc driven by problems/heat_1d_zero_grad.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files exist or are needed. The manufactured solution exp(-alpha pi^2 t) cos(pi x) is exact for the continuous PDE (derivation in the problem file); the recorded L2/Linf errors at t=0.1 are pure spatial-discretization error, expected to fall as O(dx^2).",
+  "problem": "../../../../problems/heat_1d_zero_grad.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "RK45", "rtol": 1e-10, "atol": 1e-12 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "pending-golden"
+}
