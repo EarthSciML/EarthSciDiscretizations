@@ -293,7 +293,12 @@ function run_convergence(output_dir, files, verbose)
                 n = Int(res["n"])
                 bindings = Dict{String,Int}(String(k) => Int(v)
                                             for (k, v) in pairs(res["bindings"]))
-                file = ESS.load(problem; metaparameters=bindings)
+                # A resolution entry MAY name its own problem file (meshes are
+                # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+                # refinement family ships one thin problem file per level).
+                res_problem = haskey(res, "problem") ?
+                    normpath(joinpath(case_dir, String(res["problem"]))) : problem
+                file = ESS.load(res_problem; metaparameters=bindings)
                 m = file.models[model]
                 # The analytic reference is the problem's own §6.6.5 assertion
                 # at assert_time (references are authored over the grid's
