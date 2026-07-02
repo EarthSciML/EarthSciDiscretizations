@@ -1,0 +1,280 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon_advection_meridional_zero_grad",
+    "description": "MMS driver: forced meridional advection on the global latlon grid, u_t = -v_deg * D(u, lat) + v_deg * dPdlat, discretized by grids/latlon/rules/central_D_lat_zero_grad_bc (2nd-order centered interior, one-sided zero-gradient pole rows). Manufactured STEADY solution u*(lat) = cos^4((pi/180) lat) — a P2-like polar-cap profile — with the exactly matching steady forcing v_deg * dPdlat, dPdlat = -4 (pi/180) cos^3(Phi) sin(Phi), Phi = (pi/180) lat (the analytic per-degree meridional derivative of u*), so u_t = 0 and u(t) = u* for all t in the continuous problem; the discrete field drifts only by the spatial truncation error, which is what the assertions and the convergence sweep measure. BC COMPATIBILITY (why cos^4 and not cos or cos^2): u* has dP/dPhi = -4 cos^3 sin, d2P/dPhi2 = 12 cos^2 sin^2 - 4 cos^4, and d3P/dPhi3 = -24 cos sin^3 + 40 cos^3 sin ... all carrying a cos factor, so the first THREE Phi-derivatives vanish at the poles: the rule's one-sided face value (u[i,2]-u[i,1])/dlat_deg = u_lat(pole + dlat/2) + O(dlat^2) = O(dlat^3) is superconvergently consistent with the exact pole value 0, and the global error is cleanly O(dlat^2) from the interior stencil alone (a profile with nonzero pole curvature, e.g. cos^2, would degrade the face residual to O(dlat) and pollute the observed order). GRID CONTRACT WIRING (grids/latlon/grid.esm): NLON is closed to 8 at the import edge (the lon axis is passive — the solution is zonally symmetric and no lon operator appears), NLAT stays open (default 91, rebound by the convergence sweep via the loader API); dlat_deg = 180/(NLAT-1) is an observed whose expression uses the metaparameter NAME NLAT (substituted at load per esm-spec 9.7.6), so the sweep keeps the spacing consistent; lat0_deg = -90. The ic, forcing, and test references inline the grid's lat_coord convention (lat_j = -90 + (j-1) * 180/(NLAT-1) via the NLAT name) instead of invoking the lat_coord template: free-name geometry is not resolvable in the bindings' build-time ic/reference evaluator (parameters and observeds are out of scope there — upstream limitation, EarthSciSerialization tree-walk _eval_cellwise), so geometry in ic/reference positions must fold to constants at load. ERROR MODEL: with v_deg = 30 and t = 0.2 (the solution 'would have' transported 6 degrees against the fixed forcing), the truncation-driven drift gives relative L2 errors falling as O(dlat^2) over the NLAT = 17/33/65/129 ladder; exact per-resolution values are pinned in tests/conformance/convergence/latlon_advection_meridional_zero_grad/golden/errors.json.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:latlon", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (boundary-compatible manufactured solutions and one-sided closures)."
+      }
+    ]
+  },
+  "models": {
+    "MeridionalAdvection": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon/rules/central_D_lat_zero_grad_bc.esm",
+          "bindings": { "NLON": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": ["lon", "lat"],
+          "description": "Tracer field over the lon x lat index sets (zonally symmetric in this problem)."
+        },
+        "v_deg": {
+          "type": "parameter",
+          "units": "deg/s",
+          "default": 30,
+          "description": "Constant meridional transport speed in degrees of latitude per second (positive northward). Multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value."
+        },
+        "dlat_deg": {
+          "type": "observed",
+          "units": "deg",
+          "expression": { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] },
+          "description": "Meridional spacing 180/(NLAT-1) (pole-to-pole point grid): the grid's dlat_deg free name (consumer-supplied geometry contract, grids/latlon/grid.esm). NLAT is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlat_deg consistent."
+        },
+        "dPdlat": {
+          "type": "observed",
+          "units": "1/deg",
+          "shape": ["lon", "lat"],
+          "description": "Analytic per-degree meridional derivative of the manufactured solution: dPdlat(lat) = -4 (pi/180) cos^3((pi/180) lat) sin((pi/180) lat). Constant in time and longitude; v_deg * dPdlat is the manufactured forcing that holds u* = cos^4 steady.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                -4,
+                { "op": "/", "args": [3.141592653589793, 180] },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            { "op": "/", "args": [3.141592653589793, 180] },
+                            {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    { "op": "-", "args": ["j", 1] },
+                                    { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "/", "args": [3.141592653589793, 180] },
+                        {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["j", 1] },
+                                { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "^",
+            "args": [
+              {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "/", "args": [3.141592653589793, 180] },
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i", "j"],
+                        "args": [],
+                        "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["j", 1] },
+                                { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              4
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  { "op": "-", "args": ["v_deg"] },
+                  { "op": "D", "args": ["u"], "wrt": "lat" }
+                ]
+              },
+              { "op": "*", "args": ["v_deg", "dPdlat"] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_polar_cap",
+          "description": "Manufactured steady solution u*(lat) = cos^4((pi/180) lat) with v_deg = 30. Derivation: the continuous balance is u_t = -v u*_lat + v u*_lat = 0 with u*_lat = dPdlat = -4 (pi/180) cos^3 sin (per-degree); the first three Phi-derivatives of u* vanish at both poles, so u* is compatible with the rule's zero-gradient pole rows to O(dlat^3) (see metadata.description) and the discrete drift is pure interior O(dlat^2) truncation. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.2 assertion bounds the truncation-driven drift against the SAME steady reference: 7.91e-3 relative L2 at the sweep's coarsest NLAT=17 and 2.55e-4 at the default NLAT=91, so the 0.02 bound holds across the whole convergence ladder with a >2x margin (exact per-resolution errors pinned in tests/conformance/convergence/latlon_advection_meridional_zero_grad/golden/errors.json). The max assertion (u* attains 1 at the equator row, present for every odd NLAT) guards against a uniform-shift/forcing-sign defect that the relative L2 could disguise.",
+          "time_span": { "start": 0.0, "end": 0.2 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i", "j"],
+                            "args": [],
+                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    { "op": "-", "args": ["j", 1] },
+                                    { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  4
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.2,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.02 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i", "j"],
+                            "args": [],
+                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    { "op": "-", "args": ["j", 1] },
+                                    { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  4
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.2,
+              "expected": 1.0,
+              "tolerance": { "abs": 0.05 },
+              "reduce": "max"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
