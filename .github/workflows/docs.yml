@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HUGO_VERSION: "0.131.0"
+      PAGEFIND_VERSION: "1.1.0"
     steps:
       - uses: actions/checkout@v4
 
@@ -75,6 +76,16 @@ jobs:
 
       - name: Build site with Hugo
         run: hugo --source docs --minify --destination public
+
+      # Pagefind search index, ported from the archive docs workflow
+      # (archive/.github/workflows/docs.yml). Runs BEFORE the link check so
+      # lychee also validates the /pagefind/pagefind-ui.{js,css} references the
+      # head partial emits (params.pagefind in docs/hugo.toml).
+      - name: Install Pagefind
+        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
+
+      - name: Build Pagefind search index
+        run: pagefind --site docs/public
 
       - name: Link-check built site (internal links only)
         uses: lycheeverse/lychee-action@v1
