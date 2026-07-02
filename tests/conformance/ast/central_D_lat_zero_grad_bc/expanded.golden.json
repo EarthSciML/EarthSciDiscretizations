@@ -11,18 +11,18 @@
     }
   },
   "metadata": {
-    "description": "AST-expansion conformance fixture for grids/latlon/rules/central_D_lon_zero_grad_bc — the esm-spec 9.6.8 worked example generalized over NLON/NLAT, here bound to NLON=8, NLAT=5 at the import edge. The match D(u,lon) must lower, through the section-9.6.3 fixpoint, to the rule's two-axis makearray — interior columns [2,7] x [1,5] holding the imported centered-difference stencil, face columns i=1 and i=8 holding the one-sided zero-gradient aggregates over the lat axis — with all metaparameters folded and the consumer-supplied spacing surviving as the free name dlon_deg (declared here as a parameter, 360/8 = 45, per the grid's keyed-factor contract). The golden pins the byte-identical post-lowering AST across bindings.",
+    "description": "AST-expansion conformance fixture for grids/latlon/rules/central_D_lat_zero_grad_bc, bound to NLON=8, NLAT=5 at the import edge. The match D(u,lat) must lower, through the section-9.6.3 fixpoint, to the rule's two-axis makearray — interior rows [1,8] x [2,4] holding the imported centered-difference stencil, zero-gradient boundary rows j=1 and j=5 holding the full-rank one-sided aggregates — with all metaparameters folded and the consumer-supplied spacing surviving as the free name dlat_deg (declared here as a parameter, 180/(5-1) = 45, per the grid's keyed-factor contract). The golden pins the byte-identical post-lowering AST across bindings.",
     "license": "MIT",
-    "name": "central_D_lon_zero_grad_bc_ast_fixture",
+    "name": "central_D_lat_zero_grad_bc_ast_fixture",
     "tags": [
       "conformance",
       "ast",
       "grid:latlon",
-      "rule:central_D_lon_zero_grad_bc"
+      "rule:central_D_lat_zero_grad_bc"
     ]
   },
   "models": {
-    "CentralDLonZeroGradBcAst": {
+    "CentralDLatZeroGradBcAst": {
       "equations": [
         {
           "lhs": {
@@ -49,31 +49,31 @@
                 "regions": [
                   [
                     [
+                      1,
+                      8
+                    ],
+                    [
                       2,
-                      7
-                    ],
-                    [
-                      1,
-                      5
+                      4
                     ]
                   ],
                   [
                     [
                       1,
-                      1
-                    ],
-                    [
-                      1,
-                      5
-                    ]
-                  ],
-                  [
-                    [
-                      8,
                       8
                     ],
                     [
                       1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      8
+                    ],
+                    [
+                      5,
                       5
                     ]
                   ]
@@ -90,28 +90,28 @@
                             {
                               "args": [
                                 "u",
+                                "i",
                                 {
                                   "args": [
-                                    "i",
+                                    "j",
                                     1
                                   ],
                                   "op": "+"
-                                },
-                                "j"
+                                }
                               ],
                               "op": "index"
                             },
                             {
                               "args": [
                                 "u",
+                                "i",
                                 {
                                   "args": [
-                                    "i",
+                                    "j",
                                     1
                                   ],
                                   "op": "-"
-                                },
-                                "j"
+                                }
                               ],
                               "op": "index"
                             }
@@ -121,7 +121,7 @@
                         {
                           "args": [
                             2,
-                            "dlon_deg"
+                            "dlat_deg"
                           ],
                           "op": "*"
                         }
@@ -134,13 +134,13 @@
                       "j"
                     ],
                     "ranges": {
-                      "i": [
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": [
                         2,
-                        7
-                      ],
-                      "j": {
-                        "from": "lat"
-                      }
+                        4
+                      ]
                     }
                   },
                   {
@@ -154,34 +154,39 @@
                             {
                               "args": [
                                 "u",
-                                2,
-                                "j"
+                                "i",
+                                2
                               ],
                               "op": "index"
                             },
                             {
                               "args": [
                                 "u",
-                                1,
-                                "j"
+                                "i",
+                                1
                               ],
                               "op": "index"
                             }
                           ],
                           "op": "-"
                         },
-                        "dlon_deg"
+                        "dlat_deg"
                       ],
                       "op": "/"
                     },
                     "op": "aggregate",
                     "output_idx": [
+                      "i",
                       "j"
                     ],
                     "ranges": {
-                      "j": {
-                        "from": "lat"
-                      }
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": [
+                        1,
+                        1
+                      ]
                     }
                   },
                   {
@@ -195,40 +200,45 @@
                             {
                               "args": [
                                 "u",
-                                8,
-                                "j"
+                                "i",
+                                5
                               ],
                               "op": "index"
                             },
                             {
                               "args": [
                                 "u",
+                                "i",
                                 {
                                   "args": [
-                                    8,
+                                    5,
                                     1
                                   ],
                                   "op": "-"
-                                },
-                                "j"
+                                }
                               ],
                               "op": "index"
                             }
                           ],
                           "op": "-"
                         },
-                        "dlon_deg"
+                        "dlat_deg"
                       ],
                       "op": "/"
                     },
                     "op": "aggregate",
                     "output_idx": [
+                      "i",
                       "j"
                     ],
                     "ranges": {
-                      "j": {
-                        "from": "lat"
-                      }
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": [
+                        5,
+                        5
+                      ]
                     }
                   }
                 ]
@@ -239,9 +249,9 @@
         }
       ],
       "variables": {
-        "dlon_deg": {
+        "dlat_deg": {
           "default": 45,
-          "description": "The grid's dlon_deg free name (consumer-supplied geometry contract): 360/NLON = 45 spelled as a literal because NLON is closed at the import edge.",
+          "description": "The grid's dlat_deg free name (consumer-supplied geometry contract): 180/(NLAT-1) = 45 spelled as a literal because NLAT is closed at the import edge.",
           "type": "parameter",
           "units": "deg"
         },
