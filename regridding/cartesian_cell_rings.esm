@@ -1,0 +1,368 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "cartesian_cell_rings",
+    "description": "Declarative cell GEOMETRY for a uniform cartesian grid, in regridder-ready form: given the grid spec -- per-axis origin x0/y0 (the west-most / south-most cell-EDGE coordinate), spacing dx/dy, and sizes GX/GY -- the templates emit the per-cell representative centers (cartesian_cell_rings_lon / _lat, shape [ring_cells]) and the per-cell four-corner closed CCW rings (cartesian_cell_rings_poly, shape [ring_cells, ring_verts, ring_coord]) that regridding/conservative_overlap.esm consumes as its src_poly/tgt_poly (narrow phase) and its binning coordinates (broad phase). This is the 0.8.0 template-library rewrite of the archived model-form file (archive/regridding/cartesian_target_cells.esm), with two deliberate changes: (1) the cell axis is FLATTENED to the single ring_cells = GX*GY enumeration the regridder's src_cells/tgt_cells axes expect -- row-major from the southwest, cell c = (y-1)*GX + x with x fastest (identical to the conformance exemplars' 'i = (row-1)*3 + col'), decoded in-expression as x-1 = (c-1) - GX*floor((c-1)/GX) and y-1 = floor((c-1)/GX); (2) the Camp Fire 19x21 LCC defaults are GONE -- a concrete grid is a consumer concern, so the INTEGER sizes are load-time metaparameters (GX/GY, bound at the import edge per esm-spec 9.7.6) and the REAL-VALUED origin/spacing are template parameters (x0/y0/dx/dy, bound per apply-site per 9.6.2), the same integers-are-metaparameters / reals-are-consumer-supplied split the grids/ libraries use. All values are affine in the indices and CONST at build time: the geometry folds into the regridder's overlap-matrix setup, off any per-step hot path. Vertex order is the CCW ring (W,S)->(E,S)->(E,N)->(W,N) = ring_verts 1..4, ring_coord 1=x 2=y; vertex x = x0 + (x-1)*dx + dx*[v in {2,3}], vertex y = y0 + (y-1)*dy + dy*[v in {3,4}]; centers are x0 + (x-1)*dx + dx/2 (= xmin + (x-1)*dx). Coordinates are in the grid's OWN frame -- lon-lat degrees for a geographic grid (feed conservative_overlap at manifold 'planar' for the coordinate-plane model or compose with a reprojection for 'spherical'), projected metres for an LCC fire grid (compose with reprojection/lambert_conformal.esm to reach lon-lat). ONE cartesian ring grid per consuming document: two imports of this file with different GX/GY bindings would collide on the merged ring_* index sets (esm-spec 9.7.5/9.7.6 diamond rule) -- a consumer regridding cartesian-to-cartesian supplies its second grid's rings as data or via a differently-named sibling library. Verification: the affine formulas are pinned exactly (0.0 error) by the conformance case tests/conformance/regridding/cartesian_rings_regrid_3x3_to_2x2/, whose consumer compares the emitted rings/centers against inline expected constants and then feeds the SAME emitted rings through the conservative regridder end-to-end (grid-spec -> rings -> broad phase -> narrow phase -> apply), gated on the exact conservation / partition-of-unity invariants.",
+    "license": "MIT",
+    "tags": [
+      "esd:regrid",
+      "method:cartesian_cell_rings",
+      "cartesian",
+      "structured-grid",
+      "cell-polygon",
+      "target-geometry",
+      "affine",
+      "build-once"
+    ],
+    "references": [
+      {
+        "citation": "EarthSciSerialization esm-spec.md 8.6/8.6.1 (regridding is a coupling expression; cell rings as ordinary [verts, coord] coordinate arrays) and 9.7 (template libraries and metaparameters).",
+        "notes": "Rewrite of archive/regridding/cartesian_target_cells.esm (esm 0.6.0 model form, Camp Fire defaults) into the grid-first 0.8.0 library layout."
+      }
+    ]
+  },
+  "metaparameters": {
+    "GX": {
+      "type": "integer",
+      "default": 2,
+      "description": "Cells along the x axis. Default matches the 2x2 target of the cartesian_rings_regrid_3x3_to_2x2 conformance exemplar."
+    },
+    "GY": {
+      "type": "integer",
+      "default": 2,
+      "description": "Cells along the y axis."
+    }
+  },
+  "index_sets": {
+    "ring_cells": {
+      "kind": "interval",
+      "size": {
+        "op": "*",
+        "args": [
+          "GX",
+          "GY"
+        ]
+      }
+    },
+    "ring_x": {
+      "kind": "interval",
+      "size": "GX"
+    },
+    "ring_y": {
+      "kind": "interval",
+      "size": "GY"
+    },
+    "ring_verts": {
+      "kind": "interval",
+      "size": 4
+    },
+    "ring_coord": {
+      "kind": "interval",
+      "size": 2
+    }
+  },
+  "expression_templates": {
+    "cartesian_cell_rings_lon": {
+      "params": [
+        "x0",
+        "dx"
+      ],
+      "description": "Per-cell representative x-coordinate (cell centre) over the flattened row-major enumeration: lon[c] = x0 + ((c-1) mod GX)*dx + dx/2, with the mod spelled (c-1) - GX*floor((c-1)/GX) from the evaluable core (no bespoke mod op). This is the regridder's broad-phase binning coordinate (conservative_overlap_{src,tgt}_bin) and any point-based consumer's cell centre. CONST at build time.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "c"
+        ],
+        "ranges": {
+          "c": {
+            "from": "ring_cells"
+          }
+        },
+        "args": [],
+        "expr": {
+          "op": "+",
+          "args": [
+            "x0",
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "c",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        "GX",
+                        {
+                          "op": "floor",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "c",
+                                    1
+                                  ]
+                                },
+                                "GX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "dx"
+              ]
+            },
+            {
+              "op": "/",
+              "args": [
+                "dx",
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cartesian_cell_rings_lat": {
+      "params": [
+        "y0",
+        "dy"
+      ],
+      "description": "Per-cell representative y-coordinate (cell centre) over the flattened row-major enumeration: lat[c] = y0 + floor((c-1)/GX)*dy + dy/2. CONST at build time.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "c"
+        ],
+        "ranges": {
+          "c": {
+            "from": "ring_cells"
+          }
+        },
+        "args": [],
+        "expr": {
+          "op": "+",
+          "args": [
+            "y0",
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "floor",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        "GX"
+                      ]
+                    }
+                  ]
+                },
+                "dy"
+              ]
+            },
+            {
+              "op": "/",
+              "args": [
+                "dy",
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cartesian_cell_rings_poly": {
+      "params": [
+        "x0",
+        "y0",
+        "dx",
+        "dy"
+      ],
+      "description": "Per-cell closed corner ring over the flattened row-major enumeration, CCW (W,S)->(E,S)->(E,N)->(W,N) = ring_verts 1..4, ring_coord 1=x 2=y: vertex x = x0 + ((c-1) mod GX)*dx + dx*[v in {2,3}], vertex y = y0 + floor((c-1)/GX)*dy + dy*[v in {3,4}] (the boolean bracket is the sum of == comparisons, 0 or 1 in the evaluable core). Shape [ring_cells, ring_verts, ring_coord] -- exactly the [cells, overlap_cell_verts, overlap_coord] ring stack conservative_overlap_A_ij{,_gated} takes as src_poly/tgt_poly (bind the consumer's NSRC/NTGT to GX*GY and NVERT to 4 at the import edges). CONST at build time; folds into the overlap-matrix setup.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "c",
+          "v",
+          "k"
+        ],
+        "ranges": {
+          "c": {
+            "from": "ring_cells"
+          },
+          "v": {
+            "from": "ring_verts"
+          },
+          "k": {
+            "from": "ring_coord"
+          }
+        },
+        "args": [],
+        "expr": {
+          "op": "ifelse",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                "k",
+                1
+              ]
+            },
+            {
+              "op": "+",
+              "args": [
+                "x0",
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            "GX",
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    "GX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "dx",
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            "v",
+                            2
+                          ]
+                        },
+                        {
+                          "op": "==",
+                          "args": [
+                            "v",
+                            3
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "+",
+              "args": [
+                "y0",
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            "GX"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "dy",
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            "v",
+                            3
+                          ]
+                        },
+                        {
+                          "op": "==",
+                          "args": [
+                            "v",
+                            4
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
