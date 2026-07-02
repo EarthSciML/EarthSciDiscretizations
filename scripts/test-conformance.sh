@@ -7,13 +7,14 @@
 # output against the committed goldens (and against the reference binding)
 # with scripts/compare-outputs.py.
 #
-# Only the Julia reference runner exists today; the per-binding probe/run
-# tables below are where run-python.py, run-rust, run-go, run-typescript drop
-# in as the ESS §9.7 ports land (AGENTS.md "Phasing").
+# All five §9.7 binding runners are registered below. Each runner skips the
+# categories outside its binding's scope (CONFORMANCE_SPEC.md §5.9; the
+# manifests' scope_excluded / blocked-upstream notes carry the reasons), so
+# requesting every category against every binding is always safe.
 #
 # Usage:
 #   scripts/test-conformance.sh [--categories ast,simulation,…]
-#                               [--bindings julia[,…]]
+#                               [--bindings julia,python,rust,typescript,go]
 #                               [--output-dir conformance-results] [--verbose]
 
 set -euo pipefail
@@ -22,7 +23,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO/scripts/ess-locate.sh"
 
 CATEGORIES="ast,simulation,convergence,regridding,reprojection"
-BINDINGS="julia"
+BINDINGS="julia,python,rust,typescript,go"
 OUTPUT_DIR="$REPO/conformance-results"
 VERBOSE=""
 
@@ -48,11 +49,49 @@ run_julia() { # $1 = output dir
     --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
 }
 
-# Future bindings land here as the ESS §9.7 ports arrive:
-#   probe_python / run_python  -> scripts/runners/run-python.py  (earthsci_toolkit)
-#   probe_rust   / run_rust    -> scripts/runners/run-rust       (earthsci-toolkit-rs)
-#   probe_go     / run_go      -> scripts/runners/run-go         (esm-format-go)
-#   probe_typescript / run_typescript -> scripts/runners/run-typescript.js
+# Python (earthsci_toolkit): prefer the binding's own venv interpreter (the
+# layout its pytest suite runs in); fall back to whatever python3 is on PATH
+# (e.g. a CI image provisioning numpy/scipy globally).
+_python_bin() {
+  local venv="$ESS_ROOT/packages/earthsci_toolkit/.venv/bin/python3"
+  [[ -x "$venv" ]] && { echo "$venv"; return; }
+  command -v python3
+}
+probe_python() {
+  [[ -d "$ESS_ROOT/packages/earthsci_toolkit/src/earthsci_toolkit" ]] &&
+    [[ -n "$(_python_bin)" ]]
+}
+run_python() { # $1 = output dir
+  "$(_python_bin)" "$REPO/scripts/runners/run-python.py" \
+    --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
+}
+
+probe_rust() {
+  command -v cargo >/dev/null 2>&1 &&
+    [[ -f "$ESS_ROOT/packages/earthsci-toolkit-rs/Cargo.toml" ]]
+}
+run_rust() { # $1 = output dir
+  "$REPO/scripts/runners/run-rust.sh" \
+    --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
+}
+
+probe_typescript() {
+  command -v node >/dev/null 2>&1 &&
+    [[ -f "$ESS_ROOT/packages/earthsci-toolkit/dist/cjs/index.js" ]]
+}
+run_typescript() { # $1 = output dir
+  node "$REPO/scripts/runners/run-typescript.js" \
+    --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
+}
+
+probe_go() {
+  command -v go >/dev/null 2>&1 &&
+    [[ -d "$ESS_ROOT/packages/esm-format-go/pkg/esm" ]]
+}
+run_go() { # $1 = output dir
+  "$REPO/scripts/runners/run-go.sh" \
+    --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
+}
 
 ran=()
 IFS=',' read -ra requested <<<"$BINDINGS"

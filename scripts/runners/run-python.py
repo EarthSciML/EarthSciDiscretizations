@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+"""run-python.py — the official Python conformance runner for EarthSciDiscretizations.
+
+THIN WRAPPER (AGENTS.md §2, single pathway): every number and byte this script
+emits comes from official earthsci_toolkit entry points driven over the one
+canonical pipeline (.esm → parse → §9.7 import/metaparameter resolution →
+§9.6.3 rewrite fixpoint → official runner). No evaluator, rule engine, or
+numeric kernel lives here — only argument marshalling and JSON I/O.
+
+CLI (EarthSciSerialization CONFORMANCE_SPEC.md §4.2):
+  run-python.py --output-dir <path> \
+      [--categories ast,simulation,convergence] \
+      [--files <manifest.json>[,<manifest.json>…]] [--verbose]
+
+Outputs (§4.4 layout, mirroring scripts/runners/run-julia.jl):
+  <output-dir>/python_<category>_results.json    one file per category run
+  <output-dir>/python_summary.json               roll-up
+  <output-dir>/ast/<case>/expanded.golden.json   canonical post-lowering bytes
+
+Category → official earthsci_toolkit pathway:
+  ast          raw §9.7 pipeline (template_imports.resolve_template_machinery →
+               lower_expression_templates), canonical bytes byte-identical to
+               the Julia reference writer (sorted keys, 2-space indent, JSON3
+               numeric normalization: integral floats → integers, Ryu-shortest
+               float tokens)
+  simulation   pde_inline_tests.run_pde_tests (§6.6/§6.6.5 inline tests over
+               simulation.simulate, scipy method pinned by the manifest)
+  convergence  parse.load(problem, metaparameters=…) per manifest resolution →
+               simulate → evaluate_cellwise(reference) → field_reduce norms
+
+Environment: the earthsci_toolkit venv ($ESS_ROOT/packages/earthsci_toolkit/
+.venv) or any interpreter with numpy+scipy; the package is imported from the
+ESS checkout's src tree (the same layout its own pytest suite runs in).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+ESD_ROOT = Path(__file__).resolve().parent.parent.parent
+ESS_ROOT = Path(os.environ.get("ESS_ROOT", ESD_ROOT.parent / "EarthSciSerialization"))
+if not (ESS_ROOT / "esm-schema.json").is_file():
+    sys.exit(f"error: EarthSciSerialization not found at '{ESS_ROOT}'; set ESS_ROOT "
+             "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
+sys.path.insert(0, str(ESS_ROOT / "packages" / "earthsci_toolkit" / "src"))
+
+from earthsci_toolkit.lower_expression_templates import lower_expression_templates
+from earthsci_toolkit.template_imports import resolve_template_machinery
+
+CONF = ESD_ROOT / "tests" / "conformance"
+ALL_CATEGORIES = ["ast", "simulation", "convergence"]
+INT64_MIN, INT64_MAX = -(2**63), 2**63 - 1
+
+# ---------------------------------------------------------------------------
+# Canonical golden writer — byte-for-byte the scheme the Julia reference runner
+# (scripts/runners/run-julia.jl) emits: object keys sorted, arrays in order,
+# 2-space indent, trailing newline, scalars exactly as JSON3 renders them
+# after JSON3.read's numeric normalization (integral floats parse to Int64,
+# hence 0.0 → 0; other floats print via Ryu shortest with Julia's positional/
+# scientific switch at 1e-5 / 1e6).
+# ---------------------------------------------------------------------------
+
+
+def _norm(x):
+    if isinstance(x, dict):
+        return {str(k): _norm(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_norm(v) for v in x]
+    if isinstance(x, float) and x.is_integer() and INT64_MIN <= x <= INT64_MAX:
+        return int(x)  # JSON3.read parses integral floats as Int64 (0.0 → 0)
+    return x
+
+
+def julia_float_repr(v: float) -> str:
+    """Render a non-integral finite float exactly as Julia's JSON3.write
+    (Base.Ryu shortest digits; scientific iff decimal exponent < -4 or >= 6;
+    scientific mantissa always carries a fraction digit; exponent unpadded)."""
+    if v != v or v in (float("inf"), float("-inf")):
+        raise ValueError(f"non-finite float {v!r} is not valid JSON")
+    s = repr(float(v))
+    neg = s.startswith("-")
+    s = s.lstrip("-")
+    if "e" in s or "E" in s:
+        mant, exp = re.split(r"[eE]", s)
+        e = int(exp)
+    else:
+        mant, e = s, 0
+    ip, _, fp = mant.partition(".")
+    digits = (ip + fp).lstrip("0")
+    if ip != "0" and ip != "":
+        e10 = e + len(ip) - 1
+    else:
+        lead = len(fp) - len(fp.lstrip("0"))
+        e10 = e - lead - 1
+    digits = digits.rstrip("0") or "0"
+    sign = "-" if neg else ""
+    if -4 <= e10 <= 5:  # positional
+        if e10 < 0:
+            return sign + "0." + "0" * (-e10 - 1) + digits
+        if len(digits) <= e10 + 1:
+            return sign + digits + "0" * (e10 + 1 - len(digits)) + ".0"
+        return sign + digits[: e10 + 1] + "." + digits[e10 + 1:]
+    frac = digits[1:] or "0"
+    return sign + digits[0] + "." + frac + "e" + str(e10)
+
+
+def _scalar(x) -> str:
+    if x is True:
+        return "true"
+    if x is False:
+        return "false"
+    if x is None:
+        return "null"
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, float):
+        return julia_float_repr(x)
+    if isinstance(x, str):
+        return json.dumps(x, ensure_ascii=False)
+    raise TypeError(f"unsupported scalar {type(x)}")
+
+
+def _write_sorted(out: list[str], x, indent: int) -> None:
+    pad, pad1 = "  " * indent, "  " * (indent + 1)
+    if isinstance(x, dict):
+        if not x:
+            out.append("{}")
+            return
+        out.append("{\n")
+        ks = sorted(x.keys())
+        for i, k in enumerate(ks):
+            out.append(pad1 + json.dumps(k, ensure_ascii=False) + ": ")
+            _write_sorted(out, x[k], indent + 1)
+            out.append(",\n" if i < len(ks) - 1 else "\n")
+        out.append(pad + "}")
+    elif isinstance(x, list):
+        if not x:
+            out.append("[]")
+            return
+        out.append("[\n")
+        for i, v in enumerate(x):
+            out.append(pad1)
+            _write_sorted(out, v, indent + 1)
+            out.append(",\n" if i < len(x) - 1 else "\n")
+        out.append(pad + "]")
+    else:
+        out.append(_scalar(x))
+
+
+def canonical_bytes(doc) -> bytes:
+    out: list[str] = []
+    _write_sorted(out, _norm(doc), 0)
+    out.append("\n")
+    return "".join(out).encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Manifest discovery (mirrors run-julia.jl).
+# ---------------------------------------------------------------------------
+
+
+def discover_manifests(category: str, files: list[str]):
+    if files:
+        out = []
+        for f in files:
+            p = Path(f) if os.path.isabs(f) else ESD_ROOT / f
+            m = json.loads(p.read_text())
+            if m["category"] == category:
+                out.append((p.resolve().parent, m))
+        return out
+    root = CONF / category
+    if not root.is_dir():
+        return []
+    out = []
+    for case_dir in sorted(root.iterdir()):
+        mp = case_dir / "manifest.json"
+        if mp.is_file():
+            out.append((case_dir, json.loads(mp.read_text())))
+    return out
+
+
+def integrator_opts(manifest):
+    j = manifest.get("integrators", {}).get("python")
+    if j is None:
+        return "RK45", 1e-10, 1e-12
+    return (str(j.get("method", "RK45")), float(j.get("rtol", 1e-10)),
+            float(j.get("atol", 1e-12)))
+
+
+def assertion_dicts(results):
+    return [{
+        "model": r.model, "test_id": r.test_id, "assertion_idx": r.assertion_idx,
+        "variable": r.variable, "time": r.time, "reduce": r.reduce,
+        "expected": r.expected, "actual": r.actual,
+        "rtol": r.rtol, "atol": r.atol, "passed": r.passed,
+        "message": r.message} for r in results]
+
+
+# ---------------------------------------------------------------------------
+# ast — raw §9.7 expansion to canonical bytes + post-lowering gates.
+# ---------------------------------------------------------------------------
+
+
+def unlowered_violations(node, acc):
+    if isinstance(node, dict):
+        op = str(node.get("op", ""))
+        if op == "apply_expression_template":
+            acc.append("apply_expression_template")
+        if op in ("grad", "div", "laplacian"):
+            acc.append(f"unlowered {op}")
+        if op == "D" and str(node.get("wrt", "t")) != "t":
+            acc.append(f"unlowered spatial D (wrt={node['wrt']})")
+        for k, v in node.items():
+            if k == "metadata":  # prose may cite op names
+                continue
+            unlowered_violations(v, acc)
+    elif isinstance(node, list):
+        for v in node:
+            unlowered_violations(v, acc)
+    return acc
+
+
+def run_ast(output_dir: Path, files, verbose):
+    cases = {}
+    for case_dir, manifest in discover_manifests("ast", files):
+        case = manifest["case"]
+        rec = {"case": case, "status": "ok"}
+        try:
+            fixture = case_dir / manifest["fixture"]
+            raw = json.loads(fixture.read_text())
+            resolved = resolve_template_machinery(raw, str(fixture.parent))
+            doc = lower_expression_templates(resolved if resolved is not None else raw)
+            doc_n = _norm(doc)
+            violations = []
+            for model in doc_n.get("models", {}).values():
+                unlowered_violations(
+                    {k: v for k, v in model.items() if k != "metadata"}, violations)
+            if violations:
+                raise RuntimeError("post-lowering gate failed: "
+                                   + ", ".join(sorted(set(violations))))
+            data = canonical_bytes(doc_n)
+            art_dir = output_dir / "ast" / case
+            art_dir.mkdir(parents=True, exist_ok=True)
+            art = art_dir / "expanded.golden.json"
+            art.write_bytes(data)
+            rec["artifact"] = str(art.relative_to(output_dir))
+            rec["bytes"] = len(data)
+            rec["golden"] = str((case_dir / manifest["golden"]).resolve()
+                                .relative_to(ESD_ROOT))
+        except Exception as err:  # noqa: BLE001 — recorded per-case
+            rec["status"] = "error"
+            rec["message"] = f"{type(err).__name__}: {err}"
+        if verbose:
+            print(f"  ast/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "python", "category": "ast", "cases": cases}
+
+
+# ---------------------------------------------------------------------------
+# simulation — the problems' inline §6.6/§6.6.5 tests via run_pde_tests.
+# ---------------------------------------------------------------------------
+
+
+def run_simulation(output_dir: Path, files, verbose):
+    from earthsci_toolkit.pde_inline_tests import run_pde_tests
+
+    cases = {}
+    for case_dir, manifest in discover_manifests("simulation", files):
+        case = manifest["case"]
+        rec = {"case": case, "status": "ok"}
+        try:
+            problem = (case_dir / manifest["problem"]).resolve()
+            method, rtol, atol = integrator_opts(manifest)
+            results = run_pde_tests(str(problem), model_name=manifest["model"],
+                                    method=method, rtol=rtol, atol=atol)
+            wanted = set(manifest["tests"])
+            results = [r for r in results if r.test_id in wanted]
+            if not results:
+                raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
+            rec["assertions"] = assertion_dicts(results)
+            rec["passed"] = all(r.passed for r in results)
+            rec["status"] = "ok" if rec["passed"] else "failed"
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = f"{type(err).__name__}: {err}"
+        if verbose:
+            print(f"  simulation/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "python", "category": "simulation", "cases": cases}
+
+
+# ---------------------------------------------------------------------------
+# convergence — one load per manifest resolution entry (§9.7.6 binding site 4),
+# error norms vs the problem's own §6.6.5 analytic reference at assert_time.
+# ---------------------------------------------------------------------------
+
+
+def run_convergence(output_dir: Path, files, verbose):
+    from earthsci_toolkit.parse import load
+    from earthsci_toolkit.pde_inline_tests import (
+        evaluate_cellwise, field_reduce, simulate_states, state_cells)
+
+    cases = {}
+    for case_dir, manifest in discover_manifests("convergence", files):
+        case = manifest["case"]
+        rec = {"case": case, "status": "ok"}
+        try:
+            problem = (case_dir / manifest["problem"]).resolve()
+            model = manifest["model"]
+            assert_time = float(manifest["assert_time"])
+            method, rtol, atol = integrator_opts(manifest)
+            errors = []
+            for res in manifest["resolutions"]:
+                n = int(res["n"])
+                bindings = {str(k): int(v) for k, v in res["bindings"].items()}
+                file = load(str(problem), metaparameters=bindings)
+                m = file.models[model]
+                refs = [a for t in m.tests for a in t.assertions
+                        if a.time == assert_time and a.reduce == "L2_error"]
+                if not refs:
+                    raise RuntimeError("problem declares no L2_error assertion at "
+                                       f"t={assert_time} to take the reference from")
+                a = refs[0]
+                sim = simulate_states(file, (0.0, assert_time),
+                                      method=method, rtol=rtol, atol=atol,
+                                      saveat=[assert_time])
+                cells = state_cells(sim.var_map, a.variable, model)
+                if not cells:
+                    raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
+                state = sim.states[-1]
+                field = [float(state[slot]) for _, slot in cells]
+                ref = evaluate_cellwise(a.reference, [c for c, _ in cells])
+                row = {"n": n}
+                for norm in manifest["norms"]:
+                    row[norm] = field_reduce(norm, field, reference=ref)
+                errors.append(row)
+                if verbose:
+                    print(f"  convergence/{case} n={n}: " + " ".join(
+                        f"{k}={row[k]}" for k in sorted(row) if k != "n"))
+            rec["assert_time"] = assert_time
+            rec["errors"] = errors
+        except Exception as err:  # noqa: BLE001
+            rec["status"] = "error"
+            rec["message"] = f"{type(err).__name__}: {err}"
+        if verbose:
+            print(f"  convergence/{case}: {rec['status']}")
+        cases[case] = rec
+    return {"binding": "python", "category": "convergence", "cases": cases}
+
+
+# ---------------------------------------------------------------------------
+# Main.
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--output-dir", required=True)
+    ap.add_argument("--categories", default="")
+    ap.add_argument("--files", default="")
+    ap.add_argument("--verbose", action="store_true")
+    args = ap.parse_args()
+
+    categories = [c for c in args.categories.split(",") if c]
+    files = [f for f in args.files.split(",") if f]
+    if not categories:
+        categories = list(ALL_CATEGORIES)
+    if files:
+        file_cats = {json.loads((Path(f) if os.path.isabs(f) else ESD_ROOT / f)
+                                .read_text())["category"] for f in files}
+        categories = [c for c in categories if c in file_cats]
+
+    runners = {"ast": run_ast, "simulation": run_simulation,
+               "convergence": run_convergence}
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary = {"binding": "python", "runner": "scripts/runners/run-python.py",
+               "categories": {}}
+    exit_code = 0
+    for cat in categories:
+        if cat not in runners:
+            print(f"python/{cat}: unsupported category (skipping; this runner "
+                  f"implements {ALL_CATEGORIES})")
+            continue
+        if args.verbose:
+            print(f"category: {cat}")
+        res = runners[cat](output_dir, files, args.verbose)
+        (output_dir / f"python_{cat}_results.json").write_bytes(canonical_bytes(res))
+        n_cases = len(res["cases"])
+        n_bad = sum(1 for r in res["cases"].values() if r["status"] != "ok")
+        if n_bad:
+            exit_code = 1
+        summary["categories"][cat] = {"cases": n_cases, "failures": n_bad}
+        print(f"python/{cat}: {n_cases} case(s), {n_bad} failure(s)")
+    (output_dir / "python_summary.json").write_bytes(canonical_bytes(summary))
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
