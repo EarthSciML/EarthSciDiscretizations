@@ -1,0 +1,231 @@
+{
+  "esm": "0.8.0",
+  "index_sets": {
+    "cells": {
+      "kind": "interval",
+      "size": 12
+    },
+    "edge_ends": {
+      "kind": "interval",
+      "size": 2
+    },
+    "edges": {
+      "kind": "interval",
+      "size": 30
+    },
+    "edges_of_cell": {
+      "kind": "ragged",
+      "of": [
+        "cells"
+      ],
+      "offsets": "nEdgesOnCell",
+      "values": "edgesOnCell"
+    },
+    "maxEdges": {
+      "kind": "interval",
+      "size": 5
+    },
+    "vertices": {
+      "kind": "interval",
+      "size": 20
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/mpas/rules/fv_divergence_cell: a minimal consuming model on the icosahedral level-0 mesh (metaparameters bound to NCELLS=12, NEDGES=30, NVERTICES=20, MAXEDGES=5 at the import edge). The single spatial operator div(flux) must lower, through the section-9.6.3 fixpoint, to the rule's ragged finite-volume aggregate with all metaparameters folded — the golden pins the byte-identical post-lowering AST across bindings. The edge flux is pure index arithmetic (flux(e) = e) so the fixture carries no data beyond the mesh subsystem; the mesh's const arrays enter the expanded AST only through the bare-name observed aliases that satisfy the grid's keyed-factor contract.",
+    "license": "MIT",
+    "name": "fv_divergence_cell_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mpas",
+      "rule:fv_divergence_cell"
+    ]
+  },
+  "models": {
+    "FvDivergenceCellAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  "flux",
+                  "edgeSignOnCell",
+                  "edgesOnCell",
+                  "dvEdge",
+                  "areaCell"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "edgeSignOnCell",
+                            "i",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "flux",
+                            {
+                              "args": [
+                                "edgesOnCell",
+                                "i",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "dvEdge",
+                            {
+                              "args": [
+                                "edgesOnCell",
+                                "i",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    },
+                    {
+                      "args": [
+                        "areaCell",
+                        "i"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "/"
+                },
+                "op": "aggregate",
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "cells"
+                  },
+                  "k": {
+                    "from": "edges_of_cell",
+                    "of": [
+                      "i"
+                    ]
+                  }
+                },
+                "semiring": "sum_product"
+              }
+            ],
+            "op": "-"
+          }
+        }
+      ],
+      "subsystems": {
+        "mesh": {
+          "ref": "../../../../grids/mpas/mesh/level0.esm"
+        }
+      },
+      "variables": {
+        "areaCell": {
+          "description": "Bare-name alias of mesh.areaCell.",
+          "expression": "mesh.areaCell",
+          "shape": [
+            "cells"
+          ],
+          "type": "observed",
+          "units": "sr"
+        },
+        "dvEdge": {
+          "description": "Bare-name alias of mesh.dvEdge.",
+          "expression": "mesh.dvEdge",
+          "shape": [
+            "edges"
+          ],
+          "type": "observed",
+          "units": "rad"
+        },
+        "edgeSignOnCell": {
+          "description": "Bare-name alias of mesh.edgeSignOnCell.",
+          "expression": "mesh.edgeSignOnCell",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "type": "observed"
+        },
+        "edgesOnCell": {
+          "description": "Bare-name alias of mesh.edgesOnCell (ragged edges_of_cell values factor).",
+          "expression": "mesh.edgesOnCell",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "type": "observed"
+        },
+        "flux": {
+          "description": "Data-free edge flux flux(e) = e: enough structure to pin the gather pattern of the expanded divergence.",
+          "expression": {
+            "args": [],
+            "expr": "e",
+            "op": "aggregate",
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            }
+          },
+          "shape": [
+            "edges"
+          ],
+          "type": "observed",
+          "units": "1"
+        },
+        "nEdgesOnCell": {
+          "description": "Bare-name alias of mesh.nEdgesOnCell (ragged edges_of_cell offsets factor).",
+          "expression": "mesh.nEdgesOnCell",
+          "shape": [
+            "cells"
+          ],
+          "type": "observed"
+        },
+        "u": {
+          "description": "Cell-mean tracer over the Voronoi cells.",
+          "shape": [
+            "cells"
+          ],
+          "type": "state",
+          "units": "1"
+        }
+      }
+    }
+  }
+}
