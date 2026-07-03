@@ -87,7 +87,7 @@ python scripts/validate-library.py
 
 ## Status
 
-The conformance suite is green at **192 passed / 0 failed / 46 scope-skipped**,
+The conformance suite is green at **200 passed / 0 failed / 48 scope-skipped**,
 with `validate-library.py` reporting 0 findings. All five ESS binding runners
 are registered in `scripts/test-conformance.sh` and CI.
 
@@ -108,6 +108,9 @@ simulation (Julia; div∘curl exact to ~3e-14). Regridding is now **end-to-end
 declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →
 candidate-gated overlap → apply — with the gated path value-identical to the
 dense path (tol 0.0) and conservation / partition-of-unity as the exact gates.
+A **cartesian↔cartesian** remap constructs *both* grids in-library by importing
+`cartesian_cell_rings.esm` twice under §9.7.7 prefixes (`src`/`tgt`), so neither
+side is precomputed (`cartesian_rings_regrid_cart2cart_3x3_to_2x2`).
 
 Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript are
 rewrite-only ports (`scope_excluded` from the numeric categories), and the
