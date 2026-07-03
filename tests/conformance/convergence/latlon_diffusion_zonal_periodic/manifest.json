@@ -8,30 +8,73 @@
   "rule": "../../../../grids/latlon/rules/central_D2_lon_periodic.esm",
   "grid": "latlon",
   "resolutions": [
-    { "n": 16, "bindings": { "NLON": 16 } },
-    { "n": 32, "bindings": { "NLON": 32 } },
-    { "n": 64, "bindings": { "NLON": 64 } },
-    { "n": 128, "bindings": { "NLON": 128 } }
+    {
+      "n": 16,
+      "bindings": {
+        "NLON": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLON": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLON": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLON": 128
+      }
+    }
   ],
-  "norms": ["L2_error", "Linf_error"],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
   "assert_time": 1.0,
   "expected_order": 2.0,
   "order_tolerance": 0.2,
   "reference_binding": "julia",
-  "bindings_required": ["julia", "python", "rust"],
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
   },
   "tolerances": {
-    "error_vs_golden_rtol": 1e-4,
-    "error_vs_golden_atol": 1e-9
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
   },
   "integrators": {
-    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
-    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14, "_doc": "Pinned so Python temporal truncation is negligible against the spatial goldens: LSODA at 1e-12/1e-14 handles the stiff diffusion sweep and agrees with the Julia Tsit5 reference to well under the error_vs_golden tolerance on every resolution, where a loose explicit RK method would leave a temporal residue comparable to the spatial error." },
-    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14,
+      "_doc": "Pinned so Python temporal truncation is negligible against the spatial goldens: LSODA at 1e-12/1e-14 handles the stiff diffusion sweep and agrees with the Julia Tsit5 reference to well under the error_vs_golden tolerance on every resolution, where a loose explicit RK method would leave a temporal residue comparable to the spatial error."
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
   },
   "golden": "golden/errors.json",
-  "status": "active"
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
 }

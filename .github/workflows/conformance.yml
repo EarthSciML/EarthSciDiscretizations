@@ -115,10 +115,11 @@ jobs:
           name: conformance-results-python
           path: conformance-results/
 
-  # The Rust binding (earthsci-toolkit-rs): ast bytes via the upstream
-  # canonical_expand example (scripts/runners/run-rust.sh). Simulation and
-  # convergence are blocked-upstream — see the manifests'
-  # blocked_upstream_bindings notes.
+  # The Rust binding (earthsci-toolkit-rs): ast bytes (upstream canonical_expand)
+  # plus the numeric categories for every case Rust can solve. The nonlinear /
+  # high-order / genuinely-stiff-2-D cases whose ODE hangs the diffsol integrator
+  # (no dtmin/max-step guard; Erk/Bdf/Sdirk all wedge) are marked
+  # blocked_upstream_bindings.rust in their manifests and skip cleanly here.
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -131,10 +132,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ess/packages/earthsci-toolkit-rs
-      - name: Conformance (rust; ast)
+      - name: Conformance (rust; ast + numeric)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
-            --bindings rust --categories ast
+            --bindings rust \
+            --categories ast,simulation,convergence,regridding,reprojection
       - name: Upload runner outputs
         if: always()
         uses: actions/upload-artifact@v4

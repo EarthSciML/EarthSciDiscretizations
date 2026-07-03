@@ -87,31 +87,36 @@ python scripts/validate-library.py
 
 ## Status
 
-The **Julia reference runner passes all 140 cases** (45 AST · 46 simulation · 40
-convergence · 8 regridding · 1 reprojection) and `validate-library.py` reports **0
-findings across 137 files**. The `ast` category is **byte-identical across all five
-bindings** (Julia, Python, Rust, TypeScript, Go — 405 passed / 0 failed), and the
-numeric categories are cross-verified **Julia ↔ Python** (298 passed / 0 failed / 61
-scope-skipped — the `spherely`-gated spherical regrids plus the Go/TypeScript numeric
-scope). In CI the **AST** gate covers all five bindings, but the **numeric** categories
-run on **Julia and Python only**. The Rust CI job is AST-only for a concrete upstream
-reason: `earthsci-toolkit-rs` offers only the explicit **`Erk`** integrator, which **hangs
-on genuinely-two-axis stiff diffusion** (confirmed on `anisotropic_diffusion_2d_periodic`,
-whose full `D2x + Dxy + D2y` tensor is stiff in both directions at once) — an explicit RK
-method cannot step a stiff 2-D Laplacian. Rust completes the 1-D and hyperbolic numeric
-cases (the per-axis `heat_2d_*` drivers diffuse only one axis and behave like the 1-D
-heat cases), but a full Rust numeric sweep hangs, so it is not wired into CI (tracked as
-an upstream stiff-solver gap). Julia (`Tsit5`) and Python (`LSODA`) verify every numeric
-case; Go/TypeScript are rewrite-only ports. All five ESS binding runners are registered in
-`scripts/test-conformance.sh` and CI.
+The cross-binding conformance suite is green at **676 passed / 0 failed / 284
+scope-skipped** across all five bindings, with `validate-library.py` reporting **0 findings
+across 137 files**. The `ast` category is **byte-identical across all five bindings** (Julia,
+Python, Rust, TypeScript, Go). The **numeric** categories (simulation, convergence,
+regridding, reprojection) run on Julia (reference, `Tsit5`), Python (`LSODA`), and Rust; Go
+and TypeScript are rewrite-only ports (`scope_excluded` from numeric).
+
+Rust runs every numeric case its ODE solver can handle. The remaining nonlinear / high-order /
+stiff cases are marked `blocked_upstream_bindings.rust` — for a specific reason established by
+a **per-case tolerance sweep** (all three Rust solvers `Erk`/`Bdf`/`Sdirk` tested):
+`earthsci-toolkit-rs`'s diffsol integrator has **no `dtmin`/max-step fail-fast guard**, so at
+the tight tolerance the cross-binding gates require it drives `dt → 0` without terminating.
+**33 cases** are blocked, in two honest classes — **22 hang at _every_ tolerance** (down to the
+loosest `reltol 1e-6`: genuinely-stiff 2-D Laplacians, the `sqrt(0)`-singular Godunov
+Hamiltonian, huge WENO ASTs), and **11 terminate only at a tolerance so loose** (`1e-6`–`1e-8`)
+that their temporal error then misses the gate against Julia's tight reference (the `1e-9`
+cross-binding-actuals floor for simulation, the `1e-4` errors-vs-golden for convergence). Two
+low-order latlon zonal-advection *convergence* cases **do** run — at a pinned looser `reltol
+1e-7`, loose enough not to hang yet tight enough that the spatially-dominated error still
+matches the golden. Julia and Python verify every blocked case. The CI Rust job runs
+`ast + numeric`; a blocked case skips cleanly (a `blocked-upstream` skip, never a silent
+pass). All five ESS binding runners are registered in `scripts/test-conformance.sh` and CI.
 
 Large AST goldens (≥ 64 KiB — the WENO / HJ-WENO reconstructions, whose fully-inlined
 trees are 90–93 % redundant) are checked in as a committed **sha256 digest** rather than
 the full bytes: every binding still reproduces the exact canonical AST and is gated on the
 hash (`golden-digest`), so the repo carries no multi-MB derived blobs while keeping both
-the byte-identity gate and the regression pin (AGENTS.md §5). A companion upstream RFC
-proposes an ESM `let`/shared-binding node + canonical CSE pass to shrink such goldens ~10×
-at the source (`EarthSciSerialization/docs/content/rfcs/shared-subexpression-binding-cse.md`).
+the byte-identity gate and the regression pin (AGENTS.md §5). (Shrinking these goldens
+further — a canonical common-subexpression-elimination pass over the ~90 %-redundant lowered
+trees — is an upstream ESM concern.)
 
 The `ast` category is **byte-identical across Julia, Python, Rust, TypeScript,
 and Go** — including the end-to-end consuming-model gate at N=64 and the two
