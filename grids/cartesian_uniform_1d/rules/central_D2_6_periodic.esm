@@ -1,0 +1,159 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_6_periodic",
+    "description": "Sixth-order centered second derivative with periodic boundary on cartesian_uniform_1d. Compound match on D(D(f,x),x) at priority 10, so it fires on the whole second derivative before any plain-D rule lowers the inner derivative (esm-spec 9.6.3 compound precedence), match-scoped with `where: {f: {shape: [x]}}` (esm-spec 9.6.1); under import-edge renaming (esm-spec 9.7.7) the wrt literals and the where shape follow the renamed axis together. Interior [4, N-3]: the imported 7-point stencil (2 f[i-3] - 27 f[i-2] + 270 f[i-1] - 490 f[i] + 270 f[i+1] - 27 f[i+2] + 2 f[i+3]) / (180 dx^2). The six near-boundary rows i in {1, 2, 3, N-2, N-1, N} carry the same 7-point weights with out-of-range neighbors wrapped periodically, so the whole operator is the exact circulant 6th-order Laplacian — O(dx^6) with no boundary order reduction. Requires N >= 7 for the 7-point stencil to have distinct points. `dx` is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm); the periodic wrap is dx-scale-invariant. A model imports exactly one second-derivative rule for `x`.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "axes:x", "order:6", "stencil_width:7", "bc:periodic", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2_6_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_6_periodic": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "x" } ],
+        "wrt": "x"
+      },
+      "where": { "f": { "shape": ["x"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[4, { "op": "-", "args": ["N", 3] }]],
+          [[1, 1]],
+          [[2, 2]],
+          [[3, 3]],
+          [[{ "op": "-", "args": ["N", 2] }, { "op": "-", "args": ["N", 2] }]],
+          [[{ "op": "-", "args": ["N", 1] }, { "op": "-", "args": ["N", 1] }]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_6_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", 1] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 2] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 3] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 4] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 1] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", 2] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 3] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 4] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 5] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 1] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 2] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", 3] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 4] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 5] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 6] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 5] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 4] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 3] }] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 1] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 4] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 3] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 1] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 2] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 3] }] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }] },
+                  { "op": "*", "args": [-490, { "op": "index", "args": ["f", "N"] }] },
+                  { "op": "*", "args": [270, { "op": "index", "args": ["f", 1] }] },
+                  { "op": "*", "args": [-27, { "op": "index", "args": ["f", 2] }] },
+                  { "op": "*", "args": [2, { "op": "index", "args": ["f", 3] }] }
+                ]
+              },
+              { "op": "*", "args": [180, "dx", "dx"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
