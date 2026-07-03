@@ -1,0 +1,99 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "duo",
+    "description": "DUO icosahedral triangular primal grid (Heikes et al. 2023) on the sphere: NCELLS triangular cells (faces), NVERTICES vertices, NEDGES edges. On a closed icosahedral mesh the Euler identity gives NEDGES = 3*(NCELLS/2 ... ) and the sphere relation V - E + F = 2 (level r: 20*4^r cells, 10*4^r + 2 vertices, 30*4^r edges), but -- exactly as grids/mpas keeps NCELLS/NEDGES/NVERTICES independent -- the three counts stay independent integer metaparameters, bound per resolution at the import edge (the level-0 defaults are 20/12/30). Like grids/mpas there is no coordinate axis: the iteration domains are the entity interval sets (cells, vertices, edges) plus the fixed triangle-corner (corners=3) and cartesian (space=3) axes. Geometry is DERIVED from mesh DATA, not baked in: a level mesh file under grids/duo/mesh/ (a section-4.7 subsystem file with literal `const` arrays; see grids/duo/mesh/level0.esm) supplies vert_raw (the pre-normalization golden-ratio vertex coordinates), face_vert (cell->corner-vertex connectivity), and edges_vert (edge->vertex connectivity); the grid DERIVES every metric from those through closed-form expression templates, so the mesh-generation math lives in the grid (like grids/mpas derives cell rings, grids/cartesian_nonuniform_1d derives centers) rather than in a runtime loader. `duo_vertex_cart` is the generation step proper: it normalizes the raw golden-ratio vertices onto the R-sphere, vert_cart[v,d] = R * vert_raw[v,d] / sqrt(sum_e vert_raw[v,e]^2) -- pure AST math, bit-for-bit the archive's _icosahedron_vertices, and identical in shape at every subdivision level. `duo_cell_corner_stack` gathers each face's three corner vertex coordinates into the [cells, corners, space] stack the centroid / spherical-area derivations consume, the same aggregate-gather pattern as grids/mpas mpas_cell_rings_deg. `duo_cell_area_mean` = 4*pi/NCELLS is the resolution measure (nominal spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d. The real-valued sphere radius R is NOT baked in: it is a consumer-supplied free name (keyed-factor / template-parameter convention, AGENTS.md extent rule), so one grid file serves any sphere. IMPORTANT SCOPE NOTE: this file encodes the LEVEL-0 base icosahedron and any FIXED level whose mesh data ships as a companion const file; ARBITRARY-level (resolution-parameterized) subdivision is NOT expressible in the ESM AST (no build-time repeat/iterate/fold construct; metaparameter expressions are closed to + - * / so a 4^level index-set size is inexpressible) and is deferred to the upstream primitive tracked as EarthSciSerialization bead ess-vnk -- see grids/duo/README/feasibility notes.",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:duo", "ndim:2", "topology:unstructured_triangular", "staggering:primal", "sphere:generic"],
+    "references": [
+      {
+        "citation": "Heikes, R. P., Randall, D. A., & Konor, C. S. (2023). Icosahedral triangular/hexagonal spherical meshes for atmospheric modeling."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NCELLS": { "type": "integer", "default": 20, "description": "Number of triangular cells (faces). Default: the icosahedral level-0 mesh (grids/duo/mesh/level0.esm). Level r has 20*4^r." },
+    "NVERTICES": { "type": "integer", "default": 12, "description": "Number of mesh vertices. Level r has 10*4^r + 2 (12 at level 0)." },
+    "NEDGES": { "type": "integer", "default": 30, "description": "Number of unique undirected edges. Level r has 30*4^r (30 at level 0)." }
+  },
+  "index_sets": {
+    "cells": { "kind": "interval", "size": "NCELLS" },
+    "vertices": { "kind": "interval", "size": "NVERTICES" },
+    "edges": { "kind": "interval", "size": "NEDGES" },
+    "corners": { "kind": "interval", "size": 3 },
+    "space": { "kind": "interval", "size": 3 },
+    "edge_ends": { "kind": "interval", "size": 2 }
+  },
+  "expression_templates": {
+    "duo_cell_area_mean": {
+      "params": [],
+      "description": "Mean triangular-cell area on the unit sphere, 4*pi/NCELLS: the grid's resolution measure (nominal mesh spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d. Scale by R^2 for a physical sphere.",
+      "body": { "op": "/", "args": [12.566370614359172, "NCELLS"] }
+    },
+    "duo_vertex_cart": {
+      "params": ["vert_raw", "R"],
+      "description": "The icosahedron GENERATION step: normalize the raw golden-ratio vertices onto the R-sphere, vert_cart[v,d] = R * vert_raw[v,d] / sqrt(sum_e vert_raw[v,e]^2). vert_raw is the [vertices, space] pre-normalization coordinate array supplied by the level mesh file (grids/duo/mesh/level0.esm), R the consumer-supplied sphere radius (free name). The squared norm is an INNER sum_product aggregate over the space index e (squares as products, matching the archive's bit-exact _icosahedron_vertices); the outer aggregate emits one [vertices, space] entry per (v,d). A consuming model applies this template to its mounted mesh's vert_raw and its R to define its vert_cart observed. The derivation is closed-form AST and identical in shape at every subdivision level.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["v", "d"],
+        "args": ["vert_raw"],
+        "ranges": {
+          "v": { "from": "vertices" },
+          "d": { "from": "space" }
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            "R",
+            {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": ["vert_raw", "v", "d"] },
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "aggregate",
+                      "output_idx": [],
+                      "args": ["vert_raw"],
+                      "ranges": { "e": { "from": "space" } },
+                      "expr": {
+                        "op": "*",
+                        "args": [
+                          { "op": "index", "args": ["vert_raw", "v", "e"] },
+                          { "op": "index", "args": ["vert_raw", "v", "e"] }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_cell_corner_stack": {
+      "params": ["vert_cart", "face_vert"],
+      "description": "Gather each triangular cell's three corner vertex coordinates into the [cells, corners, space] stack that the centroid and spherical-triangle-area derivations consume: stack[i,k,d] = vert_cart[face_vert[i,k], d]. vert_cart is the [vertices, space] R-sphere coordinate array (from duo_vertex_cart), face_vert the [cells, corners] cell->vertex connectivity (from the level mesh file). Single aggregate gather -- the same connectivity-gather pattern as grids/mpas mpas_cell_rings_deg (which gathers cell vertex rings). A consuming model applies this to its vert_cart and mesh face_vert. Build-time CONST.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "k", "d"],
+        "args": ["vert_cart", "face_vert"],
+        "ranges": {
+          "i": { "from": "cells" },
+          "k": { "from": "corners" },
+          "d": { "from": "space" }
+        },
+        "expr": {
+          "op": "index",
+          "args": [
+            "vert_cart",
+            { "op": "index", "args": ["face_vert", "i", "k"] },
+            "d"
+          ]
+        }
+      }
+    }
+  }
+}

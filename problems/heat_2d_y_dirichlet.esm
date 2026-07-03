@@ -1,0 +1,113 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_2d_y_dirichlet",
+    "description": "MMS driver: 2-D heat equation reduced to y-diffusion u_t = alpha u_yy on the unit box [0,1]x[0,1] with homogeneous DIRICHLET (fixed-value) conditions on the two y-walls, discretized by grids/cartesian_uniform_2d/rules/central_D2y_dirichlet_bc (second-order centered second derivative, cell-centered mirror-ghost faces) over the full 2-D field u[x,y]. Manufactured DECAYING solution u(x,y,t) = exp(-alpha pi^2 t) sin(pi y): zero on both y-walls (sin(0)=sin(pi)=0) and constant in x. Derivation: sin(pi y) has u_yy = -pi^2 sin(pi y), so u_t = -alpha pi^2 u = alpha u_yy exactly for the continuous PDE; the wall values are identically zero, so the rule's Dirichlet free names take their homogeneous defaults gB=gT=0 (bottom/top y-walls) and the mirror-ghost faces preserve global O(dy^2). The diffusion is dissipative (stable, no short-window trick needed at t=0.1). The x axis is PASSIVE: u is constant in x, no x-operator appears, and NX is closed to 8 at the import edge; NY stays open (grid default 64, rebound by the convergence sweep via the loader API). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dy=1/NY (an observed dividing by the metaparameter name NY, substituted as an integer literal at load per esm-spec 9.7.6 so the sweep keeps dy consistent), dx=1/NX. BUILD-TIME SCOPE CAVEAT (AGENTS.md): gB/gT live only in the runtime rule body (both zero here, so no wall term survives); the ic and test references spell the cell-center coordinate y_j = 0 + (j-1/2)(1/NY) inline from literals and the metaparameter NY (the build-time cellwise evaluator is scope-free), never invoking the grid's y_coord free-name template.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:heat", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (cell-centered Dirichlet via mirror ghost)."
+      }
+    ]
+  },
+  "models": {
+    "Heat2DyDirichlet": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/central_D2y_dirichlet_bc.esm",
+          "bindings": { "NX": 8 }
+        }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "K", "shape": ["x", "y"], "description": "Temperature field over the 2-D [x, y] index sets (constant in x in this problem)." },
+        "alpha": { "type": "parameter", "units": "m^2/s", "default": 0.01, "description": "Thermal diffusivity." },
+        "gB": { "type": "parameter", "units": "K", "default": 0.0, "description": "Prescribed field value on the bottom y-wall y=y0 (the rule's Dirichlet free name). Zero: the manufactured sin(pi y) vanishes there, homogeneous bottom wall." },
+        "gT": { "type": "parameter", "units": "K", "default": 0.0, "description": "Prescribed field value on the top y-wall y=y0+NY*dy (the rule's Dirichlet free name). Zero: the manufactured sin(pi y) vanishes there, homogeneous top wall." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge (unit box): the grid's x0 free name (unused here; the solution is constant in x)." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name; NX closed to 8 at the import edge (unused here; the y-second-derivative rule references only dy)." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name, resolved inside the rewrite rule's expanded body at evaluation. NY is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dy consistent." }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "sin",
+              "args": [
+                { "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "y" } ], "wrt": "y" }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_heat_y_dirichlet_decay",
+          "description": "Manufactured decaying solution u(x,y,t) = exp(-alpha pi^2 t) sin(pi y) with alpha = 0.01, homogeneous walls gB=gT=0. Derivation: the sine mode gives u_t = -alpha pi^2 u_sin and u_yy = -pi^2 u_sin (so u_t = alpha u_yy) with zero y-wall values, constant in x. The mirror-ghost Dirichlet faces preserve global O(dy^2); the operator is dissipative, so the decay stays clean at t=0.1. References evaluate at cell centers y_j = (j - 1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error (well under the bound at the default NY=64; exact per-resolution errors pinned in tests/conformance/convergence/heat_2d_y_dirichlet/golden/errors.json).",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "sin",
+                  "args": [
+                    { "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-4 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    { "op": "exp", "args": [{ "op": "*", "args": [-0.01, 9.869604401089358, 0.1] }] },
+                    { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

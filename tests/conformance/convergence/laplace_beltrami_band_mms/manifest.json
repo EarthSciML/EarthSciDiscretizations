@@ -1,0 +1,81 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "laplace_beltrami_band_mms",
+  "description": "Observed-order sweep for grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad driven by problems/laplace_beltrami_band_mms.esm. Forced-steady MMS u* = cos^4(s) cos(2 lambda) on the band lat in [30,60], periodic lon, kappa=1, assert t=0.5. BOTH NLON and NLAT refine together via the loader-API metaparameter binding (esm-spec 9.7.6 site 4): n = NLON = NLAT-1 = 16/32/64/128 so dlambda=(pi/180)360/NLON and dphi=(pi/180)(30/(NLAT-1)) halve together (true refinement ratio 2). u* is boundary-supercompatible with the zero-flux Neumann band edges (derivations in the problem file), so the recorded relative-L2 / Linf errors are pure O(h^2) truncation drift -- both the cos(lat)-weighted zonal (1/cos^2 phi) and mimetic meridional terms active.",
+  "problem": "../../../../problems/laplace_beltrami_band_mms.esm",
+  "model": "LaplaceBeltramiBand",
+  "rule": "../../../../grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad.esm",
+  "grid": "latlon",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLON": 16,
+        "NLAT": 17
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLON": 32,
+        "NLAT": 33
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLON": 64,
+        "NLAT": 65
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLON": 128,
+        "NLAT": 129
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.5,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14,
+      "_doc": "Tight LSODA so the Python temporal truncation is negligible against the spatial goldens on the stiff metric-diffusion sweep."
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

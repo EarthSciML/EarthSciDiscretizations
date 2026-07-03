@@ -1,0 +1,158 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "anisotropic_diffusion_2d_periodic",
+    "description": "MMS driver: forced-steady anisotropic diffusion on the doubly-periodic unit box [0,1]x[0,1], the vehicle that exercises grids/cartesian_uniform_2d/rules/central_Dxy_periodic (the mixed second derivative d^2u/dx dy) inside a well-posed evolution. WHY NOT A BARE CROSS DERIVATIVE: the isolated discrete cross operator is symmetric INDEFINITE (its periodic eigenvalues span -N^2..+N^2), so u_t = c D(D(u,x),y) + forcing is exponentially unstable (roundoff-seeded modes grow at rate ~c N^2 and blow up long before t=0.1) — unlike the skew-symmetric first-derivative advection cases, a bare cross derivative is not a stable time-evolution operator. It IS, however, the off-diagonal term of a full anisotropic diffusion tensor K = [[Kxx, Kxy], [Kxy, Kyy]], and for a positive-definite K (|Kxy| < sqrt(Kxx Kyy)) the combined operator L = Kxx d^2/dx^2 + 2 Kxy d^2/dx dy + Kyy d^2/dy^2 is negative-(semi)definite and dissipative — a stable parabolic evolution. This problem takes Kxx = Kyy = 1, Kxy = 1/2 (so 2 Kxy = 1; K positive definite), discretizing L as D(D(u,x),x) + D(D(u,x),y) + D(D(u,y),y) via central_D2x_periodic + central_Dxy_periodic + central_D2y_periodic (the three priority-10 compound rules fire on their distinct wrt patterns and superpose). MANUFACTURED STEADY SOLUTION u*(x,y) = sin(2 pi x) sin(2 pi y) — doubly periodic — held steady by the exactly matching analytic forcing c*S with S = -L[u*] = 2 (2 pi)^2 sin(2 pi x) sin(2 pi y) - (2 pi)^2 cos(2 pi x) cos(2 pi y): the continuous balance is u_t = c L u* + c S = c (L u* - L u*) = 0, so u(t) = u* for all t and the discrete field drifts only by the O(dx^2 + dy^2) truncation of L, whose cross-derivative half is central_Dxy_periodic — a bug in the cross stencil corrupts the drift, so the convergence sweep gates the mixed-derivative rule. Because L is negative definite (dissipative), the drift relaxes to a bounded O(h^2) steady offset (the (1,1) transient decays as exp(-2(2pi)^2 c t), ~4e-4 by t=0.1), giving a clean order-2 measurement. The single scalar c multiplies both the operator and the forcing, so the steady balance holds for any c > 0 (default 1). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY (observeds dividing by the metaparameter names, substituted as integer literals at load per esm-spec 9.7.6 so the sweep rebinding NX=NY keeps dx,dy consistent). BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free names dx,dy survive only in the runtime rule bodies; the ic, forcing observed S, and test references spell the cell-center coordinates x_i = (i-1/2)/NX, y_j = (j-1/2)/NY inline from literals and the metaparameters NX,NY (the build-time cellwise evaluator is scope-free), never invoking the grid's x_coord/y_coord free-name templates.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:diffusion", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 10.4 (centered differences on periodic domains) and Section 2.12 (mixed partial derivatives)."
+      }
+    ]
+  },
+  "models": {
+    "AnisotropicDiffusion2DPeriodic": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_2d/rules/central_D2x_periodic.esm" },
+        { "ref": "../grids/cartesian_uniform_2d/rules/central_Dxy_periodic.esm" },
+        { "ref": "../grids/cartesian_uniform_2d/rules/central_D2y_periodic.esm" }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "K", "shape": ["x", "y"], "description": "Diffused scalar field over the 2-D [x, y] index sets." },
+        "c": { "type": "parameter", "units": "m^2/s", "default": 1.0, "description": "Scalar diffusivity multiplying the whole anisotropic operator AND the whole forcing, so the steady MMS balance c(L u* + S)=0 holds for any c>0 (and c>0 keeps L dissipative)." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the expanded rule bodies at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6) so the convergence sweep keeps dx consistent." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the sweep keeps dy consistent." },
+        "S": {
+          "type": "observed",
+          "units": "K/m^2",
+          "shape": ["x", "y"],
+          "description": "Analytic steady forcing S = -L[u*] = 2 (2 pi)^2 sin(2 pi x) sin(2 pi y) - (2 pi)^2 cos(2 pi x) cos(2 pi y), where L[u*] = u*_xx + u*_xy + u*_yy = -(2 pi)^2 sin sin - (2 pi)^2 sin sin + (2 pi)^2 cos cos (Kxx=Kyy=1, 2 Kxy=1). Constant in time; c*S holds u* = sin(2 pi x) sin(2 pi y) steady. Coordinates spelled inline from literals and NX, NY (build-time scope caveat). (2 pi)^2 = 39.47841760435743; 2 (2 pi)^2 = 78.95683520871486.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    78.95683520871486,
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    39.47841760435743,
+                    { "op": "cos", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    { "op": "cos", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  {
+                    "op": "+",
+                    "args": [
+                      { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" },
+                      { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "y" },
+                      { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "y" } ], "wrt": "y" }
+                    ]
+                  }
+                ]
+              },
+              { "op": "*", "args": ["c", "S"] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_anisotropic_periodic",
+          "description": "Manufactured steady solution u*(x,y) = sin(2 pi x) sin(2 pi y) with c = 1, tensor K = [[1, 1/2], [1/2, 1]] (positive definite). Derivation: the continuous balance is u_t = c(L u* + S) = 0 with S = -L u* (in metadata.description); the discrete anisotropic operator L is negative definite, so the field relaxes from u* to a bounded O(dx^2+dy^2) steady offset — the drift the assertions and the convergence sweep measure, whose cross-derivative half is central_Dxy_periodic. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.1 assertion bounds the truncation-driven drift against the SAME steady reference (relative L2 well under the bound at the default NX=NY=64; exact per-resolution errors pinned in tests/conformance/convergence/anisotropic_diffusion_2d_periodic/golden/errors.json). References evaluate at cell centers x_i = (i-1/2)/NX, y_j = (j-1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only).",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 3e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    { "op": "sin", "args": [{ "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

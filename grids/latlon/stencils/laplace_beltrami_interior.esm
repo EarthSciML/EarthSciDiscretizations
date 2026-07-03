@@ -1,0 +1,423 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "laplace_beltrami_interior",
+    "description": "Interior-only metric spherical Laplacian (Laplace-Beltrami) on the latlon grid: the doubly-interior 5-point cross value lap u = (1/(R_sphere^2 cos^2 phi)) d2u/dlambda^2 + (1/(R_sphere^2 cos phi)) d/dphi(cos phi du/dphi) over i in [2,NLON-1], j in [2,NLAT-1] (lambda=lon, phi=lat in RADIANS; dlambda=(pi/180)dlon_deg, dphi=(pi/180)dlat_deg, pi=3.141592653589793). ZONAL term: the centered per-radian second difference (u[i+1,j]-2u[i,j]+u[i-1,j])/(R_sphere^2 cos^2 phi_j dlambda^2) -- the per-degree D2 of central_D2_lon_interior scaled by the (180/pi)^2/(R_sphere^2 cos^2 phi_j) metric weight (the cos(lat) weighting that distinguishes this from the bare per-degree operator). MERIDIONAL term: the conservative (mimetic) flux-form divergence of the cos-weighted gradient, (cos(phi_{j+1/2})(u[i,j+1]-u[i,j]) - cos(phi_{j-1/2})(u[i,j]-u[i,j-1])) /(R_sphere^2 cos phi_j dphi^2), with the cell-face latitudes phi_{j+-1/2} at the half-index nodes -- the standard 2nd-order finite-volume Laplace-Beltrami stencil that annihilates constants and is discretely conservative in the meridional flux. cos(phi) at cell centers and faces is computed IN THIS BODY from phi_j=(pi/180)(lat0_deg+(j-1)dlat_deg) and phi_{j+-1/2}=(pi/180)(lat0_deg+(j-1+-1/2)dlat_deg): free-name geometry (lat0_deg, dlat_deg, dlon_deg, R_sphere) resolves in the consuming model's scope at evaluation (the grid's consumer-supplied geometry contract, grids/latlon/grid.esm). VALID ONLY on a REGIONAL spherical patch with lat strictly inside (-90,90) so cos phi>0 everywhere (a spherical cap/band); the global pole-cap treatment of the 1/cos^2 zonal singularity at phi=+-90 is a documented FOLLOW-UP. Match-less named template consumed by the boundary-condition rule layer (rules/laplace_beltrami_lon_periodic_lat_zero_grad). O(dlon_deg^2)+O(dlat_deg^2) on this uniform index space.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon",
+      "op:laplacian",
+      "order:2",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Laplace-Beltrami / covariant Laplacian on the sphere.)"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Chapter 2 (finite-volume flux-form divergence of a variable-coefficient gradient) and the [1,-2,1] second difference."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "laplace_beltrami_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLON",
+                1
+              ]
+            }
+          ],
+          "j": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLAT",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "+",
+          "args": [
+            {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        -2,
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        },
+                        "j"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "^",
+                      "args": [
+                        "R_sphere",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "lat0_deg",
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            1
+                                          ]
+                                        },
+                                        "dlat_deg"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            "dlon_deg"
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "lat0_deg",
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            0.5
+                                          ]
+                                        },
+                                        "dlat_deg"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "j"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "lat0_deg",
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            -0.5
+                                          ]
+                                        },
+                                        "dlat_deg"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "j"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "^",
+                      "args": [
+                        "R_sphere",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                "lat0_deg",
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    "dlat_deg"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            "dlat_deg"
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

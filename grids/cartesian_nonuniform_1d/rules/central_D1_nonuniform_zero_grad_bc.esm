@@ -1,0 +1,923 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D1_nonuniform_zero_grad_bc",
+    "description": "Second-order centered first derivative with second-order one-sided (zero-gradient-family) boundary closures on cartesian_nonuniform_1d. Matches plain D(f, wrt: x) at DEFAULT priority, so compound rules (e.g. a second-derivative rule at priority 10) fire first, match-scoped with `where: {f: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the first derivative of a bare field over this grid's `x` index set; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together. Interior [2, N-1]: the imported 3-point centered nonuniform stencil central_D1_nonuniform_interior. The boundary faces use the exact second-order ONE-SIDED nonuniform first derivative (Fornberg 1988) built on the three nearest cell centers -- at i=1 the forward stencil on {xc[1], xc[2], xc[3]}, at i=N the backward stencil on {xc[N-2], xc[N-1], xc[N]} -- so the operator is second-order at the walls without any ghost cell, the natural zero-gradient-compatible closure for the manufactured cos(pi x) mode (whose gradient vanishes at both domain ends). `xc` (cell centers) is a free-name array resolving to the consuming model's geometry observed (grids/cartesian_nonuniform_1d/grid.esm); the first derivative needs only centers, not widths. Second-order in L2 on smoothly stretched meshes (supraconvergence). A model imports exactly one first-derivative rule for `x`.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_nonuniform_1d",
+      "op:D",
+      "axes:x",
+      "order:2",
+      "stencil_width:3",
+      "bc:zero_gradient",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Sections 2.13 (nonuniform grids) and 2.12 (one-sided boundary closures)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/central_D1_nonuniform_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "central_D1_nonuniform_zero_grad_bc": {
+      "params": [
+        "f"
+      ],
+      "match": {
+        "op": "D",
+        "args": [
+          "f"
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "x"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              "N",
+              "N"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D1_nonuniform_interior",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  2,
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      {
+                                        "op": "index",
+                                        "args": [
+                                          "xc",
+                                          2
+                                        ]
+                                      },
+                                      {
+                                        "op": "index",
+                                        "args": [
+                                          "xc",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      3
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  1
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      2
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      3
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  1
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  3
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  1
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  3
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  1
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  3
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  2
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      2
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      3
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      3
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "index",
+                            "args": [
+                              "xc",
+                              "N"
+                            ]
+                          },
+                          {
+                            "op": "index",
+                            "args": [
+                              "xc",
+                              {
+                                "op": "-",
+                                "args": [
+                                  "N",
+                                  1
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      "N"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      {
+                        "op": "-",
+                        "args": [
+                          "N",
+                          2
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      "N"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  "N"
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      {
+                        "op": "-",
+                        "args": [
+                          "N",
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              2,
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      "N"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      "N"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "xc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "N",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  "N"
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "xc",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "f",
+                      "N"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

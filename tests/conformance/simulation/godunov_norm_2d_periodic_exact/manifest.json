@@ -1,0 +1,21 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "godunov_norm_2d_periodic_exact",
+  "description": "Exactness gate: run the inline esm-spec 6.6.5 tests of problems/godunov_norm_2d_periodic_exact.esm (model GodunovNorm2DExact, test constant_field_annihilated_exact) at the problem's default resolution (NX=NY=64) through each binding's official simulation pathway. The first-order Godunov gradient magnitude annihilates a constant field to the bit (|grad(const)| = 0), so the constant state is preserved exactly under u_t = -S*godunov(u): the assertions pin L2_error(u, 3) = 0 at t=0 and t=1 within 1e-13 and mean(u) = 3. This is the cartesian_uniform_2d analogue of the gradient_mpas grad(const) = 0 exactness gate and the 2-D companion of godunov_norm_1d_periodic_exact; it drives the compound sqrt((D(u,x))^2 + (D(u,y))^2) through lowering to a makearray Godunov norm and confirms the whole max/min/sqrt 5-point stencil evaluates and integrates over the 9-region periodic tiling. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners. The nontrivial order-1 accuracy of the same rule on smooth data is gated separately by tests/conformance/convergence/godunov_norm_2d_eikonal_mms.",
+  "problem": "../../../../problems/godunov_norm_2d_periodic_exact.esm",
+  "model": "GodunovNorm2DExact",
+  "tests": ["constant_field_annihilated_exact"],
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "status": "active"
+}

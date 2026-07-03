@@ -1,0 +1,204 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_zero_grad_central",
+    "description": "MMS driver: forced-steady 1-D linear advection u_t = -c D(u,x) + c dGdx on the unit interval [0, 1] with no-flux walls, discretized by grids/cartesian_uniform_1d/rules/central_D1_zero_grad_bc (2nd-order centered interior, 2nd-order one-sided zero-gradient faces). Manufactured STEADY solution u*(x) = cos(2 pi x) with the exactly matching steady forcing c dGdx, dGdx = g'(x) = -2 pi sin(2 pi x) (the analytic derivative of u*), so the continuous balance is u_t = -c u*_x + c u*_x = 0 and u(t) = u* for all t; the discrete field drifts only by the spatial truncation error of the operator, which is what the assertions and the convergence sweep measure (forced-steady MMS: observed L2/Linf order = operator order = 2). BC COMPATIBILITY (why cos(2 pi x)): u* is domain-periodic, so every ODD derivative vanishes at both walls (u*_x = -2 pi sin(2 pi x) and u*_xxx = (2 pi)^3 sin(2 pi x) are zero at x=0 and x=1); the rule's 2nd-order one-sided face has local truncation -(dx^2/3) u*_xxx(wall) + O(dx^3), so with u*_xxx(wall)=0 the faces are superconvergent and the global error is the clean interior O(dx^2). OBSERVATION WINDOW (why t=0.02, shorter than latlon's t=0.2): the both-ends one-sided closure of a CENTERED advection operator is only weakly stable — its semi-discrete spectrum carries a small O(dx)-scale positive real part (a mild boundary mode), unlike latlon's genuinely stable no-flux pole rows — so the truncation-driven drift is measured over a short window in which it stays dominated by the O(dx^2) spatial error rather than the slowly growing boundary transient (confirmed: L2/Linf observed order 2.0 across N=16..128 at t=0.02; the order degrades toward 1 only for observation windows several times longer). The measured order is a property of the semi-discrete operator and is independent of the temporal integrator tolerance. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). The ic, the dGdx forcing, and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic/observed cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_zero_grad_central/golden/errors.json.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "models": {
+    "Advection": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_1d/rules/central_D1_zero_grad_bc.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": ["x"],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed. Multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, "N"] },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        },
+        "dGdx": {
+          "type": "observed",
+          "units": "kg/m^4",
+          "shape": ["x"],
+          "description": "Analytic derivative of the manufactured solution: dGdx(x) = g'(x) = -2 pi sin(2 pi x). Constant in time; c dGdx is the manufactured forcing that holds u* = cos(2 pi x) steady. Cell centers x_i = 0 + (i - 1/2)/N are spelled inline from literals and the metaparameter name N (build-time-foldable; never the free-name x_coord template).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["i"],
+            "args": [],
+            "ranges": { "i": { "from": "x" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                -6.283185307179586,
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  6.283185307179586,
+                  {
+                    "op": "aggregate",
+                    "output_idx": ["i"],
+                    "args": [],
+                    "ranges": { "i": { "from": "x" } },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        0,
+                        { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  { "op": "-", "args": ["c"] },
+                  { "op": "D", "args": ["u"], "wrt": "x" }
+                ]
+              },
+              { "op": "*", "args": ["c", "dGdx"] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_zero_grad_central",
+          "description": "Manufactured steady solution u*(x) = cos(2 pi x) with c = 1. Derivation: the continuous balance is u_t = -c u*_x + c u*_x = 0 with u*_x = dGdx = -2 pi sin(2 pi x), so u(t) = u* exactly; the discrete drift is the pure spatial truncation of central_D1_zero_grad_bc. u* is domain-periodic, so its odd derivatives vanish at both no-flux walls and the 2nd-order one-sided faces are superconvergent (metadata.description), leaving the clean interior O(dx^2). References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.02 assertion bounds the truncation-driven drift against the SAME steady reference; the window is short because the centered both-ends one-sided operator is only weakly stable (metadata.description), so the drift stays O(dx^2)-dominated (well under the 0.01 bound at the default N=64, falling at order 2). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_zero_grad_central/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.02 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i"],
+                        "args": [],
+                        "ranges": { "i": { "from": "x" } },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            0,
+                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.02,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.01 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i"],
+                        "args": [],
+                        "ranges": { "i": { "from": "x" } },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            0,
+                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

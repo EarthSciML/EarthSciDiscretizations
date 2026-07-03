@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "anisotropic_diffusion_2d_periodic",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_2d/rules/central_Dxy_periodic (the mixed second derivative d^2u/dx dy) driven by problems/anisotropic_diffusion_2d_periodic.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding of NX=NY together (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files. The bare cross operator is symmetric indefinite (eigenvalues -N^2..+N^2) and would blow up under time integration, so the MMS embeds it in a positive-definite anisotropic diffusion tensor K=[[1,1/2],[1/2,1]]: the combined operator D(D(u,x),x)+D(D(u,x),y)+D(D(u,y),y) (central_D2x_periodic + central_Dxy_periodic + central_D2y_periodic) is negative definite and dissipative. The manufactured steady solution sin(2 pi x) sin(2 pi y) is held by the exactly matching analytic forcing (derivation in the problem file); the drift at t=0.1 is the pure O(h^2) truncation of the anisotropic operator, whose cross-derivative half is the rule under test, so a bug in central_Dxy_periodic corrupts the recorded L2/Linf errors and the order.",
+  "problem": "../../../../problems/anisotropic_diffusion_2d_periodic.esm",
+  "model": "AnisotropicDiffusion2DPeriodic",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/central_Dxy_periodic.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    { "n": 16, "bindings": { "NX": 16, "NY": 16 } },
+    { "n": 32, "bindings": { "NX": 32, "NY": 32 } },
+    { "n": 64, "bindings": { "NX": 64, "NY": 64 } },
+    { "n": 128, "bindings": { "NX": 128, "NY": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

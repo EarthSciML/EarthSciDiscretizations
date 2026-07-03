@@ -1,0 +1,144 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_nonuniform_dirichlet_bc",
+    "description": "Conservative finite-volume second derivative with inhomogeneous Dirichlet (fixed-value wall) boundaries on cartesian_nonuniform_1d, cell-centered. Compound match on D(D(f,x),x) at priority 10, so it fires on the whole second derivative before any plain-D rule lowers the inner derivative (esm-spec 9.6.3 compound precedence), match-scoped with `where: {f: {shape: [x]}}` (esm-spec 9.6.1); under import-edge renaming (esm-spec 9.7.7) the wrt literals and the where shape follow the renamed axis together. Interior [2, N-1]: the imported conservative flux-difference stencil. The boundary faces impose a prescribed value at the domain wall (the finite-volume Dirichlet closure -- no ghost geometry): the left wall sits at node xe[1], a half control-width dxw[1]/2 below the first center xc[1], and the right wall sits at node xe[N+1], a half control-width dxw[N]/2 above the last center xc[N]. Replacing the missing outside face-gradient by the one-sided gradient to the wall value gives L f[1] = ( (f[2]-f[1])/(xc[2]-xc[1]) - (f[1]-gL)/(dxw[1]/2) ) / dxw[1] at i=1 and L f[N] = ( (gR-f[N])/(dxw[N]/2) - (f[N]-f[N-1])/(xc[N]-xc[N-1]) ) / dxw[N] at i=N. As the mesh uniformizes (xc[i+1]-xc[i] -> dx, dxw[i] -> dx) the wall term (f[1]-gL)/(dx/2) is the linear reconstruction to the half-cell-outside wall, recovering the cell-centered mirror-ghost Dirichlet face (grids/cartesian_uniform_1d/rules/central_D2_dirichlet_bc); at gL=gR=0 it is the homogeneous-Dirichlet closure. `xc` (cell centers) and `dxw` (cell widths) are free-name arrays resolving to the consuming model's geometry observeds (grids/cartesian_nonuniform_1d/grid.esm), and `gL`, `gR` are consumer-supplied free names giving the field value at the left wall x=xe[1] and the right wall x=xe[N+1]; a consuming model declares gL/gR as ordinary real parameters and a parameter not overridden falls back to its default (esm-spec 6: default, or 0), so gL=gR=0 is the homogeneous case. The gL/gR terms live only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). Second-order in L2 on smoothly stretched meshes (supraconvergence); a Dirichlet-compatible manufactured mode (e.g. sin(pi x), zero at both walls) matches the closure so no forcing is needed. A model imports exactly one second-derivative rule for `x`.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_nonuniform_1d", "op:D2", "axes:x", "order:2", "stencil_width:3", "bc:dirichlet", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Sections 2.12 (boundary conditions; cell-centered Dirichlet via one-sided wall reconstruction) and 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2_nonuniform_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_nonuniform_dirichlet_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "x" } ],
+        "wrt": "x"
+      },
+      "where": { "f": { "shape": ["x"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["N", 1] }]],
+          [[1, 1]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_nonuniform_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["f", 2] },
+                          { "op": "index", "args": ["f", 1] }
+                        ]
+                      },
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["xc", 2] },
+                          { "op": "index", "args": ["xc", 1] }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["f", 1] },
+                          "gL"
+                        ]
+                      },
+                      {
+                        "op": "/",
+                        "args": [
+                          { "op": "index", "args": ["dxw", 1] },
+                          2
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              { "op": "index", "args": ["dxw", 1] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          "gR",
+                          { "op": "index", "args": ["f", "N"] }
+                        ]
+                      },
+                      {
+                        "op": "/",
+                        "args": [
+                          { "op": "index", "args": ["dxw", "N"] },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["f", "N"] },
+                          { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] }
+                        ]
+                      },
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["xc", "N"] },
+                          { "op": "index", "args": ["xc", { "op": "-", "args": ["N", 1] }] }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              { "op": "index", "args": ["dxw", "N"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

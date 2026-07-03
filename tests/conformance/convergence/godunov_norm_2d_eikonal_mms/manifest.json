@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "godunov_norm_2d_eikonal_mms",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic driven by problems/godunov_norm_2d_eikonal_mms.esm, loaded once per resolution with the loader-API metaparameter binding of NX=NY together (esm-spec 9.7.6 binding site 4). Forced-steady eikonal u_t = -S*godunov(u) + S|grad g| with exact solution g = sin(2 pi x) + sin(2 pi y); the discretization error is the first-order Godunov truncation S*(|grad g| - godunov(g)) = O(dx + dy). The manufactured |grad g| = 2 pi sqrt(cos^2(2 pi x) + cos^2(2 pi y)) has slope-sign kinks in each gradient component, but the Rouy-Tourin/Osher-Sethian entropy fix keeps the scheme first-order in L2 AND Linf uniformly, so both norms fall as O(h) (expected order 1).",
+  "problem": "../../../../problems/godunov_norm_2d_eikonal_mms.esm",
+  "model": "GodunovEikonal2DMMS",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    { "n": 16, "bindings": { "NX": 16, "NY": 16 } },
+    { "n": 32, "bindings": { "NX": 32, "NY": 32 } },
+    { "n": 64, "bindings": { "NX": 64, "NY": 64 } },
+    { "n": 128, "bindings": { "NX": 128, "NY": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.2,
+  "expected_order": 1.0,
+  "order_tolerance": 0.15,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

@@ -1,0 +1,506 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "lax_friedrichs_D_periodic",
+    "description": "First-order Lax-Friedrichs / Rusanov (local Lax-Friedrichs) finite-VOLUME flux discretization of the advective first derivative u_x for the scalar linear advection u_t = -c u_x (non-negative speed c, periodic) on cartesian_uniform_1d, in semi-discrete method-of-lines form. The consumer writes u_t = -c*D(u, wrt: x); this rule emits the c-independent flux-difference D_i = (G[i+1/2] - G[i-1/2]) / dx that, scaled by the consumer's -c, gives the finite-volume tendency -(F[i+1/2] - F[i-1/2])/dx with the Lax-Friedrichs numerical flux F[i+1/2] = 0.5*c*(u_i + u_{i+1}) - 0.5*alpha*(u_{i+1} - u_i), alpha = |c| (Rusanov). The dissipation coefficient alpha equals the SAME c the consumer multiplies by, so with c > 0 the coefficient ratio alpha/c = 1 and the flux factors as F = c*G with G[i+1/2] = 0.5*(u_i + u_{i+1}) - 0.5*(u_{i+1} - u_i), the c-free average-minus-dissipation form emitted here (the +x sign is baked exactly as upwind1_D_periodic bakes it; a sign-aware variant belongs in a separate rule). ALGEBRAIC NOTE: for scalar linear advection this local-LxF/Rusanov flux is exactly first-order upwind — G[i+1/2] simplifies to u_i, so D reduces to the backward difference (u_i - u_{i-1})/dx and this rule is numerically identical to upwind1_D_periodic (its convergence golden matches upwind's to the bit). The rule is nonetheless authored in the explicit Lax-Friedrichs flux structure (central average minus |c|-scaled jump dissipation) so the migrated scheme is recognizable as its own operator; the equivalence is a genuine property of the Rusanov flux for a linear flux function, documented rather than hidden. O(dx), monotone, TVD (a maximum-principle scheme: it develops no new extrema and its total variation is non-increasing). MATCH: plain D(u, wrt: x) at priority 10, match-scoped `where: {u: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the first derivative of a bare field over this grid's `x` index set; the priority + shape constraint disambiguate it from a sibling plain first-derivative rule (central_D1_periodic / upwind1_D_periodic) if both are ever in scope, and under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together. A model imports exactly one advection rule for `x`. Self-contained makearray: interior [2, N-1] holds the flux-difference aggregate over the 3-point stencil (u[i-1], u[i], u[i+1]); the two faces i=1 and i=N carry the same flux difference with the out-of-range neighbor wrapped PERIODICALLY (i=1 uses the ghost u[0]=u[N] in G[1/2], i=N uses u[N+1]=u[1] in G[N+1/2]). `dx` is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract); the periodic wrap is dx-scale-invariant, so the rule serves any domain extent unchanged.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:cartesian_uniform_1d",
+      "op:D",
+      "axes:x",
+      "order:1",
+      "stencil_width:3",
+      "bc:periodic",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 6.11-6.12 (flux-limiter methods) and eq. (6.35); Chapter 4 (Lax-Friedrichs / Rusanov)."
+      },
+      {
+        "citation": "Rusanov, V. V. (1961). Calculation of interaction of non-steady shock waves with obstacles. J. Comput. Math. Phys. USSR 1:267-279 (local Lax-Friedrichs / Rusanov flux); Lax, P. D. (1954). Weak solutions of nonlinear hyperbolic equations. Comm. Pure Appl. Math. 7:159-193."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "lax_friedrichs_D_periodic": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "u"
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              "N",
+              "N"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N",
+                    1
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "dx"
+              ]
+            }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dx"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

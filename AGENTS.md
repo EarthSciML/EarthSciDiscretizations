@@ -104,6 +104,15 @@ fixpoint → official runner`.
   [category …]` — it drives the canonical ESS pipeline and nothing else.
 - A PR that changes goldens must say *why* (spec change, rule change, or bug — never
   "refreshed to green").
+- **Large AST goldens are pinned by digest, not stored.** An `ast` golden whose canonical
+  bytes reach `AST_GOLDEN_MAX_BYTES` (64 KiB) is checked in as `expanded.golden.sha256`
+  (a sha256 of the bytes + byte-count) instead of the full `expanded.golden.json`, which
+  is removed. Every binding still reproduces the exact bytes; `compare-outputs.py` hashes
+  each binding's output and gates on the digest (`golden-digest` instead of `golden-bytes`).
+  Smaller goldens stay full text so their diffs stay reviewable. This keeps multi-MB
+  derived blobs (WENO/HJ-WENO reconstructions) out of git history while preserving both
+  the regression pin (the digest changes visibly if the canonical output changes) and the
+  cross-binding byte-identity gate. Regenerate locally to inspect a digest-pinned golden.
 - Convergence goldens (`golden/errors.json`) hold the Julia-computed error norms;
   `scripts/check_convergence_order.py` asserts observed order from them without any
   binding installed. Docs read observed orders from the same files — nothing is ever
@@ -112,8 +121,9 @@ fixpoint → official runner`.
 ## 6. Generated files
 
 Docs content pages and plots are generated **only** in the CI docs job and are never
-committed (`.gitignore` pins this). Conformance goldens and fixtures *are* committed.
-Convergence per-resolution fixtures are thin hand-written wrappers binding
+committed (`.gitignore` pins this). Conformance goldens and fixtures *are* committed —
+AST goldens at or above the 64 KiB threshold as a `.sha256` digest rather than full bytes
+(§5). Convergence per-resolution fixtures are thin hand-written wrappers binding
 metaparameters — if you feel the need for a fixture generator, the metaparameter
 mechanism is being misused.
 

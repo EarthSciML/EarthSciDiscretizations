@@ -1,0 +1,95 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D1y_zero_grad_bc",
+    "description": "Second-order centered first derivative along y with one-sided (zero-gradient frame) boundary rows on cartesian_uniform_2d, over the full 2-D field f[x,y]. Interior j in [2, NY-1] (all i): the imported y-stencil (f[i,j+1]-f[i,j-1])/(2 dy). The two y-face rows use 2nd-order one-sided differences that reach only into the interior (no ghost, no periodic wrap): j=1 gives (-3 f[i,1]+4 f[i,2]-f[i,3])/(2 dy) and j=NY gives (f[i,NY-2]-4 f[i,NY-1]+3 f[i,NY])/(2 dy), so the discretized derivative is fully defined with its BC and stays O(dy^2) at every row (esm-spec 9.6.8). The face values are FULL-RANK aggregates (singleton output range on the y axis, all i) mirroring grids/cartesian_uniform_2d/rules/central_D2y_neumann_bc so every binding's simulator fills the (NX x 1) regions without rank promotion — the rank-reduced face form of the esm-spec 9.6.8 worked example only fills leading-axis faces portably. `dy` is the grid's consumer-supplied y-spacing free name. The one-sided faces are O(dy^2) locally and preserve global 2nd-order convergence for boundary-compatible solutions — those whose odd y-derivatives vanish at the walls, so the discrete derivative matches the zero-gradient closure superconvergently (the MMS driver problems/advection_2d_y_zero_grad_central.esm uses cos(pi y), whose y-derivative is zero on both walls). Matches plain D(f, wrt: y) at default priority, so compound rules (e.g. a second-derivative rule at priority 10) fire first, match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec 9.6.1) so it fires only on the first y-derivative of a bare field declared over this grid's [x, y] index sets; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axes together. A model imports exactly one first-derivative rule for y (this zero-gradient rule or the periodic variant), never both.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:D", "axes:x,y", "order:2", "stencil_width:3", "bc:zero_gradient", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (one-sided boundary treatment)."
+      },
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D1y_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D1y_zero_grad_bc": {
+      "params": ["f"],
+      "match": { "op": "D", "args": ["f"], "wrt": "y" },
+      "where": { "f": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, "NX"], [2, { "op": "-", "args": ["NY", 1] }]],
+          [[1, "NX"], [1, 1]],
+          [[1, "NX"], ["NY", "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D1y_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "x" }, "j": [1, 1] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        { "op": "*", "args": [-3, { "op": "index", "args": ["f", "i", 1] }] },
+                        { "op": "*", "args": [4, { "op": "index", "args": ["f", "i", 2] }] }
+                      ]
+                    },
+                    { "op": "index", "args": ["f", "i", 3] }
+                  ]
+                },
+                { "op": "*", "args": [2, "dy"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "x" }, "j": ["NY", "NY"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NY", 2] }] },
+                        { "op": "*", "args": [4, { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NY", 1] }] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [3, { "op": "index", "args": ["f", "i", "NY"] }] }
+                  ]
+                },
+                { "op": "*", "args": [2, "dy"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

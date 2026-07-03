@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_2d_x_zero_grad_central",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc driven by problems/advection_2d_x_zero_grad_central.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — NX is the open metaparameter (NY is edge-closed at 8; the solution is constant in y and no y-operator appears), and the problem's dx observed and inlined x coordinates use the NX name so the geometry follows each rebinding automatically. The manufactured steady solution cos(pi x) is zero-gradient-compatible (its odd x-derivatives vanish on the walls), so the 2nd-order one-sided face residual is superconvergent and the recorded L2/Linf errors at t=0.03 are clean interior O(dx^2) truncation drift (the short transport keeps the weakly non-normal one-sided operator in the linear-drift regime; derivation in the problem file).",
+  "problem": "../../../../problems/advection_2d_x_zero_grad_central.esm",
+  "model": "Advection2DxZeroGrad",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    { "n": 16, "bindings": { "NX": 16 } },
+    { "n": 32, "bindings": { "NX": 32 } },
+    { "n": 64, "bindings": { "NX": 64 } },
+    { "n": 128, "bindings": { "NX": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.03,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

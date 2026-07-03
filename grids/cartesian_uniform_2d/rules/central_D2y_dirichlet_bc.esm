@@ -1,0 +1,96 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2y_dirichlet_bc",
+    "description": "The y-half of a 2-D Laplacian on cartesian_uniform_2d with inhomogeneous DIRICHLET (fixed-value) conditions on the two y-walls, over the full 2-D field f[x,y], cell-centered. Interior j in [2, NY-1] (all i): the imported y-stencil (f[i,j+1] - 2 f[i,j] + f[i,j-1]) / dy^2. Faces j=1 and j=NY: mirror-ghost elimination against a prescribed wall value. `gB` and `gT` are consumer-supplied free names (the same free-name contract as the grid geometry `dy`; see grids/cartesian_uniform_2d/grid.esm) giving the field value on the BOTTOM y-wall y=y0 (the j=1 side) and the TOP y-wall y=y0+NY*dy (the j=NY side), constant along that wall (all i). The names deliberately read gB/gT (bottom/top) so the y-wall assignment is unambiguous, the y-analogue of gL/gR on the x-walls. On this cell-centered grid the wall sits half a cell outside the first center, so linear reconstruction to the wall gives the ghost f[i,0]=2*gB-f[i,1] (and f[i,NY+1]=2*gT-f[i,NY]); substituting into the 3-point stencil yields D2y[i,1] = (f[i,2]-3*f[i,1]+2*gB)/dy^2 and D2y[i,NY] = (f[i,NY-1]-3*f[i,NY]+2*gT)/dy^2. A consuming model declares gB/gT as ordinary real parameters; a parameter not overridden falls back to its default (esm-spec §6: default, or 0), so gB=gT=0 is the homogeneous-Dirichlet y-wall. The gB/gT terms live only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). `dy` is the grid's consumer-supplied y-spacing free name. The face values are FULL-RANK aggregates (singleton output range on the y axis, all i) mirroring central_D2y_neumann_bc. The full Laplacian is assembled in the consuming equation as D(D(f,x),x) + D(D(f,y),y): this rule lowers the second term. Compound match on D(D(f,y),y) at priority 10 (esm-spec §9.6.3), match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec §9.6.1) so it fires only on the yy-second-derivative of a bare field declared over this 2-D grid's [x, y] axes; under import-edge renaming (esm-spec §9.7.7) the wrt literals and the where shape follow the renamed axes together. Interior O(dy^2); the one-sided mirror-ghost faces preserve global 2nd-order convergence for Dirichlet-compatible solutions.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:D2", "axes:x,y", "order:2", "stencil_width:3", "bc:dirichlet", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (boundary conditions; cell-centered Dirichlet via mirror ghost) and Chapter 3 (multidimensional Poisson/heat by dimension-wise second differences)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2y_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2y_dirichlet_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "y" } ],
+        "wrt": "y"
+      },
+      "where": { "f": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, "NX"], [2, { "op": "-", "args": ["NY", 1] }]],
+          [[1, "NX"], [1, 1]],
+          [[1, "NX"], ["NY", "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2y_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "x" }, "j": [1, 1] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["f", "i", 2] },
+                        { "op": "*", "args": [3, { "op": "index", "args": ["f", "i", 1] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [2, "gB"] }
+                  ]
+                },
+                { "op": "*", "args": ["dy", "dy"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "x" }, "j": ["NY", "NY"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NY", 1] }] },
+                        { "op": "*", "args": [3, { "op": "index", "args": ["f", "i", "NY"] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [2, "gT"] }
+                  ]
+                },
+                { "op": "*", "args": ["dy", "dy"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

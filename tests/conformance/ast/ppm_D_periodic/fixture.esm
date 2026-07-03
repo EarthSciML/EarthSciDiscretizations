@@ -1,0 +1,61 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/ppm_D_periodic: a minimal consuming model binding N=8 at the import edge. The plain match D(u,x) fires at priority 10 and lowers, through the section-9.6.3 fixpoint (with the ppm_face_value / ppm_limit_right / ppm_flux / ppm_D_interior body-reference templates inlined at load per esm-spec 9.7.3), to the rule's makearray -- interior [4,6] holding the conservative PPM flux-difference aggregate (F_{i+1/2}-F_{i-1/2})/dx with F the CW84-limited semi-discrete upwind edge flux, and the five explicit periodic-wrap faces i=1,2,3,7,8 -- with all metaparameters folded, zero apply_expression_template nodes, zero unlowered rewrite-target ops (the spatial D is gone), and the free name dx surviving in the expanded body (the grid's consumer-supplied geometry contract). The model fulfills that contract with x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:ppm_D_periodic"]
+  },
+  "models": {
+    "PpmDPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/ppm_D_periodic.esm",
+          "bindings": { "N": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": ["x"],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; the PPM upwind flux assumes flow in +x)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 8] },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["c"] },
+              { "op": "D", "args": ["u"], "wrt": "x" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

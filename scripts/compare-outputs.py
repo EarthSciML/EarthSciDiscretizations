@@ -101,10 +101,24 @@ def case_rec(results, case: str):
 
 
 def compare_ast(results_root, bindings, rep):
+    import hashlib
     for case_dir, manifest in manifests("ast"):
         case = manifest["case"]
-        golden_path = case_dir / manifest["golden"]
-        golden = golden_path.read_bytes() if golden_path.is_file() else None
+        # The committed golden is either the full canonical bytes (small cases) or, for
+        # cases whose lowered AST exceeds the regenerate threshold, a sha256 DIGEST
+        # (`expanded.golden.sha256`) that pins the bytes without storing them. Either way
+        # every binding must reproduce the exact same canonical bytes; the digest just
+        # records their hash (regression pin + cross-binding gate, minus the multi-MB blob).
+        digest_path = case_dir / "expanded.golden.sha256"
+        full_path = case_dir / manifest["golden"]
+        golden = None       # full bytes, if stored
+        golden_hex = None   # committed sha256 hex, if digest-pinned
+        golden_n = None
+        if digest_path.is_file():
+            dinfo = json.loads(digest_path.read_text())
+            golden_hex, golden_n = dinfo["hex"], dinfo.get("bytes")
+        elif full_path.is_file():
+            golden = full_path.read_bytes()
         reference = manifest.get("reference_binding", "julia")
         ref_artifact = None
         for binding in bindings:
@@ -119,17 +133,27 @@ def compare_ast(results_root, bindings, rep):
             artifact = (results_root / binding / rec["artifact"]).read_bytes()
             if binding == reference:
                 ref_artifact = artifact
-            if golden is None:
+            if golden_hex is not None:
+                h = hashlib.sha256(artifact).hexdigest()
+                if h == golden_hex:
+                    rep.add("ast", case, binding, "golden-digest", "pass",
+                            f"sha256 match ({len(artifact)} bytes; golden pinned by digest)")
+                else:
+                    rep.add("ast", case, binding, "golden-digest", "fail",
+                            f"sha256 {h[:12]}… != committed {golden_hex[:12]}… "
+                            f"({len(artifact)} B vs {golden_n} B golden)")
+            elif golden is not None:
+                if artifact == golden:
+                    rep.add("ast", case, binding, "golden-bytes", "pass",
+                            f"{len(artifact)} bytes identical")
+                else:
+                    rep.add("ast", case, binding, "golden-bytes", "fail",
+                            f"artifact ({len(artifact)} B) != golden ({len(golden)} B)")
+            else:
                 status = "skip" if manifest.get("status") == "pending-golden" else "fail"
                 rep.add("ast", case, binding, "golden-bytes", status,
                         "golden not yet generated" if status == "skip"
                         else "golden missing and not marked pending-golden")
-            elif artifact == golden:
-                rep.add("ast", case, binding, "golden-bytes", "pass",
-                        f"{len(artifact)} bytes identical")
-            else:
-                rep.add("ast", case, binding, "golden-bytes", "fail",
-                        f"artifact ({len(artifact)} B) != golden ({len(golden)} B)")
             if binding != reference and ref_artifact is not None:
                 rep.add("ast", case, binding, "cross-binding-bytes",
                         "pass" if artifact == ref_artifact else "fail")

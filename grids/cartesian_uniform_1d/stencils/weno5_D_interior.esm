@@ -1,0 +1,214 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "weno5_D_interior",
+    "description": "Interior-only fifth-order upwind (positive transport speed) WENO5-Z first derivative on cartesian_uniform_1d, evaluated over the cells i in [4, N-2] where the full conservative flux-difference stencil fits without wrapping. CONSERVATIVE FINITE-DIFFERENCE FORM (Shu 1998, eqs. 2.16-2.18): D(u,x)|_i = (hatF_{i+1/2} - hatF_{i-1/2}) / dx, where hatF_{i+1/2} is the WENO5 reconstruction of the numerical flux at the i+1/2 face from the 5-cell stencil {u[i-2], u[i-1], u[i], u[i+1], u[i+2]} and hatF_{i-1/2} is the SAME reconstruction operator shifted one cell left (stencil {u[i-3]..u[i+1]}). The derivative therefore reads six consecutive cells u[i-3..i+2]; the WENO reconstruction stencil is five cells wide (hence stencil_width:5, the conventional WENO5 nomenclature), but the flux DIFFERENCE spans six. THIS IS NOT the single-centered 5-cell 'mirror' reconstruction of the derivative (archive finite_difference/weno5_grad.json): that form telescopes in the smooth limit to the fourth-order centered stencil (u[i-2]-8u[i-1]+8u[i+1]-u[i+2])/(12 dx) and is only O(dx^4). The shifted-stencil conservative form here is genuinely O(dx^5) (its smooth-limit leading truncation error is -(dx^5/60) u^(6), a dissipative upwind term). Each 5-cell reconstruction uses the Jiang-Shu (1996) candidate polynomials q0=(2u[i-2]-7u[i-1]+11u[i])/6, q1=(-u[i-1]+5u[i]+2u[i+1])/6, q2=(2u[i]+5u[i+1]-u[i+2])/6, the 13/12 + 1/4 smoothness indicators beta_k, and the WENO-Z (Borges 2008) nonlinear weights alpha_k = d_k (1 + (tau_5/(eps+beta_k))^2), tau_5 = |beta_0 - beta_2|, ideal weights d = (1/10, 6/10, 3/10), eps = 1e-6; hatF = (alpha_0 q0 + alpha_1 q1 + alpha_2 q2)/(alpha_0+alpha_1+alpha_2). WENO-Z (not classic Jiang-Shu) is used so the scheme keeps fifth order at the first-order critical points of a smooth periodic profile (the extrema of a sin wave, u_x=0), where classic weights degrade to ~fourth order (Henrick 2005). Match-less named template; the boundary-condition layer (rules/weno5_D_periodic.esm) wraps it with periodic-wrap faces for the near-boundary cells. `dx` is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract). Sign convention: upwind for flow in +x; a sign-aware variant belongs in a separate rule.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:cartesian_uniform_1d",
+      "op:D",
+      "axes:x",
+      "order:5",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient Implementation of Weighted ENO Schemes. Journal of Computational Physics, 126(1), 202-228. Smoothness indicators beta_k (eq. 2.17), nonlinear weights (eqs. 2.9-2.10), and the fifth-order reconstruction.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Shu, C.-W. (1998). Essentially Non-Oscillatory and Weighted Essentially Non-Oscillatory Schemes for Hyperbolic Conservation Laws. In Advanced Numerical Approximation of Nonlinear Hyperbolic Equations, Lecture Notes in Mathematics 1697, 325-432. NASA/CR-97-206253. The conservative finite-difference flux-reconstruction framework: f'(x_i) = (hatf_{i+1/2} - hatf_{i-1/2})/dx with hatf reconstructed from the sliding-average primitive, eqs. (2.16)-(2.18).",
+        "doi": "10.1007/BFb0096355"
+      },
+      {
+        "citation": "Borges, R., Carmona, M., Costa, B., & Don, W. S. (2008). An improved weighted essentially non-oscillatory scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6), 3191-3211. The WENO-Z weights alpha_k = d_k (1 + (tau_5/(eps+beta_k))^2) with tau_5 = |beta_0 - beta_2|, which recover the full fifth order at first-order critical points where the classic Jiang-Shu weights degrade.",
+        "doi": "10.1016/j.jcp.2007.11.038"
+      },
+      {
+        "citation": "Henrick, A. K., Aslam, T. D., & Powers, J. M. (2005). Mapped weighted essentially non-oscillatory schemes: Achieving optimal order near critical points. Journal of Computational Physics, 207(2), 542-567. The demonstration that classic WENO5 drops to fourth order at simple critical points (u'=0, u''!=0), motivating the WENO-Z remedy used here.",
+        "doi": "10.1016/j.jcp.2005.01.023"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./weno5_recon.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno5_D_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            4,
+            {
+              "op": "-",
+              "args": [
+                "N",
+                2
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "weno5_recon",
+                  "bindings": {
+                    "v0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "v1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "v2": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i"
+                      ]
+                    },
+                    "v3": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "v4": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "weno5_recon",
+                  "bindings": {
+                    "v0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            3
+                          ]
+                        }
+                      ]
+                    },
+                    "v1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "v2": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "v3": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i"
+                      ]
+                    },
+                    "v4": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "dx"
+          ]
+        }
+      }
+    }
+  }
+}

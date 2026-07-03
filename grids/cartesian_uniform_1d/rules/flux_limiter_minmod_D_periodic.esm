@@ -1,0 +1,1262 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "flux_limiter_minmod_D_periodic",
+    "description": "Second-order TVD flux-limited (minmod limiter) finite-VOLUME discretization of the advective first derivative u_x for scalar linear advection u_t = -c u_x (non-negative speed c, periodic) on cartesian_uniform_1d, in semi-discrete method-of-lines form. The consumer writes u_t = -c*D(u, wrt: x); this rule emits the c-independent flux-difference D_i = (G[i+1/2] - G[i-1/2]) / dx that, scaled by -c, gives the finite-volume tendency with the high-resolution TVD flux F[i+1/2] = c*u_i + 0.5*c*phi(r_i)*(u_{i+1} - u_i), where phi(r) = max(0, min(1, r)) is the minmod limiter of Roe (1986) and r_i = (u_i - u_{i-1})/(u_{i+1} - u_i) is the upwind-to-local slope ratio (LeVeque 2002, eq. 6.35, in the dt->0 semi-discrete limit where the (1 - nu) Courant factor -> 1). Because c > 0 the flux factors as F = c*G with G[i+1/2] = u_i + 0.5*phi(r_i)*(u_{i+1} - u_i), the c-free form emitted here (the +x sign is baked as in upwind1_D_periodic). DIVISION-FREE GUARD: the ratio r_i divides by (u_{i+1} - u_i), which vanishes at extrema and flat regions. Rather than form r explicitly (a 0/0 at flat data), the anti-diffusive correction 0.5*phi(r_i)*(u_{i+1} - u_i) is written in the algebraically-identical division-free jump form 0.5*minmod(u_i - u_{i-1}, u_{i+1} - u_i), with the two-slope minmod expressed in pure max/min as minmod(a, b) = max(0, min(a, b)) + min(0, max(a, b)) (verified to machine precision against phi(r)*(u_{i+1}-u_i) wherever r is defined, and finite — an exact 0 — when the jump is 0). This is the min/max form that avoids the explicit division a naive r would introduce; no epsilon regularization is needed. TVD, monotonicity-preserving (develops no new extrema; total variation non-increasing). Formally second-order accurate where the limiter is inactive (smooth monotone regions); the minmod limiter CLIPS at smooth extrema, so on a periodic sin the observed order of accuracy is below 2 (documented honestly in the convergence case — L2 ~1.6, Linf ~1.2). MATCH: plain D(u, wrt: x) at priority 10, match-scoped `where: {u: {shape: [x]}}` (esm-spec 9.6.1); the priority + shape constraint disambiguate it from a sibling plain first-derivative rule if both are ever in scope, and survive import-edge renaming (esm-spec 9.7.7). A model imports exactly one advection rule for `x`. Self-contained makearray: the TVD stencil is 4-point (u[i-2], u[i-1], u[i], u[i+1]) because the two face fluxes each need the upwind slope one cell back; interior [3, N-1] holds the flux-difference aggregate, and the three faces i=1, i=2, i=N carry the same flux difference with the out-of-range neighbors wrapped PERIODICALLY (i=1: u[0]=u[N], u[-1]=u[N-1]; i=2: u[0]=u[N]; i=N: u[N+1]=u[1]). `dx` is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract); the periodic wrap is dx-scale-invariant.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:cartesian_uniform_1d",
+      "op:D",
+      "axes:x",
+      "order:2",
+      "stencil_width:4",
+      "bc:periodic",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Roe, P. L. (1986). Characteristic-based schemes for the Euler equations. Ann. Rev. Fluid Mech. 18:337-365 (minmod eq. 35, superbee eq. 36).",
+        "doi": "10.1146/annurev.fl.18.010186.002005"
+      },
+      {
+        "citation": "Sweby, P. K. (1984). High resolution schemes using flux limiters for hyperbolic conservation laws. SIAM J. Numer. Anal. 21(5):995-1011.",
+        "doi": "10.1137/0721062"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 6.11-6.12 (flux-limiter methods) and eq. (6.35); Chapter 4 (Lax-Friedrichs / Rusanov)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "flux_limiter_minmod_D_periodic": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "u"
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              2,
+              2
+            ]
+          ],
+          [
+            [
+              "N",
+              "N"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                3,
+                {
+                  "op": "-",
+                  "args": [
+                    "N",
+                    1
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i"
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "max",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    2
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "max",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    2
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                "i"
+                                              ]
+                                            },
+                                            {
+                                              "op": "index",
+                                              "args": [
+                                                "u",
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "dx"
+              ]
+            }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          1
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          "N"
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          2
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              3
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              3
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          1
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              2
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          "N"
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              1
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "u",
+                          {
+                            "op": "-",
+                            "args": [
+                              "N",
+                              1
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "max",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  2
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "min",
+                                "args": [
+                                  0,
+                                  {
+                                    "op": "max",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  2
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              "N"
+                                            ]
+                                          },
+                                          {
+                                            "op": "index",
+                                            "args": [
+                                              "u",
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  "N",
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dx"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

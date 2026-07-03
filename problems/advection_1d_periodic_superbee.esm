@@ -1,0 +1,265 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_periodic_superbee",
+    "description": "MMS order-of-accuracy driver for grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic (superbee flux limiter (second-order TVD, compressive)) on the periodic unit interval [0,1]: linear advection u_t = -c u_x with exact solution u(x,t) = sin(2 pi (x - c t)), c = 1 (initial profile transported unchanged, no forcing). The limiter is second-order where inactive but CLIPS at the sin's two smooth extrema, so the OBSERVED order is below 2 and differs by norm; the honest observed order is pinned by the convergence case, the design order (2) by the rule's order: tag. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). The ic and test references spell the cell-center coordinate x_i = (i - 1/2)/N inline from literals and N (the 6.6.5/ic build-time cellwise evaluation is scope-free). The companion monotonicity/TVD driver is problems/advection_1d_periodic_superbee_tvd.esm; per-resolution errors and observed order are pinned in tests/conformance/convergence/advection_1d_periodic_superbee/.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 6.11-6.12 (flux-limiter methods); Chapters 4, 8."
+      },
+      {
+        "citation": "Sweby, P. K. (1984). High resolution schemes using flux limiters for hyperbolic conservation laws. SIAM J. Numer. Anal. 21(5):995-1011.",
+        "doi": "10.1137/0721062"
+      }
+    ]
+  },
+  "models": {
+    "AdvectionSuperbee": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": [
+            "x"
+          ],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; +x upwind convention)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "sin",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  6.283185307179586,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            "N"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "c"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_transport",
+          "description": "Exact solution u(x,t) = sin(2 pi (x - c t)) with c = 1: u_t = -2 pi c cos(2 pi (x - c t)) = -c u_x, periodic on [0,1], no forcing. References evaluate at cell centers x_i = (i - 1/2)/N, spelled inline per esm-spec 6.6.5. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the discretization error. Exact per-resolution errors and observed order in tests/conformance/convergence/advection_1d_periodic_superbee/.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.1
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          0.1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

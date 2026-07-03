@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon_advection_zonal_upwind",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon/rules/upwind1_D_lon_periodic driven by problems/latlon_advection_zonal_upwind.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — NLON is the open metaparameter (NLAT is edge-closed at 5; the lat axis is passive), and the problem's dlon_deg observed divides by the NLON name, so the geometry follows each rebinding automatically. Exact solution sin((pi/180)(lon - omega t)) cos((pi/180) lat) (derivation in the problem file); the recorded errors at t=0.5 are dominated by first-order upwind amplitude damping (numerical diffusion), a relative L2 error ~O(dlon) — approximately 1.42e-1 / 7.41e-2 / 3.78e-2 / 1.91e-2 over the NLON ladder, an O(dlon) sequence. The resolution ladder matches the centered case (latlon_advection_zonal_periodic). expected_order is 1.0; order_tolerance is loosened modestly to 0.15 (from the centered case's 0.2 being tighter around order 2) because a first-order upwind scheme approaches its asymptotic order 1 from below in the pre-asymptotic regime — the observed per-interval orders run 0.94 -> 0.97 -> 0.99 with a median near 0.97, so 0.15 gives comfortable margin while still gating a genuine order-1 claim (this matches the sibling cartesian upwind case advection_1d_periodic, which uses the same 0.15 for the same reason).",
+  "problem": "../../../../problems/latlon_advection_zonal_upwind.esm",
+  "model": "ZonalAdvectionUpwind",
+  "rule": "../../../../grids/latlon/rules/upwind1_D_lon_periodic.esm",
+  "grid": "latlon",
+  "resolutions": [
+    { "n": 16, "bindings": { "NLON": 16 } },
+    { "n": 32, "bindings": { "NLON": 32 } },
+    { "n": 64, "bindings": { "NLON": 64 } },
+    { "n": 128, "bindings": { "NLON": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.5,
+  "expected_order": 1.0,
+  "order_tolerance": 0.15,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14, "_doc": "Pinned to match the cartesian problems' convention: LSODA at 1e-12/1e-14 keeps Python temporal truncation negligible against the spatial goldens (the upwind-advection system is non-stiff but weakly dissipative, where loose explicit tolerances would add spurious dissipation on top of the scheme's own)." },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

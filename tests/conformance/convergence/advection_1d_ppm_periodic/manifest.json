@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_ppm_periodic",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/ppm_D_periodic (Piecewise Parabolic Method, Colella-Woodward 1984, semi-discrete method-of-lines flux) driven by problems/advection_1d_ppm_periodic.esm, loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4). Exact solution sin(2 pi (x - c t)). HONEST ORDER: PPM is nominally 3rd order (parabolic reconstruction) and the UNLIMITED flux-difference is exactly the 4th-order central first derivative, but the original 1984 monotonicity limiter still clips the two smooth extrema of the sine (the classic smooth-extremum clipping of the CW84 limiter, cured only by later extremum-preserving variants), flattening the parabola there to first order. The global error is therefore dominated by two isolated first-order points, giving a sub-nominal, norm-dependent observed order -- the Julia golden gives median observed order 1.68 in L2 (pairwise 1.93, 1.66, 1.68) and 1.35 in Linf (pairwise 1.53, 1.35, 1.18). expected_order 1.5 with order_tolerance 0.25 brackets BOTH norm medians honestly (deviation 0.18 in L2, 0.15 in Linf); this is NOT a claim of 3rd-order convergence (which the CW84 limiter forecloses on any smooth periodic profile, whose extrema always trigger the clip). Conservation is exact and is gated separately by the problem's mean assertion.",
+  "problem": "../../../../problems/advection_1d_ppm_periodic.esm",
+  "model": "AdvectionPPM",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/ppm_D_periodic.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 1.5,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

@@ -87,9 +87,31 @@ python scripts/validate-library.py
 
 ## Status
 
-The conformance suite is green at **314 passed / 0 failed / 74 scope-skipped**,
-with `validate-library.py` reporting 0 findings. All five ESS binding runners
-are registered in `scripts/test-conformance.sh` and CI.
+The **Julia reference runner passes all 140 cases** (45 AST · 46 simulation · 40
+convergence · 8 regridding · 1 reprojection) and `validate-library.py` reports **0
+findings across 137 files**. The `ast` category is **byte-identical across all five
+bindings** (Julia, Python, Rust, TypeScript, Go — 405 passed / 0 failed), and the
+numeric categories are cross-verified **Julia ↔ Python** (298 passed / 0 failed / 61
+scope-skipped — the `spherely`-gated spherical regrids plus the Go/TypeScript numeric
+scope). In CI the **AST** gate covers all five bindings, but the **numeric** categories
+run on **Julia and Python only**. The Rust CI job is AST-only for a concrete upstream
+reason: `earthsci-toolkit-rs` offers only the explicit **`Erk`** integrator, which **hangs
+on genuinely-two-axis stiff diffusion** (confirmed on `anisotropic_diffusion_2d_periodic`,
+whose full `D2x + Dxy + D2y` tensor is stiff in both directions at once) — an explicit RK
+method cannot step a stiff 2-D Laplacian. Rust completes the 1-D and hyperbolic numeric
+cases (the per-axis `heat_2d_*` drivers diffuse only one axis and behave like the 1-D
+heat cases), but a full Rust numeric sweep hangs, so it is not wired into CI (tracked as
+an upstream stiff-solver gap). Julia (`Tsit5`) and Python (`LSODA`) verify every numeric
+case; Go/TypeScript are rewrite-only ports. All five ESS binding runners are registered in
+`scripts/test-conformance.sh` and CI.
+
+Large AST goldens (≥ 64 KiB — the WENO / HJ-WENO reconstructions, whose fully-inlined
+trees are 90–93 % redundant) are checked in as a committed **sha256 digest** rather than
+the full bytes: every binding still reproduces the exact canonical AST and is gated on the
+hash (`golden-digest`), so the repo carries no multi-MB derived blobs while keeping both
+the byte-identity gate and the regression pin (AGENTS.md §5). A companion upstream RFC
+proposes an ESM `let`/shared-binding node + canonical CSE pass to shrink such goldens ~10×
+at the source (`EarthSciSerialization/docs/content/rfcs/shared-subexpression-binding-cse.md`).
 
 The `ast` category is **byte-identical across Julia, Python, Rust, TypeScript,
 and Go** — including the end-to-end consuming-model gate at N=64 and the two
@@ -111,7 +133,18 @@ non-uniform-mesh driver (`heat_1d_nonuniform`, conservative finite volume, L2
 order 2 by supraconvergence), and both
 lat-lon MMS drivers at observed order ~2), regridding, reprojection point
 gates and the in-model LCC round-trip, and the ragged-MPAS divergence
-simulation (Julia; div∘curl exact to ~3e-14). Regridding is now **end-to-end
+simulation (Julia; div∘curl exact to ~3e-14). This wave adds the full
+**first-derivative (gradient) family across all five grids** with second-derivative /
+Laplacian companions, plus a **variable-coefficient / nonlinear Laplacian** `∇·(k∇u)` and
+a **mixed `∂²/∂x∂y`** cross-derivative on cartesian, the **metric spherical
+(Laplace–Beltrami)** Laplacian on lat-lon, the **MPAS TRiSK edge-gradient and cell
+Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
+Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
+**WENO-Z advection** and the **Jiang–Peng HJ-WENO** `|∇u|` (both observed order 5.00),
+Colella–Woodward **PPM** conservative transport, and TVD **Lax–Friedrichs / minmod /
+superbee** limiters. Sub-nominal observed orders (PPM's smooth-extremum clip, limiter
+clipping, Lax–Friedrichs reducing to first-order upwind for a linear flux) are pinned as
+*observed*, never forced to a design order. Regridding is now **end-to-end
 declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →
 candidate-gated overlap → apply — with the gated path value-identical to the
 dense path (tol 0.0) and conservation / partition-of-unity as the exact gates.
@@ -144,5 +177,10 @@ in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs
 follow the reals-are-consumer-supplied contract: wall values/fluxes are free
 names defaulting to 0, so the homogeneous case is the default and the Neumann
-rule generalizes the zero-gradient one. The pre-0.8.0 catalog in `archive/`
-migrates rule-by-rule on top of these patterns.
+rule generalizes the zero-gradient one. A prototype **`duo`** icosahedral grid ships its
+level-0 construction as pure closed-form AST (golden-ratio vertices normalized onto the
+sphere via a nested aggregate) — a scoping result establishing that *resolution-parameterized*
+subdivision needs two upstream ESM features (a `^`/pow metaparameter-expression op for the
+`20·4^level` sizing and a build-time repeat/fold to iterate the refine pass, tracked as ESS
+`ess-vnk`), with fixed levels otherwise shippable as MPAS-style const mesh data. The pre-0.8.0
+catalog in `archive/` migrates rule-by-rule on top of these patterns.

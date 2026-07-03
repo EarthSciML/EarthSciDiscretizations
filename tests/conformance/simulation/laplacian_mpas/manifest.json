@@ -1,0 +1,21 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "laplacian_mpas",
+  "description": "Exactness gate: run the inline esm-spec 6.6.5 tests of problems/laplacian_mpas.esm (model Laplacian, test laplacian_of_const_is_zero_and_conservative) on the icosahedral level-0 mesh (12 cells / 30 edges / 20 vertices) through each binding's official simulation pathway. The TRiSK discrete Laplacian lap = div(grad) is pinned by two exact mimetic properties: (1) null-space -- laplacian(const) = 0 makes u(t) = u(0) exact to rounding, with the rule output itself asserted directly (lap_const max/min = 0 within 1e-13, the 6.6.5 observed-assertion form), ic preservation (relative L2 of u vs the ic field u0(i) = i, 0 at t=0 within 1e-12 and at t=1 within 1e-9), and preservation independently (mean(u) = 6.5 within 1e-9); (2) conservation -- for the non-constant field latCell the area-weighted integral sum_i areaCell(i)*lap_lat(i) = 0 by edge cancellation, asserted as mean(areaCell*lap_lat) = 0 within 1e-12. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners. This is the mimetic composition of the divergence_mpas gate (div(curl) = 0) and the gradient_mpas gate (grad(const) = 0): the fv_laplacian_cell rule body contracts over the ragged edges_of_cell index set (like the divergence, with the nEdgesOnCell CSR offsets factor, esm-spec 4.3.1) but builds each edge flux in-place from phi and dcEdge (like the gradient), the mesh data arrives as const-op subsystem observeds re-exposed as bare-name aliases (the MPAS keyed-factor wiring contract), and lap_const/lap_lat/conservation_integrand are general cell-indexed aggregate observeds -- the same tree_walk capabilities the divergence and gradient gates exercise (aggregate array-observed inlining; const-op/alias observed materialization; ragged dynamic bounds in expression-position aggregate expansion with model-scope keyed-factor resolution).",
+  "problem": "../../../../problems/laplacian_mpas.esm",
+  "model": "Laplacian",
+  "tests": ["laplacian_of_const_is_zero_and_conservative"],
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "status": "active"
+}

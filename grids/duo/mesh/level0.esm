@@ -1,0 +1,87 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "duo_mesh_level0",
+    "description": "DUO icosahedral primal mesh DATA, subdivision level 0 (the bare icosahedron) on the unit sphere: 20 triangular cells (faces), 12 vertices, 30 edges -- the Heikes et al. (2023) icosahedral triangular primal. This is mesh DATA, not a library entry: a section-4.7 subsystem file (one model, no dynamics) whose observed variables carry the LITERAL connectivity and the pre-normalization vertex coordinates as `const` arrays (esm-spec 4.2 `const`), exactly like grids/mpas/mesh/level0.esm. The grid file grids/duo/grid.esm derives all geometry FROM these arrays through closed-form expression templates (normalize-to-sphere, corner gather, resolution measure), so no mesh geometry is baked here beyond the seed literals -- the level-0 icosahedron is fully generable in ESM AST. Conventions (all ids 1-based): vert_raw holds the 12 golden-ratio icosahedron vertices, the cyclic set {(0,+/-1,+/-phi),(+/-1,+/-phi,0),(+/-phi,0,+/-1)} with phi = (1+sqrt(5))/2 the golden ratio, PRE-normalization (the unit-sphere coordinates are vert_raw/||vert_raw||, produced by grid.esm's duo_vertex_cart template, bit-for-bit the imperative _icosahedron_vertices of the archive). face_vert lists the three corner vertex ids of each outward-wound triangular face (the cell->vertex relation). edges_vert lists the two endpoint vertex ids of each of the 30 unique undirected edges, in ascending (min,max) order. Verified at authoring time: unit-normalized, V-E+F = 2 (12-30+20), all 20 spherical-triangle areas equal and summing to 4*pi.",
+    "license": "MIT",
+    "tags": [
+      "esd:mesh-data",
+      "family:duo",
+      "mesh:icosahedral_level0",
+      "sphere:unit"
+    ],
+    "references": [
+      {
+        "citation": "Heikes, R. P., Randall, D. A., & Konor, C. S. (2023). Icosahedral triangular/hexagonal spherical meshes for atmospheric modeling."
+      }
+    ]
+  },
+  "index_sets": {
+    "cells": { "kind": "interval", "size": 20 },
+    "vertices": { "kind": "interval", "size": 12 },
+    "edges": { "kind": "interval", "size": 30 },
+    "corners": { "kind": "interval", "size": 3 },
+    "space": { "kind": "interval", "size": 3 },
+    "edge_ends": { "kind": "interval", "size": 2 }
+  },
+  "models": {
+    "DuoMeshLevel0": {
+      "variables": {
+        "vert_raw": {
+          "type": "observed",
+          "shape": ["vertices", "space"],
+          "description": "Raw (pre-normalization) cartesian coordinates of the 12 base icosahedron vertices: the cyclic golden-ratio set {(0,+/-1,+/-phi),(+/-1,+/-phi,0),(+/-phi,0,+/-1)}, phi = (1+sqrt(5))/2 = 1.618033988749895. grid.esm's duo_vertex_cart normalizes these onto the R-sphere.",
+          "expression": {
+            "op": "const",
+            "args": [],
+            "value": [
+              [0.0, 1.0, 1.618033988749895],
+              [0.0, 1.0, -1.618033988749895],
+              [0.0, -1.0, 1.618033988749895],
+              [0.0, -1.0, -1.618033988749895],
+              [1.0, 1.618033988749895, 0.0],
+              [1.0, -1.618033988749895, 0.0],
+              [-1.0, 1.618033988749895, 0.0],
+              [-1.0, -1.618033988749895, 0.0],
+              [1.618033988749895, 0.0, 1.0],
+              [-1.618033988749895, 0.0, 1.0],
+              [1.618033988749895, 0.0, -1.0],
+              [-1.618033988749895, 0.0, -1.0]
+            ]
+          }
+        },
+        "face_vert": {
+          "type": "observed",
+          "shape": ["cells", "corners"],
+          "description": "The three corner vertex ids of each of the 20 triangular faces (cells), outward-wound (the cell->vertex connectivity gathered by grid.esm's duo_cell_corner_stack and consumed by centroid/area derivations).",
+          "expression": {
+            "op": "const",
+            "args": [],
+            "value": [
+              [1, 3, 9], [1, 10, 3], [1, 5, 7], [1, 9, 5], [1, 7, 10],
+              [2, 11, 4], [2, 4, 12], [2, 7, 5], [2, 5, 11], [2, 12, 7],
+              [3, 8, 6], [3, 6, 9], [3, 10, 8], [4, 6, 8], [4, 11, 6],
+              [4, 8, 12], [5, 9, 11], [6, 11, 9], [7, 12, 10], [8, 10, 12]
+            ]
+          }
+        },
+        "edges_vert": {
+          "type": "observed",
+          "shape": ["edges", "edge_ends"],
+          "description": "The two endpoint vertex ids of each of the 30 unique undirected edges, ascending (min,max) order (the edge->vertex connectivity).",
+          "expression": {
+            "op": "const",
+            "args": [],
+            "value": [
+              [1, 3], [1, 5], [1, 7], [1, 9], [1, 10], [2, 4], [2, 5], [2, 7],
+              [2, 11], [2, 12], [3, 6], [3, 8], [3, 9], [3, 10], [4, 6], [4, 8],
+              [4, 11], [4, 12], [5, 7], [5, 9], [5, 11], [6, 8], [6, 9], [6, 11],
+              [7, 10], [7, 12], [8, 10], [8, 12], [9, 11], [10, 12]
+            ]
+          }
+        }
+      },
+      "equations": []
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_lat_zero_grad_bc",
+    "description": "Centered second derivative (per-degree diffusion / 1-D Laplacian) along latitude with zero-gradient (homogeneous Neumann) pole rows on the latlon grid. Compound match on D(D(f, wrt: lat), wrt: lat) at priority 10, so it fires on the whole second derivative before any plain-D rule could lower the inner meridional derivative (esm-spec 9.6.3 compound precedence); a PER-DEGREE operator (the physical northward diffusion composes the (180/pi)^2 / R_sphere^2 metric factor in the consuming equation — see grids/latlon/grid.esm; the full metric spherical Laplacian with cos(lat) weighting is a documented FOLLOW-UP, not this rule). Interior rows [2, NLAT-1]: the imported 3-point centered stencil (f[i,j+1] - 2 f[i,j] + f[i,j-1]) / dlat_deg^2. Pole rows j=1 and j=NLAT: ghost elimination with f[i,0]=f[i,1] and f[i,NLAT+1]=f[i,NLAT] (the same zero-gradient ghost closure as cartesian_uniform_1d/rules/central_D2_zero_grad_bc, lifted to the lat axis), giving (f[i,2]-f[i,1])/dlat_deg^2 and (f[i,NLAT-1]-f[i,NLAT])/dlat_deg^2; the three regions tile the axes, so the discretized second derivative is fully defined with its BC (esm-spec 9.6.8). The face values are FULL-RANK aggregates (singleton output range on the lat axis) so every binding's simulator fills the (NLON x 1) regions without rank promotion. POLE-TREATMENT ACCURACY (important, and different from the cell-centered cartesian case): on the GLOBAL recipe the lat axis is POINT-BASED with lat_1 = -90 and lat_NLAT = +90 exactly AT the poles (not half a cell inside, as cartesian_uniform_1d's cell centers are). At a node-coincident boundary the ghost-elimination face (f[i,2]-f[i,1])/dlat_deg^2 is the finite-volume Neumann Laplacian evaluated half a cell off the node, so its leading truncation is O(1) unless the field's first THREE lat-derivatives vanish at the pole (a plain zero-gradient / cos(k*lat) eigenmode, whose second derivative is nonzero at the pole, degrades the observed order to 1; see the de-risk note in problems/latlon_diffusion_meridional_zero_grad.esm). For a pole-supercompatible field (all of d/dlat, d2/dlat2, d3/dlat3 zero at the poles — e.g. cos^4((pi/180) lat)) the face residual is O(dlat_deg^2) and the global scheme is cleanly 2nd order; such fields are exactly those a regular scalar on the sphere produces near the polar cap. This is a deliberately CRUDE pole treatment (as for the first-derivative central_D_lat_zero_grad_bc): it neither couples the pole rows across longitude nor conserves anything through the pole; proper pole handling (averaged polar caps, or an unstructured cap) is a different rule/grid. On a REGIONAL grid the same rule is an ordinary zero-gradient (homogeneous Neumann) frame boundary. `dlat_deg` is a free name resolving to the consuming model's meridional spacing variable (consumer-supplied geometry contract). Match scoping: the pattern is the compound `wrt: lat` twice plus the constraint `where: {f: {shape: [lon, lat]}}` (esm-spec 9.6.1), so it fires only on the second meridional derivative of a bare field declared over this grid's lon x lat index sets — not on any unrelated D(D(., wrt: lat), wrt: lat) reusing the axis name, and, under import-edge renaming (esm-spec 9.7.7), the wrt literals and the where shape follow the renamed axis together, so two latlon instances coexist scoped to their own meshes. The constraint requires a bare shaped variable; a consumer differentiating a compound inline expression must bind it to a declared lon x lat observed first.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:latlon", "op:D2", "axes:lon,lat", "order:2", "stencil_width:3", "bc:zero_gradient", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (Neumann boundary conditions by ghost-point elimination) and Chapter 2 (the [1, -2, 1] second-difference operator)."
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Context for pole treatments on latitude-longitude grids.)"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2_lat_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_lat_zero_grad_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "lat" } ],
+        "wrt": "lat"
+      },
+      "where": { "f": { "shape": ["lon", "lat"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, "NLON"], [2, { "op": "-", "args": ["NLAT", 1] }]],
+          [[1, "NLON"], [1, 1]],
+          [[1, "NLON"], ["NLAT", "NLAT"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_lat_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "lon" }, "j": [1, 1] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["f", "i", 2] },
+                    { "op": "index", "args": ["f", "i", 1] }
+                  ]
+                },
+                { "op": "*", "args": ["dlat_deg", "dlat_deg"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": { "from": "lon" }, "j": ["NLAT", "NLAT"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 1] }] },
+                    { "op": "index", "args": ["f", "i", "NLAT"] }
+                  ]
+                },
+                { "op": "*", "args": ["dlat_deg", "dlat_deg"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

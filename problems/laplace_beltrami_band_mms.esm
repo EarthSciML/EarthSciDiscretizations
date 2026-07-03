@@ -1,0 +1,1767 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "laplace_beltrami_band_mms",
+    "description": "MMS driver: forced-steady metric spherical Laplacian (Laplace-Beltrami) diffusion on a REGIONAL latlon band lat in [30,60] deg (strictly inside (-90,90), so cos phi>0 -- the pole singularity 1/cos^2(+-90) is avoided; the GLOBAL pole-cap Laplacian is a documented FOLLOW-UP), periodic in longitude over the full zonal circle (lon0_deg=0, dlon_deg=360/NLON). u_t = kappa (laplacian(u) - Lstar), laplacian lowered by grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad (periodic zonal wrap + zero-gradient Neumann band edges, cos(lat)-weighted mimetic FV). Manufactured STEADY solution u*(lon,lat) = cos^4(s) cos(2 lambda), lambda=(pi/180)lon, s=(pi/2)(phi-phi_mid)/B, phi=(pi/180)lat, phi_mid=(pi/180)45, B=(pi/180)15 -- a pole-cap-style profile REMAPPED so the band edges lat=30 and lat=60 play the role of the poles: F=cos^4(s) has F,F',F'',F''' all vanishing at s=+-pi/2 (the edges), making u* supercompatible with the rule's zero-flux Neumann faces to O(dlat_deg^2) (a plain non-vanishing-derivative field would collapse the meridional pole-face order to 1, the same node-coincident-boundary degradation problems/latlon_diffusion_meridional_zero_grad documents). The zonal factor cos(2 lambda) is smooth and periodic, so the (180/pi)^2/(R_sphere^2 cos^2 phi) zonal metric weight is genuinely exercised (both Laplacian terms active, unlike the meridional-only per-degree companion). The manufactured Laplace-Beltrami Lstar = cos(2 lambda) [ (-sin phi F'(phi) + cos phi F''(phi)) /(R_sphere^2 cos phi) - 4 F(phi)/(R_sphere^2 cos^2 phi) ] (F'(phi)=-4 cos^3 s sin s (pi/2)/B, F''(phi)=(12 cos^2 s sin^2 s - 4 cos^4 s)((pi/2)/B)^2) is the exact steady source, so u_t=kappa(laplacian(u*)-Lstar)=0 continuously and the discrete field drifts only by the spatial truncation -- what the assertions and the convergence sweep measure. GRID CONTRACT (grids/latlon/grid.esm): R_sphere=2 (m, test value baked into Lstar as a literal), lat0_deg=30, dlon_deg=360/NLON, dlat_deg=30/(NLAT-1) as observeds using the metaparameter NAMES (substituted as integer literals at load per esm-spec 9.7.6, so the loader-API convergence sweep keeps the geometry consistent). BOTH NLON and NLAT stay OPEN (defaults 144 x 91) and refine together in the sweep (n=NLON=NLAT-1, dphi and dlambda halve together). The ic, Lstar, and reference INLINE the grid coordinates from literals + the metaparameter names (never the free-name lat_coord/coslat templates), because free-name geometry is out of scope in the bindings' build-time cellwise evaluator (esm-spec build-time caveat; same pattern as latlon_diffusion_meridional_zero_grad). ERROR MODEL: at kappa=1, T=0.5 the truncation-driven relative-L2 drift is O(h^2); at the default NLON=144,NLAT=91 it is 4.9e-4 (Linf 5.6e-4), and the NLON/NLAT = 16/32/64/128 (paired 17/33/65/129) sweep gives 2.64e-2 / 6.65e-3 / 1.67e-3 / ~4.2e-4 (observed order ~2 in L2 and Linf); exact per-resolution values are pinned in tests/conformance/convergence/laplace_beltrami_band_mms/golden/errors.json.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:latlon",
+      "equation:laplacian",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Laplace-Beltrami on the sphere; latitude-longitude pole context.)"
+      }
+    ]
+  },
+  "models": {
+    "LaplaceBeltramiBand": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Diffused scalar over the lon x lat index sets on the regional band."
+        },
+        "kappa": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 1.0,
+          "description": "Constant diffusivity; the forced-steady balance u_t = kappa (laplacian(u) - Lstar) = 0 holds for any value, so it only sets the time scale."
+        },
+        "R_sphere": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2.0,
+          "description": "Sphere radius (test value); the rule's free name for the metric 1/R_sphere^2 factor. Baked as the literal 2 inside Lstar so the manufactured source matches the discretized operator."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 30.0,
+          "description": "Band's southern edge latitude (=30); the grid's lat0_deg free name (consumer-supplied geometry contract)."
+        },
+        "dlon_deg": {
+          "type": "observed",
+          "units": "deg",
+          "expression": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
+            ]
+          },
+          "description": "Zonal spacing 360/NLON (full periodic circle); NLON is the document metaparameter, substituted as an integer literal at load (esm-spec 9.7.6) so the sweep keeps dlon_deg consistent."
+        },
+        "dlat_deg": {
+          "type": "observed",
+          "units": "deg",
+          "expression": {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  60.0,
+                  30.0
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              }
+            ]
+          },
+          "description": "Meridional spacing (60-30)/(NLAT-1) over the band; NLAT is the document metaparameter, substituted as an integer literal at load."
+        },
+        "Lstar": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    360,
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                -1,
+                                {
+                                  "op": "sin",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            30.0,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        60.0,
+                                                        30.0
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    -4,
+                                    {
+                                      "op": "^",
+                                      "args": [
+                                        {
+                                          "op": "cos",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        3.141592653589793,
+                                                        2
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                180
+                                                              ]
+                                                            },
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                30.0,
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "-",
+                                                                      "args": [
+                                                                        "j",
+                                                                        1
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        {
+                                                                          "op": "-",
+                                                                          "args": [
+                                                                            60.0,
+                                                                            30.0
+                                                                          ]
+                                                                        },
+                                                                        {
+                                                                          "op": "-",
+                                                                          "args": [
+                                                                            "NLAT",
+                                                                            1
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                180
+                                                              ]
+                                                            },
+                                                            45.0
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        3.141592653589793,
+                                                        180
+                                                      ]
+                                                    },
+                                                    15.0
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        3
+                                      ]
+                                    },
+                                    {
+                                      "op": "sin",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    2
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            3.141592653589793,
+                                                            180
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            30.0,
+                                                            {
+                                                              "op": "*",
+                                                              "args": [
+                                                                {
+                                                                  "op": "-",
+                                                                  "args": [
+                                                                    "j",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "op": "/",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "-",
+                                                                      "args": [
+                                                                        60.0,
+                                                                        30.0
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "op": "-",
+                                                                      "args": [
+                                                                        "NLAT",
+                                                                        1
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            3.141592653589793,
+                                                            180
+                                                          ]
+                                                        },
+                                                        45.0
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    180
+                                                  ]
+                                                },
+                                                15.0
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            2
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            15.0
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            30.0,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        60.0,
+                                                        30.0
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            12,
+                                            {
+                                              "op": "^",
+                                              "args": [
+                                                {
+                                                  "op": "cos",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                2
+                                                              ]
+                                                            },
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "op": "+",
+                                                                      "args": [
+                                                                        30.0,
+                                                                        {
+                                                                          "op": "*",
+                                                                          "args": [
+                                                                            {
+                                                                              "op": "-",
+                                                                              "args": [
+                                                                                "j",
+                                                                                1
+                                                                              ]
+                                                                            },
+                                                                            {
+                                                                              "op": "/",
+                                                                              "args": [
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    60.0,
+                                                                                    30.0
+                                                                                  ]
+                                                                                },
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    "NLAT",
+                                                                                    1
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    45.0
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                180
+                                                              ]
+                                                            },
+                                                            15.0
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                2
+                                              ]
+                                            },
+                                            {
+                                              "op": "^",
+                                              "args": [
+                                                {
+                                                  "op": "sin",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                2
+                                                              ]
+                                                            },
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "op": "+",
+                                                                      "args": [
+                                                                        30.0,
+                                                                        {
+                                                                          "op": "*",
+                                                                          "args": [
+                                                                            {
+                                                                              "op": "-",
+                                                                              "args": [
+                                                                                "j",
+                                                                                1
+                                                                              ]
+                                                                            },
+                                                                            {
+                                                                              "op": "/",
+                                                                              "args": [
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    60.0,
+                                                                                    30.0
+                                                                                  ]
+                                                                                },
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    "NLAT",
+                                                                                    1
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    45.0
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                180
+                                                              ]
+                                                            },
+                                                            15.0
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                2
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            -4,
+                                            {
+                                              "op": "^",
+                                              "args": [
+                                                {
+                                                  "op": "cos",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                2
+                                                              ]
+                                                            },
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "op": "+",
+                                                                      "args": [
+                                                                        30.0,
+                                                                        {
+                                                                          "op": "*",
+                                                                          "args": [
+                                                                            {
+                                                                              "op": "-",
+                                                                              "args": [
+                                                                                "j",
+                                                                                1
+                                                                              ]
+                                                                            },
+                                                                            {
+                                                                              "op": "/",
+                                                                              "args": [
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    60.0,
+                                                                                    30.0
+                                                                                  ]
+                                                                                },
+                                                                                {
+                                                                                  "op": "-",
+                                                                                  "args": [
+                                                                                    "NLAT",
+                                                                                    1
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "op": "*",
+                                                                  "args": [
+                                                                    {
+                                                                      "op": "/",
+                                                                      "args": [
+                                                                        3.141592653589793,
+                                                                        180
+                                                                      ]
+                                                                    },
+                                                                    45.0
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                3.141592653589793,
+                                                                180
+                                                              ]
+                                                            },
+                                                            15.0
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                4
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "^",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                2
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    180
+                                                  ]
+                                                },
+                                                15.0
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        2
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "^",
+                              "args": [
+                                2.0,
+                                2
+                              ]
+                            },
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        30.0,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    60.0,
+                                                    30.0
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "NLAT",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            -4,
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                2
+                                              ]
+                                            },
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        3.141592653589793,
+                                                        180
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "+",
+                                                      "args": [
+                                                        30.0,
+                                                        {
+                                                          "op": "*",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "j",
+                                                                1
+                                                              ]
+                                                            },
+                                                            {
+                                                              "op": "/",
+                                                              "args": [
+                                                                {
+                                                                  "op": "-",
+                                                                  "args": [
+                                                                    60.0,
+                                                                    30.0
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "op": "-",
+                                                                  "args": [
+                                                                    "NLAT",
+                                                                    1
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        3.141592653589793,
+                                                        180
+                                                      ]
+                                                    },
+                                                    45.0
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            15.0
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                4
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "^",
+                              "args": [
+                                2.0,
+                                2
+                              ]
+                            },
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            30.0,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        60.0,
+                                                        30.0
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                2
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "description": "Analytic Laplace-Beltrami of u* = cos^4(s) cos(2 lambda) (the exact steady source; derivation in metadata.description). Constant in time; kappa (laplacian(u) - Lstar) is the residual that holds u* steady."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    360,
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            30.0,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        60.0,
+                                                        30.0
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        45.0
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                15.0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    4
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "kappa",
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "laplacian",
+                    "args": [
+                      "u"
+                    ]
+                  },
+                  "Lstar"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_band_laplace_beltrami",
+          "description": "Manufactured steady u* = cos^4(s) cos(2 lambda) on the band lat in [30,60], periodic lon, kappa=1. u* is boundary-supercompatible with the rule's zero-flux Neumann band edges (F,F',F'',F''' vanish at s=+-pi/2), so the discrete drift is pure O(dlat_deg^2)+O(dlon_deg^2) truncation; both the cos(lat)-weighted zonal (1/cos^2 phi) and meridional (mimetic cos-flux) terms are exercised. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.5 relative-L2 assertion bounds the truncation drift at the default NLON=144,NLAT=91 (4.9e-4, well under 2e-3). The max assertion (u* peaks near 1 at the band-center row lat=45 where cos^4(0)=1 and cos(2 lambda)~1) guards against a uniform-shift or source-sign defect the relative L2 could disguise.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.5
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  }
+                },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            2,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        360,
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        2
+                                      ]
+                                    },
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                30.0,
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "j",
+                                                        1
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            60.0,
+                                                            30.0
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "NLAT",
+                                                            1
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            45.0
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
+                                    15.0
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        4
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.002
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  }
+                },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            2,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        360,
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        2
+                                      ]
+                                    },
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                30.0,
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "j",
+                                                        1
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            60.0,
+                                                            30.0
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "NLAT",
+                                                            1
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                3.141592653589793,
+                                                180
+                                              ]
+                                            },
+                                            45.0
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
+                                    15.0
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        4
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 0.05
+              },
+              "reduce": "max"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

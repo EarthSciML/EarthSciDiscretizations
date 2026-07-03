@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_inflow_upwind",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/upwind1_D_inflow_bc driven by problems/advection_1d_inflow_upwind.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files. The manufactured steady solution cos(pi x) is held by the exact forcing c dGdx with inflow gL = u*(0) = 1 (derivation and the inflow-compatibility argument in the problem file); the recorded L2/Linf errors at t=0.1 are the pure 1st-order upwind truncation drift, expected to fall as O(dx). The inflow wall gradient u*_x(0)=0 keeps the boundary-cell residual O(dx) so the observed order is a clean 1 (a nonzero wall gradient would degrade it toward 1/2); order_tolerance is the standard 0.2, no loosening required (de-risk median observed order 0.98).",
+  "problem": "../../../../problems/advection_1d_inflow_upwind.esm",
+  "model": "Advection",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/upwind1_D_inflow_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 1.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

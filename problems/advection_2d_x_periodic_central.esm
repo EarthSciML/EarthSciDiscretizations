@@ -1,0 +1,134 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_2d_x_periodic_central",
+    "description": "MMS driver: forced-steady linear advection along x on the unit box [0,1]x[0,1] with a periodic x-boundary, discretized by grids/cartesian_uniform_2d/rules/central_D1x_periodic (second-order centered, periodic wrap). Manufactured STEADY solution u*(x) = sin(2 pi x) — zonally periodic and constant in y — held steady by the exactly matching forcing c * gx with gx = du*/dx = 2 pi cos(2 pi x): the continuous balance is u_t = -c u*_x + c u*_x = 0, so u(t) = u* for all t and the discrete field drifts only by the spatial truncation of the x-operator, which is what the assertions and the convergence sweep measure. The x-operator's periodic wrap makes its semi-discrete matrix skew-symmetric (energy-conserving), so the drift stays clean O(dx^2) at the transport time t=0.1. The y axis is PASSIVE: u* is constant in y, no y-operator appears, and NY is closed to 8 at the import edge; NX stays open (grid default 64, rebound by the convergence sweep via the loader API). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX (an observed dividing by the metaparameter name NX, substituted as an integer literal at load per esm-spec 9.7.6 so the sweep keeps dx consistent), dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free-name dx survives only in the runtime rule body; the ic, forcing observed, and test references spell the cell-center coordinate x_i = 0 + (i-1/2)(1/NX) inline from literals and the metaparameter NX (the build-time cellwise evaluator is scope-free), never invoking the grid's x_coord free-name template.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 10.4 (centered differences on periodic domains)."
+      }
+    ]
+  },
+  "models": {
+    "Advection2DxPeriodic": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/central_D1x_periodic.esm",
+          "bindings": { "NY": 8 }
+        }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected tracer field over the 2-D [x, y] index sets (constant in y in this problem)." },
+        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed along x; multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge (unit box): the grid's y0 free name (unused here; the solution is constant in y)." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dx consistent." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name; NY closed to 8 at the import edge." },
+        "gx": {
+          "type": "observed",
+          "units": "kg/m^4",
+          "shape": ["x", "y"],
+          "description": "Analytic x-derivative of the manufactured solution: gx(x) = du*/dx = 2 pi cos(2 pi x). Constant in time and y; c * gx is the manufactured forcing that holds u* = sin(2 pi x) steady. Coordinates spelled inline from literals and NX (build-time scope caveat).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                6.283185307179586,
+                {
+                  "op": "cos",
+                  "args": [
+                    { "op": "*", "args": [6.283185307179586, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "sin",
+              "args": [
+                { "op": "*", "args": [6.283185307179586, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [{ "op": "-", "args": ["c"] }, { "op": "D", "args": ["u"], "wrt": "x" }] },
+              { "op": "*", "args": ["c", "gx"] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_x_periodic",
+          "description": "Manufactured steady solution u*(x) = sin(2 pi x) with c = 1. Derivation: the continuous balance is u_t = -c u*_x + c u*_x = 0 with u*_x = gx = 2 pi cos(2 pi x); on the periodic x-circle the discrete drift is pure interior + wrap O(dx^2) truncation. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.1 assertion bounds the truncation-driven drift against the SAME steady reference (relative L2 well under the bound at the default NX=64; exact per-resolution errors pinned in tests/conformance/convergence/advection_2d_x_periodic_central/golden/errors.json). References evaluate at cell centers x_i = 0 + (i - 1/2)/NX, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only).",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "sin",
+                  "args": [
+                    { "op": "*", "args": [6.283185307179586, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 5e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "sin",
+                  "args": [
+                    { "op": "*", "args": [6.283185307179586, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
