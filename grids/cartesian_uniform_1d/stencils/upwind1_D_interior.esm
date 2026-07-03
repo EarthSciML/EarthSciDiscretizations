@@ -1,0 +1,41 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_interior",
+    "description": "Interior-only first-order upwind (backward) first derivative on cartesian_uniform_1d: (f[i] - f[i-1]) / dx over i in [2, N], for advection with non-negative transport speed. Match-less named template; boundary-condition layers (rules/) wrap it into complete rewrite rules — e.g. rules/upwind1_D_periodic.esm adds the i=1 periodic wrap. `dx` is a free name resolving to the consuming model's spacing variable (the grid's consumer-supplied geometry contract; see grids/cartesian_uniform_1d/grid.esm). O(dx). Sign convention: upwind for flow in +x.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D", "order:1", "stencil_width:2"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.8 (upwind methods)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "upwind1_D_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i"],
+        "args": ["f"],
+        "ranges": { "i": [2, "N"] },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["f", "i"] },
+                { "op": "index", "args": ["f", { "op": "-", "args": ["i", 1] }] }
+              ]
+            },
+            "dx"
+          ]
+        }
+      }
+    }
+  }
+}
