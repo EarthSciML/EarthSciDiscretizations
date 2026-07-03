@@ -87,7 +87,7 @@ python scripts/validate-library.py
 
 ## Status
 
-The conformance suite is green at **268 passed / 0 failed / 64 scope-skipped**,
+The conformance suite is green at **314 passed / 0 failed / 74 scope-skipped**,
 with `validate-library.py` reporting 0 findings. All five ESS binding runners
 are registered in `scripts/test-conformance.sh` and CI.
 
@@ -104,7 +104,11 @@ simulation, convergence sweeps (error norms within rtol 1e-4 of the committed
 Julia goldens, including the arbitrary-extent `heat_1d_zero_grad_nonunit`, the
 parameterized fixed-value/fixed-flux BC drivers (`heat_1d_dirichlet`,
 `heat_1d_neumann_flux`), the 2-D Laplacian heat driver (`heat_2d_neumann_flux`),
-the centered-advection companion (`advection_1d_periodic_central`), and both
+the centered-advection companion (`advection_1d_periodic_central`), the
+fourth- and sixth-order periodic-heat drivers (`heat_1d_periodic_o4`,
+`heat_1d_periodic_o6`) at observed order 4 and 6, the smoothly-stretched
+non-uniform-mesh driver (`heat_1d_nonuniform`, conservative finite volume, L2
+order 2 by supraconvergence), and both
 lat-lon MMS drivers at observed order ~2), regridding, reprojection point
 gates and the in-model LCC round-trip, and the ragged-MPAS divergence
 simulation (Julia; div∘curl exact to ~3e-14). Regridding is now **end-to-end
@@ -124,9 +128,15 @@ activates for Python the moment the pinned wheel installs).
 
 The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent;
 a centered second derivative with zero-gradient, parameterized Dirichlet, and
-parameterized Neumann fixed-flux BCs; a centered first-derivative gradient; and
+parameterized Neumann fixed-flux BCs; fourth- and sixth-order periodic Laplacians
+that stay high-order to the wrap boundary; a centered first-derivative gradient; and
 first-order upwind), uniform 2-D cartesian (the Laplacian assembled per-axis as
-`D(D(u,x),x) + D(D(u,y),y)` with parameterized Neumann flux BCs), the lat-lon
+`D(D(u,x),x) + D(D(u,y),y)` with parameterized Neumann flux BCs), non-uniform 1-D
+cartesian (a smoothly-stretched mesh from a single consumer-supplied edge array, with
+the grid deriving cell centers and widths through its own `nonuniform_cell_center`/
+`nonuniform_cell_width` templates over an `N+1`-node axis, feeding a conservative
+finite-volume Laplacian with exact zero-flux walls, second-order in L2 by
+supraconvergence), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
 rules; global and regional recipes), and the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
