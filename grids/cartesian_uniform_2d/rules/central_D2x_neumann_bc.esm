@@ -1,0 +1,96 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2x_neumann_bc",
+    "description": "The x-half of a 2-D Laplacian on cartesian_uniform_2d: second-order centered second derivative along x with inhomogeneous Neumann (fixed-flux) conditions on the two x-walls, over the full 2-D field f[x,y]. Interior i in [2, NX-1] (all j): the imported x-stencil. x-left face i=1: ghost elimination (f[i,j]-f[0,j])/dx = qXL gives D2x[1,j] = (f[2,j]-f[1,j]-qXL*dx)/dx^2. x-right face i=NX: (f[NX+1,j]-f[NX,j])/dx = qXR gives D2x[NX,j] = (f[NX-1,j]-f[NX,j]+qXR*dx)/dx^2. `qXL`/`qXR` are consumer-supplied free names (df/dx at the left/right walls, +x direction) declared as ordinary real parameters; an un-overridden parameter falls back to its default (esm-spec §6: default, or 0), so qXL=qXR=0 is the homogeneous (zero-gradient) x-wall. `dx` is the grid's consumer-supplied spacing free name. The full Laplacian is assembled in the consuming equation as D(D(f,x),x) + D(D(f,y),y): this rule lowers the first term and central_D2y_neumann_bc the second, and the two per-axis makearrays superpose to the correct 5-point interior and one-sided edges/corners. Compound match on D(D(f,x),x) at priority 10 (esm-spec §9.6.3), match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec §9.6.1) so it fires only on the xx-second-derivative of a bare field declared over this 2-D grid's [x, y] axes (distinct from the 1-D shape-[x] rules); under import-edge renaming (esm-spec §9.7.7) the wrt literals and the where shape follow the renamed axes together. Interior O(dx^2); the one-sided faces preserve global 2nd-order convergence for Neumann-compatible solutions.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:D2", "axes:x,y", "order:2", "stencil_width:3", "bc:neumann", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 and Chapter 3 (Neumann conditions; multidimensional Poisson/heat by dimension-wise second differences)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2x_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D2x_neumann_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "x" } ],
+        "wrt": "x"
+      },
+      "where": { "f": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NX", 1] }], [1, "NY"]],
+          [[1, 1], [1, "NY"]],
+          [["NX", "NX"], [1, "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2x_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": [1, 1], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["f", { "op": "+", "args": ["i", 1] }, "j"] },
+                        { "op": "index", "args": ["f", "i", "j"] }
+                      ]
+                    },
+                    { "op": "*", "args": ["qXL", "dx"] }
+                  ]
+                },
+                { "op": "*", "args": ["dx", "dx"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": ["NX", "NX"], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["f", { "op": "-", "args": ["i", 1] }, "j"] },
+                        { "op": "index", "args": ["f", "i", "j"] }
+                      ]
+                    },
+                    { "op": "*", "args": ["qXR", "dx"] }
+                  ]
+                },
+                { "op": "*", "args": ["dx", "dx"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
