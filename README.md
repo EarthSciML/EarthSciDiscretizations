@@ -87,7 +87,7 @@ python scripts/validate-library.py
 
 ## Status
 
-The conformance suite is green at **200 passed / 0 failed / 48 scope-skipped**,
+The conformance suite is green at **268 passed / 0 failed / 64 scope-skipped**,
 with `validate-library.py` reporting 0 findings. All five ESS binding runners
 are registered in `scripts/test-conformance.sh` and CI.
 
@@ -101,8 +101,11 @@ and shape) and §9.6.2 aggregate-mapped template expansion (`lcc_grid_roundtrip`
 
 Julia (reference), Python, and Rust run the numeric categories — MMS
 simulation, convergence sweeps (error norms within rtol 1e-4 of the committed
-Julia goldens, including the arbitrary-extent `heat_1d_zero_grad_nonunit` and
-both lat-lon MMS drivers at observed order ~2), regridding, reprojection point
+Julia goldens, including the arbitrary-extent `heat_1d_zero_grad_nonunit`, the
+parameterized fixed-value/fixed-flux BC drivers (`heat_1d_dirichlet`,
+`heat_1d_neumann_flux`), the 2-D Laplacian heat driver (`heat_2d_neumann_flux`),
+the centered-advection companion (`advection_1d_periodic_central`), and both
+lat-lon MMS drivers at observed order ~2), regridding, reprojection point
 gates and the in-model LCC round-trip, and the ragged-MPAS divergence
 simulation (Julia; div∘curl exact to ~3e-14). Regridding is now **end-to-end
 declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →
@@ -119,10 +122,17 @@ rewrite-only ports (`scope_excluded` from the numeric categories), and the
 (planar regrid runs on Julia + Python + Rust; spherical on Julia + Rust, and
 activates for Python the moment the pinned wheel installs).
 
-The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent),
-the lat-lon production kit (coordinate/metric templates; periodic-lon and
-zero-gradient-lat rules; global and regional recipes), and the MPAS unstructured
-grid; centered/upwind/finite-volume rules; the conservative overlap regridder
-with in-library cell-ring constructors; and Lambert conformal reprojection —
-establishing the layering, testing, and docs patterns. The pre-0.8.0 catalog in
-`archive/` migrates rule-by-rule on top of these patterns.
+The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent;
+a centered second derivative with zero-gradient, parameterized Dirichlet, and
+parameterized Neumann fixed-flux BCs; a centered first-derivative gradient; and
+first-order upwind), uniform 2-D cartesian (the Laplacian assembled per-axis as
+`D(D(u,x),x) + D(D(u,y),y)` with parameterized Neumann flux BCs), the lat-lon
+production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
+rules; global and regional recipes), and the MPAS unstructured grid;
+finite-difference/finite-volume rules; the conservative overlap regridder with
+in-library cell-ring constructors; and Lambert conformal reprojection —
+establishing the layering, testing, and docs patterns. The parameterized BCs
+follow the reals-are-consumer-supplied contract: wall values/fluxes are free
+names defaulting to 0, so the homogeneous case is the default and the Neumann
+rule generalizes the zero-gradient one. The pre-0.8.0 catalog in `archive/`
+migrates rule-by-rule on top of these patterns.
