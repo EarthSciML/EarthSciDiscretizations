@@ -1,0 +1,48 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "flux_limiter_minmod_flux",
+    "description": "Second-order TVD minmod-limited numerical face flux for scalar linear advection with non-negative transport speed on cartesian_uniform_1d, in the c-free reconstructed-edge form. Given the three cell-center values (um1, u0, up1) straddling the upwind cell u0 (um1 the further-upstream neighbour, up1 the downstream neighbour), the limited right-edge value of cell u0 is G = u0 + 0.5*minmod(u0 - um1, up1 - u0), i.e. the upwind value u0 plus the minmod-limited anti-diffusive correction 0.5*phi(r)*(up1 - u0) with r = (u0 - um1)/(up1 - u0) and phi(r) = max(0, min(1, r)) (Roe 1986 minmod). The correction is written division-free via stencils/minmod2.esm as 0.5*minmod2(u0 - um1, up1 - u0) = max(0, min(Dm, Dp)) + min(0, max(Dm, Dp)) with Dm = u0 - um1, Dp = up1 - u0 -- no explicit slope ratio, no epsilon, and an exact 0 at a zero jump (so the flux clips to first-order upwind G = u0 at extrema and where either jump vanishes). When the two slopes match (smooth monotone data, phi -> 1) the correction is 0.5*(up1 - u0) and G -> 0.5*(u0 + up1), the centred face value whose flux-difference is the standard 2nd-order central derivative. This is the SEMI-DISCRETE (method-of-lines) flux -- the reconstructed edge value itself, no Courant/dt factor -- so it composes with the ESS simulate() method-of-lines pathway exactly as the sibling flux stencils (stencils/ppm_flux, stencils/lax_friedrichs_flux) do. Match-less named template of three scalar arguments; the interior difference (stencils/flux_limiter_minmod_D_interior.esm) and the boundary layers (rules/flux_limiter_minmod_D_inflow_bc.esm) bind um1, u0, up1 to adjacent cell values or to ghost/inflow values. dx-free (an edge value). The +x upwind sign is baked (u0 is the upwind cell for c >= 0), matching the periodic sibling rules/flux_limiter_minmod_D_periodic.esm.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_volume", "grid:cartesian_uniform_1d", "op:flux", "order:2", "stencil_width:3"],
+    "references": [
+      {
+        "citation": "Roe, P. L. (1986). Characteristic-based schemes for the Euler equations. Ann. Rev. Fluid Mech. 18:337-365 (minmod eq. 35).",
+        "doi": "10.1146/annurev.fl.18.010186.002005"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 6.11-6.12 (flux-limiter methods) and eq. (6.35)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./minmod2.esm" }
+  ],
+  "expression_templates": {
+    "flux_limiter_minmod_flux": {
+      "params": ["um1", "u0", "up1"],
+      "description": "G = u0 + 0.5*minmod(u0-um1, up1-u0) (minmod-limited right-edge value of upwind cell u0)",
+      "body": {
+        "op": "+",
+        "args": [
+          "u0",
+          {
+            "op": "*",
+            "args": [
+              0.5,
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "minmod2",
+                "bindings": {
+                  "a": { "op": "-", "args": ["u0", "um1"] },
+                  "b": { "op": "-", "args": ["up1", "u0"] }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

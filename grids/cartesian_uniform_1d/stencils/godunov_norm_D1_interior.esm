@@ -1,0 +1,156 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "godunov_norm_D1_interior",
+    "description": "Interior-only first-order Godunov (Rouy-Tourin / Osher-Sethian) upwind gradient magnitude |u_x| = sqrt(max(D-,0)^2 + min(D+,0)^2) on cartesian_uniform_1d over the cells i in [2, N-1] where the 3-point stencil u[i-1], u[i], u[i+1] fits without reaching a boundary. Backward D- = (u[i]-u[i-1])/dx, forward D+ = (u[i+1]-u[i])/dx; the max/min is the entropy (upwind) fix of Osher-Sethian (1988) / Rouy-Tourin (1992) selecting the incoming-characteristic one-sided difference for the non-negative-speed Hamilton-Jacobi term psi_t = -S|grad psi| (S >= 0). Match-less named template extracting the interior aggregate of grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic verbatim, so a boundary-condition layer (rules/godunov_norm_D1_dirichlet_bc.esm) wraps it with prescribed-value faces via apply_expression_template rather than re-inlining the Hamiltonian, exactly as central_D2_dirichlet_bc reuses central_D2_interior. EXACT on a linear field: for u = a x + b the interior gives D- = D+ = a, so sqrt(max(a,0)^2 + min(a,0)^2) = |a| = |u_x| with no truncation error (the low-order analogue of the null-space property that annihilates constants). First order O(dx) on smooth data, uniform through the |grad| kinks where u_x changes sign. dx is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_1d",
+      "op:grad_norm",
+      "axes:x",
+      "order:1",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The max/min upwind (entropy) construction of |grad phi| for the level-set Hamilton-Jacobi term.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. The Godunov Hamiltonian sqrt(max(D-,0)^2 + min(D+,0)^2) as the monotone, first-order-convergent discretization of the eikonal |grad u|.",
+        "doi": "10.1137/0729053"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "godunov_norm_D1_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "N",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "sqrt",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "dx"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i"
+                                  ]
+                                }
+                              ]
+                            },
+                            "dx"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_2d_neumann_flux_o4",
+  "description": "Observed-order-of-accuracy sweep for the fourth-order 2-D rule(s) driven by problems/heat_2d_neumann_flux_o4.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4). The manufactured solution is exact for the continuous PDE (derivation in the problem file); the steady linear/ramp component is discretely exact for the fourth-order operator (all closure weight-sums are zero), so the recorded L2/Linf errors at t=0.1 are pure spatial fourth-order truncation from the smooth decaying mode. expected_order 4.0; the honestly observed order is pinned by golden/errors.json.",
+  "problem": "../../../../problems/heat_2d_neumann_flux_o4.esm",
+  "model": "Heat2DO4",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/central_D2x_4_neumann_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    {
+      "n": 8,
+      "bindings": {
+        "NX": 8,
+        "NY": 8
+      }
+    },
+    {
+      "n": 16,
+      "bindings": {
+        "NX": 16,
+        "NY": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NX": 32,
+        "NY": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NX": 64,
+        "NY": 64
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 4.0,
+  "order_tolerance": 0.5,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-12,
+      "abstol": 1e-14
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-12,
+      "abstol": 1e-14
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

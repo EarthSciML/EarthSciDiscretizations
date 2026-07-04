@@ -1,0 +1,1047 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_Dxy_dirichlet_bc",
+    "description": "Second-order centered MIXED second derivative d^2f/dx dy on cartesian_uniform_2d with DIRICHLET (fixed-value) walls on all four sides, over the full 2-D field f[x,y], cell-centered. This is the off-diagonal 2 Kxy d^2f/dx dy term of a full anisotropic diffusion tensor K = [[Kxx, Kxy], [Kxy, Kyy]] that the diagonal central_D2x/central_D2y rules do not supply; the non-periodic wall analogue of central_Dxy_periodic. INTERIOR block [2,NX-1]x[2,NY-1]: the imported central_Dxy_interior 4-point stencil (f[i+1,j+1]-f[i+1,j-1]-f[i-1,j+1]+f[i-1,j-1])/(4 dx dy), which reaches diagonally to all four corner neighbours, so the wall closure needs ghosts across whichever axis is out of the domain (one axis on the four edge strips, two axes plus the diagonal corner ghost on the four corner cells). GHOST RECONSTRUCTION: on this cell-centered grid the wall sits half a cell outside the first center, so the Dirichlet value g_wall gives the mirror (odd-reflection) ghost f_ghost = 2 g_wall - f_interior (left f[0,j]=2 gL-f[1,j], right f[NX+1,j]=2 gR-f[NX,j], bottom f[i,0]=2 gB-f[i,1], top f[i,NY+1]=2 gT-f[i,NY]); the diagonal corner ghost is that reconstruction applied in both directions (for the homogeneous-compatible case f[0,0]=f[1,1], etc.). CANCELLATION OF THE WALL VALUE (why no free names appear): the mixed derivative differences ALONG the wall (the tangential direction), and the prescribed value is constant along each wall (scalar gL/gR/gB/gT, matching central_D2x_dirichlet_bc / central_D2y_dirichlet_bc). At the left x-wall edge (i=1) the stencil's antisymmetric y-difference of the ghost column is -f[0,j+1]+f[0,j-1] = -(2 gL-f[1,j+1])+(2 gL-f[1,j-1]) = f[1,j+1]-f[1,j-1]: the 2 gL drops IDENTICALLY. The same tangential-difference cancellation removes gR, gB, gT on the other three edges and every corner (the diagonal-ghost constant terms cancel against the two edge-ghost constant terms). So this Dirichlet cross closure carries NO wall free names - it encodes only the structural fact that df/dy=0 along the x-walls and df/dx=0 along the y-walls (both implied by f being constant along the wall), which is exactly the boundary information the mixed derivative needs; the specific wall values are irrelevant to d^2f/dx dy. (A wall datum that VARIES along the wall would add a tangential-derivative term this scalar-wall closure omits, consistent with the scalar-wall D2 rules; out of scope.) RESULTING FACE FORMULAS (all over 4 dx dy): left edge i=1 -> (f[2,j+1]-f[2,j-1])+(f[1,j+1]-f[1,j-1]); right edge i=NX -> (f[NX,j-1]-f[NX,j+1])+(f[NX-1,j-1]-f[NX-1,j+1]); bottom edge j=1 -> (f[i+1,2]-f[i-1,2])+(f[i+1,1]-f[i-1,1]); top edge j=NY -> (f[i-1,NY]-f[i+1,NY])+(f[i-1,NY-1]-f[i+1,NY-1]); corner (1,1) -> f[2,2]+f[2,1]+f[1,2]+f[1,1]; corner (1,NY) -> -(f[2,NY]+f[2,NY-1]+f[1,NY]+f[1,NY-1]); corner (NX,1) -> -(f[NX,2]+f[NX,1]+f[NX-1,2]+f[NX-1,1]); corner (NX,NY) -> f[NX,NY]+f[NX,NY-1]+f[NX-1,NY]+f[NX-1,NY-1]. Each edge/corner is the mirror-ghost centered cross difference, O(dx^2+dy^2) like the interior, and is exactly the odd-reflected form of the interior stencil (the odd extension is exact for a solution that is odd about the wall, e.g. sin(pi x) about x=0). The makearray tiles [x,y] as the 3x3 block partition {1}u[2,NX-1]u{NX} x {1}u[2,NY-1]u{NY} (interior + four edge strips + four corner cells), mirroring central_Dxy_periodic and central_D2x/D2y_dirichlet_bc so every binding's simulator fills the strips and corners without rank promotion. `dx`/`dy` are the grid's consumer-supplied spacing free names (grids/cartesian_uniform_2d/grid.esm). WELL-POSEDNESS: the isolated cross operator is symmetric indefinite (eigenvalues span -N^2..+N^2), not a stable time-evolution operator on its own; the accompanying MMS (problems/anisotropic_diffusion_2d_dirichlet.esm) embeds it in the positive-definite tensor K=[[1,1/2],[1/2,1]] so L = D2x+Dxy+D2y is dissipative. With homogeneous Dirichlet walls the discrete energy estimate's boundary flux vanishes (the test function is zero on the wall), so the combined operator is provably negative definite and the parabolic evolution is well-posed - unlike the Neumann cross closure, whose walls leave a residual conormal boundary flux. Compound match on D(D(f,x),y) at priority 10 (esm-spec 9.6.3); the consumer writes d^2u/dx dy as D(D(u,x),y) (inner wrt x, outer wrt y), and the priority-10 compound fires before any first-derivative rule could rewrite the inner D. Match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec 9.6.1) so it fires only on the mixed second derivative of a bare field declared over this 2-D grid's [x,y] axes; under import-edge renaming (esm-spec 9.7.7) the two wrt literals and the where shape follow the renamed axes together, so two instances coexist scoped to their own meshes. O(dx^2+dy^2).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:Dxy",
+      "axes:x,y",
+      "order:2",
+      "stencil_width:3",
+      "bc:dirichlet",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (mixed partial derivatives; cell-centered ghost reconstruction for Dirichlet/Neumann walls) and Chapter 3 (multidimensional operators by tensor products of one-dimensional differences)."
+      },
+      {
+        "citation": "Morton, K. W. and Mayers, D. F. (2005). Numerical Solution of Partial Differential Equations, 2nd ed. Cambridge University Press. Section 3 (boundary closures by ghost cells; tangential vs normal derivatives at walls)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/central_Dxy_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "central_Dxy_dirichlet_bc": {
+      "params": [
+        "f"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "D",
+            "args": [
+              "f"
+            ],
+            "wrt": "x"
+          }
+        ],
+        "wrt": "y"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              "NY",
+              "NY"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              "NY",
+              "NY"
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              "NY",
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_Dxy_interior",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    1
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            2,
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            1,
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            2,
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            1,
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    1
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            "NX",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            "NX",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                }
+              ],
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                }
+              ],
+              "j": [
+                "NY",
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "NY"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "NY"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        2,
+                        2
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        2,
+                        1
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        1,
+                        2
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        1,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                "NY",
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    0,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            2,
+                            "NY"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            2,
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            1,
+                            "NY"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            1,
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    0,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            "NX",
+                            2
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            "NX",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "f",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": [
+                "NY",
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "NX",
+                        "NY"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "NX",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NY",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NX",
+                            1
+                          ]
+                        },
+                        "NY"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NX",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            "NY",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    4,
+                    {
+                      "op": "*",
+                      "args": [
+                        "dx",
+                        "dy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_inflow_ppm",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/ppm_D_inflow_bc (open-boundary PPM: one-sided inflow-ghost reconstruction at the left wall, non-reflecting zeroth-order extrapolation at the right wall) driven by problems/advection_1d_inflow_ppm.esm (model AdvectionPPMInflow), loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) -- no per-resolution fixture files. The manufactured steady solution cos(pi x) is MONOTONE (no interior extrema), so the CW84 limiter stays inactive in the interior and the recorded L2/Linf errors at t=0.1 are governed by the ONE-SIDED boundary reconstruction, not by the smooth-extremum clipping that pins the periodic PPM case to order ~1.7. HONEST ORDER: the observed order is set by the boundary closure and is pinned from the Julia golden, NOT the nominal 3. The Julia golden gives median observed order 1.97 in L2 (pairwise 1.94, 1.97, 1.99) and 2.00 in Linf (pairwise 2.00, 1.99, 2.03) over N=16..128 -- a clean 2nd order (the one-sided inflow/outflow reconstruction is the order-limiting term, above the interior operator's higher formal order); expected_order 2.0 with the standard order_tolerance 0.2 brackets both norm medians (deviation 0.03 in L2, 0.005 in Linf).",
+  "problem": "../../../../problems/advection_1d_inflow_ppm.esm",
+  "model": "AdvectionPPMInflow",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/ppm_D_inflow_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Same CW84-limited PPM RHS (stencils/ppm_flux -> ppm_limit_right, a large non-smooth min/max ifelse AST) that hangs earthsci-toolkit-rs's diffsol integrator on the periodic PPM case (tests/conformance/convergence/advection_1d_ppm_periodic): diffsol has no dtmin/max-step fail-fast guard, so it drives dt->0 without terminating instead of erroring. Blocked by structural analogy to the periodic PPM sweep (identical flux/limiter chain); Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard / is verified on this case."
+  }
+}

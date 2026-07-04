@@ -1,0 +1,201 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_nonuniform_neumann_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_neumann_bc: a minimal consuming model binding N=8 at the import edge. The compound match D(D(u,x),x) must fire through the section-9.6.3 fixpoint (priority 10) and lower to the rule's makearray -- interior [2,7] holding the imported conservative finite-volume flux-difference stencil aggregate, faces i=1 and i=8 holding the inhomogeneous fixed-flux Neumann one-sided differences -- with all metaparameters folded, all apply_expression_template nodes inlined (including the two grid geometry templates the observeds xc and dxw apply to the node array xe), the free-name geometry arrays xc and dxw surviving as index references, and the free-name wall fluxes qL, qR surviving as bare name references in the two face terms. The model declares qL and qR as ordinary real parameters (qL = 0 homogeneous, qR = 1 nonzero) so both the homogeneous and the inhomogeneous wall term appear in the expanded golden; parameters are not metaparameter-folded, so qL/qR stay as names (a consuming model that omits them falls back to the default 0, at which the rule reduces exactly to central_D2_nonuniform_zero_flux_bc). The model follows the grid's EDGE-ARRAY contract at N=8: it supplies the 9-node (x_nodes) quadratic-stretch array xe and derives xc = nonuniform_cell_center(xe), dxw = nonuniform_cell_width(xe), all spelled with the literal 8 because the edge binding closes N. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_nonuniform_1d",
+      "rule:central_D2_nonuniform_neumann_bc"
+    ]
+  },
+  "models": {
+    "CentralD2NonuniformNeumannAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_neumann_bc.esm",
+          "bindings": {
+            "N": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": [
+            "x"
+          ],
+          "description": "Temperature field over the x index set."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "qL": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 0.0,
+          "description": "Prescribed du/dx (+x direction) at the left wall x=xe[1] (the rule's Neumann free name). Zero default = homogeneous (zero-flux) left wall."
+        },
+        "qR": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 1.0,
+          "description": "Prescribed du/dx (+x direction) at the right wall x=xe[N+1] (the rule's Neumann free name), nonzero so the inhomogeneous face term appears in the expanded golden."
+        },
+        "xe": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x_nodes"
+          ],
+          "description": "Node coordinates of the quadratic-stretch mesh at N=8, xe[k] = 0.6 ((k-1)/8) + 0.4 ((k-1)/8)^2 for k=1..9 (the single geometry input; edge binding closes N so spelled with the literal 8). Index k over the x_nodes axis.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "k": {
+                "from": "x_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "xc": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Cell centers, grid-derived by applying nonuniform_cell_center to xe.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_center",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        },
+        "dxw": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Cell widths, grid-derived by applying nonuniform_cell_width to xe.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_width",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

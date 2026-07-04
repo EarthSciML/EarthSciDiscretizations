@@ -1,0 +1,446 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_2d_varcoeff_x_periodic",
+    "description": "MMS driver: 2-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit box [0,1]x[0,1] reduced to x-diffusion, with PERIODIC conditions on the two x-walls, discretized by the conservative finite-volume rule grids/cartesian_uniform_2d/rules/varcoeff_laplacian_x_periodic over the full 2-D field u[x,y]. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil plus the two x-edge faces. This is the exact 2-D per-axis lift of problems/heat_1d_varcoeff_periodic: the manufactured solution and the coefficient k(x) = 1 + 0.5 cos(2 pi x) depend only on x and are constant in the passive y axis, so the x-operator reproduces the 1-D behaviour on every y-row and the discretization error equals the 1-D case (relative L2 and absolute Linf are invariant under the passive-axis replication). The passive y axis is PASSIVE: u is constant in y, no y-operator appears, and NY is closed to 8 at the import edge; NX stays open (grid default 64, rebound by the convergence sweep via the loader API). k is a consumer-supplied [x,y]-shaped observed read by the rule at the x-faces; its aggregate loops over gi/gj (DISTINCT from the stencil's interior i/j) per the keyed-factor capture-avoidance contract (see the rule). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the wall free names (none) live only in the runtime rule body; the ic, coefficient, forcing, and test references spell the cell-center coordinate (i-1/2)/NX inline from literals and the metaparameter NX (the build-time cellwise evaluator is scope-free), never invoking the grid's x_coord free-name template. The SAME rule also serves the nonlinear case (a consumer declaring k=f(u)); this driver exercises the variable-coefficient dual.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:heat",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form)."
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/varcoeff_laplacian_x_periodic.esm",
+          "bindings": {
+            "NY": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Temperature field over the 2-D [x, y] index sets (constant in the passive axis in this per-axis driver)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (unit box): the grid's y0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          },
+          "description": "x-spacing 1/NX: the grid's dx free name, resolved in the rewrite rule's expanded body at evaluation. NX substituted as an integer literal at load (esm-spec 9.7.6) so the convergence sweep stays consistent."
+        },
+        "dy": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          },
+          "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the convergence sweep stays consistent."
+        },
+        "k": {
+          "type": "observed",
+          "units": "m^2/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Variable conductivity k(x) = 1 + 0.5 cos(2 pi x) over the 2-D [x, y] index sets (constant in the passive axis), evaluated at cell centers (gi - 1/2)/NX spelled inline from literals and the metaparameter name NX. Positive (range [0.5, 1.5]). Bound by the rule's match as the coefficient k (the left factor of k*D(u,x)) and read by the expanded stencil at the x-faces via kf = (k[.]+k[.])/2. The aggregate loops over gi/gj, DISTINCT from the stencil's interior indices i/j: an array coefficient authored as an aggregate observed is inlined into the stencil's interior aggregate at evaluation, and a shared loop-index name would be captured (see the rule description).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gi",
+              "gj"
+            ],
+            "args": [],
+            "ranges": {
+              "gi": {
+                "from": "x"
+              },
+              "gj": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "gi",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "cos",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    6.283185307179586,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            "NX"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "k",
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      }
+                    ]
+                  }
+                ],
+                "wrt": "x"
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "exp",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          -39.47841760435743,
+                          "t"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      },
+                      "j": {
+                        "from": "y"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        19.739208802178716,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                12.566370614359172,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_varcoeff_2d_x_periodic_decay",
+          "description": "Manufactured solution (constant in the passive y axis) for the 2-D variable-coefficient heat equation u_t = div(k(x) grad u) + S(x,t) reduced to x-diffusion, with k(x) = 1 + 0.5 cos(2 pi x) and PERIODIC x-walls. This is the exact per-axis 2-D lift of problems/heat_1d_varcoeff_periodic: u and k depend only on x and are replicated across the passive y axis (closed to NY=8 at the import edge), so the relative-L2/Linf errors are identical to that 1-D case and fall at the conservative-FV order 2. Boundary compatibility: cos(2 pi x) is the fundamental periodic mode, compatible with the periodic wrap of both u and k. The closed-form MMS forcing S makes u exact for the continuous PDE (derivation mirrors heat_1d_varcoeff_periodic). References evaluate at cell centers (i-1/2)/NX, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameter NX only); the wall free names (none) live only in the runtime rule body. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error. Exact per-resolution errors are pinned in tests/conformance/convergence/heat_2d_varcoeff_x_periodic/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.01
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "exp",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            -39.47841760435743,
+                            0.1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

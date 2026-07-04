@@ -1,0 +1,42 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "heat_1d_varcoeff_dirichlet",
+  "description": "MMS gate: run the inline esm-spec 6.6 tests of problems/heat_1d_varcoeff_dirichlet.esm (model Heat, test mms_varcoeff_dirichlet_decay) at the problem's default resolution (N=64) through each binding's official simulation pathway. Exercises the conservative finite-volume variable-coefficient Laplacian rule varcoeff_laplacian_dirichlet_bc lowering the compound D(k*D(u,x),x) with mirror-ghost fixed-value walls gL=gR=0.5. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners.",
+  "problem": "../../../../problems/heat_1d_varcoeff_dirichlet.esm",
+  "model": "Heat",
+  "tests": [
+    "mms_varcoeff_dirichlet_decay"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Preemptively excluded, mirroring the same-operator sibling heat_1d_varcoeff_zero_flux: earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard and wedges (drives dt->0 without terminating) on this stiff variable-coefficient large-AST RHS. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

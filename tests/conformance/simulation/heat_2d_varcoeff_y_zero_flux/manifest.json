@@ -1,0 +1,42 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "heat_2d_varcoeff_y_zero_flux",
+  "description": "MMS gate: run the inline esm-spec 6.6 tests of problems/heat_2d_varcoeff_y_zero_flux.esm (model Heat, test mms_varcoeff_2d_y_zero_flux_decay) at the problem's default resolution (NY=64, NX edge-bound to 8) through each binding's official simulation pathway. Exercises the conservative finite-volume variable-coefficient 2-D Laplacian rule varcoeff_laplacian_y_zero_flux_bc lowering the compound D(k*D(u,y),y) over the full 2-D field. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners.",
+  "problem": "../../../../problems/heat_2d_varcoeff_y_zero_flux.esm",
+  "model": "Heat",
+  "tests": [
+    "mms_varcoeff_2d_y_zero_flux_decay"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Preemptively excluded, mirroring the same-operator sibling heat_1d_varcoeff_zero_flux: earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard and wedges (drives dt->0 without terminating) on this stiff variable-coefficient large-AST RHS. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

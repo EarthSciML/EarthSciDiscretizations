@@ -1,0 +1,267 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_1d_varcoeff_dirichlet",
+    "description": "MMS driver: 1-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit interval [0, 1] with inhomogeneous DIRICHLET (fixed-value) boundaries, discretized by the conservative finite-volume rule grids/cartesian_uniform_1d/rules/varcoeff_laplacian_dirichlet_bc. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil with mirror-ghost fixed-value faces. The coefficient k(x) = 1 + 0.5 cos(2 pi x) is a consumer-supplied observed of shape [x] (positive on [0,1], range [0.5,1.5]); it is read by the rule body at the interior faces via kf[i+1/2]=(k[i]+k[i+1])/2, and the boundary faces use the wall conductivities k[1], k[N]. Manufactured solution u(x,t) = exp(-4 pi^2 t) sin^2(pi x) + gL with gL = gR = 0.5: the decaying sin^2(pi x) = 0.5 - 0.5 cos(2 pi x) vanishes AND has zero gradient at both walls, so the wall values are the constant offset 0.5 at both x=0 and x=1 (constant in time), matched by the rule's free names gL = gR = 0.5. Choosing a mode with ZERO wall gradient is deliberate: the cell-centered mirror-ghost boundary flux 2 k[1] (u[1]-gL)/dx uses the wall conductivity k[1], whose O(dx) offset from k(x0) would multiply a nonzero wall gradient into a variable-coefficient-specific O(dx) boundary term and cause fine-grid error cancellation (a non-asymptotic super-2 order); with u_x=0 at the walls that cross term vanishes, leaving the SAME benign boundary error as the constant-coefficient central_D2_dirichlet_bc, so both L2 and Linf converge cleanly at order 2. The constant offset 0.5 is discretely exact (interior flux difference and both mirror-ghost face residuals vanish identically), so the discretization error comes solely from the sin^2 mode. Because sin^2(pi x) is NOT an eigenfunction of the variable-coefficient operator, a forcing term S(x,t) = u_t - div(k grad u) is added so u is exact for the continuous PDE. Derivation: with k' = -pi sin(2 pi x), div(k grad(exp(-4 pi^2 t) sin^2 pi x)) = exp(-4 pi^2 t)[2 pi^2 cos(2 pi x) + pi^2 cos(4 pi x)] and u_t = -4 pi^2 exp(-4 pi^2 t) sin^2(pi x) = exp(-4 pi^2 t)[-2 pi^2 + 2 pi^2 cos(2 pi x)]; choosing lambda = 4 pi^2 cancels the cos(2 pi x) terms, leaving the closed form S(x,t) = exp(-4 pi^2 t)(-2 pi^2 - pi^2 cos(4 pi x)), spelled below as a time factor exp(-4 pi^2 t) times an aggregate over cell centers. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6). gL/gR appear only in the runtime rule body; initial condition, coefficient, forcing, and test references all spell the cell-center coordinate x_i = (i - 1/2)/N inline with load-foldable scalars (AGENTS.md build-time scope caveat), with the wall constant 0.5 matching the gL/gR parameter values and the ic written in the identity form sin^2(pi x)+0.5 = 1 - 0.5 cos(2 pi x). The SAME rule also serves the nonlinear case (a consumer declaring k as an observed k=f(u)); this driver exercises the variable-coefficient dual.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (cell-centered Dirichlet)."
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_1d/rules/varcoeff_laplacian_dirichlet_bc.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": ["x"],
+          "description": "Temperature field over the x index set."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.5,
+          "description": "Prescribed field value at the left wall x=x0 (the rule's Dirichlet free name), equal to the manufactured wall value u(0,t) = 0.5 (the sin^2 mode vanishes there)."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.5,
+          "description": "Prescribed field value at the right wall x=x0+N*dx (the rule's Dirichlet free name), equal to the manufactured wall value u(1,t) = 0.5 (the sin^2 mode vanishes there)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, "N"] },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        },
+        "k": {
+          "type": "observed",
+          "units": "m^2/s",
+          "shape": ["x"],
+          "description": "Variable conductivity k(x) = 1 + 0.5 cos(2 pi x) over the x index set, evaluated at cell centers x_gi = (gi - 1/2)/N (spelled inline from literals and the metaparameter name N). Positive on [0,1] (range [0.5,1.5]). Bound by the rule's match as the coefficient k (the left factor of k*D(u,x)) and read by the expanded stencil at the faces. The aggregate loops over `gi`, NOT the stencil's interior index `i`: an array coefficient authored as an aggregate observed is inlined into the stencil's [2,N-1] aggregate at evaluation, and a shared loop-index name would be captured (see the rule description).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["gi"],
+            "args": [],
+            "ranges": { "gi": { "from": "x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["gi", 0.5] },
+                                { "op": "/", "args": [1, "N"] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i"],
+            "args": [],
+            "ranges": { "i": { "from": "x" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        { "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "k",
+                      { "op": "D", "args": ["u"], "wrt": "x" }
+                    ]
+                  }
+                ],
+                "wrt": "x"
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "exp",
+                    "args": [
+                      { "op": "*", "args": [-39.47841760435743, "t"] }
+                    ]
+                  },
+                  {
+                    "op": "aggregate",
+                    "output_idx": ["i"],
+                    "args": [],
+                    "ranges": { "i": { "from": "x" } },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        -19.739208802178716,
+                        {
+                          "op": "*",
+                          "args": [
+                            -9.869604401089358,
+                            {
+                              "op": "cos",
+                              "args": [
+                                { "op": "*", "args": [12.566370614359172, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_varcoeff_dirichlet_decay",
+          "description": "Manufactured solution u(x,t) = exp(-4 pi^2 t) sin^2(pi x) + 0.5 for u_t = div(k(x) grad u) + S(x,t) with k(x) = 1 + 0.5 cos(2 pi x) and gL = gR = 0.5. Derivation: div(k grad u) = exp(-4 pi^2 t)[2 pi^2 cos(2 pi x) + pi^2 cos(4 pi x)] and u_t = exp(-4 pi^2 t)[-2 pi^2 + 2 pi^2 cos(2 pi x)]; the forcing S = u_t - div(k grad u) = exp(-4 pi^2 t)(-2 pi^2 - pi^2 cos(4 pi x)) matches the rhs term above, so u solves the continuous PDE exactly. sin^2(pi x) has zero value AND zero gradient at both walls, so the wall values are the constant 0.5 (prescribed as gL = gR = 0.5) and the mirror-ghost boundary flux carries no variable-coefficient cross term; the constant offset is discretely exact, so the error is the sin^2 mode's O(dx^2), clean 2nd order in both L2 and Linf. References evaluate at cell centers x_i = (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameter N only; the constant 0.5 matches gL/gR, and the ic uses sin^2(pi x)+0.5 = 1 - 0.5 cos(2 pi x)). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 discretization error, which falls at the conservative-FV order 2. Exact per-resolution error values are pinned in tests/conformance/convergence/heat_1d_varcoeff_dirichlet/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "cos",
+                          "args": [
+                            { "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 2e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "exp", "args": [{ "op": "*", "args": [-39.47841760435743, 0.1] }] },
+                        {
+                          "op": "-",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    { "op": "*", "args": [6.283185307179586, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0.5
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

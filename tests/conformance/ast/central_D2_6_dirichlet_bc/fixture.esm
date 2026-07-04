@@ -1,0 +1,73 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_6_dirichlet_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/central_D2_6_dirichlet_bc: a minimal consuming model binding N=8 at the import edge. The compound match D(D(u,x),x) fires (priority 10) through the section-9.6.3 fixpoint and lowers to the rule's makearray — interior [4,5] holding the imported 7-point sixth-order stencil aggregate, boundary rows i in {1,2,3,6,7,8} holding the one-sided sixth-order Dirichlet face closures — with all metaparameters folded and the free names dx, gL, gR surviving in the expanded body. The model declares gL and gR as ordinary real parameters (gL homogeneous, gR a nonzero fixed value). x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:central_D2_6_dirichlet_bc"]
+  },
+  "models": {
+    "CentralD2Order6DirichletBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/central_D2_6_dirichlet_bc.esm",
+          "bindings": { "N": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": ["x"],
+          "description": "Temperature field over the x index set."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.0,
+          "description": "Prescribed field value at the left wall x=x0 (the rule's Dirichlet free name). Zero default = homogeneous left wall."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "K",
+          "default": 1.0,
+          "description": "Prescribed field value at the right wall (the rule's Dirichlet free name), nonzero so the inhomogeneous face term appears in the expanded golden."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 8] },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

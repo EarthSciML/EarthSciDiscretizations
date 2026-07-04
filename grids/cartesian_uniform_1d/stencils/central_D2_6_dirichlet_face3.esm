@@ -1,0 +1,40 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_6_dirichlet_face3",
+    "description": "Sixth-order one-sided second-derivative closure for the THIRD cell from a Dirichlet (fixed-value) wall on cartesian_uniform_1d, cell-centered. Match-less named scalar template; the boundary-condition rule (rules/central_D2_6_dirichlet_bc) applies it at the third interior row, whose centered 7-point stencil would reach one cell outside the domain. The same eight data as central_D2_6_dirichlet_face1/face2 (the wall value g at offset 0 and the seven nearest cells f1..f7 at offsets {1/2,3/2,5/2,7/2,9/2,11/2,13/2}*dx) fit a degree-7 polynomial; differentiating it twice at the THIRD center (offset 5/2 dx) gives D2 = (4096 g - 17589 f1 + 121836 f2 - 216216 f3 + 120120 f4 - 13585 f5 + 1404 f6 - 66 f7) / (77220 dx^2) (Fornberg 1988 weights for the offset node set and this evaluation point). Exact for polynomials up to degree 7, so the local truncation error is O(dx^6), matching the interior 7-point stencil; the eight weights sum to zero (4096 - 17589 + 121836 - 216216 + 120120 - 13585 + 1404 - 66 = 0), so a steady linear profile is discretely exact and returns identically zero. Reused unchanged at the right wall's third cell by reflection (the second derivative is even under x -> -x), with f1..f7 mapped to the cells in increasing distance from the right wall and g bound to the right wall value. `dx` is a free name resolving to the consuming model's spacing variable (the grid's consumer-supplied geometry contract; see grids/cartesian_uniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "order:6", "stencil_width:8"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_templates": {
+    "central_D2_6_dirichlet_face3": {
+      "params": ["g", "f1", "f2", "f3", "f4", "f5", "f6", "f7"],
+      "description": "D2 = (4096 g - 17589 f1 + 121836 f2 - 216216 f3 + 120120 f4 - 13585 f5 + 1404 f6 - 66 f7) / (77220 dx^2). g is the wall value; f1..f7 are the seven cells in order of increasing distance from the wall.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [4096, "g"] },
+              { "op": "*", "args": [-17589, "f1"] },
+              { "op": "*", "args": [121836, "f2"] },
+              { "op": "*", "args": [-216216, "f3"] },
+              { "op": "*", "args": [120120, "f4"] },
+              { "op": "*", "args": [-13585, "f5"] },
+              { "op": "*", "args": [1404, "f6"] },
+              { "op": "*", "args": [-66, "f7"] }
+            ]
+          },
+          { "op": "*", "args": [77220, "dx", "dx"] }
+        ]
+      }
+    }
+  }
+}

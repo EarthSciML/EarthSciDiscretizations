@@ -1,0 +1,140 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_laplacian_x_periodic",
+    "description": "The x-half of a 2-D conservative finite-volume VARIABLE-COEFFICIENT / NONLINEAR Laplacian div(k grad u) on cartesian_uniform_2d with a PERIODIC x-boundary, over the full 2-D field u[x,y]. The operator carries a coefficient, so a bare laplacian match cannot express it; the rule matches the CONSERVATIVE COMPOUND the consumer writes, D( {op:*, args:[k, D(u,wrt:x)]}, wrt:x ) -- outer-D of (k times the inner x-gradient) -- at priority 10, so under esm-spec 9.6.3 outermost-first compound precedence it fires on the whole compound before any plain-D rule could lower the inner derivative (exactly as central_D2x_periodic fires on D(D(u,x),x)). This is the 2-D per-axis lift of grids/cartesian_uniform_1d/rules/varcoeff_laplacian_periodic: the operated axis x gets an interior band plus two wrapped x-faces, while the y axis is full-rank (all rows j treated identically). BOTH operands are match wildcards bound to consumer fields: `u` (the state, inner D's argument) and `k` (the coefficient, the LEFT factor of the product); matching is structural and non-commutative, so the consumer MUST write the coefficient on the LEFT: k * D(u, wrt:x). Match-scoped with where {u:{shape:[x,y]}, k:{shape:[x,y]}} (esm-spec 9.6.1) so it fires only on the xx-conservative-compound of bare fields declared over this 2-D grid's [x,y] axes (distinct from the 1-D shape-[x] varcoeff rules); under import-edge renaming (esm-spec 9.7.7) the wrt literals and both where shapes follow the renamed axes together, so two instances coexist scoped to their own meshes. ONE rule serves two duals: the VARIABLE-COEFFICIENT case (k=k(x,y), a given periodic field) and the NONLINEAR case (k declared as an observed k=f(u)); the body only reads k by index at the faces, so a state-dependent k just makes the expanded stencil nonlinear in u with no reformulation (the keyed-factor field contract, like the grid's dx). AUTHORING CONTRACT for k: it is a declared [x,y]-shaped field; when supplied as an aggregate observed it MUST loop over indices DISTINCT from the stencil's interior indices `i`,`j` (the library convention is `gi`/`gj`), because the coefficient observed is inlined into the stencil's [2,NX-1]x[1,NY] aggregate at evaluation and a shared loop-index name is captured (silently wrong interior values). Face conductivity is the ARITHMETIC MEAN kf[i+1/2,j]=(k[i,j]+k[i+1,j])/2 (O(dx^2) at the face for a differentiable coefficient, and affine in k so it composes with the nonlinear dual). Interior i in [2,NX-1] (all j): the imported conservative x-flux-difference stencil. The two x-face columns i=1 and i=NX carry the same conservative x-flux difference with the out-of-range x-neighbor AND its coefficient wrapped periodically: at i=1 the left x-face flux uses the ghost u[0,j]=u[NX,j] and k[0,j]=k[NX,j], giving kf[1/2,j]=(k[NX,j]+k[1,j])/2 and Lx u[1,j] = ( (k[1,j]+k[2,j])/2 (u[2,j]-u[1,j]) - (k[NX,j]+k[1,j])/2 (u[1,j]-u[NX,j]) ) / dx^2; at i=NX the right x-face flux uses u[NX+1,j]=u[1,j] and k[NX+1,j]=k[1,j], giving kf[NX+1/2,j]=(k[NX,j]+k[1,j])/2 and Lx u[NX,j] = ( (k[NX,j]+k[1,j])/2 (u[1,j]-u[NX,j]) - (k[NX-1,j]+k[NX,j])/2 (u[NX,j]-u[NX-1,j]) ) / dx^2. The SAME wrapped x-face flux (k[NX,j]+k[1,j])/2 (u[1,j]-u[NX,j])/dx is the left face of column 1 and the right face of column NX, so the discrete x-operator is exactly conservative on each row (the circulant variable-coefficient x-Laplacian) and its row sums vanish. The face values are FULL-RANK aggregates (singleton output range on the x axis, all j) mirroring central_D2x_neumann_bc so every binding's simulator fills the (1 x NY) columns without rank promotion. `dx` is the grid's consumer-supplied x-spacing free name; the periodic wrap is dx-scale-invariant, so the rule serves any x-extent unchanged. The full variable-coefficient 2-D Laplacian is assembled in the consuming equation as D(k*D(u,x),x) + D(k*D(u,y),y): this rule lowers the first term. Reduces to central_D2x_periodic when k is spatially constant. Interior and periodic faces are all O(dx^2), so the whole x-operator is 2nd order with no boundary reduction. A model imports exactly one second-derivative/Laplacian rule for x.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:varcoeff_laplacian", "axes:x,y", "order:2", "stencil_width:3", "bc:periodic", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 10.4 (centered differences on periodic domains)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/varcoeff_laplacian_x_interior.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_laplacian_x_periodic": {
+      "params": ["u", "k"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "k",
+              { "op": "D", "args": ["u"], "wrt": "x" }
+            ]
+          }
+        ],
+        "wrt": "x"
+      },
+      "where": { "u": { "shape": ["x", "y"] }, "k": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NX", 1] }], [1, "NY"]],
+          [[1, 1], [1, "NY"]],
+          [["NX", "NX"], [1, "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_laplacian_x_interior",
+            "bindings": { "u": "u", "k": "k" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["u"],
+            "ranges": { "i": [1, 1], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "*", "args": [0.5, { "op": "+", "args": [
+                          { "op": "index", "args": ["k", 1, "j"] },
+                          { "op": "index", "args": ["k", 2, "j"] }
+                        ] }] },
+                        { "op": "-", "args": [
+                          { "op": "index", "args": ["u", 2, "j"] },
+                          { "op": "index", "args": ["u", 1, "j"] }
+                        ] }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "*", "args": [0.5, { "op": "+", "args": [
+                          { "op": "index", "args": ["k", "NX", "j"] },
+                          { "op": "index", "args": ["k", 1, "j"] }
+                        ] }] },
+                        { "op": "-", "args": [
+                          { "op": "index", "args": ["u", 1, "j"] },
+                          { "op": "index", "args": ["u", "NX", "j"] }
+                        ] }
+                      ]
+                    }
+                  ]
+                },
+                { "op": "*", "args": ["dx", "dx"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["u"],
+            "ranges": { "i": ["NX", "NX"], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "*", "args": [0.5, { "op": "+", "args": [
+                          { "op": "index", "args": ["k", "NX", "j"] },
+                          { "op": "index", "args": ["k", 1, "j"] }
+                        ] }] },
+                        { "op": "-", "args": [
+                          { "op": "index", "args": ["u", 1, "j"] },
+                          { "op": "index", "args": ["u", "NX", "j"] }
+                        ] }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "*", "args": [0.5, { "op": "+", "args": [
+                          { "op": "index", "args": ["k", { "op": "-", "args": ["NX", 1] }, "j"] },
+                          { "op": "index", "args": ["k", "NX", "j"] }
+                        ] }] },
+                        { "op": "-", "args": [
+                          { "op": "index", "args": ["u", "NX", "j"] },
+                          { "op": "index", "args": ["u", { "op": "-", "args": ["NX", 1] }, "j"] }
+                        ] }
+                      ]
+                    }
+                  ]
+                },
+                { "op": "*", "args": ["dx", "dx"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

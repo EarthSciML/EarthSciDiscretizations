@@ -1,0 +1,136 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "flux_limiter_minmod_D_inflow_bc",
+    "description": "Second-order TVD minmod flux-limited finite-VOLUME advective first derivative u_x with OPEN boundaries -- a prescribed inflow (Dirichlet) value at the upstream (left) wall and a one-sided extrapolation (outflow) closure at the downstream (right) wall -- on cartesian_uniform_1d, for scalar linear advection with non-negative transport speed (a consumer writes u_t = -c*D(u, wrt: x), c >= 0). This is the open-boundary sibling of rules/flux_limiter_minmod_D_periodic.esm and, unlike that ~55 KB inlined periodic file, is built THINLY on extracted stencils: the interior is a single apply of stencils/flux_limiter_minmod_D_interior.esm (which composes stencils/flux_limiter_minmod_flux.esm over stencils/minmod2.esm, the reusable minmod kernel), and the boundary faces reuse the SAME flux stencil with ghost bindings -- the good compositional pattern (mirroring rules/ppm_D_periodic over stencils/ppm_D_interior + ppm_flux, and rules/lax_friedrichs_D_inflow_bc over its interior + flux). The semi-discrete divergence is D u[i] = (G_{i+1/2} - G_{i-1/2})/dx with the minmod-limited face flux G(um1,u0,up1) = u0 + 0.5*minmod(u0 - um1, up1 - u0) (u0 the upwind cell, +x). Self-contained makearray over axis x with FOUR regions: interior [3, N-1] is the imported flux-difference aggregate; the three faces i=1, i=2, i=N reach a ghost. INFLOW (left, i=1 and the i=2 left face): the wall face flux is G_{1/2} = gL (first-order upwind: the prescribed inflow value carried into the domain, the only defensible value where the reconstruction would need the absent cell u[-1]), and the u[0] ghost that the limited face G_{3/2} = flux(gL, u[1], u[2]) needs is injected as the inflow value gL; so D u[1] = (flux(gL,u[1],u[2]) - gL)/dx and D u[2] = (flux(u[1],u[2],u[3]) - flux(gL,u[1],u[2]))/dx. Near the smooth inflow the limiter stays active (gL is a genuine one-sided slope), degrading to first-order upwind only at the wall face itself where the stencil runs out -- standard TVD boundary practice. OUTFLOW (right, i=N): the right ghost is set by ZEROTH-ORDER EXTRAPOLATION u[N+1] = u[N], so G_{N+1/2} = flux(u[N-1], u[N], u[N]); its upper slope Dp = u[N+1] - u[N] = 0 makes minmod(Dm, 0) EXACTLY 0, so the outflow face collapses to first-order upwind G_{N+1/2} = u[N] -- carrying no external data and injecting no spurious reflection (non-reflecting). The one-sided upwind/limiter closure keeps pure advection well-posed with a single upstream wall value; a two-sided fixed-value closure would over-determine the outflow. `gL` is a free name with default 0 (the same consumer-supplied contract as rules/upwind1_D_inflow_bc's gL and rules/lax_friedrichs_D_inflow_bc's gL, and the grid geometry dx; grids/cartesian_uniform_1d/grid.esm): a consuming model declares gL as an ordinary real parameter giving the field value carried into the domain at the left wall x = x0, and an unset parameter falls back to its default (esm-spec 6; 0 = zero inflow). The gL term lives only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). `dx` is likewise the grid's consumer-supplied free name; every face is dx-scale-invariant so the rule serves any domain extent unchanged. Second-order TVD where the limiter is inactive (the interior of a smooth monotone profile), monotonicity-preserving (no new extrema); the boundary faces are a formally first-order closure, but for a compatible smooth solution (exact inflow value, zero wall gradient) their residual is higher order, so the observed order approaches the design second order (norm-dependent, median ~1.9 L2 / ~1.8 Linf on the reference MMS) and is pinned honestly in tests/conformance/convergence/advection_1d_inflow_minmod. MATCH: plain D(u, wrt: x) at priority 10 (mirroring the periodic limiter sibling), match-scoped `where: {u: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the first derivative of a bare field over this grid's x index set; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together, so two cartesian instances coexist. The constraint requires a bare shaped variable. A model imports exactly one advection rule for x. Sign convention: upwind for flow in +x (inflow at the left wall).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_volume", "grid:cartesian_uniform_1d", "op:D", "axes:x", "order:2", "stencil_width:4", "bc:inflow", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Roe, P. L. (1986). Characteristic-based schemes for the Euler equations. Ann. Rev. Fluid Mech. 18:337-365 (minmod eq. 35).",
+        "doi": "10.1146/annurev.fl.18.010186.002005"
+      },
+      {
+        "citation": "Sweby, P. K. (1984). High resolution schemes using flux limiters for hyperbolic conservation laws. SIAM J. Numer. Anal. 21(5):995-1011.",
+        "doi": "10.1137/0721062"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 6.11-6.12 (flux-limiter methods) and eq. (6.35); Section 7 (inflow / outflow boundary conditions for advection)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/flux_limiter_minmod_D_interior.esm" },
+    { "ref": "../stencils/flux_limiter_minmod_flux.esm" }
+  ],
+  "expression_templates": {
+    "flux_limiter_minmod_D_inflow_bc": {
+      "params": ["u"],
+      "priority": 10,
+      "match": { "op": "D", "args": ["u"], "wrt": "x" },
+      "where": { "u": { "shape": ["x"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[3, { "op": "-", "args": ["N", 1] }]],
+          [[1, 1]],
+          [[2, 2]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "flux_limiter_minmod_D_interior",
+            "bindings": { "f": "u" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "flux_limiter_minmod_flux",
+                    "bindings": {
+                      "um1": "gL",
+                      "u0": { "op": "index", "args": ["u", 1] },
+                      "up1": { "op": "index", "args": ["u", 2] }
+                    }
+                  },
+                  "gL"
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "flux_limiter_minmod_flux",
+                    "bindings": {
+                      "um1": { "op": "index", "args": ["u", 1] },
+                      "u0": { "op": "index", "args": ["u", 2] },
+                      "up1": { "op": "index", "args": ["u", 3] }
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "flux_limiter_minmod_flux",
+                    "bindings": {
+                      "um1": "gL",
+                      "u0": { "op": "index", "args": ["u", 1] },
+                      "up1": { "op": "index", "args": ["u", 2] }
+                    }
+                  }
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "flux_limiter_minmod_flux",
+                    "bindings": {
+                      "um1": { "op": "index", "args": ["u", { "op": "-", "args": ["N", 1] }] },
+                      "u0": { "op": "index", "args": ["u", "N"] },
+                      "up1": { "op": "index", "args": ["u", "N"] }
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "flux_limiter_minmod_flux",
+                    "bindings": {
+                      "um1": { "op": "index", "args": ["u", { "op": "-", "args": ["N", 2] }] },
+                      "u0": { "op": "index", "args": ["u", { "op": "-", "args": ["N", 1] }] },
+                      "up1": { "op": "index", "args": ["u", "N"] }
+                    }
+                  }
+                ]
+              },
+              "dx"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

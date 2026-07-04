@@ -1,0 +1,38 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2y_4_neumann_face2",
+    "description": "Fourth-order one-sided second-derivative closure along y for the SECOND cell from a Neumann (fixed-flux) y-wall on cartesian_uniform_2d, cell-centered. Match-less named scalar template; the boundary-condition rule (rules/central_D2y_4_neumann_bc) applies it at the second interior y-row, tiled over all i, whose centered 5-point stencil would reach one cell outside the domain. Identical algebra to the 1-D closure grids/cartesian_uniform_1d/stencils/central_D2_4_neumann_face2, rewritten for the y-axis so the free name is `dy`. The same six data as central_D2y_4_neumann_face1 (the wall derivative q = df/dy at offset 0 and the five nearest cells f1..f5 at offsets {1/2,3/2,5/2,7/2,9/2}*dy) determine the degree-5 Hermite-type polynomial; differentiating it twice at the SECOND center (offset 3/2 dy) gives D2 = (1920 q dy + 26019 f1 - 52100 f2 + 28134 f3 - 2124 f4 + 71 f5) / (20268 dy^2). Exact for polynomials up to degree 5, so the local truncation error is O(dy^4); the five value-weights sum to zero and the derivative term supplies the exact wall slope, so a steady ramp-in-y with the matching wall flux is discretely exact. Written for a BOTTOM (low-index) y-wall where q = +df/dy points into the domain; reused unchanged at the top y-wall's second cell by reflection (the second derivative even, df/dy odd), so the rule binds q -> -qYR there with f1..f5 mapped to the cells in increasing distance from the top wall. `dy` is a free name resolving to the consuming model's y-spacing variable (grids/cartesian_uniform_2d/grid.esm).",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:cartesian_uniform_2d", "op:D2", "order:4", "stencil_width:6"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_templates": {
+    "central_D2y_4_neumann_face2": {
+      "params": ["q", "f1", "f2", "f3", "f4", "f5"],
+      "description": "D2 = (1920 q dy + 26019 f1 - 52100 f2 + 28134 f3 - 2124 f4 + 71 f5) / (20268 dy^2). q is the y-wall derivative datum entering this low-wall closure (bind q -> -qYR at the high wall); f1..f5 are the five cells (fixed i) in order of increasing distance from the y-wall.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [1920, "q", "dy"] },
+              { "op": "*", "args": [26019, "f1"] },
+              { "op": "*", "args": [-52100, "f2"] },
+              { "op": "*", "args": [28134, "f3"] },
+              { "op": "*", "args": [-2124, "f4"] },
+              { "op": "*", "args": [71, "f5"] }
+            ]
+          },
+          { "op": "*", "args": [20268, "dy", "dy"] }
+        ]
+      }
+    }
+  }
+}

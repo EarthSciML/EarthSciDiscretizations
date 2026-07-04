@@ -1,0 +1,106 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_4_neumann_bc",
+    "description": "Fourth-order centered second derivative with inhomogeneous Neumann (fixed-flux) boundaries on cartesian_uniform_1d, cell-centered. Interior [3, N-2]: the imported 5-point fourth-order stencil central_D2_4_interior, (-f[i-2] + 16 f[i-1] - 30 f[i] + 16 f[i+1] - f[i+2])/(12 dx^2), O(dx^4). The four near-boundary rows i in {1, 2, N-1, N}, whose centered 5-point stencils would reach outside the domain, are closed with the imported one-sided fourth-order face templates central_D2_4_neumann_face1 (nearest-wall row) and central_D2_4_neumann_face2 (second row): each is the unique degree-5 Hermite-type polynomial matching the prescribed wall derivative and the five nearest cell values, differentiated twice at that cell. The wall gradients `qL` (df/dx at the left wall x=x0, +x direction) and `qR` (df/dx at the right wall x=x0+N*dx, +x direction) are consumer-supplied free names; the same free-name contract as the grid geometry `dx` (grids/cartesian_uniform_1d/grid.esm). A consuming model declares qL/qR as ordinary real parameters; a parameter not overridden falls back to its default (esm-spec 6: default, or 0), so qL=qR=0 is the homogeneous (zero-flux) case and the rule reduces exactly to a zero-gradient fourth-order closure. qL/qR appear only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). The left face templates take the wall derivative datum q as their +x-into-domain slope, so the left rows bind q -> qL. The right wall reuses the SAME face weights by reflection (the second derivative is even under x -> -x while df/dx is odd), so the right rows bind q -> -qR and map f1..f5 to cells N, N-1, N-2, N-3, N-4 (increasing distance from the right wall). Because BOTH the interior stencil and all four boundary closures are O(dx^4), the global scheme is uniformly fourth order with no boundary reduction; a steady ramp carrying the wall fluxes is discretely exact at every row (the value-weight sums are zero and the derivative term supplies the exact wall slope). Verified stable for the heat operator: the homogeneous discrete Laplacian's spectrum lies in the closed left half plane with a single zero eigenvalue (the constant Neumann nullspace), exactly as the continuous pure-Neumann Laplacian. Compound match on D(D(f,x),x) at priority 10 (esm-spec 9.6.3 compound precedence), match-scoped with `where: {f: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the second derivative of a bare field declared over this grid's x index set; under import-edge renaming (esm-spec 9.7.7) the wrt literals and the where shape follow the renamed axis together. A model imports exactly one second-derivative rule for x.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "axes:x", "order:4", "stencil_width:5", "bc:neumann", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (Neumann boundary conditions; one-sided high-order closures)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D2_4_interior.esm" },
+    { "ref": "../stencils/central_D2_4_neumann_face1.esm" },
+    { "ref": "../stencils/central_D2_4_neumann_face2.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_4_neumann_bc": {
+      "params": ["f"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [ { "op": "D", "args": ["f"], "wrt": "x" } ],
+        "wrt": "x"
+      },
+      "where": { "f": { "shape": ["x"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[3, { "op": "-", "args": ["N", 2] }]],
+          [[1, 1]],
+          [[2, 2]],
+          [[{ "op": "-", "args": ["N", 1] }, { "op": "-", "args": ["N", 1] }]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_4_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_4_neumann_face1",
+            "bindings": {
+              "q": "qL",
+              "f1": { "op": "index", "args": ["f", 1] },
+              "f2": { "op": "index", "args": ["f", 2] },
+              "f3": { "op": "index", "args": ["f", 3] },
+              "f4": { "op": "index", "args": ["f", 4] },
+              "f5": { "op": "index", "args": ["f", 5] }
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_4_neumann_face2",
+            "bindings": {
+              "q": "qL",
+              "f1": { "op": "index", "args": ["f", 1] },
+              "f2": { "op": "index", "args": ["f", 2] },
+              "f3": { "op": "index", "args": ["f", 3] },
+              "f4": { "op": "index", "args": ["f", 4] },
+              "f5": { "op": "index", "args": ["f", 5] }
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_4_neumann_face2",
+            "bindings": {
+              "q": { "op": "*", "args": [-1, "qR"] },
+              "f1": { "op": "index", "args": ["f", "N"] },
+              "f2": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] },
+              "f3": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] },
+              "f4": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 3] }] },
+              "f5": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 4] }] }
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2_4_neumann_face1",
+            "bindings": {
+              "q": { "op": "*", "args": [-1, "qR"] },
+              "f1": { "op": "index", "args": ["f", "N"] },
+              "f2": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 1] }] },
+              "f3": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 2] }] },
+              "f4": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 3] }] },
+              "f5": { "op": "index", "args": ["f", { "op": "-", "args": ["N", 4] }] }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

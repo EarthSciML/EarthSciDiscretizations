@@ -1,0 +1,121 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "godunov_norm_D1_dirichlet_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/godunov_norm_D1_dirichlet_bc: a minimal consuming model binding N=8 at the import edge. The COMPOUND match sqrt((D(u,x))^2) fires (priority 10) through the section-9.6.3 fixpoint before any plain first-derivative rule could lower the inner D(u,x), lowering the whole gradient-magnitude term to the rule's makearray (interior Godunov-norm aggregate over [2,7]; mirror-ghost fixed-value faces at i=1 and i=8) with the imported interior stencil inlined, the mirror-ghost Dirichlet faces carrying the free names gL, gR and dx, all metaparameters folded, zero apply_expression_template nodes, and zero unlowered rewrite-target ops. gL is homogeneous (0), gR nonzero (1) so the inhomogeneous face term appears in the golden. x0 = 0 and dx = 1/8 spelled with the literal 8 (the import edge binds N before this document's scope; grids/cartesian_uniform_1d/grid.esm contract). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:godunov_norm_D1_dirichlet_bc"
+    ]
+  },
+  "models": {
+    "GodunovNormD1DirichletBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/godunov_norm_D1_dirichlet_bc.esm",
+          "bindings": {
+            "N": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x"
+          ],
+          "description": "Level-set / eikonal field over the x index set."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "1/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi speed (psi_t = -S|grad psi|)."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.0,
+          "description": "Prescribed left-wall value (rule Dirichlet free name); homogeneous."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1.0,
+          "description": "Prescribed right-wall value (rule Dirichlet free name); nonzero so the inhomogeneous face term appears in the golden."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
+              {
+                "op": "sqrt",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,524 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_1d_nonuniform_neumann",
+    "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the unit interval [0, 1] discretized on a SMOOTHLY STRETCHED non-uniform mesh by grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_neumann_bc (conservative finite-volume, inhomogeneous fixed-flux Neumann walls). Manufactured solution u(x,t) = x + exp(-alpha pi^2 t) cos(pi x): the linear ramp x has zero second derivative, and cos(pi x) gives u_xx = -pi^2 exp(-alpha pi^2 t) cos(pi x) with u_t = -alpha pi^2 exp(-alpha pi^2 t) cos(pi x), so u_t = alpha u_xx exactly with no forcing term. Its wall GRADIENT u_x = 1 - pi exp(-alpha pi^2 t) sin(pi x) equals the CONSTANT 1 at both walls (sin vanishes at x=0 and x=1), so the prescribed fluxes are qL = qR = 1, genuinely inhomogeneous (nonzero) Neumann. The discrete operator ANNIHILATES the linear ramp x exactly: every discrete face gradient of x is (x[j+1]-x[j])/(xc[j+1]-xc[j]) = 1, so the interior flux difference is 1-1=0 and, at the walls, the prescribed qL=qR=1 cancels the ramp's wall face gradient too; what remains is exactly the zero-flux evolution of the decaying cos mode (whose wall gradient is zero). Hence this Neumann problem's spatial error EQUALS the zero-flux problem heat_1d_nonuniform's error at every resolution while exercising the nonzero qL/qR terms. The mesh follows the grid's EDGE-ARRAY contract (grids/cartesian_nonuniform_1d/grid.esm): the consumer supplies ONE node array xe (shape [x_nodes], N+1 values) for the quadratic stretch x(xi) = 0.6 xi + 0.4 xi^2 on uniform computational nodes xi_k = (k-1)/N, i.e. xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 (xe[1]=0, xe[N+1]=1), and the GRID derives the cell centers xc and control widths dxw from it via the nonuniform_cell_center / nonuniform_cell_width templates -- so xc and dxw cannot disagree, and a loader-API rebinding of N re-sizes x_nodes and re-derives the whole mesh consistently. The prescribed wall fluxes are the rule's free names qL, qR, declared here as ordinary real parameters with value 1 (matched to the manufactured ramp's unit wall gradient); the rule reads qL/qR only in its runtime body, never in the build-time ic/reference. The conservative FV Neumann Laplacian is second-order in the L2 norm on this smooth mesh (supraconvergence; verified L2 orders ~2.0), so the convergence gate checks L2 only, consistent with heat_1d_nonuniform. Initial condition and test references spell xc[i] = (xe(i-1)+xe(i))/2 inline from literals and N alone (the build-time 6.6.5/ic cellwise evaluation is scope-free; AGENTS.md build-time scope caveat; qL/qR are not referenced there), algebraically identical to the grid-derived xc observed used at runtime by the rule, so the t=0 assertion is exact.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_nonuniform_1d",
+      "equation:heat",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Sections 2.12 (Neumann boundary conditions) and 2.13 (nonuniform grids) and the supraconvergence discussion."
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_neumann_bc.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": [
+            "x"
+          ],
+          "description": "Temperature field over the x index set."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "qL": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 1.0,
+          "description": "Prescribed du/dx (+x direction) at the left wall x=xe[1] (the rule's Neumann free name). Set to 1 to match the manufactured ramp's unit wall gradient u_x(0)=1; nonzero, so the inhomogeneous left flux term is exercised."
+        },
+        "qR": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 1.0,
+          "description": "Prescribed du/dx (+x direction) at the right wall x=xe[N+1] (the rule's Neumann free name). Set to 1 to match the manufactured ramp's unit wall gradient u_x(1)=1; nonzero, so the inhomogeneous right flux term is exercised."
+        },
+        "xe": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x_nodes"
+          ],
+          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input, over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` (over x_nodes), distinct from the cell index.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "k": {
+                "from": "x_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "xc": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by the rule body for the center-to-center face-gradient denominators.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_center",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        },
+        "dxw": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Finite-volume control widths, GRID-DERIVED from xe by applying nonuniform_cell_width (dxw[i] = xe[i+1]-xe[i]). Read by the rule body as the outer control-cell divisor for both the interior flux difference and the Neumann wall faces. Because both xc and dxw descend from the same xe they are automatically consistent.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_width",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "aggregate",
+                "output_idx": [
+                  "i"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  }
+                },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      3.141592653589793,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_nonuniform_neumann_decay",
+          "description": "Manufactured solution u(x,t) = x + exp(-alpha pi^2 t) cos(pi x) with alpha = 0.01 on the quadratic-stretch mesh (b=0.4), inhomogeneous Neumann qL=qR=1 (the unit wall gradient of the ramp x). The linear ramp is annihilated exactly by the discrete operator (every discrete face gradient of x equals 1, cancelled at the walls by qL=qR=1), so only the zero-flux evolution of the decaying cos mode carries error; cos(pi x) has zero wall gradient and u_t = alpha u_xx exactly, no forcing. References evaluate at the stretched cell centers xc[i] = (xe(i-1)+xe(i))/2, xe(k) = 0.6 (k/N)+0.4 (k/N)^2, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameter N only; qL/qR are not referenced here), algebraically identical to the grid-derived xc observed. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the L2 error, which falls at the supraconvergent order 2 and equals the zero-flux problem heat_1d_nonuniform's error. Exact per-resolution errors are pinned in tests/conformance/convergence/heat_1d_nonuniform_neumann/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "exp",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              -0.01,
+                              9.869604401089358,
+                              0.1
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "cos",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              3.141592653589793,
+                              {
+                                "op": "aggregate",
+                                "output_idx": [
+                                  "i"
+                                ],
+                                "args": [],
+                                "ranges": {
+                                  "i": {
+                                    "from": "x"
+                                  }
+                                },
+                                "expr": {
+                                  "op": "*",
+                                  "args": [
+                                    0.5,
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
+                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
+                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

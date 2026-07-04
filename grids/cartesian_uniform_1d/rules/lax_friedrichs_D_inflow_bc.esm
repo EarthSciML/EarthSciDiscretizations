@@ -1,0 +1,104 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "lax_friedrichs_D_inflow_bc",
+    "description": "First-order Lax-Friedrichs / Rusanov finite-volume advective first derivative u_x with OPEN boundaries -- a prescribed inflow (Dirichlet) value at the upstream (left) wall and a one-sided extrapolation (outflow) closure at the downstream (right) wall -- on cartesian_uniform_1d, for scalar linear advection with non-negative transport speed (a consumer writes u_t = -c*D(u, wrt: x), c >= 0). This is the open-boundary sibling of rules/lax_friedrichs_D_periodic.esm and, unlike that 55-region inlined periodic file, is built THINLY on extracted stencils: the interior is a single apply of stencils/lax_friedrichs_D_interior.esm (which itself composes stencils/lax_friedrichs_flux.esm, the reusable Rusanov face flux), and the two boundary faces reuse the same flux stencil with ghost bindings -- the good compositional pattern (mirroring rules/ppm_D_periodic over stencils/ppm_D_interior + ppm_flux). The semi-discrete divergence is D u[i] = (G_{i+1/2} - G_{i-1/2})/dx with G(uL,uR) = 0.5*(uL+uR) - 0.5*(uR-uL). Self-contained makearray over axis x: interior [2, N-1] is the imported flux-difference; the two faces reach a ghost. INFLOW (i=1, upstream): G_{1/2} = lax_friedrichs_flux(gL, u[1]) injects the consumer-supplied inflow value gL as the left ghost, and G_{3/2} = lax_friedrichs_flux(u[1], u[2]); D u[1] = (G_{3/2} - G_{1/2})/dx. OUTFLOW (i=N, downstream): the right ghost is set by ZEROTH-ORDER EXTRAPOLATION u[N+1] = u[N], so G_{N+1/2} = lax_friedrichs_flux(u[N], u[N]), and G_{N-1/2} = lax_friedrichs_flux(u[N-1], u[N]); D u[N] = (G_{N+1/2} - G_{N-1/2})/dx. NON-REFLECTING (why extrapolation is the correct outflow closure): the Rusanov flux for a linear flux simplifies to the upwind value G(uL,uR) = uL, so G_{N+1/2} = lax_friedrichs_flux(u[N], u[N]) = u[N] regardless of the extrapolated ghost -- the outflow face carries no external data and injects no spurious reflection (equivalently the extrapolation is EXACT for this flux), while G_{1/2} = lax_friedrichs_flux(gL, u[1]) = gL is exactly the prescribed inflow. So the open-boundary Lax-Friedrichs operator is bit-identical to the one-sided upwind inflow rule (upwind1_D_inflow_bc), which is why pure advection is well-posed with this single upstream wall value (a two-sided fixed-value/central closure would over-determine the outflow and need added diffusion; the one-sided upwind/LxF closure does not). `gL` is a free name with default 0 (the same consumer-supplied contract as rules/upwind1_D_inflow_bc's gL and the grid geometry dx; grids/cartesian_uniform_1d/grid.esm): a consuming model declares gL as an ordinary real parameter giving the field value carried into the domain at the left wall x = x0, and an unset parameter falls back to its default (esm-spec 6; 0 = zero inflow). The gL term lives only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). `dx` is likewise the grid's consumer-supplied free name; both faces are dx-scale-invariant so the rule serves any domain extent unchanged. O(dx), monotone (LxF numerical viscosity). MATCH: plain D(u, wrt: x) at priority 10 (mirroring the periodic LxF sibling), match-scoped `where: {u: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the first derivative of a bare field over this grid's x index set; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together, so two cartesian instances coexist. The constraint requires a bare shaped variable. A model imports exactly one advection rule for x. Sign convention: upwind for flow in +x (inflow at the left wall).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_volume", "grid:cartesian_uniform_1d", "op:D", "axes:x", "order:1", "stencil_width:3", "bc:inflow", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 4 (Lax-Friedrichs / Rusanov); Section 7 (inflow / outflow boundary conditions for advection)."
+      },
+      {
+        "citation": "Rusanov, V. V. (1961). Calculation of interaction of non-steady shock waves with obstacles. J. Comput. Math. Phys. USSR 1:267-279 (local Lax-Friedrichs / Rusanov flux); Lax, P. D. (1954). Weak solutions of nonlinear hyperbolic equations. Comm. Pure Appl. Math. 7:159-193."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/lax_friedrichs_D_interior.esm" },
+    { "ref": "../stencils/lax_friedrichs_flux.esm" }
+  ],
+  "expression_templates": {
+    "lax_friedrichs_D_inflow_bc": {
+      "params": ["u"],
+      "priority": 10,
+      "match": { "op": "D", "args": ["u"], "wrt": "x" },
+      "where": { "u": { "shape": ["x"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["N", 1] }]],
+          [[1, 1]],
+          [["N", "N"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lax_friedrichs_D_interior",
+            "bindings": { "f": "u" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "lax_friedrichs_flux",
+                    "bindings": {
+                      "uL": { "op": "index", "args": ["u", 1] },
+                      "uR": { "op": "index", "args": ["u", 2] }
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "lax_friedrichs_flux",
+                    "bindings": {
+                      "uL": "gL",
+                      "uR": { "op": "index", "args": ["u", 1] }
+                    }
+                  }
+                ]
+              },
+              "dx"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "lax_friedrichs_flux",
+                    "bindings": {
+                      "uL": { "op": "index", "args": ["u", "N"] },
+                      "uR": { "op": "index", "args": ["u", "N"] }
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "lax_friedrichs_flux",
+                    "bindings": {
+                      "uL": { "op": "index", "args": ["u", { "op": "-", "args": ["N", 1] }] },
+                      "uR": { "op": "index", "args": ["u", "N"] }
+                    }
+                  }
+                ]
+              },
+              "dx"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

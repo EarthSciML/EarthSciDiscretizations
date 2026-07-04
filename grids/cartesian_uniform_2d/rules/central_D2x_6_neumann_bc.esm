@@ -1,0 +1,835 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2x_6_neumann_bc",
+    "description": "The x-half of a sixth-order 2-D Laplacian on cartesian_uniform_2d with inhomogeneous NEUMANN conditions on the two x-walls, over the full 2-D field f[x,y], cell-centered. Interior x in [4, NX-3] (all y): the imported 7-point sixth-order x-stencil central_D2x_6_interior, O(dx^6). The six near-x-wall lines x in {1,2,3,NX-2,NX-1,NX}, whose centered 7-point stencils would reach outside the domain, are closed with the imported one-sided sixth-order face templates central_D2x_6_neumann_face1/face2/face3 (nearest, second, third column), each applied as a FULL-RANK aggregate over all y (singleton output range on x): the unique degree-7 polynomial matching the prescribed wall datum and the seven nearest cells (at fixed y), differentiated twice at that cell. The wall gradients `qXL` (df/dx at the low wall) and `qXR` (df/dx at the high wall) are consumer-supplied free names; an un-overridden parameter defaults to 0, so qXL=qXR=0 is the homogeneous (zero-flux) case and the rule reduces exactly to a zero-gradient sixth-order closure. The low face templates take q as the +x-into-domain slope, so the low rows bind q -> qXL. The far wall reuses the SAME face weights by reflection (the second derivative even, df/dx odd), so the far rows bind q -> -qXR and map f1..f7 to cells NX, NX-1, ..., NX-6. The wall free names appear only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). Because BOTH the interior stencil and all six boundary closures are O(dx^6), the x-operator is uniformly sixth order with no boundary reduction; a steady ramp-in-x carrying the wall fluxes is discretely exact at every line (all closure value-weight sums are zero). The full sixth-order Laplacian is assembled in the consuming equation as D(D(f,x),x) + D(D(f,y),y): this rule lowers the x-term. Compound match on D(D(f,x),x) at priority 10 (esm-spec 9.6.3), match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec 9.6.1) so it fires only on the xx-second-derivative of a bare field declared over this 2-D grid's [x, y] axes; under import-edge renaming (esm-spec 9.7.7) the wrt literals and the where shape follow the renamed axes together. Requires NX >= 7. A model imports exactly one second-derivative rule for x.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D2",
+      "axes:x,y",
+      "order:6",
+      "stencil_width:7",
+      "bc:neumann",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (one-sided high-order closures) and Chapter 3 (multidimensional Poisson/heat by dimension-wise second differences)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/central_D2x_6_interior.esm"
+    },
+    {
+      "ref": "../stencils/central_D2x_6_neumann_face1.esm"
+    },
+    {
+      "ref": "../stencils/central_D2x_6_neumann_face2.esm"
+    },
+    {
+      "ref": "../stencils/central_D2x_6_neumann_face3.esm"
+    }
+  ],
+  "expression_templates": {
+    "central_D2x_6_neumann_bc": {
+      "params": [
+        "f"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "D",
+            "args": [
+              "f"
+            ],
+            "wrt": "x"
+          }
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  3
+                ]
+              }
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              3,
+              3
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  2
+                ]
+              }
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2x_6_interior",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face1",
+              "bindings": {
+                "q": "qXL",
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    1,
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    2,
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    3,
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    4,
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    5,
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    6,
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    7,
+                    "j"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                2
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face2",
+              "bindings": {
+                "q": "qXL",
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    1,
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    2,
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    3,
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    4,
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    5,
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    6,
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    7,
+                    "j"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                3,
+                3
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face3",
+              "bindings": {
+                "q": "qXL",
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    1,
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    2,
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    3,
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    4,
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    5,
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    6,
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    7,
+                    "j"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    2
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    2
+                  ]
+                }
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face3",
+              "bindings": {
+                "q": {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    "qXR"
+                  ]
+                },
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    "NX",
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        1
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        2
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        3
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        4
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        5
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        6
+                      ]
+                    },
+                    "j"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                }
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face2",
+              "bindings": {
+                "q": {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    "qXR"
+                  ]
+                },
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    "NX",
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        1
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        2
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        3
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        4
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        5
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        6
+                      ]
+                    },
+                    "j"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "central_D2x_6_neumann_face1",
+              "bindings": {
+                "q": {
+                  "op": "*",
+                  "args": [
+                    -1,
+                    "qXR"
+                  ]
+                },
+                "f1": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    "NX",
+                    "j"
+                  ]
+                },
+                "f2": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        1
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f3": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        2
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f4": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        3
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f5": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        4
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f6": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        5
+                      ]
+                    },
+                    "j"
+                  ]
+                },
+                "f7": {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NX",
+                        6
+                      ]
+                    },
+                    "j"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

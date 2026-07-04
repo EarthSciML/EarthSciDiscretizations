@@ -1,0 +1,115 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_laplacian_neumann_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/varcoeff_laplacian_neumann_bc: a minimal consuming model binding N=8 at the import edge. The compound match D( k * D(u,x), x ) must fire through the section-9.6.3 fixpoint (priority 10) and lower to the rule's makearray -- interior [2,7] holding the imported conservative flux-difference stencil aggregate over u and k, faces i=1 and i=8 holding the prescribed-flux one-sided faces (the dropped-flux zero-flux face value minus qL/dx at i=1, plus qR/dx at i=8) -- with zero apply_expression_template nodes, zero surviving spatial D, and the free names dx, qL, qR surviving in the expanded body. The model declares qL and qR as ordinary real parameters; qL keeps its zero default (homogeneous left wall, so at i=1 the qL/dx term is present but zero) and qR is a nonzero fixed flux, so the golden pins both the homogeneous and the inhomogeneous face spellings. The coefficient k is a consumer-supplied field of shape [x] (here k=1+0.5 cos(2 pi x_i)), bound by the match as the LEFT factor of the product; u is the state. x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:varcoeff_laplacian_neumann_bc"]
+  },
+  "models": {
+    "VarcoeffLaplacianNeumannBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/varcoeff_laplacian_neumann_bc.esm",
+          "bindings": { "N": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": ["x"],
+          "description": "Temperature field over the x index set."
+        },
+        "k": {
+          "type": "observed",
+          "units": "m^2/s",
+          "shape": ["x"],
+          "description": "Consumer-supplied variable conductivity of shape [x], k_gi = 1 + 0.5 cos(2 pi x_gi) at cell centers x_gi = (gi - 1/2)/8, spelled inline from literals and the edge-bound N=8. Bound by the rule's match as the coefficient k (the left factor of k*D(u,x)); read by the expanded stencil at the interior faces. The boundary faces prescribe the flux directly and read no wall conductivity. The aggregate loops over `gi`, distinct from the stencil's interior index `i`, per the keyed-factor convention (see the rule description).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["gi"],
+            "args": [],
+            "ranges": { "gi": { "from": "x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["gi", 0.5] },
+                                { "op": "/", "args": [1, 8] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "qL": {
+          "type": "parameter",
+          "units": "K*m/s",
+          "default": 0.0,
+          "description": "Prescribed physical flux k du/dx at the left wall x=x0 (the rule's Neumann free name). Zero default = homogeneous (zero-flux) left wall."
+        },
+        "qR": {
+          "type": "parameter",
+          "units": "K*m/s",
+          "default": 2.5,
+          "description": "Prescribed physical flux k du/dx at the right wall (the rule's Neumann free name), nonzero so the inhomogeneous face term appears in the expanded golden."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 8] },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "k",
+                  { "op": "D", "args": ["u"], "wrt": "x" }
+                ]
+              }
+            ],
+            "wrt": "x"
+          }
+        }
+      ]
+    }
+  }
+}

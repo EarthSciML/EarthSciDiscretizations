@@ -1,0 +1,506 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_2d_varcoeff_y_dirichlet",
+    "description": "MMS driver: 2-D VARIABLE-COEFFICIENT heat equation u_t = div(k(y) grad u) + S(y,t) on the unit box [0,1]x[0,1] reduced to y-diffusion, with inhomogeneous DIRICHLET (fixed-value) conditions on the two y-walls, discretized by the conservative finite-volume rule grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_dirichlet_bc over the full 2-D field u[x,y]. The consumer writes the operator as the conservative compound D(k*D(u,y),y) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil plus the two y-edge faces. This is the exact 2-D per-axis lift of problems/heat_1d_varcoeff_dirichlet: the manufactured solution and the coefficient k(y) = 1 + 0.5 cos(2 pi y) depend only on y and are constant in the passive x axis, so the y-operator reproduces the 1-D behaviour on every x-column and the discretization error equals the 1-D case (relative L2 and absolute Linf are invariant under the passive-axis replication). The passive x axis is PASSIVE: u is constant in x, no x-operator appears, and NX is closed to 8 at the import edge; NY stays open (grid default 64, rebound by the convergence sweep via the loader API). k is a consumer-supplied [x,y]-shaped observed read by the rule at the y-faces; its aggregate loops over gj/gi (DISTINCT from the stencil's interior i/j) per the keyed-factor capture-avoidance contract (see the rule). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the wall free names gB/gT live only in the runtime rule body; the ic, coefficient, forcing, and test references spell the cell-center coordinate (j-1/2)/NY inline from literals and the metaparameter NY (the build-time cellwise evaluator is scope-free), never invoking the grid's y_coord free-name template. The SAME rule also serves the nonlinear case (a consumer declaring k=f(u)); this driver exercises the variable-coefficient dual.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:heat",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form)."
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_dirichlet_bc.esm",
+          "bindings": {
+            "NX": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Temperature field over the 2-D [x, y] index sets (constant in the passive axis in this per-axis driver)."
+        },
+        "gB": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.5,
+          "description": "Prescribed field value at the bottom y-wall y=y0 (the rule's Dirichlet free name), equal to the manufactured wall value 0.5 (the decaying sin^2 mode vanishes there)."
+        },
+        "gT": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.5,
+          "description": "Prescribed field value at the top y-wall y=y0+NY*dy (the rule's Dirichlet free name), equal to the manufactured wall value 0.5 (the decaying sin^2 mode vanishes there)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (unit box): the grid's y0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          },
+          "description": "x-spacing 1/NX: the grid's dx free name, resolved in the rewrite rule's expanded body at evaluation. NX substituted as an integer literal at load (esm-spec 9.7.6) so the convergence sweep stays consistent."
+        },
+        "dy": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          },
+          "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the convergence sweep stays consistent."
+        },
+        "k": {
+          "type": "observed",
+          "units": "m^2/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Variable conductivity k(y) = 1 + 0.5 cos(2 pi y) over the 2-D [x, y] index sets (constant in the passive axis), evaluated at cell centers (gj - 1/2)/NY spelled inline from literals and the metaparameter name NY. Positive (range [0.5, 1.5]). Bound by the rule's match as the coefficient k (the left factor of k*D(u,y)) and read by the expanded stencil at the y-faces via kf = (k[.]+k[.])/2. The aggregate loops over gj/gi, DISTINCT from the stencil's interior indices i/j: an array coefficient authored as an aggregate observed is inlined into the stencil's interior aggregate at evaluation, and a shared loop-index name would be captured (see the rule description).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gi",
+              "gj"
+            ],
+            "args": [],
+            "ranges": {
+              "gi": {
+                "from": "x"
+              },
+              "gj": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "gj",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "k",
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "y"
+                      }
+                    ]
+                  }
+                ],
+                "wrt": "y"
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "exp",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          -39.47841760435743,
+                          "t"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      },
+                      "j": {
+                        "from": "y"
+                      }
+                    },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        -19.739208802178716,
+                        {
+                          "op": "*",
+                          "args": [
+                            -9.869604401089358,
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    12.566370614359172,
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            1,
+                                            "NY"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_varcoeff_2d_y_dirichlet_decay",
+          "description": "Manufactured solution (constant in the passive x axis) for the 2-D variable-coefficient heat equation u_t = div(k(y) grad u) + S(y,t) reduced to y-diffusion, with k(y) = 1 + 0.5 cos(2 pi y) and inhomogeneous DIRICHLET (fixed-value) y-walls. This is the exact per-axis 2-D lift of problems/heat_1d_varcoeff_dirichlet: u and k depend only on y and are replicated across the passive x axis (closed to NX=8 at the import edge), so the relative-L2/Linf errors are identical to that 1-D case and fall at the conservative-FV order 2. Boundary compatibility: the decaying sin^2(pi y) mode vanishes AND has zero gradient at both walls, so the wall value is the constant 0.5 (= gWALL) and the mirror-ghost boundary flux carries no variable-coefficient cross term. The closed-form MMS forcing S makes u exact for the continuous PDE (derivation mirrors heat_1d_varcoeff_dirichlet). References evaluate at cell centers (j-1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameter NY only); the wall free names gB/gT live only in the runtime rule body. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error. Exact per-resolution errors are pinned in tests/conformance/convergence/heat_2d_varcoeff_y_dirichlet/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.002
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "exp",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                -39.47841760435743,
+                                0.1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        6.283185307179586,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NY"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0.5
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

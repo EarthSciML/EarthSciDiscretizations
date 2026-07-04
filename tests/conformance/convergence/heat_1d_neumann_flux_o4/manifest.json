@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_1d_neumann_flux_o4",
+  "description": "Observed-order-of-accuracy sweep for the fourth-order inhomogeneous-Neumann rule central_D2_4_neumann_bc driven by problems/heat_1d_neumann_flux_o4.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding of N (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files. The manufactured solution exp(-alpha pi^2 t) cos(pi x) + b x is exact for the continuous PDE with constant wall flux b = qL = qR = 1 (derivation in the problem file); the steady ramp is discretely exact (interior and boundary closures return zero on any matching ramp), so the recorded L2/Linf errors at t=0.1 are pure spatial-discretization error from the cosine mode. Both the interior 5-point stencil and the one-sided boundary-row closures are derived to be O(dx^4) (Fornberg 1988 offset-node weights, one order per row verified symbolically), so the ASYMPTOTIC order is 4 and expected_order is pinned to that design order. HONEST OBSERVED BEHAVIOR: over n=8..64 the smooth cosine mode is mildly SUPERCONVERGENT — the Julia sweep gives median pairwise orders 4.39 (L2, pairwise 4.25/4.51/4.39) and 4.33 (Linf, pairwise 3.83/4.33/4.90), running above 4 in this pre-asymptotic range and turning back toward 4 at finer n. This is favorable, not a boundary-limited reduction; nothing is fudged toward a higher nominal order. order_tolerance is therefore widened to 0.5 (vs the 0.2 used for the clean fourth-order Dirichlet sibling) so the 4.0 design order brackets the observed 4.3-4.4 superconvergent transient. Resolutions n=8..64 mirror the heat_1d_periodic_o4 sweep so the tiny high-order errors stay above the integrator temporal floor; tolerances are tightened to 1e-12/1e-14 so the errors stay spatial-dominated and cross-binding reproducible.",
+  "problem": "../../../../problems/heat_1d_neumann_flux_o4.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/central_D2_4_neumann_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 8, "bindings": { "N": 8 } },
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 4.0,
+  "order_tolerance": 0.5,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-12, "abstol": 1e-14 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-12, "abstol": 1e-14 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}
