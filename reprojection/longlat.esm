@@ -1,180 +1,37 @@
 {
-  "esm": "0.6.0",
+  "esm": "0.8.0",
   "metadata": {
     "name": "longlat",
-    "description": "RFC pure-io-data-loaders §5.1 (bead esd-47z.1): the CONVENTION-ESTABLISHING reprojection model — the geographic WGS84 long/lat 'identity' projection (PROJ `+proj=longlat`), authored as a plain declarative .esm over the EXISTING operator set with NO new rule-schema, scaffold, validation, resolver, or per-binding code. It is structurally identical to regridding/conservative_regrid_overlap_join.esm: the projection's configuration is a `parameter` input (`lon_0`, the central meridian / prime-meridian offset, exactly as the regridder's `dx`/`dy`/`atol` knobs ride as scalar parameters driven via parameter_overrides), and the FORWARD (geographic→projected) and INVERSE (projected→geographic) maps are `observed` variables defined by ordinary equations over the operator set. A coordinate transform is a POINT-WISE SCALAR FORMULA, so the maps are SCALAR observeds (a binding applies the kernel over a coordinate array at the runtime layer): the engine's tree-walk evaluator accepts array-shaped parameters/observeds ONLY when a geometry kernel (intersect_polygon) or value-invention (skolem/distinct) is active (it materializes those into const_arrays at setup); a pure transform has neither, so the declarative form is the scalar kernel — exactly the regridder's `narrow_phase_area`/`A_ij_rep` SCALAR pair, not its array-shaped `A_ij`. The maps: FORWARD x = lon − lon_0, y = lat; INVERSE lon = x + lon_0, lat = y. The inverse equations compose on the forward observeds (`geo_lon = proj_x + lon_0` reads `proj_x`; `geo_lat = proj_y` reads `proj_y` — the observed-substitution pipeline resolves the chain), so the inverse∘forward ROUND-TRIP is the identity on (lon, lat) BY CONSTRUCTION. With the WGS84 default lon_0 = 0 the forward map degenerates to the pure geographic identity x = lon, y = lat (the bead's 'forward = inverse = identity'); a non-zero lon_0 makes the parameter LOAD-BEARING (x = lon − lon_0 ≠ lon) while the round-trip stays the identity — this is what proves the existing .esm format can BIND a PARAMETERIZED transform (the declarative-or-fail acceptance), not merely a constant. SURFACING: each observed map is read off through the engine via the regridder's zero-IC state idiom — a `state` whose D-equation is d(state)/dt = <observed> from a zero initial condition, so `du = f!(u0)` at the zero IC IS the map's value (the `narrow_phase_area` precedent). `forward_x`/`forward_y` surface the forward map; `roundtrip_lon`/`roundtrip_lat` surface the inverse∘forward round-trip. Julia EVALUATES it through build_evaluator (the longlat_conformance_test.jl gate: round-trip == input exactly at lon_0 = 0, isapprox at lon_0 ≠ 0, with the forward asserting lon_0 is load-bearing); the other bindings schema-/structurally-validate the document. NO NEW PHYSICAL OPERATOR: the model composes from `-`, `+`, and `D` over scalar `parameter`/`observed`/`state` — all already landed. This is the template the rest of the reprojection/ family (mercator, lambert_conformal, etc.) mirrors: declare the projection's parameters, author forward + inverse observed maps as equations, gate on the round-trip.",
-    "authors": [
-      "earthscidiscretizations/gastown.furiosa"
-    ],
-    "tags": [
-      "reprojection",
-      "coordinate-transform",
-      "longlat",
-      "geographic",
-      "wgs84",
-      "identity",
-      "forward-inverse",
-      "round-trip",
-      "parameterized-transform",
-      "observed",
-      "declarative",
-      "pure-io-data-loaders",
-      "esd-47z.1"
+    "description": "Geographic lon-lat 'projection' (PROJ +proj=longlat; identity / plate carree in degrees), as a template library (esm-spec 9.7). This is the CONVENTION-ESTABLISHING degenerate base case for the reprojection/ family: every esd:reproject library declares four match-less scalar templates -- <crs>_forward_x and <crs>_forward_y taking the geographic point (lon, lat, in degrees) plus the projection constants and returning the projected coordinate (x resp. y), and <crs>_inverse_lon and <crs>_inverse_lat taking the projected point (x, y) plus the SAME constants and returning the geographic coordinate. A coordinate transform is a POINT-WISE SCALAR FORMULA, so each template body is a scalar expression; a consumer maps it over a coordinate array with an ordinary aggregate (bind lon/lat to indexed reads), or evaluates it at scalars. Projection constants are TEMPLATE PARAMETERS, not metaparameters: metaparameters are load-time integers (9.7.6) while lon_0 etc. are real-valued, and template parameters bind arbitrary expressions (numeric literals included) at each apply_expression_template site. Every template takes the full signature even where an argument is unused (longlat's y is independent of lon and lon_0) -- uniform signatures are what let a consumer swap CRS libraries without rewiring bindings; esm-spec 9.6.1 explicitly allows a parameter to occur zero times in the body. The math (archive/reprojection/longlat.esm, re-expressed in the 0.8.0 library form): FORWARD x = lon - lon_0, y = lat; INVERSE lon = x + lon_0, lat = y. inverse(forward(lon, lat)) = (lon - lon_0) + lon_0 = lon and lat = lat, so the round-trip is the identity by construction; with lon_0 = 0 the forward map degenerates to the pure geographic identity, and a non-zero lon_0 keeps the parameter load-bearing. Units convention: lon/lat and x/y are all DEGREES for this CRS (a projected CRS such as lambert_conformal returns metres -- the units are part of each library's documented contract, not of the shared signature).",
+    "license": "MIT",
+    "tags": ["esd:reproject", "crs:longlat", "forward-inverse", "identity", "plate-carree"],
+    "references": [
+      {
+        "citation": "Snyder, J. P. (1987). Map Projections -- A Working Manual. U.S. Geological Survey Professional Paper 1395, pp. 90-91 (Equirectangular projection, eqs. 12-1..12-6 with phi_1 = 0: the degenerate plate carree case, here kept in degrees).",
+        "url": "https://pubs.usgs.gov/pp/1395/report.pdf"
+      }
     ]
   },
-  "models": {
-    "LongLat": {
-      "variables": {
-        "lon": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Input geographic longitude (degrees) of the coordinate being transformed — the `lon` operand of the forward map. A scalar parameter driven via parameter_overrides; a binding applies the kernel over a coordinate array at the runtime layer."
-        },
-        "lat": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Input geographic latitude (degrees). longlat is the identity in latitude, so it passes through both maps unchanged."
-        },
-        "lon_0": {
-          "type": "parameter",
-          "shape": [],
-          "description": "The projection PARAMETER: the central meridian / prime-meridian offset in degrees (PROJ `+lon_0`). A scalar parameter knob driven via parameter_overrides, exactly as the regridder drives `dx`/`dy`/`atol`. WGS84 longlat defaults to lon_0 = 0 (Greenwich), at which the forward map is the pure geographic identity; a non-zero value shifts longitude and makes the parameter load-bearing while the inverse∘forward round-trip stays the identity."
-        },
-        "proj_x": {
-          "type": "observed",
-          "shape": [],
-          "description": "FORWARD map, x component: proj_x = lon − lon_0. A scalar observed over the operator set, the longlat analogue of the regridder's scalar observed `A_ij_rep` — no new leaf op. At lon_0 = 0 this is x = lon (geographic identity). The schema-canonical `expression` here IS the map definition; it is mirrored as an equation below so the non-geometry tree-walk evaluator's observed-substitution binds it (build_evaluator synthesizes expression→equation only under a geometry/value-invention kernel, RFC §8.1).",
-          "expression": {
-            "op": "-",
-            "args": [
-              "lon",
-              "lon_0"
-            ]
-          }
-        },
-        "proj_y": {
-          "type": "observed",
-          "shape": [],
-          "description": "FORWARD map, y component: proj_y = lat. longlat is the identity in latitude, so the forward y map passes the input latitude through unchanged (a bare-variable observed expression). Mirrored as an equation below for the non-geometry evaluator (see proj_x).",
-          "expression": "lat"
-        },
-        "geo_lon": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE map, longitude component: geo_lon = proj_x + lon_0. Composes on the FORWARD observed `proj_x` (mirroring the regridder's `A_ij_rep` reading the observed `clip`), so inverse∘forward = (lon − lon_0) + lon_0 = lon is the identity BY CONSTRUCTION — the round-trip the acceptance gate checks. Mirrored as an equation below for the non-geometry evaluator (see proj_x).",
-          "expression": {
-            "op": "+",
-            "args": [
-              "proj_x",
-              "lon_0"
-            ]
-          }
-        },
-        "geo_lat": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE map, latitude component: geo_lat = proj_y. Composes on the forward observed `proj_y`; the identity in latitude round-trips trivially. Mirrored as an equation below for the non-geometry evaluator (see proj_x).",
-          "expression": "proj_y"
-        },
-        "forward_x": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the forward x map: d(forward_x)/dt = proj_x from a zero IC, so du = proj_x = lon − lon_0 (the `narrow_phase_area` zero-IC surfacing idiom). Lets the conformance gate read the forward output and assert lon_0 is load-bearing."
-        },
-        "forward_y": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the forward y map: d(forward_y)/dt = proj_y from a zero IC, so du = proj_y = lat."
-        },
-        "roundtrip_lon": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the inverse∘forward round-trip longitude: d(roundtrip_lon)/dt = geo_lon from a zero IC, so du = geo_lon = (lon − lon_0) + lon_0. The acceptance invariant is roundtrip_lon == lon (identity)."
-        },
-        "roundtrip_lat": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the round-trip latitude: d(roundtrip_lat)/dt = geo_lat from a zero IC, so du = geo_lat = lat. The acceptance invariant is roundtrip_lat == lat (identity)."
-        }
-      },
-      "equations": [
-        {
-          "_comment": "FORWARD map, x component: proj_x = lon − lon_0. The projection's longitude shift by the central meridian; the observed-substitution pipeline inlines it into the consumers below. At lon_0 = 0 this is the geographic identity x = lon.",
-          "lhs": "proj_x",
-          "rhs": {
-            "op": "-",
-            "args": [
-              "lon",
-              "lon_0"
-            ]
-          }
-        },
-        {
-          "_comment": "FORWARD map, y component: proj_y = lat. longlat is the identity in latitude (a bare-variable observed equation).",
-          "lhs": "proj_y",
-          "rhs": "lat"
-        },
-        {
-          "_comment": "INVERSE map, longitude: geo_lon = proj_x + lon_0. Composes on the forward observed proj_x, so geo_lon = (lon − lon_0) + lon_0 = lon by construction.",
-          "lhs": "geo_lon",
-          "rhs": {
-            "op": "+",
-            "args": [
-              "proj_x",
-              "lon_0"
-            ]
-          }
-        },
-        {
-          "_comment": "INVERSE map, latitude: geo_lat = proj_y. Composes on the forward observed proj_y; the latitude identity round-trips trivially.",
-          "lhs": "geo_lat",
-          "rhs": "proj_y"
-        },
-        {
-          "_comment": "FORWARD x surfaced: d(forward_x)/dt = proj_x. Zero IC ⇒ du = proj_x = lon − lon_0. The regridder's narrow_phase_area scalar-observed surfacing idiom.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "forward_x"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "proj_x"
-        },
-        {
-          "_comment": "FORWARD y surfaced: d(forward_y)/dt = proj_y. Zero IC ⇒ du = proj_y = lat.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "forward_y"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "proj_y"
-        },
-        {
-          "_comment": "ROUND-TRIP longitude surfaced: d(roundtrip_lon)/dt = geo_lon. Zero IC ⇒ du = geo_lon = (lon − lon_0) + lon_0 = lon. The inverse∘forward identity — the acceptance invariant.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "roundtrip_lon"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "geo_lon"
-        },
-        {
-          "_comment": "ROUND-TRIP latitude surfaced: d(roundtrip_lat)/dt = geo_lat. Zero IC ⇒ du = geo_lat = lat.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "roundtrip_lat"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "geo_lat"
-        }
-      ]
+  "expression_templates": {
+    "longlat_forward_x": {
+      "params": ["lon", "lat", "lon_0"],
+      "description": "FORWARD, x component (degrees): x = lon - lon_0. lat is unused (uniform reprojection signature).",
+      "body": { "op": "-", "args": ["lon", "lon_0"] }
+    },
+    "longlat_forward_y": {
+      "params": ["lon", "lat", "lon_0"],
+      "description": "FORWARD, y component (degrees): y = lat. lon and lon_0 are unused (uniform reprojection signature).",
+      "body": "lat"
+    },
+    "longlat_inverse_lon": {
+      "params": ["x", "y", "lon_0"],
+      "description": "INVERSE, longitude (degrees): lon = x + lon_0. Composes with longlat_forward_x to the identity: (lon - lon_0) + lon_0 = lon.",
+      "body": { "op": "+", "args": ["x", "lon_0"] }
+    },
+    "longlat_inverse_lat": {
+      "params": ["x", "y", "lon_0"],
+      "description": "INVERSE, latitude (degrees): lat = y. x and lon_0 are unused (uniform reprojection signature).",
+      "body": "y"
     }
   }
 }

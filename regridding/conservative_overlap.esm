@@ -1,0 +1,848 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "conservative_overlap",
+    "description": "Conservative overlap-area regridding, factored as a template library (esm-spec 9.7) so a coupling can invoke it instead of restating the aggregates inline. This is the library form of exactly the computation in the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm and tests/coupling/cross_domain_coupling.esm (esm-spec 8.6 / 8.6.1): F_tgt[j] = (1/A_j) * sum_i A_ij * F_src[i], with A_ij = polygon_intersection_area(src_i, tgt_j) and A_j = sum_i A_ij. The match-less templates factor the stages: (1) conservative_overlap_A_ij -- the NARROW PHASE as a dense evaluable aggregate over the fused polygon_intersection_area leaf (esm-spec 8.6.1: the fused leaf is what makes the narrow phase a dense tensor contraction with no ragged clip-ring intermediate); (2) conservative_overlap_A_j -- the ROW-NORMALIZATION denominator, the group-by-j row-sum of the SAME computed areas with the sliver filter A_ij > atol (CONFORMANCE_SPEC 5.8.2), which is what makes partition-of-unity sum_i W_ij = 1 EXACT BY CONSTRUCTION (5.8.3: the denominator is the row-sum of the computed areas, not the true target-cell area) -- note the denominator applies the SAME filter as the numerator, so the surviving sets coincide and the invariant is exact; (3) conservative_overlap_apply -- the weighted-sum APPLY + NORMALIZE, F_tgt[j] = sum_i A_ij*F_src[i] / A_j[j] over the same filtered set (the sparse mat-vec of ConservativeRegridding.jl, W_ij = A_ij/A_j folded in). THE BROAD PHASE NOW SHIPS IN-LIBRARY TOO (ported from the ESS worked fixture's equations (1a)-(1c), modernized from the 0.6.0 model-level spelling to 0.8.0 template form): (4) conservative_overlap_{src,tgt}_rep_{lon,lat} -- representative binning coordinates DERIVED from the cell rings themselves (the bbox-min corner, a reduce-min projection over the ring vertex axis; build-time constant, esm-spec 8.6.1's 'binning coordinate derived from geometry, not hand-supplied'); (5) conservative_overlap_{src,tgt}_bin -- the integer bin keys, skolem('bin', floor(lon/bin_dx), floor(lat/bin_dy)): floor does the integer quantization (no bespoke binning op), skolem mints the content-addressed key, and INTEGER bin keys keep the candidate set byte-identical across bindings (CONFORMANCE_SPEC 5.8.5 / 5.5 -- no floating-point coordinate comparison enters the broad phase); (6) the _gated narrow-phase/assembly variants (conservative_overlap_A_ij_gated / _A_j_gated / _W_ij_gated / _apply_gated) -- the SAME aggregates with the candidate equi-join folded in as a join.on [[src_bin, tgt_bin]] gate (RFC semiring-faq-unified-ir 5.3 buffer-gated join): a product term is contributed only where the source and target bin keys are EQUAL, so the contraction runs over O(#candidates) instead of O(NSRC*NTGT). DENSE OR GATED IS THE CONSUMER'S CHOICE, value-identically: with the sliver filter present the two forms agree exactly PROVIDED the binning is admissible -- every genuinely-overlapping pair must share a bin key (a non-candidate pair then has zero overlap area, which the dense path computes and the filter drops, while the gated path never visits it; identical surviving sets, identical sums -- adding exact-zero terms to a nonnegative-area sum is FP-exact). Admissibility is the consumer's obligation, exactly as bin width dx/dy is the consumer's parameter in the ESS fixture: single-representative-point binning admits every overlap only when cells that touch always land in the same floor-bin (the degenerate safe choice is a bin width spanning the whole domain; disjoint cell clusters prune cross-cluster pairs at any width separating the clusters). The gated A_j applies the SAME join gate AND the SAME filter as the gated numerator, so the surviving sets coincide and partition-of-unity stays exact by construction -- the denominator broad-phases like the numerator (the A_j_w pin). Cell polygons ARRIVE AS TEMPLATE PARAMETERS (closed vertex rings shaped [cells, overlap_cell_verts, overlap_coord], CCW, ring vertex v = [lon, lat]), so the templates are grid-agnostic: any pair of grids that can present its cells as fixed-vertex-count rings flows through unchanged (regridding/cartesian_cell_rings.esm derives such rings from a uniform cartesian grid spec; grids/mpas/grid.esm's mpas_cell_rings_deg derives them from MPAS mesh vertex data). Grid sizes are load-time metaparameters (NSRC, NTGT source/target cell counts; NVERT ring length, default quads), bound at the import edge; the defaults match the 3x3 -> 2x2 conformance exemplar. The MANIFOLD stays a TEMPLATE PARAMETER of the A_ij templates: per the esm-spec 9.6.1 scalar-field substitution rule (a parameter name appearing as the string value of a scalar Expression-node field in a body is a substitution site, the mirror of the match-side scalar-field binding rule), the geometry kernel's manifold flag is bound at each invocation -- 'planar' (clipping in the source/target coordinate plane; exact for the lon-lat-rectangle coarsening exemplar and for any projected patch) or 'spherical' (great-circle-edge clipping on the unit sphere, areas in steradians; the correct model for lat-lon-on-sphere regridding, with the CONFORMANCE_SPEC 5.8.4 great-circle-edge caveat for parallel edges). The bound value MUST be a member of the closed set {planar, spherical, geodesic}: substitution is pure-syntactic and the enum is enforced on the expanded form (9.6.4, diagnostic geometry_manifold_invalid). One library file therefore serves every manifold; there is no separate spherical near-duplicate. Conformance contract for consumers: candidate set byte-identical (when the broad phase is used), conservation and partition-of-unity as the primary exact gates, per-pair areas/weights toleranced with the sliver floor (CONFORMANCE_SPEC 5.8.1-5.8.3), and dense/gated value-identity gated exactly where both paths are computed. Exemplars: tests/conformance/regridding/conservative_overlap_3x3_to_2x2/ (dense, manifold 'planar'), conservative_overlap_sphere_fan_4_to_2/ (dense, 'spherical'), conservative_overlap_gated_3x3_to_2x2/ (gated vs dense value-identity on the exemplar geometry), conservative_overlap_gated_clusters_4_to_2/ (gated with genuine candidate pruning across disjoint clusters), cartesian_rings_regrid_3x3_to_2x2/ (grid-spec -> rings -> broad phase -> narrow phase -> apply, end-to-end declarative), and mpas_l0_to_octants_sphere/ (MPAS mesh-derived rings on the sphere).",
+    "license": "MIT",
+    "tags": [
+      "esd:regrid",
+      "method:conservative_overlap",
+      "manifold:parametric",
+      "conservation",
+      "partition-of-unity"
+    ],
+    "references": [
+      {
+        "citation": "Jones, P. W. (1999). First- and second-order conservative remapping schemes for grids in spherical coordinates. Monthly Weather Review 127(9), 2204-2210.",
+        "doi": "10.1175/1520-0493(1999)127<2204:FASOCR>2.0.CO;2"
+      },
+      {
+        "citation": "EarthSciSerialization esm-spec.md 8.6/8.6.1 (regridding is a coupling expression; the polygon_intersection_area fused leaf) and CONFORMANCE_SPEC.md 5.8 (geometry tolerance contract).",
+        "notes": "The library factoring mirrors the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm (equations 2-5) and tests/coupling/cross_domain_coupling.esm (rg_A / rg_At / heat_flux)."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NSRC": {
+      "type": "integer",
+      "default": 9,
+      "description": "Number of source cells (the flattened source-cell enumeration the polygon ring array and F_src are shaped over). Default matches the 3x3 exemplar."
+    },
+    "NTGT": {
+      "type": "integer",
+      "default": 4,
+      "description": "Number of target cells. Default matches the 2x2 exemplar."
+    },
+    "NVERT": {
+      "type": "integer",
+      "default": 4,
+      "description": "Vertices per cell polygon ring (default: quadrilateral cells)."
+    }
+  },
+  "index_sets": {
+    "src_cells": {
+      "kind": "interval",
+      "size": "NSRC"
+    },
+    "tgt_cells": {
+      "kind": "interval",
+      "size": "NTGT"
+    },
+    "overlap_cell_verts": {
+      "kind": "interval",
+      "size": "NVERT"
+    },
+    "overlap_coord": {
+      "kind": "interval",
+      "size": 2
+    }
+  },
+  "expression_templates": {
+    "conservative_overlap_A_ij": {
+      "params": [
+        "src_poly",
+        "tgt_poly",
+        "manifold"
+      ],
+      "description": "NARROW PHASE (overlap-weight template): the raw overlap-area matrix A_ij[i,j] = polygon_intersection_area(src_poly[i], tgt_poly[j]) as a dense evaluable aggregate (esm-spec 8.6.1). src_poly is shaped [src_cells, overlap_cell_verts, overlap_coord], tgt_poly [tgt_cells, overlap_cell_verts, overlap_coord]; each cell is a closed CCW vertex ring with ring vertex v = [lon, lat] (or [x, y] on a projected patch). The fused leaf hides the clip ring, so no ragged intermediate appears and the whole matrix is a dense tensor contraction. The MANIFOLD is the third template parameter, occupying the leaf's scalar manifold field as a substitution site (esm-spec 9.6.1): bind 'planar' for coordinate-plane clipping (areas in the squared coordinate unit) or 'spherical' for great-circle-edge clipping on the unit sphere (areas in steradians); the bound value must be a member of the closed set {planar, spherical, geodesic}, enforced post-expansion (9.6.4, geometry_manifold_invalid). Entries for disjoint pairs are exactly 0; near-tangent slivers are dropped downstream by the atol filter of the A_j / apply templates, never here -- the raw areas are what the CONFORMANCE_SPEC 5.8.2 tolerance gates compare.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "args": [
+          "src_poly",
+          "tgt_poly"
+        ],
+        "expr": {
+          "op": "polygon_intersection_area",
+          "manifold": "manifold",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "src_poly",
+                "i"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "tgt_poly",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_A_j": {
+      "params": [
+        "A_ij",
+        "atol"
+      ],
+      "description": "ROW NORMALIZATION (partition-of-unity template): the per-target-cell denominator A_j[j] = sum_i A_ij[i,j] over the surviving-overlap set (filter A_ij > atol -- the CONFORMANCE_SPEC 5.8.2 sliver floor; sub-atol areas are equal-to-zero and contribute the additive identity). Because the apply template divides by THIS row-sum of the SAME computed areas under the SAME filter, the weights W_ij = A_ij/A_j satisfy sum_i W_ij = 1 exactly by construction (5.8.3), regardless of edge-model or clipping error -- the exact invariant the conformance gate asserts. This is ConservativeRegridding.jl's dst_areas (row-sums of the intersections matrix), equation (3) of the ESS overlap-join fixture.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "A_ij",
+            "i",
+            "j"
+          ]
+        }
+      }
+    },
+    "conservative_overlap_W_ij": {
+      "params": [
+        "A_ij",
+        "A_j",
+        "atol"
+      ],
+      "description": "NORMALIZED WEIGHTS (observability template): the explicit weight matrix W_ij[i,j] = A_ij[i,j] / A_j[j] over the surviving-overlap set, under the SAME filter A_ij > atol as the A_j and apply templates (a filtered-out sliver's weight is exactly 0, the aggregate's additive identity). This is ConservativeRegridding.jl's W matrix that conservative_overlap_apply folds into its sparse mat-vec -- factored out as its own template so a conformance runner can gate the per-pair weights through the official build-time pathway (CONFORMANCE_SPEC 5.8.1-5.8.2; the EarthSciSerialization.jl BuildInspection setup-array surface). Because the denominator is the row-sum of the SAME computed areas under the SAME filter, sum_i W_ij = 1 exactly for every target cell with a surviving overlap (5.8.3). Bind A_j to the materialized result of conservative_overlap_A_j. W_ij is build-once diagnostic data: the apply template never reads it, so declaring it adds no work to the ODE hot path.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij",
+          "A_j"
+        ],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "A_j",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_apply": {
+      "params": [
+        "A_ij",
+        "A_j",
+        "F_src",
+        "atol"
+      ],
+      "description": "WEIGHTED-SUM APPLY (+ fold-in normalize): F_tgt[j] = sum_i A_ij[i,j]*F_src[i] / A_j[j] over the same filtered surviving set as the A_j template -- i.e. F_tgt = sum_i W_ij*F_src[i] with W_ij = A_ij/A_j, the sparse mat-vec apply of ConservativeRegridding.jl (equations (4)+(5) of the ESS overlap-join fixture, the heat_flux observed of cross_domain_coupling.esm). Bind A_j to the materialized result of conservative_overlap_A_j so the denominator is the row-sum of the same computed areas: that is what makes partition-of-unity exact and conservation sum_j A_j*F_tgt[j] = sum_i A_i*F_src[i] hold wherever the target tiles the source domain (CONFORMANCE_SPEC 5.8.3). For a time-varying F_src this template is the apply-many half of the build-once/apply-many split; A_ij and A_j are build-once.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij",
+          "A_j",
+          "F_src"
+        ],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_ij",
+                    "i",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "A_j",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_src_rep_lon": {
+      "params": [
+        "src_poly"
+      ],
+      "description": "BROAD PHASE, stage 1 (representative coordinate): the per-source-cell binning longitude src_lon[i] = min_v src_poly[i,v,1] -- the bbox-min corner of the cell ring, a build-time reduce-min projection over the ring vertex axis (the esm-spec 8.6.1 binning-coordinate derivation: the coordinate is derived from the same geometry the narrow phase clips, never hand-supplied, so the fixture stays pure). Any per-cell representative works for the broad phase -- bbox corner, centroid, first vertex -- as long as source and target use the SAME convention and the consumer's bin width makes the binning admissible (see conservative_overlap_src_bin).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i"
+        ],
+        "reduce": "min",
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "v": {
+            "from": "overlap_cell_verts"
+          }
+        },
+        "args": [
+          "src_poly"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "src_poly",
+            "i",
+            "v",
+            1
+          ]
+        }
+      }
+    },
+    "conservative_overlap_src_rep_lat": {
+      "params": [
+        "src_poly"
+      ],
+      "description": "BROAD PHASE, stage 1: the per-source-cell binning latitude src_lat[i] = min_v src_poly[i,v,2] (bbox-min corner; see conservative_overlap_src_rep_lon).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i"
+        ],
+        "reduce": "min",
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "v": {
+            "from": "overlap_cell_verts"
+          }
+        },
+        "args": [
+          "src_poly"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "src_poly",
+            "i",
+            "v",
+            2
+          ]
+        }
+      }
+    },
+    "conservative_overlap_tgt_rep_lon": {
+      "params": [
+        "tgt_poly"
+      ],
+      "description": "BROAD PHASE, stage 1: the per-target-cell binning longitude tgt_lon[j] = min_v tgt_poly[j,v,1] (bbox-min corner; the target-side mirror of conservative_overlap_src_rep_lon).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "j"
+        ],
+        "reduce": "min",
+        "ranges": {
+          "j": {
+            "from": "tgt_cells"
+          },
+          "v": {
+            "from": "overlap_cell_verts"
+          }
+        },
+        "args": [
+          "tgt_poly"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "tgt_poly",
+            "j",
+            "v",
+            1
+          ]
+        }
+      }
+    },
+    "conservative_overlap_tgt_rep_lat": {
+      "params": [
+        "tgt_poly"
+      ],
+      "description": "BROAD PHASE, stage 1: the per-target-cell binning latitude tgt_lat[j] = min_v tgt_poly[j,v,2] (bbox-min corner).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "j"
+        ],
+        "reduce": "min",
+        "ranges": {
+          "j": {
+            "from": "tgt_cells"
+          },
+          "v": {
+            "from": "overlap_cell_verts"
+          }
+        },
+        "args": [
+          "tgt_poly"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "tgt_poly",
+            "j",
+            "v",
+            2
+          ]
+        }
+      }
+    },
+    "conservative_overlap_src_bin": {
+      "params": [
+        "src_lon",
+        "src_lat",
+        "bin_dx",
+        "bin_dy"
+      ],
+      "description": "BROAD PHASE, stage 2 (bin key): the integer bin key of each source cell, src_bin[i] = skolem('bin', floor(src_lon[i]/bin_dx), floor(src_lat[i]/bin_dy)) -- the ESS worked fixture's equation (1a) in template form. floor does the integer quantization (item-3 decision: no bespoke bin/floor leaf op), skolem mints the content-addressed key; because the key components are INTEGERS, the candidate set downstream is byte-identical across bindings (CONFORMANCE_SPEC 5.8.5 / 5.5 determinism -- no floating-point coordinate comparison enters the broad phase). bin_dx/bin_dy are the consumer's quantization steps, shared verbatim with conservative_overlap_tgt_bin so a common key means the representatives fall in the same bucket. ADMISSIBILITY (the consumer's obligation, inherited from the ESS fixture where dx/dy were host parameters): the binning must place every genuinely-overlapping (i,j) pair in a common bin -- with single-representative-point binning that holds when cells that touch always land in the same floor-bin (degenerate safe choice: a bin width spanning the whole domain; genuinely pruning choice: any width separating disjoint cell clusters). An inadmissible width silently drops real overlaps; the gated/dense value-identity conformance gate is exactly the check that catches it. This is build-time value invention (skolem runs once at setup, RFC semiring-faq-unified-ir 6.1); STR-tree or other spatial-index acceleration remains a physical-operator concern outside the IR.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          }
+        },
+        "args": [
+          "src_lon",
+          "src_lat"
+        ],
+        "expr": {
+          "op": "skolem",
+          "args": [
+            "bin",
+            {
+              "op": "floor",
+              "args": [
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "src_lon",
+                        "i"
+                      ]
+                    },
+                    "bin_dx"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "floor",
+              "args": [
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "src_lat",
+                        "i"
+                      ]
+                    },
+                    "bin_dy"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_tgt_bin": {
+      "params": [
+        "tgt_lon",
+        "tgt_lat",
+        "bin_dx",
+        "bin_dy"
+      ],
+      "description": "BROAD PHASE, stage 2: the integer bin key of each target cell -- identically quantized to conservative_overlap_src_bin (the ESS worked fixture's equation (1b)), so a shared key means source and target representatives fall in the same broad-phase bucket. Bind the SAME bin_dx/bin_dy as the source-side invocation.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "args": [
+          "tgt_lon",
+          "tgt_lat"
+        ],
+        "expr": {
+          "op": "skolem",
+          "args": [
+            "bin",
+            {
+              "op": "floor",
+              "args": [
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "tgt_lon",
+                        "j"
+                      ]
+                    },
+                    "bin_dx"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "floor",
+              "args": [
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "tgt_lat",
+                        "j"
+                      ]
+                    },
+                    "bin_dy"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_A_ij_gated": {
+      "params": [
+        "src_poly",
+        "tgt_poly",
+        "manifold",
+        "src_bin",
+        "tgt_bin"
+      ],
+      "description": "CANDIDATE-GATED NARROW PHASE: the overlap-area matrix of conservative_overlap_A_ij with the broad-phase candidate equi-join folded in -- join.on [[src_bin, tgt_bin]] (RFC semiring-faq-unified-ir 5.3, the F3 buffer-gated join) admits a product term only where the source and target bin keys are EQUAL, so one polygon clip runs per CANDIDATE pair instead of per (i,j) pair: O(#candidates) build cost. Non-candidate entries are the aggregate's additive identity, exactly 0. VALUE-IDENTICAL to the dense template under an admissible binning (every genuinely-overlapping pair shares a bin; see conservative_overlap_src_bin): a pruned pair has zero true overlap, which the dense path computes as 0 and the downstream sliver filter drops anyway -- identical surviving sets, identical sums. src_bin/tgt_bin are the materialized bin-key buffers from the stage-2 templates (bind the consumer's observed names; the join gate reads them at build time). Manifold semantics identical to conservative_overlap_A_ij.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "join": [
+          {
+            "on": [
+              [
+                "src_bin",
+                "tgt_bin"
+              ]
+            ]
+          }
+        ],
+        "args": [
+          "src_poly",
+          "tgt_poly",
+          "src_bin",
+          "tgt_bin"
+        ],
+        "expr": {
+          "op": "polygon_intersection_area",
+          "manifold": "manifold",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "src_poly",
+                "i"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "tgt_poly",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_A_j_gated": {
+      "params": [
+        "A_ij",
+        "src_bin",
+        "tgt_bin",
+        "atol"
+      ],
+      "description": "CANDIDATE-GATED ROW NORMALIZATION: A_j[j] = sum_i A_ij[i,j] over the CANDIDATE pairs (join.on [[src_bin, tgt_bin]]) that survive the sliver filter A_ij > atol. THE DENOMINATOR BROAD-PHASES LIKE THE NUMERATOR: this template applies the SAME join gate and the SAME filter as conservative_overlap_A_ij_gated / the apply, so the surviving-overlap sets coincide and partition-of-unity sum_i W_ij = 1 stays EXACT BY CONSTRUCTION (CONFORMANCE_SPEC 5.8.3) -- gating only the numerator, or only the denominator, would break the invariant wherever a spurious sliver or a pruned pair appears on one side only. Value-identical to conservative_overlap_A_j on a gated A_ij under an admissible binning (the pruned entries are exactly 0 and sub-atol, so both forms sum the same surviving terms).",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "join": [
+          {
+            "on": [
+              [
+                "src_bin",
+                "tgt_bin"
+              ]
+            ]
+          }
+        ],
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij",
+          "src_bin",
+          "tgt_bin"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "A_ij",
+            "i",
+            "j"
+          ]
+        }
+      }
+    },
+    "conservative_overlap_W_ij_gated": {
+      "params": [
+        "A_ij",
+        "A_j",
+        "src_bin",
+        "tgt_bin",
+        "atol"
+      ],
+      "description": "CANDIDATE-GATED NORMALIZED WEIGHTS: W_ij[i,j] = A_ij[i,j] / A_j[j] over the candidate pairs surviving the SAME join gate and SAME filter as the gated A_j (a pruned or filtered pair's weight is exactly 0, the additive identity). Bind A_j to the materialized result of conservative_overlap_A_j_gated. Build-once diagnostic data exactly like the dense W_ij template: the conformance runner reads it from the official build-time setup-array surface; the apply never does.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "join": [
+          {
+            "on": [
+              [
+                "src_bin",
+                "tgt_bin"
+              ]
+            ]
+          }
+        ],
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij",
+          "A_j",
+          "src_bin",
+          "tgt_bin"
+        ],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "A_j",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "conservative_overlap_apply_gated": {
+      "params": [
+        "A_ij",
+        "A_j",
+        "F_src",
+        "src_bin",
+        "tgt_bin",
+        "atol"
+      ],
+      "description": "CANDIDATE-GATED WEIGHTED-SUM APPLY (+ fold-in normalize): F_tgt[j] = sum_i A_ij[i,j]*F_src[i] / A_j[j] over the candidate pairs surviving the SAME join gate and SAME filter as the gated A_j -- the O(#overlaps) production spelling of the ESS worked fixture's equations (4)+(5), the sparse mat-vec restricted to the candidate set. Bind A_j to the materialized result of conservative_overlap_A_j_gated so the denominator is the row-sum of the same computed areas over the same surviving set: partition-of-unity exact by construction, conservation wherever the target tiles the source domain (CONFORMANCE_SPEC 5.8.3). Value-identical to conservative_overlap_apply on the same (gated) A_ij/A_j under an admissible binning. For a time-varying F_src this is the apply-many half of the build-once/apply-many split; the bins, A_ij and A_j are build-once.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "join": [
+          {
+            "on": [
+              [
+                "src_bin",
+                "tgt_bin"
+              ]
+            ]
+          }
+        ],
+        "filter": {
+          "op": ">",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "A_ij",
+                "i",
+                "j"
+              ]
+            },
+            "atol"
+          ]
+        },
+        "args": [
+          "A_ij",
+          "A_j",
+          "F_src",
+          "src_bin",
+          "tgt_bin"
+        ],
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_ij",
+                    "i",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "A_j",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

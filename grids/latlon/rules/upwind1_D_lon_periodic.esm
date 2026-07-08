@@ -1,0 +1,59 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_lon_periodic",
+    "description": "First-order upwind (backward) first derivative along longitude with periodic (wrap) boundary on the latlon grid — the dissipative companion to grids/latlon/rules/central_D_lon_periodic for a closed zonal circle (global recipe: dlon_deg = 360/NLON; see grids/latlon/grid.esm), for zonal advection with non-negative angular velocity (flow toward increasing longitude). Matches D(f, wrt: lon), a PER-DEGREE derivative. Interior columns [2, NLON]: the imported backward-difference stencil (f[i,j] - f[i-1,j]) / dlon_deg. The single i=1 face column wraps explicitly to (f[1,j] - f[NLON,j]) / dlon_deg, following the cartesian upwind1_D_periodic / ESS pde_simulation fixture precedent for periodic boundaries, so the scheme is the same O(dlon_deg) backward difference at every column and conserves sum(f) exactly (the periodic wrap telescopes). Only one face column is special here — upwind needs a neighbor upstream (toward smaller lon), which every column but i=1 has — so the makearray tiles [lon, lat] with just two regions rather than the centered rule's three. The face value is a FULL-RANK aggregate (singleton output range on the lon axis, output_idx [i, j] over the lat axis) rather than the esm-spec 9.6.8 worked example's rank-reduced form, mirroring central_D_lon_periodic so every binding's simulator fills the (1 x NLAT) region without rank promotion. `dlon_deg` is a free name resolving to the consuming model's zonal spacing variable (consumer-supplied geometry contract); the rule itself never assumes the global extent, but composing it with a non-closing regional grid is a modeling error — use central_D_lon_zero_grad_bc there. Match scoping: the pattern is `wrt: lon` plus the constraint `where: {f: {shape: [lon, lat]}}` (esm-spec 9.6.1) at DEFAULT priority, so it fires only on the longitudinal derivative of a bare field declared over this grid's lon x lat index sets — not on any unrelated D(., wrt: lon) reusing the axis name — and, under import-edge renaming (esm-spec 9.7.7), the wrt literal and the where shape follow the renamed axis together, so two latlon instances coexist scoped to their own meshes. The constraint requires a bare shaped variable; a consumer differentiating a compound inline expression must bind it to a declared lon x lat observed first. Sign convention: upwind for flow toward +lon; a westward variant belongs in a separate rule.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:latlon", "op:D", "axes:lon,lat", "order:1", "stencil_width:2", "bc:periodic", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.8 (upwind methods on periodic domains)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/upwind1_D_lon_interior.esm" }
+  ],
+  "expression_templates": {
+    "upwind1_D_lon_periodic": {
+      "params": ["f"],
+      "match": { "op": "D", "args": ["f"], "wrt": "lon" },
+      "where": { "f": { "shape": ["lon", "lat"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, "NLON"], [1, "NLAT"]],
+          [[1, 1], [1, "NLAT"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "upwind1_D_lon_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": [1, 1], "j": { "from": "lat" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["f", 1, "j"] },
+                    { "op": "index", "args": ["f", "NLON", "j"] }
+                  ]
+                },
+                "dlon_deg"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

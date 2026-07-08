@@ -1,0 +1,109 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "hjweno_norm_D1_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/hjweno_norm_D1_periodic: a minimal consuming model binding N=8 at the import edge. The COMPOUND match sqrt((D(u,x))^2) must fire through the section-9.6.3 rewrite fixpoint at priority 10 (before any plain first-derivative rule could lower the inner D(u,x)) and lower the whole Hamilton-Jacobi gradient-magnitude term to the rule's makearray - the interior [4, N-3] = [4,5] holding the imported HJ-WENO aggregate sqrt(max(u_x^-,0)^2 + min(u_x^+,0)^2), the six periodic-wrap faces i in {1,2,3} and {6,7,8} holding the same norm with the seam neighbors wrapped - with the imported interior stencil inlined (zero apply_expression_template), zero unlowered spatial D, zero surviving metaparameter names, and the free name dx surviving (the grid's consumer-supplied geometry contract). The model fulfills the geometry contract with x0 = 0 and dx = 1/8 (spelled with the literal 8 because the import edge binds N, closing it before this document's scope). N=8 is the smallest size that keeps the seven makearray regions disjoint ({1,2,3}, [4,5], {6,7,8} tile [1,8]).",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:hjweno_norm_D1_periodic"
+    ]
+  },
+  "models": {
+    "HJWenoNormD1PeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/hjweno_norm_D1_periodic.esm",
+          "bindings": {
+            "N": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x"
+          ],
+          "description": "Level-set / eikonal field over the x index set."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "1/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi speed (psi_t = -S|grad psi|)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
+              {
+                "op": "sqrt",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

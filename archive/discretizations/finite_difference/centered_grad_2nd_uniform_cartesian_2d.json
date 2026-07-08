@@ -1,0 +1,50 @@
+{
+  "discretizations": {
+    "grad_x_centered_2nd_uniform_cartesian_2d": {
+      "applies_to": {
+        "op": "grad",
+        "args": ["$u"],
+        "dim": "x"
+      },
+      "grid_family": "cartesian",
+      "accuracy": "O(dx^2)",
+      "doc": "Centered 2nd-order x-derivative grad(u,x) = (u[i+1,j] - u[i-1,j]) / (2 dx) on a 2-D uniform Cartesian grid (loop indices i over x, j over y; uniform spacing dx). The 2-D counterpart of centered_2nd_uniform.json: it holds the non-differentiated axis j fixed and offsets only the x index i, so the replacement is a scalar per-cell expression in the discretizer's spatial loops (i,j) rather than a 1-D arrayop. Use for a level-set Hamilton-Jacobi front where the gradient feeds an already-per-cell right-hand side (psi_t = -S|grad psi|^2); the Godunov upwind form (godunov_norm_1st_uniform_cartesian_2d) is preferred for stability but needs an array intermediate. The grad reads u[i+-1,j] at the boundary are handled by the consumer's ghost-cell lowering. The spacing token 'dx' is the model's grid-spacing parameter; a consumer may rename it to a namespaced parameter (e.g. LevelSetFireSpread.dx) when loading.",
+      "replacement": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {"op": "index", "args": ["$u", {"op": "+", "args": ["i", 1]}, "j"]},
+              {"op": "index", "args": ["$u", {"op": "-", "args": ["i", 1]}, "j"]}
+            ]
+          },
+          {"op": "*", "args": [2, "dx"]}
+        ]
+      }
+    },
+    "grad_y_centered_2nd_uniform_cartesian_2d": {
+      "applies_to": {
+        "op": "grad",
+        "args": ["$u"],
+        "dim": "y"
+      },
+      "grid_family": "cartesian",
+      "accuracy": "O(dx^2)",
+      "doc": "Centered 2nd-order y-derivative grad(u,y) = (u[i,j+1] - u[i,j-1]) / (2 dx) on a 2-D uniform Cartesian grid (loop indices i over x, j over y; uniform spacing dx). Companion to grad_x_centered_2nd_uniform_cartesian_2d: holds the non-differentiated axis i fixed and offsets only the y index j. Same usage notes and 'dx' spacing-token convention.",
+      "replacement": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {"op": "index", "args": ["$u", "i", {"op": "+", "args": ["j", 1]}]},
+              {"op": "index", "args": ["$u", "i", {"op": "-", "args": ["j", 1]}]}
+            ]
+          },
+          {"op": "*", "args": [2, "dx"]}
+        ]
+      }
+    }
+  }
+}

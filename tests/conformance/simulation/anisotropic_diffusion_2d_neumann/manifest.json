@@ -1,0 +1,42 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "anisotropic_diffusion_2d_neumann",
+  "description": "MMS gate: run the inline esm-spec 6.6 tests of problems/anisotropic_diffusion_2d_neumann.esm (model AnisotropicDiffusion2DNeumann, test mms_steady_anisotropic_neumann) at the problem's default resolution (NX=NY=64) through each binding's official simulation pathway. Exercises the second-order centered NEUMANN-wall MIXED second-derivative rule central_Dxy_neumann_bc (the d^2u/dx dy off-diagonal of a positive-definite anisotropic diffusion tensor K=[[1,1/2],[1/2,1]]) together with the diagonal central_D2x_neumann_bc + central_D2y_neumann_bc. WELL-POSEDNESS: per-axis Neumann walls leave a residual conormal boundary flux (n.K grad u = Kxy u_tangential) the normal condition does not kill, so the combined operator is only conditionally well-posed; the chosen u* = cos(pi x) cos(pi y) makes that boundary term vanish and the dissipative bulk keeps the integration stable at the tested resolutions (see the problem file). The assertions and their tolerances live in the problem file itself; this manifest only routes the runners.",
+  "problem": "../../../../problems/anisotropic_diffusion_2d_neumann.esm",
+  "model": "AnisotropicDiffusion2DNeumann",
+  "tests": [
+    "mms_steady_anisotropic_neumann"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried on this stiff / non-smooth / large-AST anisotropic-diffusion RHS (same failure as anisotropic_diffusion_2d_periodic): earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

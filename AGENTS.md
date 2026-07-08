@@ -1,120 +1,154 @@
-# Agent instructions — EarthSciDiscretizations
+# Agent and contributor guide
 
-This file documents project-wide expectations for any agent authoring code
-or discretization rules in this repository. It is the committed counterpart
-to the per-agent scratch `CLAUDE.md` (which is gitignored and does not ship
-to future sessions).
+This repo is the ESM discretization standard library: pure data (`.esm` files) plus the
+test harness and docs pipeline that pin its behavior. The sibling spec repo is
+[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization) (`$ESS_ROOT`,
+default `../EarthSciSerialization` — resolved everywhere by `scripts/ess-locate.sh`).
 
-## Authoring discretization rules
+## 1. AST first
 
-Rules live in `discretizations/<family>/*.json`. The schema is ESS §7
-(see `EarthSciSerialization/esm-spec.md`). **Express all math directly
-in the ExpressionNode AST** — available ops include `+ - * / ^`,
-`max min ifelse abs sign`, all trig/exp/log, comparisons, and logical
-ops. See ESS `esm-spec.md` §9.2 decision tree for when (rarely) a
-`call` op is justified.
+All mathematics is expressed in the ESM Expression AST (esm-spec §4). If it fits on
+paper, it fits in the AST. No helper functions hiding math, no registered functions for
+anything writable in finite closed form (esm-spec §1.1).
 
-Do NOT:
+## 2. Single pathway (ABSOLUTE)
 
-- Write Julia/Python/etc helper functions that implement math a rule
-  should own (limiters, reconstructions, ratio functions).
-- Use `{"op": "call", "fn": "…"}` for anything expressible in existing
-  ops.
-- Rely on per-binding runtime names that hide the math.
+This repo contains **zero evaluators, zero rule engines, zero numeric kernels**. Every
+number in every golden was produced by an *official ESS binding runner* through the one
+canonical pipeline: `.esm → parse → import/metaparameter resolution → §9.6.3 rewrite
+fixpoint → official runner`.
 
-When in doubt: if the formula fits on paper, it fits in the AST.
+- `scripts/runners/*` are thin argument-marshalling wrappers over ESS binding entry
+  points. If a binding lacks a capability (e.g. a canonical-emit CLI), file the issue
+  upstream in EarthSciSerialization — **never** patch a local shim, shadow evaluator, or
+  per-rule special case here. The archive's retired shadow evaluators are the cautionary
+  tale.
+- `tools/` and `docs/generate_catalog.py` may *structurally* read `.esm` JSON (offsets,
+  tags, metadata) and may call official ESS display/pretty-print APIs; they must never
+  numerically evaluate library math.
 
-See `discretizations/README.md` for the catalog landing and the
-[generated rule catalog](docs/rule-catalog.md) for the full manifest.
+## 3. Layering rules
 
-### What rule authors must NOT commit
+- **Grid-first layout**: everything specific to a grid lives under `grids/<grid>/` —
+  `grid.esm` (index sets + geometry, metaparameterized), `stencils/` (interior-only,
+  match-less templates importing `grid.esm`), `rules/` (the complete auto-applied `match`
+  rules: imported stencil + boundary-condition face regions in one `makearray`). The same
+  scheme takes a different form on different grids; there is no grid-generic rule file.
+- Boundary conditions live inside the rule body and nowhere else (esm-spec §9.6.8).
+- Cross-grid entries (`regridding/`, `reprojection/`) and drivers (`problems/`) are
+  top-level; problems import their grid + rules and carry inline tests (esm-spec §6.6.5).
+- Everything is resolution-generic via metaparameters (esm-spec §9.7.6). Never bake a
+  concrete size into a rule; bind sizes at import/subsystem edges (convergence wrappers)
+  or defaults (the grid file).
+- **Extent convention (integers-are-metaparameters, reals-are-consumer-supplied).** Only
+  the integer *counts* are metaparameters (`N`, `NLON`/`NLAT`, `NCELLS`…). The
+  real-valued geometry — origins and spacings — is NOT baked into a grid file: it is
+  supplied by the consuming model as *free names* resolved in its own scope at evaluation
+  (`x0`/`dx` on cartesian, `lon0_deg`/`dlon_deg`/`lat0_deg`/`dlat_deg` + `R_sphere` on
+  latlon), the same keyed-factor pattern MPAS uses for `areaCell`/`dvEdge`. A grid file
+  therefore serves any *extent*, not merely any resolution. Spell a spacing as an
+  observed dividing by the metaparameter *name* (`dx = (b − a)/N`), which §9.7.6
+  substitutes as an integer literal at load, so a loader-API rebinding of `N` keeps it
+  consistent; a model that closes `N` at the import edge instead spells the matching
+  literal.
+- **IMPORTANT — build-time scope caveat.** Free-name geometry templates (`x_coord`,
+  `lon_coord`) resolve in RUNTIME expression positions (rule bodies, equation RHS) but
+  NOT in `ic` equations or §6.6.5 test `reference`s. Those are evaluated build-time and
+  cellwise, and that evaluation is scope-free in every binding (the consumer's model
+  parameters/observeds are out of scope). There, coordinates must fold from literals plus
+  the metaparameter name — spell `x_i = a + (i − 1/2)·((b − a)/N)` inline; never invoke
+  the free-name `x_coord` template. (`problems/heat_1d_zero_grad*.esm` and
+  `two_cartesian_grids_coexist.esm` all follow this.)
+- **`where`-constraint authoring.** Every rule carries a §9.6.1 `where` shape constraint
+  (`{f: {shape: [x]}}`, `{F: {shape: [edges]}}`) so it fires only on *this* grid's fields
+  and so it survives §9.7.7 import renaming (the shape follows the renamed axis, enabling
+  multi-instance coexistence). A shape-constrained rule needs a **bare declared shaped
+  field**, not a compound inline flux: write the match over a plain parameter, and require
+  a consumer differentiating a compound expression (`div(u*h)`) to bind it to a declared
+  shaped observed first.
+- A rule author commits exactly: the library file(s), the `tests/conformance/ast/<rule>/`
+  fixture + golden, a `tests/conformance/convergence/` case when an order claim is made,
+  and nothing else.
 
-- `docs/rule-catalog.md` — **generated** by `docs/generate_rule_catalog.jl` at
-  doc-build time; gitignored. Do not commit it; do not run the generator and
-  stage its output. The CI doc build regenerates it automatically.
-- Edits to `test/test_esd_walker.jl` — the walker discovers rules and fixture
-  files **dynamically**. Adding a rule JSON (with or without fixtures) requires
-  zero edits to the walker test.
+## 4. Metadata and tags contract (lint-enforced)
 
-When authoring a new rule, the ONLY files you commit are:
-1. `discretizations/<family>/<name>.json` — the rule itself
-2. `discretizations/<family>/<name>/fixtures/**` — any fixtures (canonical,
-   convergence, rewrite, monotonicity, conservation)
-3. Rule-specific test items in `test/test_rule_catalog.jl` (structural checks)
+`scripts/validate-library.py` enforces (codes L001–L008; fixtures in
+`tests/invalid/lint/`):
 
-## The single-pathway rule (all bindings)
+- Exactly one kind tag: `esd:grid | esd:stencil | esd:rule | esd:regrid | esd:reproject |
+  esd:problem` (L001), with required companions (L002):
+  - `esd:grid` → `family:`
+  - `esd:stencil` → `family: grid: op:`
+  - `esd:rule` → `family: grid: op: order: bc: axes:`
+  - `esd:regrid` → `method:` · `esd:reproject` → `crs:` · `esd:problem` → `grid:`
+- Name agreement (L003): filename stem == `metadata.name` == the sole
+  `expression_templates` key. Grid constructors are `grids/<name>/grid.esm` with
+  `metadata.name == <name>`. Exception: `esd:regrid` / `esd:reproject` files factor
+  one operation into several templates (weight/normalize/apply stages;
+  forward/inverse pairs plus helper fragments), so they may declare multiple
+  templates — every key must be the stem or prefixed `<stem>_`.
+- `grid:<name>` resolves to `grids/<name>/grid.esm` (L004); stencils/rules live under
+  that directory (L005).
+- Rule `makearray` regions tile the axes named by `axes:` exactly, verified by folding
+  metaparameter bounds at sampled sizes (L006). `axes:` lists the output dimensions in
+  order, comma-separated (e.g. `axes:lon,lat`).
+- Library entries are pure template-library files; problems carry models (L007). All
+  files declare `esm: 0.8.0` (L008).
+- Provenance goes in `metadata.references` (Fornberg, Snyder, Roache, …);
+  human-readable derivations (incl. MMS solutions and BC-compatibility arguments) go in
+  `metadata.description` / test descriptions.
 
-**ESD never carries a rule evaluator. In every binding, the rule
-evaluator/runner is a THIN PASSTHROUGH to the corresponding ESS
-binding's evaluator.** There is exactly one canonical pipeline:
+## 5. Goldens
 
-> rule application in ESS → ArrayOp → eval
+- Regeneration is **Julia-reference-only**, via `scripts/regenerate-goldens.sh
+  [category …]` — it drives the canonical ESS pipeline and nothing else.
+- A PR that changes goldens must say *why* (spec change, rule change, or bug — never
+  "refreshed to green").
+- **Large AST goldens are pinned by digest, not stored.** An `ast` golden whose canonical
+  bytes reach `AST_GOLDEN_MAX_BYTES` (64 KiB) is checked in as `expanded.golden.sha256`
+  (a sha256 of the bytes + byte-count) instead of the full `expanded.golden.json`, which
+  is removed. Every binding still reproduces the exact bytes; `compare-outputs.py` hashes
+  each binding's output and gates on the digest (`golden-digest` instead of `golden-bytes`).
+  Smaller goldens stay full text so their diffs stay reviewable. This keeps multi-MB
+  derived blobs (WENO/HJ-WENO reconstructions) out of git history while preserving both
+  the regression pin (the digest changes visibly if the canonical output changes) and the
+  cross-binding byte-identity gate. Regenerate locally to inspect a digest-pinned golden.
+- Convergence goldens (`golden/errors.json`) hold the Julia-computed error norms;
+  `scripts/check_convergence_order.py` asserts observed order from them without any
+  binding installed. Docs read observed orders from the same files — nothing is ever
+  recomputed for display.
 
-No binding may carry a shadow evaluator, a reimplementation of an ESS
-op, or a binding-local fast path that bypasses ESS. If you find one,
-file a bead to retire it; do not extend it.
+## 6. Generated files
 
-Per-binding entry points (each is a passthrough to ESS):
+Docs content pages and plots are generated **only** in the CI docs job and are never
+committed (`.gitignore` pins this). Conformance goldens and fixtures *are* committed —
+AST goldens at or above the 64 KiB threshold as a `.sha256` digest rather than full bytes
+(§5). Convergence per-resolution fixtures are thin hand-written wrappers binding
+metaparameters — if you feel the need for a fixture generator, the metaparameter
+mechanism is being misused.
 
-| Binding    | ESD entry point                                           | Delegates to                                                      |
-|------------|-----------------------------------------------------------|-------------------------------------------------------------------|
-| Julia      | `EarthSciDiscretizations.eval_coeff` (`src/rule_eval.jl`) | `EarthSciSerialization.parse_expression` + `evaluate_expr`        |
-| Python     | `earthsci_discretizations.rules` (`python/src/earthsci_discretizations/rules/`) | `earthsci_toolkit.evaluate` (Python)                 |
-| Rust       | `rule_eval` (`rust/src/rule_eval.rs`)                     | `earthsci_toolkit::evaluate` (the `earthsci-toolkit` crate)       |
-| TypeScript | `rules/` (`typescript/src/rules/`)                        | `evaluate` from the `earthsci-toolkit` npm package                |
+## 7. Workflow
 
-A binding-level file with non-trivial math, branch logic, or op
-dispatch is a bug, not a feature. Passthrough means: marshal inputs,
-call ESS, return outputs. Nothing else.
+- Conventional commits: `type(scope): description` (scopes: `grids`, `rules`,
+  `regridding`, `reprojection`, `problems`, `conformance`, `docs`, `ci`).
+- Non-interactive shell flags for `cp`/`mv`/`rm`.
+- CI: `.github/workflows/conformance.yml` (validate job always; per-binding matrix +
+  compare as runners land), `docs.yml`, `nightly-upstream.yml` (drift watch vs ESS main).
 
-### Conformance: golden regeneration drives the canonical pipeline
+## Phasing (bootstrap)
 
-The `regenerate_golden.*` scripts under `tests/conformance/` (e.g.
-`tests/conformance/grids/cartesian/regenerate_golden.jl`,
-`tests/conformance/grids/latlon/regenerate_golden.py`,
-`tests/conformance/rules/centered_2nd_uniform_latlon/regenerate_golden.jl`)
-**MUST drive the canonical pipeline** — rule application in ESS →
-ArrayOp → eval through the ESD passthrough. They must NOT call a
-per-binding shadow evaluator. If a regeneration script computes
-expected values via a binding-local code path, the resulting golden
-will mask divergence between bindings rather than expose it.
+1. ✅ Skeleton + validation harness (this document, `validate-library.py`, lint fixtures)
+2. ✅ Grids + stencils + rules + `ast/` conformance (Julia/Python runners)
+3. ✅ Remaining AST runners (Rust/TypeScript/Go) — five-way byte-identical goldens
+4. ✅ Problems + MMS + convergence (Julia reference + Python + Rust; MPAS ragged
+   simulation gated in Julia, Python blocked per the case manifest's note)
+5. ✅ Regridding + reprojection (exact invariants + analytic point gates +
+   per-pair A_ij/A_j/W_ij weights golden via the Julia BuildInspection surface)
+6. ✅ Docs pipeline · 7. ✅ Full CI matrix (per-binding jobs + cross-binding
+   compare in `.github/workflows/conformance.yml`)
 
-### Cross-reference
-
-The single-pathway rule is the project-level expression of the
-workspace-root `CLAUDE.md` (Gas Town mayor) directive that ESD is a
-discretization catalog over ESS, not a parallel runtime.
-
-## Dependency resolution
-
-`EarthSciSerialization` is not yet in the Julia General registry. ESD's
-`Project.toml` declares a Pkg `[sources]` entry pointing at the GitHub
-repo (`packages/EarthSciSerialization.jl` subdir on `main`), so a plain
-`Pkg.instantiate()` resolves ESS directly from GitHub on Julia ≥ 1.11.
-The project's `julia` compat is therefore `"1.11"`.
-
-For local development against an in-progress ESS checkout (Gas Town
-workspace), `scripts/setup_polecat_env.sh` Pkg.develops a local path —
-the explicit develop entry overrides the `[sources]` URL until you
-remove it. CI still runs this same script as a mandatory step
-(`.github/workflows/Tests.yml`), so polecats and CI share one setup path.
-
-### The `[sources]` invariant
-
-**The `[sources]` block must always be present in `Project.toml`.** Never
-remove it, and never commit `Project.toml` without it.
-
-`EarthSciSerialization` is not in the General registry. It resolves only
-via `[sources]`. Without this block, `Pkg.instantiate()` on a fresh clone
-fails with a "not found in any registry" error.
-
-**Why this keeps breaking:** `Pkg.add`, `Pkg.develop`, and `Pkg.update`
-silently rewrite `Project.toml` and drop `[sources]`. The scripts in
-this repo that call Pkg operations (`scripts/setup_polecat_env.sh`) now
-snapshot and restore `[sources]` automatically. However, any direct Pkg
-invocation outside that script is still at risk.
-
-**Rules:**
-- Always run `scripts/setup_polecat_env.sh` (not bare `Pkg.add` / `Pkg.develop`) to set up ESS locally.
-- Before committing `Project.toml`, verify `[sources]` is present: `grep '\[sources\]' Project.toml`.
-- `.github/workflows/SourcesCheck.yml` fails CI if `[sources]` is missing — do not bypass or delete this check.
+The bootstrap is complete; the archive migration (`archive/` → `grids/` et al.)
+proceeds rule-by-rule on top of these patterns. Each §9.7-capable binding runs
+the categories in its scope (CONFORMANCE_SPEC.md §5.9); scope gaps are recorded
+in the manifests (`scope_excluded`, `blocked_upstream_bindings`), never papered
+over locally.

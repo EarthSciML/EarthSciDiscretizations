@@ -1,0 +1,70 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "divergence_mpas",
+  "description": "Observed-order-of-accuracy sweep for grids/mpas/rules/fv_divergence_cell (order:1) over the icosahedral refinement family levels 0/1/2 (12/42/162 cells). Subsystem ref paths cannot be metaparameterized, so each resolution entry names its own thin problem file (problems/divergence_mpas_l{0,1,2}.esm — the rebinding recipe of problems/divergence_mpas.esm made concrete); the per-resolution `bindings` are empty because each problem file closes the grid metaparameters at its import edge. n semantics: scripts/check_convergence_order.py computes order against n ratios, so n is an effective 1-D resolution n_eff = round(1000 * sqrt(NCELLS / (4 pi))) proportional to 1/h with h = sqrt(4 pi / NCELLS), the mean cell spacing on the unit sphere (the same h the grid's cell_area_mean template encodes): NCELLS 12/42/162 -> n = 977/1828/3590, ratios 1.871/1.964 (integer rounding shifts observed orders by < 0.001). The measured error is the discrete divergence of the P2-flux fixture vs the analytic divergence -3(3 z^2 - 1) (derivation in the problem files). Expected order: the TRiSK cell divergence is guaranteed first-order on arbitrary Voronoi meshes, and the max-norm tracks exactly that here (Julia-measured pairwise Linf orders 1.00 and 0.85 across the three levels; median 0.93, asserted as 1.0 +/- 0.25 — the tolerance is wide because only two order samples exist and the 12-cell mesh is preasymptotic, per the golden). The relative-L2 error superconverges on this quasi-symmetric bisected family (pairwise orders ~1.75/1.52, between the guaranteed 1 and the centroidal-mesh 2, because the pentagon-adjacent first-order region has vanishing measure); it is recorded in the problem files' inline tolerances but deliberately NOT order-gated here — a single expected_order cannot honestly cover both norms on three meshes.",
+  "problem": "../../../../problems/divergence_mpas_l0.esm",
+  "model": "Divergence",
+  "rule": "../../../../grids/mpas/rules/fv_divergence_cell.esm",
+  "grid": "mpas",
+  "resolutions": [
+    {
+      "n": 977,
+      "problem": "../../../../problems/divergence_mpas_l0.esm",
+      "bindings": {}
+    },
+    {
+      "n": 1828,
+      "problem": "../../../../problems/divergence_mpas_l1.esm",
+      "bindings": {}
+    },
+    {
+      "n": 3590,
+      "problem": "../../../../problems/divergence_mpas_l2.esm",
+      "bindings": {}
+    }
+  ],
+  "norms": [
+    "Linf_error"
+  ],
+  "assert_time": 1.0,
+  "expected_order": 1.0,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14,
+      "_doc": "Matches the other convergence cases' pinning."
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

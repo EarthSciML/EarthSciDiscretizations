@@ -1,0 +1,437 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "hjweno_norm_1d_eikonal_dirichlet_mms",
+    "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_1d/rules/hjweno_norm_D1_dirichlet_bc on the unit interval [0,1] with inhomogeneous DIRICHLET (state-constraint) boundaries, the Dirichlet companion of problems/hjweno_norm_1d_eikonal_mms.esm (periodic). Forced-steady eikonal u_t = -S|u_x| + S|g'(x)| with g(x) = sin(2 pi x) + 0.5 + x: u_t = -S|g'| + S|g'| = 0 continuously, so g is exact for all t and is the analytic reference. Discretely u_t = S*(|g'| - hjweno(u)); the imbalance is the fifth-order HJ-WENO-Z truncation S*(|g'| - hjweno(g)) = O(dx^5), so ||u(T) - g|| = O(dx^5) (expected order 5). Prescribed walls gL = g(0) = 0.5, gR = g(1) = 1.5. g is SMOOTH everywhere (it is |u_x|, not u, that has kinks, at the u_x = 0 critical points near x = 0.275, 0.725), so the WENO-Z one-sided reconstructions stay fifth order INCLUDING at those critical points (WENO-Z tau_5 weights, Borges 2008), and the Godunov max/min resolves the |grad| kinks. THE BOUNDARY RETAINS FIFTH ORDER: g = sin(2 pi x) + linear is antisymmetric about x=0 and x=1, so the antisymmetric mirror ghosts (u[0]=2gL-u[1], u[-1]=2gL-u[2], u[-2]=2gL-u[3]; and the mirror at the right wall) reproduce g's true smooth extension to every ghost depth the seven-point stencil reaches; the six near-boundary WENO faces see a smooth extension and converge at the interior fifth-order rate -- a clean order-5 gate with nothing to exempt. The linear part 0.5 + x is represented EXACTLY by the discrete Dirichlet operator (the mirror reflection preserves affine data to every ghost depth), so the error comes solely from the sine mode. Geometry contract fulfilled for [0,1]: x0 = 0, dx = 1/N. The ic, forcing, and test references spell x_i = (i - 1/2)/N inline from literals and N (build-time scope-free). Per-resolution error norms pinned in tests/conformance/convergence/hjweno_norm_1d_eikonal_dirichlet_mms/golden/errors.json. Julia integrator tolerances are pinned tight so the temporal truncation stays below the finest spatial error, isolating the spatial order.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:hamilton_jacobi",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Peng, D. (2000). Weighted ENO Schemes for Hamilton-Jacobi Equations. SIAM Journal on Scientific Computing, 21(6), 2126-2143. Fifth-order HJ-WENO reconstruction combined by the Godunov Hamiltonian.",
+        "doi": "10.1137/S106482759732455X"
+      },
+      {
+        "citation": "Borges, R., Carmona, M., Costa, B., & Don, W. S. (2008). An improved WENO scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6), 3191-3211. WENO-Z weights recovering fifth order at critical points u_x = 0.",
+        "doi": "10.1016/j.jcp.2007.11.038"
+      },
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. Convergence of the monotone Godunov Hamiltonian to the viscosity solution of the eikonal equation at first order.",
+        "doi": "10.1137/0729053"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (cell-centered Dirichlet via mirror ghost)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "HJWenoEikonalDirichletMMS": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/hjweno_norm_D1_dirichlet_bc.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x"
+          ],
+          "description": "Level-set field integrated under the forced eikonal u_t = -S*|u_x| + S|g'|; starts at and stays near the manufactured solution g(x) = sin(2 pi x) + 0.5 + x, deviating by the truncation error."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "1/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi speed. The forcing carries the matching S so g is the exact steady solution for any S > 0."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.5,
+          "description": "Prescribed field value at the left wall x=x0 (the rule's Dirichlet free name), equal to the manufactured wall value g(0) = 0.5."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1.5,
+          "description": "Prescribed field value at the right wall x=x0+N*dx (the rule's Dirichlet free name), equal to the manufactured wall value g(1) = 1.5."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is substituted as an integer literal at load (esm-spec 9.7.6)."
+        },
+        "forcing": {
+          "type": "observed",
+          "units": "1/s",
+          "shape": [
+            "x"
+          ],
+          "description": "The manufactured source |g'(x)| = |2 pi cos(2 pi x_i) + 1| (the S factor folded via the du/dt scaling; x_i = (i - 1/2)/N spelled inline). It exactly balances the continuous operator so g is the steady exact solution; the residual after discretization is the truncation error.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                0.5,
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "i",
+                        0.5
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        1,
+                        "N"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "S",
+              {
+                "op": "-",
+                "args": [
+                  "forcing",
+                  {
+                    "op": "sqrt",
+                    "args": [
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "D",
+                            "args": [
+                              "u"
+                            ],
+                            "wrt": "x"
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_eikonal_dirichlet",
+          "description": "Manufactured solution g(x) = sin(2 pi x) + 0.5 + x, S = 1, with prescribed Dirichlet wall values gL = g(0) = 0.5 and gR = g(1) = 1.5. Derivation: u_t = -S|u_x| + S|g'| with u(0) = g gives u_t = 0 at the continuous level, so g is the exact solution for all t; discretely u_t = S*(|g'| - hjweno(u)) and the initial imbalance is the truncation error S*(|g'| - hjweno(g)) = O(dx^5). g = sin(2 pi x) + linear is antisymmetric about both walls, so the antisymmetric mirror-ghost Dirichlet closure reproduces g's true smooth extension one cell outside each wall, and the near-boundary cells retain the interior order. References evaluate g at cell centers x_i = (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (the wall constants 0.5 and slope 1.0 match the gL and (gR - gL) parameter values). The t=0 assertion pins the ic wiring (L2_error 0 within 1e-9). The t=0.1 assertion bounds the error under the cap 0.001. Exact per-resolution L2/Linf errors are pinned in tests/conformance/convergence/hjweno_norm_1d_eikonal_dirichlet_mms/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0.5,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            "N"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0.5,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            "N"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

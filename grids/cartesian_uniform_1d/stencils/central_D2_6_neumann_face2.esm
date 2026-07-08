@@ -1,0 +1,40 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_6_neumann_face2",
+    "description": "Sixth-order one-sided second-derivative closure for the SECOND cell from a Neumann (fixed-flux) wall on cartesian_uniform_1d, cell-centered. Match-less named scalar template; the boundary-condition rule (rules/central_D2_6_neumann_bc) applies it at the second interior row, whose centered 7-point stencil would reach two cells outside the domain. The same eight data as central_D2_6_neumann_face1 (the wall derivative q = du/dx at offset 0 and the seven nearest cells f1..f7 at offsets {1/2,3/2,5/2,7/2,9/2,11/2,13/2}*dx) determine the degree-7 Hermite-type polynomial; differentiating it twice at the SECOND center (offset 3/2 dx) gives D2 = (1182720 q dx + 18691149 f1 - 35446775 f2 + 14068125 f3 + 5473470 f4 - 3779905 f5 + 1136601 f6 - 142665 f7) / (15852420 dx^2) (Fornberg 1988 weights for the offset node set with a derivative constraint at the wall). Exact for polynomials up to degree 7, so the local truncation error is O(dx^6), matching the interior 7-point stencil; the seven value-weights sum to zero (18691149 - 35446775 + 14068125 + 5473470 - 3779905 + 1136601 - 142665 = 0) and the derivative term supplies the exact wall slope, so a steady ramp with the matching wall flux is discretely exact. Written for a LEFT (low-index) wall where q = +du/dx points into the domain; reused unchanged at the right wall's second cell by reflection (the second derivative is even, du/dx odd), so the rule binds q -> -qR there with f1..f7 mapped to the cells in increasing distance from the right wall. `dx` is a free name resolving to the consuming model's spacing variable (the grid's consumer-supplied geometry contract; see grids/cartesian_uniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "order:6", "stencil_width:8"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_templates": {
+    "central_D2_6_neumann_face2": {
+      "params": ["q", "f1", "f2", "f3", "f4", "f5", "f6", "f7"],
+      "description": "D2 = (1182720 q dx + 18691149 f1 - 35446775 f2 + 14068125 f3 + 5473470 f4 - 3779905 f5 + 1136601 f6 - 142665 f7) / (15852420 dx^2). q is the wall derivative datum entering this low-wall closure (bind q -> -qR at the high wall); f1..f7 are the seven cells in order of increasing distance from the wall.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [1182720, "q", "dx"] },
+              { "op": "*", "args": [18691149, "f1"] },
+              { "op": "*", "args": [-35446775, "f2"] },
+              { "op": "*", "args": [14068125, "f3"] },
+              { "op": "*", "args": [5473470, "f4"] },
+              { "op": "*", "args": [-3779905, "f5"] },
+              { "op": "*", "args": [1136601, "f6"] },
+              { "op": "*", "args": [-142665, "f7"] }
+            ]
+          },
+          { "op": "*", "args": [15852420, "dx", "dx"] }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_dirichlet_central",
+    "description": "MMS driver: 1-D linear advection-diffusion u_t = -c D(u,x) + nu D(D(u,x),x) on the unit interval [0, 1] with fixed-value (DIRICHLET) walls, whose advective gradient term D(u,x) is discretized by grids/cartesian_uniform_1d/rules/central_D1_dirichlet_bc (2nd-order centered interior, mirror-ghost fixed-value faces) — the RULE UNDER TEST — and whose diffusive term D(D(u,x),x) is discretized by grids/cartesian_uniform_1d/rules/central_D2_dirichlet_bc (both closures share the same wall values gL, gR). WHY ADVECTION-DIFFUSION, NOT PURE ADVECTION: a fixed-value mirror-ghost closure PINS the field at a wall, which is well posed and dissipative only where the flow is INTO the domain or where a genuine second-derivative (diffusion) operator makes Dirichlet its natural condition. A pure first-order advection with fixed values at BOTH walls is ill posed: at an outflow wall the pinned value REFLECTS (a Kreiss/GKS-unstable mode whose error grows as the grid refines), and a convergent both-inflow speed instead seeds an undamped interior stagnation mode — so no constant- or variable-speed pure-advection driver converges (unlike the zero-gradient sibling, whose extrapolation-like one-sided faces are non-reflecting and so DO admit a pure inflow/outflow advection driver). Adding a physical diffusion nu D(D(u,x),x) supplies the dissipation that renders the two-sided fixed-value problem well posed and the semi-discrete operator stable, while the advective gradient term is still genuinely exercised: a broken/first-order central_D1_dirichlet_bc would degrade the observed order below 2, so the sweep is a real order test of the rule. EXACT UNFORCED SOLUTION (no manufactured forcing needed — mirrors the DECAY structure of problems/heat_1d_dirichlet, whose parabolic smoothing keeps boundary truncation at global O(dx^2)): u*(x,t) = e^{2x} + e^{-lambda t} e^{x} sin(pi x) with c = 1, nu = 1/2 and lambda = nu pi^2 + c^2/(4 nu) = 5.434802200544679. Both terms solve u_t = -c u_x + nu u_xx exactly: (i) the STEADY part u_s(x) = e^{2x} = e^{(c/nu) x} satisfies -c u_s' + nu u_s'' = e^{2x}(-c(c/nu) + nu(c/nu)^2) = 0 (the homogeneous advection-diffusion steady mode), carrying the NONZERO wall values gL = u_s(0) = 1 and gR = u_s(1) = e^2 = 7.38905609893065 — so this problem exercises the inhomogeneous mirror-ghost face term 2*g at BOTH walls, not merely the homogeneous default; (ii) the DECAY part e^{-lambda t} phi(x) with phi(x) = e^{c x/(2 nu)} sin(pi x) = e^{x} sin(pi x) is the first Dirichlet eigenfunction of the advection-diffusion operator (phi(0)=phi(1)=0, so it leaves the wall values unchanged), giving u_t = -lambda u* and driving the time evolution through which the operators are exercised. The discrete field then differs from u* only by the spatial truncation of the two operators, dominated by the advective central_D1_dirichlet_bc term. OBSERVATION WINDOW t=0.05: the diffusion is dissipative so no short-window trick is needed; t is kept modest so the decay part (e^{-lambda t} = 0.76 at t=0.05) is still O(1), keeping the dynamics — and hence the operator test — active. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). The ic and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). The gL/gR wall values, by contrast, survive only in the runtime rule bodies. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_dirichlet_central/golden/errors.json.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection_diffusion", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "Gustafsson, B., Kreiss, H.-O., Sundstrom, A. (1972). Stability theory of difference approximations for mixed initial boundary value problems. II. Mathematics of Computation 26(119), 649-686.",
+        "doi": "10.1090/S0025-5718-1972-0341888-3"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (cell-centered Dirichlet via mirror ghost) and Chapter 10 (well-posed boundary conditions for advection and advection-diffusion)."
+      }
+    ]
+  },
+  "models": {
+    "Advection": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_1d/rules/central_D1_dirichlet_bc.esm" },
+        { "ref": "../grids/cartesian_uniform_1d/rules/central_D2_dirichlet_bc.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": ["x"],
+          "description": "Advected-diffused tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed for the advective gradient term D(u,x) (the rule under test). Fixes the steady mode e^{(c/nu)x} and the eigenfunction skew e^{cx/(2nu)}."
+        },
+        "nu": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.5,
+          "description": "Diffusivity for the stabilizing D(D(u,x),x) term. Makes the two-sided fixed-value problem well posed; c/nu = 2 keeps advection a leading contributor to the truncation."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "kg/m^3",
+          "default": 1.0,
+          "description": "Prescribed field value at the left wall x=x0, shared by the advective (central_D1_dirichlet_bc) and diffusive (central_D2_dirichlet_bc) Dirichlet closures. Set to 1 = u_s(0) = e^0 (the rule's own free-name default is 0; this problem overrides it nonzero so the inhomogeneous mirror-ghost face term appears at runtime)."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "kg/m^3",
+          "default": 7.38905609893065,
+          "description": "Prescribed field value at the right wall x=x0+N*dx, shared by both Dirichlet closures. Set to e^2 = 7.38905609893065 = u_s(1) (the rule's own free-name default is 0; this problem overrides it nonzero so the inhomogeneous mirror-ghost face term appears at runtime)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, "N"] },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rules' expanded bodies at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i"],
+            "args": [],
+            "ranges": { "i": { "from": "x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] },
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] },
+                    { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [{ "op": "-", "args": ["c"] }, { "op": "D", "args": ["u"], "wrt": "x" }] },
+              { "op": "*", "args": ["nu", { "op": "D", "args": [{ "op": "D", "args": ["u"], "wrt": "x" }], "wrt": "x" }] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_dirichlet_central",
+          "description": "Exact unforced advection-diffusion solution u*(x,t) = e^{2x} + e^{-lambda t} e^{x} sin(pi x) with c = 1, nu = 1/2, lambda = 5.434802200544679, fixed-value walls gL = 1, gR = e^2. Derivation: the steady mode e^{2x} (nonzero walls) and the decaying first Dirichlet eigenfunction e^{-lambda t} e^{x} sin(pi x) (homogeneous walls) each solve u_t = -c u_x + nu u_xx exactly, so u* is an exact solution and the discrete drift is the pure spatial truncation of the two operators — dominated by the advective central_D1_dirichlet_bc term (metadata.description). The diffusion makes the two-sided fixed-value problem well posed and stable; the decay is parabolic, so boundary truncation stays global O(dx^2). References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.05 assertion bounds the truncation-driven error against the exact reference (well under the bound at the default N=64, falling at order 2). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_dirichlet_central/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.05 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] },
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] },
+                        { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.05,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.01 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] },
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "exp", "args": [{ "op": "*", "args": [-5.434802200544679, 0.05] }] },
+                        {
+                          "op": "*",
+                          "args": [
+                            { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] },
+                            { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }] }] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

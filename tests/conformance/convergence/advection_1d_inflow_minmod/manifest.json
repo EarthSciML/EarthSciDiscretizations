@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_inflow_minmod",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/flux_limiter_minmod_D_inflow_bc driven by problems/advection_1d_inflow_minmod.esm (model AdvectionMinmodInflow), loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) -- no per-resolution fixture files. The manufactured steady solution cos(pi x) is held by the exact forcing c dGdx with left inflow gL = u*(0) = 1 (derivation and the inflow/outflow-compatibility argument in the problem file). cos(pi x) is smooth and monotone on [0,1], so the minmod limiter is INACTIVE in the interior (second-order there), and the boundary faces -- though a FORMALLY first-order closure (the prescribed inflow flux gL, the extrapolated outflow) -- carry only higher-order residuals for THIS compatible MMS because the exact inflow value is supplied and the wall gradient u*_x is zero at both walls. The OBSERVED order is therefore close to the design second order, norm-dependent: the Julia golden gives pairwise L2 orders [1.80, 1.88, 1.94] (median 1.88) and Linf [1.56, 1.76, 1.95] (median 1.76) over N=16..128, both approaching 2 from below. expected_order 1.8 with the standard-ish order_tolerance 0.2 brackets both norm medians; the numbers are read from the Julia sweep, not forced.",
+  "problem": "../../../../problems/advection_1d_inflow_minmod.esm",
+  "model": "AdvectionMinmodInflow",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/flux_limiter_minmod_D_inflow_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 1.8,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

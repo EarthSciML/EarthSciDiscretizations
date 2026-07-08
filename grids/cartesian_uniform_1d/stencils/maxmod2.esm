@@ -1,0 +1,44 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "maxmod2",
+    "description": "Two-argument maxmod slope combiner in pure max/min (division-free, epsilon-free) form: maxmod(p, q) = max(0, max(p, q)) + min(0, min(p, q)). When p and q share sign it returns the LARGER-magnitude of the two (with that common sign); when they have opposite signs it returns EXACTLY 0. It is the sign-preserving companion of minmod2 (which returns the smaller magnitude): together they express Roe's (1986) superbee limiter as a double minmod capped by a maxmod. The superbee flux (stencils/flux_limiter_superbee_flux.esm) forms the two candidate corrections p = minmod2(2*Dm, Dp) and q = minmod2(Dm, 2*Dp) (Dm = u_i - u_{i-1}, Dp = u_{i+1} - u_i) and combines them with maxmod2(p, q), giving the compressive upper edge of the Sweby (1984) second-order TVD region; because p and q always share sign, the opposite-sign branch of maxmod is inert here and maxmod2 simply selects the larger admissible slope. This is the division-free rewrite of phi(r)*(u_{i+1}-u_i) for superbee phi(r) = max(0, min(2r, 1), min(r, 2)): the construction equals phi(r)*Dp wherever r = Dm/Dp is defined and is finite (an exact 0) at a zero jump, so no explicit ratio and no epsilon are formed. Match-less named template of two scalar arguments (p, q). Value-only, dx-free.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_volume", "grid:cartesian_uniform_1d", "op:limiter", "order:2", "stencil_width:2"],
+    "references": [
+      {
+        "citation": "Roe, P. L. (1986). Characteristic-based schemes for the Euler equations. Ann. Rev. Fluid Mech. 18:337-365 (superbee eq. 36).",
+        "doi": "10.1146/annurev.fl.18.010186.002005"
+      },
+      {
+        "citation": "Sweby, P. K. (1984). High resolution schemes using flux limiters for hyperbolic conservation laws. SIAM J. Numer. Anal. 21(5):995-1011.",
+        "doi": "10.1137/0721062"
+      }
+    ]
+  },
+  "expression_templates": {
+    "maxmod2": {
+      "params": ["p", "q"],
+      "description": "maxmod(p,q) = max(0,max(p,q)) + min(0,min(p,q)) (pure max/min, division-free)",
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "max",
+            "args": [
+              0,
+              { "op": "max", "args": ["p", "q"] }
+            ]
+          },
+          {
+            "op": "min",
+            "args": [
+              0,
+              { "op": "min", "args": ["p", "q"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

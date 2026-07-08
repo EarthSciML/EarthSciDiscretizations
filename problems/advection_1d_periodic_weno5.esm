@@ -1,0 +1,284 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_periodic_weno5",
+    "description": "MMS driver: 1-D linear advection u_t = -c u_x on the periodic unit interval [0, 1], discretized by grids/cartesian_uniform_1d/rules/weno5_D_periodic (fifth-order upwind WENO5-Z, conservative flux-difference form, periodic wrap). Exact solution u(x,t) = sin(2 pi (x - c t)) - the initial profile transported at speed c with no change of shape, so no forcing term is required. WENO5-Z is essentially non-oscillatory and, on this smooth profile, reduces to its optimal fifth-order linear reconstruction away from the (harmless) sin extrema; the WENO-Z weighting (Borges 2008) keeps full fifth order through those first-order critical points where the classic Jiang-Shu weights would drop to ~fourth order (Henrick 2005). The relative L2 error therefore falls at order 5 - the high-order companion to advection_1d_periodic (first-order upwind) and advection_1d_periodic_central (second-order centered). The dominant smooth-limit truncation error is the dissipative upwind term -(dx^5/60) u^(6) (verified by Taylor expansion of the conservative flux difference and by a numpy reference reproduction of the exact lowered AST). The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent) resolve the rule body's free dx at evaluation. Initial condition and test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient Implementation of Weighted ENO Schemes. Journal of Computational Physics, 126(1), 202-228.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Borges, R., Carmona, M., Costa, B., & Don, W. S. (2008). An improved weighted essentially non-oscillatory scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6), 3191-3211.",
+        "doi": "10.1016/j.jcp.2007.11.038"
+      }
+    ]
+  },
+  "models": {
+    "Advection": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/weno5_D_periodic.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": [
+            "x"
+          ],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; the WENO5 rule is upwind for flow in +x)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "sin",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  6.283185307179586,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "c"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_transport_weno5",
+          "description": "Exact solution u(x,t) = sin(2 pi (x - c t)) with c = 1. Derivation: u_t = -2 pi c cos(2 pi (x - c t)) = -c u_x exactly, periodic on [0,1]; no forcing term. References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the WENO5-Z error, which is tiny (about 7e-8 relative L2 at the default N=64) and falls at order 5. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_periodic_weno5/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      6.283185307179586,
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          0.1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

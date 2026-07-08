@@ -1,0 +1,261 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "godunov_norm_D2_interior",
+    "description": "Interior-only first-order Godunov (Rouy-Tourin / Osher-Sethian) upwind gradient magnitude |grad u| = sqrt(u_x^2 + u_y^2) on cartesian_uniform_2d over the doubly-interior block [2, NX-1] x [2, NY-1] where the 5-point stencil u[i,j], u[i-1,j], u[i+1,j], u[i,j-1], u[i,j+1] fits without reaching a boundary. Per-axis backward D-_x=(u[i,j]-u[i-1,j])/dx, D-_y=(u[i,j]-u[i,j-1])/dy and forward D+_x=(u[i+1,j]-u[i,j])/dx, D+_y=(u[i,j+1]-u[i,j])/dy; the norm is sqrt( max(D-_x,0)^2 + min(D+_x,0)^2 + max(D-_y,0)^2 + min(D+_y,0)^2 ), the per-axis entropy (upwind) fix of Osher-Sethian (1988) / Rouy-Tourin (1992). Match-less named template extracting the doubly-interior aggregate of grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic verbatim so a boundary-condition layer (rules/godunov_norm_D2_dirichlet_bc.esm) wraps it with prescribed-value edge and corner faces via apply_expression_template, exactly as central_D2x_dirichlet_bc reuses central_D2x_interior. EXACT on a linear field u = a x + b y + c (D-_x=D+_x=a, D-_y=D+_y=b, norm = sqrt(a^2+b^2) = |grad u|). First order O(dx + dy) on smooth data, uniform through the |grad| kinks. dx, dy are free names resolving to the consuming model's spacing variables (grids/cartesian_uniform_2d/grid.esm consumer-supplied geometry contract).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:grad_norm",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The max/min upwind (entropy) construction of |grad phi| for the level-set Hamilton-Jacobi term.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. The Godunov Hamiltonian sqrt(max(D-,0)^2 + min(D+,0)^2) as the monotone, first-order-convergent discretization of the eikonal |grad u|.",
+        "doi": "10.1137/0729053"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "godunov_norm_D2_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NX",
+                1
+              ]
+            }
+          ],
+          "j": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NY",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "sqrt",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    "j"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    },
+                                    "j"
+                                  ]
+                                }
+                              ]
+                            },
+                            "dx"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    },
+                                    "j"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    "j"
+                                  ]
+                                }
+                              ]
+                            },
+                            "dx"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    "j"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "dy"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "i",
+                                    "j"
+                                  ]
+                                }
+                              ]
+                            },
+                            "dy"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

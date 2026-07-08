@@ -1,0 +1,539 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "godunov_norm_2d_eikonal_mms",
+    "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic on the doubly-periodic unit box [0,1]x[0,1], the 2-D companion of problems/godunov_norm_1d_eikonal_mms.esm. Forced-steady eikonal / Hamilton-Jacobi equation u_t = -S|grad u| + S|grad g| with the manufactured solution g(x,y) = sin(2 pi x) + sin(2 pi y): because u_t = -S|grad g| + S|grad g| = 0, g is the EXACT solution of the continuous forced PDE for all t (both the initial condition and the steady state), so the analytic reference at every time is g itself. The forcing S|grad g| = 2 pi S sqrt(cos^2(2 pi x) + cos^2(2 pi y)) is the constant-in-time source that balances the operator. Discretely u_t = S*(|grad g| - godunov(u)); starting from u(0) = g the imbalance is exactly the first-order truncation error S*(|grad g| - godunov(g)) = O(dx + dy), so the discrete solution drifts from g at rate O(h) and the L2 / Linf error at the assert time falls as O(h) \u2014 expected order 1. THE KINKS ARE NOT A PROBLEM: |grad g| has slope-sign kinks where each gradient component g_x = 2 pi cos(2 pi x), g_y = 2 pi cos(2 pi y) changes sign (x,y = 1/4, 3/4) and a norm cusp where grad g vanishes, yet the Godunov / Rouy-Tourin / Osher-Sethian entropy fix sqrt(max(D-,0)^2 + min(D+,0)^2) selects the correct one-sided branch per axis through the kink, so the scheme retains clean first-order accuracy in L2 AND Linf uniformly (numerically verified: pairwise orders 0.99 -> 1.00 in both norms across NX=NY = 16..128). This is the property that distinguishes the Godunov norm from a naive centered |grad u| and the reason a doubly-periodic sin MMS \u2014 whose gradient components necessarily change sign \u2014 still converges at order 1. Both g and |grad g| are doubly periodic (g(0,y)=g(1,y), g(x,0)=g(x,1); |cos| has period 1/2), so the periodic wrap is fully consistent (no seam artifact), unlike a non-periodic ramp; the wrap faces converge at the same order-1 rate as the interior, so the state L2/Linf reduction over the whole field is a clean order-1 gate with nothing to exempt. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_2d/grid.esm) is fulfilled for the unit box: x0=y0=0 and dx=1/NX, dy=1/NY (observeds dividing the extent by the metaparameter names, esm-spec 9.7.6, so the loader-API rebinding of NX,NY for the convergence sweep keeps dx,dy consistent). The ic, the forcing observed, and the test reference spell the cell-center coordinates x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY inline from literals and the metaparameters NX,NY (the build-time cellwise evaluation is scope-free; build-time coordinate expressions fold from literals and NX,NY alone, never the free-name x_coord/y_coord templates). Per-resolution error norms are pinned in tests/conformance/convergence/godunov_norm_2d_eikonal_mms/golden/errors.json.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:hamilton_jacobi",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. Convergence of the monotone Godunov Hamiltonian sqrt(sum_d max(D-,0)^2 + min(D+,0)^2) to the viscosity solution of the eikonal equation at first order.",
+        "doi": "10.1137/0729053"
+      },
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The upwind entropy construction of |grad phi| for level-set Hamilton-Jacobi terms.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      }
+    ]
+  },
+  "models": {
+    "GodunovEikonal2DMMS": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Level-set field integrated under the forced eikonal u_t = -S*godunov(u) + S|grad g|; starts at and stays near the manufactured solution g(x,y) = sin(2 pi x) + sin(2 pi y), deviating by the O(h) truncation error."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "1/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi speed (u_t = -S|grad u|). The forcing carries the matching S so g is the exact steady solution for any S > 0."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          },
+          "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        },
+        "dy": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          },
+          "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the sweep keeps dy consistent."
+        },
+        "forcing": {
+          "type": "observed",
+          "units": "1/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "The manufactured source S|grad g| = 2 pi S sqrt(cos^2(2 pi x_i) + cos^2(2 pi y_j)), a spatially varying constant-in-time field (S folded via the du/dt scaling; here the |grad g| factor, x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY spelled inline). It exactly balances the continuous operator so g = sin(2 pi x) + sin(2 pi y) is the steady exact solution; the residual after discretization is the O(h) truncation error.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                6.283185307179586,
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            1,
+                                            "NX"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            1,
+                                            "NY"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NY"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "S",
+              {
+                "op": "-",
+                "args": [
+                  "forcing",
+                  {
+                    "op": "sqrt",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "x"
+                              },
+                              2
+                            ]
+                          },
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "y"
+                              },
+                              2
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_eikonal",
+          "description": "Manufactured solution g(x,y) = sin(2 pi x) + sin(2 pi y), S = 1. Derivation: u_t = -S|grad u| + S|grad g| with u(0) = g gives u_t = 0 at the continuous level, so g is the exact solution for all t; discretely u_t = S*(|grad g| - godunov(u)) and the initial imbalance is the truncation error S*(|grad g| - godunov(g)) = O(h), so u drifts from g at O(h) and ||u(T) - g|| = O(h). References evaluate g at the cell centers x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameters NX,NY only). The t=0 assertion pins the ic wiring (L2_error 0 within 1e-9). The t=0.2 assertion bounds the first-order error (about 0.039 L2 at NX=NY=64, comfortably under the 0.1 cap, which holds across the sweep). Exact per-resolution L2/Linf errors are pinned in tests/conformance/convergence/godunov_norm_2d_eikonal_mms/golden/errors.json; the observed order is asserted to be 1.0 +/- 0.15 by scripts/check_convergence_order.py.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.2
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.2,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.1
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

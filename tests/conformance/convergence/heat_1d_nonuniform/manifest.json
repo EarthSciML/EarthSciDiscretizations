@@ -1,0 +1,38 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_1d_nonuniform",
+  "description": "Observed-order-of-accuracy sweep for the conservative finite-volume non-uniform Laplacian rule central_D2_nonuniform_zero_flux_bc driven by problems/heat_1d_nonuniform.esm on the quadratic-stretch mesh (b=0.4). The problem file is loaded once per resolution with the loader-API metaparameter binding of N (esm-spec 9.7.6 binding site 4); the consumer re-derives the x-shaped geometry observeds xc and dxw from N at each resolution. The manufactured solution exp(-alpha pi^2 t) cos(pi x) has zero wall gradient (zero-flux compatible), so the recorded errors at t=0.1 are pure spatial-discretization error. The gate checks the L2 norm ONLY: the cell-centered zero-flux finite-volume operator is second-order in L2 by supraconvergence even though the wall face-gradient closure makes the Linf error converge more slowly (order ~1.4 rising toward 2 across this sweep) — the classic cell-centered Neumann boundary signature (LeVeque 2007 section 2.13). The golden still records both norms for provenance.",
+  "problem": "../../../../problems/heat_1d_nonuniform.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_zero_flux_bc.esm",
+  "grid": "cartesian_nonuniform_1d",
+  "resolutions": [
+    { "n": 8, "bindings": { "N": 8 } },
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

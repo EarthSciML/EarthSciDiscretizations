@@ -1,223 +1,130 @@
 ---
 title: "Authoring a rule"
-slug: "authoring-a-rule"
-description: "Conceptual closed-AST walkthrough for writing a new discretization rule: pattern-match a §4.2 PDE operator, lower it to a closed arrayop, delegate BCs to the domain, and validate with Layer-A/Layer-B fixtures."
+description: "Walkthrough: grid file → stencil → BC rule → lint → fixtures → goldens, per the AGENTS.md contract."
+weight: 2
 ---
 
-This guide walks through writing a new discretization rule end-to-end
-in the closed-AST lowering pattern. The running example is
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) — the
-two-point centered finite difference for ∂u/∂x on a uniform Cartesian
-axis. It is the smallest rule in the catalog that exercises every step,
-and it is the canonical linear exemplar.
+A rule author commits exactly: the library file(s), the
+`tests/conformance/ast/<rule>/` fixture + golden, a
+`tests/conformance/convergence/` case when an order claim is made — and nothing
+else (AGENTS.md §3). Docs pages are generated; never commit them.
 
-By the end you will have:
+## 0. Ground rules
 
-1. Pattern-matched a §4.2 PDE operator with metavariables.
-2. Lowered it to a closed `arrayop` expression in the §4.2 op vocabulary.
-3. Delegated boundary handling to the domain's `boundary_conditions`
-   block.
-4. Validated the rule with a Layer-A canonical-form fixture.
-5. Set up the Layer-B convergence sweep, which runs against the
-   closed-AST lowering for supported topologies.
+- **AST first.** All mathematics is the ESM Expression AST (esm-spec §4). No
+  helper functions hiding math, no registered functions for anything writable
+  in finite closed form.
+- **Single pathway.** This repo contains zero evaluators. Every golden number
+  is produced by an official ESS binding runner through
+  `.esm → parse → import/metaparameter resolution → §9.6.3 rewrite fixpoint →
+  official runner`. If a binding lacks a capability, file the issue upstream in
+  EarthSciSerialization — never patch a local shim.
+- Everything specific to a grid lives under `grids/<grid>/`. There is no
+  grid-generic rule file: the same scheme takes a different form on different
+  grids.
 
-For the full repository-infrastructure version of this workflow (paths,
-the three CI layers, walker registration, the staged
-`applicable: false → true` landing), see the
-[Add a new discretization rule]({{< ref "/tutorials/add-a-rule" >}})
-contributor tutorial.
+## 1. The grid file (reuse it if it exists)
 
-## Step 1 — Match a §4.2 PDE operator
+`grids/<grid>/grid.esm` declares metaparameters, index sets, and geometry
+templates, and carries the `esd:grid` kind tag plus `family:`. The filename is
+`grid.esm` and `metadata.name` equals the directory name (lint L003).
 
-A rule's `applies_to` clause is a pattern that the ESS rewriter unifies
-against the equation tree. The `op` field MUST be one of the §4.2 PDE
-operators: `D`, `grad`, `div`, `laplacian` (plus the pointwise-math
-vocabulary for non-spatial transformations).
+## 2. The stencil
 
-Do **not** invent off-spec match keys. Names like `advect`,
-`reconstruct`, `flux`, and `limit` are forbidden as `applies_to.op`
-values — those are *implementation details of a scheme*, not PDE
-operators. Every advection scheme matches a `D` (or, in flux form, a
-`div`); every reconstruction is part of the `arrayop` body of the rule
-that emits the reconstructed array.
-
-For our example, the operator is the spatial gradient:
+`grids/<grid>/stencils/<name>.esm`: a match-less template importing
+`../grid.esm`, whose body is the interior `aggregate` only. Tags:
+`esd:stencil` + `family:`, `grid:`, `op:` (L002). Put the provenance (Fornberg,
+LeVeque, Ringler, …) in `metadata.references` and the derivation in
+`metadata.description`.
 
 ```json
-"applies_to": {
-  "op":   "grad",
-  "args": ["$u"],
-  "dim":  "$x"
+"central_D2_interior": {
+  "params": ["f"],
+  "body": {
+    "op": "aggregate", "output_idx": ["i"], "args": ["f"],
+    "ranges": { "i": [2, { "op": "-", "args": ["N", 1] }] },
+    "expr": { "...": "(f[i+1] − 2·f[i] + f[i−1]) / dx²" }
+  }
 }
 ```
 
-`$u` and `$x` are pattern metavariables. They bind to the actual field
-name and axis at rewrite time, so the same rule fires for
-`grad(temperature, dim=x)` and `grad(salinity, dim=x)` alike. If a rule
-applies to multiple PDE ops, write one rule file per pattern — the
-catalog favours small, single-purpose rules.
+## 3. The rule
 
-## Step 2 — Lower to a closed `arrayop`
+`grids/<grid>/rules/<name>.esm`: imports the stencil (or the grid directly for
+one-region schemes), declares the single template whose `match` fires on the
+target operator and whose body is one `makearray`:
 
-The `replacement` is a single AST node in the §4.2 op vocabulary.
-`arrayop` is the usual top-level shape: it carries an `output_idx`
-(symbolic indices spanning the result), an `expr` (the scalar body
-evaluated at each index point), and `args` (the input operands).
+- **regions** tile the axes named by the `axes:` tag exactly — lint L006
+  verifies this by folding metaparameter bounds at sampled sizes (one even,
+  one odd — parity mistakes in region arithmetic are the classic bug).
+- The **interior region** invokes the stencil via
+  `apply_expression_template`.
+- The **face regions** are the boundary condition: one-sided differences for
+  zero-gradient, a periodic wrap, a fixed value for Dirichlet, an `index` into
+  another variable for a shared seam. Later regions overwrite earlier
+  (esm-spec §4.3.2).
+- A compound scheme (e.g. matching `D(D(f,x),x)` whole) sets `priority` so it
+  out-ranks plain-D rules (§9.6.3).
+- A **`where` shape constraint** (§9.6.1) scopes the match to *this* grid:
+  `"where": { "f": { "shape": ["x"] } }` (or `{"F": {"shape": ["edges"]}}` for
+  the MPAS div rule). Every library rule carries one — it stops an axis-name
+  collision from firing the rule on an unrelated derivative, and it is what lets
+  the rule be imported twice (renamed) without a first-declared-wins tie-break:
+  the shape names an index set, so §9.7.7 renaming rewrites it to `[meshA.x]` /
+  `[meshB.x]` along with the `wrt` literal. See
+  [the layering](/guide/layering/#two-instances-of-one-grid-rename-and-where).
 
-For the centered difference, the body is `(u[$x+1] - u[$x-1]) / (2·dx)`:
+  **Authoring convention:** a `where` shape requires a *bare declared shaped
+  field*. Write the constraint over a plain parameter (`f`, `F`), and document
+  that a consumer differentiating a compound inline expression (`div(u*h)`,
+  `D(D(u*v,x),x)`) must first bind it to a declared shaped observed — the
+  constraint will not match a compound inline argument.
 
-```json
-"replacement": {
-  "op": "arrayop",
-  "output_idx": ["$x"],
-  "expr": {
-    "op": "/",
-    "args": [
-      { "op": "-", "args": [
-        { "op": "index", "args": ["$u", { "op": "+", "args": ["$x", 1] }] },
-        { "op": "index", "args": ["$u", { "op": "-", "args": ["$x", 1] }] }
-      ]},
-      { "op": "*", "args": [2, "dx"] }
-    ]
-  },
-  "args": ["$u"]
-}
+Tags: `esd:rule` + `family:`, `grid:`, `op:`, `order:`, `bc:`, `axes:` (L002);
+`axes:` lists the output dimensions in order, comma-separated. The filename
+stem, `metadata.name`, and the sole `expression_templates` key must agree
+(L003), and the file must live under the grid directory its `grid:` tag names
+(L004/L005). All files declare `esm: 0.8.0` (L008).
+
+## 4. Lint
+
+```sh
+python scripts/validate-library.py            # schema + policy lint L001–L008
+python scripts/validate-library.py --invalid  # lint-fixture expectations
 ```
 
-A few authoring rules that follow from "stay in the §4.2 vocabulary":
+This needs a sibling `EarthSciSerialization` checkout (or `ESS_ROOT`) for the
+JSON schema, and `pip install jsonschema`.
 
-- **No scheme-specific kernels.** Every `op` in the body is one of the
-  §4.2 ops listed under [Operators]({{< ref "/guide/operators" >}}). If
-  you need a limiter, write `min` / `max` / `ifelse`. If you need a
-  polynomial reconstruction, write `+` / `*` / `index`. Reviewers reject
-  `fn` nodes that re-implement a clamp under a custom name.
-- **No `bc:*` ops in the body.** The lowering is the *interior* closed
-  form; boundaries come in at Step 3.
-- **No host-language code anywhere.** Rules ship JSON. The reference
-  evaluator implements §4.2 once; rules compose against it.
+## 5. Fixtures
 
-Larger rules follow the same shape. A flux-form lowering uses an
-`arrayop` whose `output_idx` ranges over edges; a limiter is a
-`broadcast` of `min`/`max`/`ifelse` over operand arrays; a 5-point
-Laplacian is an `arrayop` summing five `index` nodes with the
-appropriate coefficients in the body. The full op alphabet is under
-[Operators]({{< ref "/guide/operators" >}}).
+- **`tests/conformance/ast/<rule>/`** — the post-lowering AST fixture: a tiny
+  consuming model binding small sizes, plus the canonical-emit golden. Every
+  binding must reproduce it byte-identically.
+- **`tests/conformance/convergence/<case>/manifest.json`** — required whenever
+  the rule claims an `order:`. It names the problem, the rule, the resolutions
+  (loader-API bindings — no per-resolution files), norms, `expected_order`,
+  and `order_tolerance`, and starts life with `"status": "pending-golden"`.
+- A driving problem under `problems/` with inline §6.6.5 MMS tests, if one
+  does not already exist (see [MMS and convergence](/guide/mms-and-convergence/)).
 
-## Step 3 — Delegate boundary conditions to the domain
+## 6. Goldens
 
-Boundary handling is declared once per field on the domain's
-`boundary_conditions` block (`esm-spec.md` §11.5). The rule itself stays
-BC-agnostic — its lowering covers only the interior. A separate set of
-**downstream BC rewrite rules** consumes the domain's BC list and
-rewrites the index expressions at the boundary cells:
+Golden regeneration is Julia-reference-only:
 
-| Domain BC | Index transformation applied to `$u[$x ± 1]` |
-|---|---|
-| `periodic` | wrap-around: `mod($x ± 1 + N, N)` (see [`periodic_bc`]({{< ref "/rules/periodic_bc" >}})) |
-| `dirichlet` / `constant` | boundary cell reads the prescribed value |
-| `neumann` / `zero_gradient` | mirror the in-range neighbor (clamp the index) |
-| `robin` | mixed coefficient row at the boundary |
-
-Concretely, this means **do not** write `ifelse` branches in your
-`arrayop` body to special-case the boundary cells. Let the lowering be
-the one-line interior formula; the BC rewriter will rewrite the index
-expressions at the boundary at lowering time.
-
-## Step 4 — Layer-A canonical fixture (validate the JSON)
-
-Layer A is the canonical-form round-trip: load the rule JSON, walk the
-AST, re-serialize, and compare. It catches schema violations,
-metavariable typos, and accidental host-language leakage. Every rule
-ships at least one Layer-A fixture covering the lowering.
-
-The Layer-A fixture for our running example lives next to the rule:
-
-```
-discretizations/finite_difference/centered_2nd_uniform/fixtures/canonical/
+```sh
+./scripts/regenerate-goldens.sh convergence
 ```
 
-Run the catalog tests locally to exercise it:
+It drives the canonical ESS pipeline and nothing else. A PR that changes
+goldens must say *why* (spec change, rule change, or bug — never "refreshed to
+green"). Once `golden/errors.json` lands, `scripts/check_convergence_order.py`
+asserts the observed order in CI without any binding installed, and the docs
+build renders the observed-order table and convergence plot from the same file.
 
-```bash
-julia --project=. -e 'using Pkg; Pkg.test()'
-```
+## 7. Done
 
-The catalog tests are the *defensive* layer — they confirm the rule
-parses, the metavariables resolve, and the lowering walks cleanly. They
-should pass before you proceed to Step 5.
-
-## Step 5 — Layer-B convergence sweep
-
-Layer B is an MMS (manufactured-solution) convergence sweep that
-verifies the rule's empirical order of accuracy on a refinement
-sequence. Each rule ships an `input.esm` that names the manufactured
-solution and a sweep of grid sizes; the harness measures L∞ / L₂ error
-and fits a slope.
-
-Layer B is **active**: the walker (`test/walk_esd_tests.jl`) drives the
-sweep through the canonical `discretize → build_evaluator` pipeline for
-every topology with an implemented runner. The supported set is the
-walker's `_LAYER_B_SUPPORTED_TOPOLOGIES`. The fixture declares a
-registered `mms_kind` so the runner can construct the manufactured
-solution; for our running example:
-
-```json
-{
-  "rule": "centered_2nd_uniform",
-  "manufactured_solution": "sin(2*pi*x) on [0,1] periodic; derivative 2*pi*cos(2*pi*x)",
-  "sampling": "cell_center",
-  "grids": [
-    { "n": 16 }, { "n": 32 }, { "n": 64 }, { "n": 128 }
-  ],
-  "applicable": true,
-  "mms_kind": "sin_2pi_x_periodic"
-}
-```
-
-`applicable: false` (paired with a `skip_reason` naming the tracked
-blocker) is the escape hatch for rules whose topology does not yet have
-a Layer-B runner, or whose acceptance signature isn't a
-manufactured-solution sweep (index-rewrite BC rules, TVD limiters). The
-walker surfaces those fixtures as structured SKIPs; once the runner for
-that topology lands, the fixture flips to `applicable: true` without
-other edits. It is **not** a general escape hatch for "the convergence
-test is hard to write", "we haven't verified the order yet", or "the
-MMS choice is wrong". A `skip_reason` that doesn't name a tracked
-blocker should not land.
-
-## Step 6 — Document and link
-
-Each rule has a doc page under `docs/content/rules/<rule>.md`. Follow
-the structure of
-[`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) —
-overview, `applies_to` and `replacement` AST, BC handoff table,
-truncation derivation, convergence figure / status. Cross-link to
-related rules and to `esm-spec.md` §4.2 / §11.5 for the definitive
-operator and BC vocabulary.
-
-The catalog landing page at
-[`rules/_index.md`]({{< ref "/rules" >}}) advertises the
-closed-AST lowering pattern as the default. New rules should match its
-framing; rules predating the migration carry a "legacy form" note on
-their page until they are rewritten.
-
-## Adapt to your scheme
-
-To author a different rule, swap each piece:
-
-- Step 1 — choose the §4.2 PDE op your scheme discretizes. (`D` for
-  most time-dependent schemes; `grad` / `div` / `laplacian` for spatial
-  operators.)
-- Step 2 — write the closed `arrayop` body. Use `index`, arithmetic,
-  `min` / `max` / `ifelse`, and (for nonlinear or weighted schemes)
-  `broadcast`. No new ops.
-- Step 3 — leave BC handling to the domain. Do not embed BC switches in
-  the body.
-- Step 4 — ship a canonical fixture. Make it pass.
-- Step 5 — ship the convergence fixture. Use `applicable: false` with a
-  named-blocker `skip_reason` only if a tracked prerequisite genuinely
-  blocks the sweep; otherwise the fixture must be `applicable: true`
-  and the slope must match the declared accuracy.
-- Step 6 — write the doc page in the same shape as
-  [`centered_2nd_uniform`]({{< ref "/rules/centered_2nd_uniform" >}}) and
-  cross-link.
+Open the PR with a conventional-commit title (`feat(rules): …`). CI runs the
+validate job (schema + lint + convergence-order check + spellcheck), the
+per-binding conformance matrix as runners land, and the docs build — your rule
+appears on its grid's page automatically.

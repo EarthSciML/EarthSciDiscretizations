@@ -1,0 +1,274 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "hjweno_norm_D1_interior",
+    "description": "Interior-only fifth-order Hamilton-Jacobi WENO (Jiang-Peng 2000) gradient magnitude |u_x| on cartesian_uniform_1d, evaluated over the cells i in [4, N-3] where the full seven-point HJ-WENO stencil u[i-3..i+3] fits without wrapping. THE SCHEME: |u_x|_i = sqrt(max(u_x^-, 0)^2 + min(u_x^+, 0)^2), the Godunov / Osher-Sethian Hamiltonian for the non-negative-speed level-set term psi_t = -S|grad psi| (S >= 0), in which the FIRST-order one-sided differences of the Rouy-Tourin scheme are replaced by FIFTH-order WENO-Z reconstructions of the one-sided derivatives u_x^- (backward-biased) and u_x^+ (forward-biased). Each reconstruction is the standard Jiang-Shu WENO5 applied to the divided differences v_k = (u[m+1] - u[m]) / dx of u: the backward reconstruction uses v = [D_{i-5/2}, D_{i-3/2}, D_{i-1/2}, D_{i+1/2}, D_{i+3/2}] (cells i-3..i+2); the forward reconstruction uses the mirror stencil v = [D_{i+5/2}, D_{i+3/2}, D_{i+1/2}, D_{i-1/2}, D_{i-3/2}] (cells i-2..i+3). Candidate derivatives q0=(2 v1 - 7 v2 + 11 v3)/6, q1=(-v2 + 5 v3 + 2 v4)/6, q2=(2 v3 + 5 v4 - v5)/6; the 13/12 + 1/4 smoothness indicators beta_k; the WENO-Z (Borges 2008) nonlinear weights alpha_k = d_k (1 + (tau_5/(eps + beta_k))^2), tau_5 = |beta_0 - beta_2|, ideal weights d = (1/10, 6/10, 3/10), eps = 1e-6; u_x^\u00b1 = (alpha_0 q0 + alpha_1 q1 + alpha_2 q2)/(alpha_0 + alpha_1 + alpha_2). WENO-Z (not classic Jiang-Shu) is used so the scheme keeps fifth order at the first-order critical points of a smooth level-set profile (its extrema, where u_x = 0), where the classic weights degrade to ~fourth order (Henrick 2005); numerically verified, the smooth eikonal MMS (problems/hjweno_norm_1d_eikonal_mms.esm) converges at observed order 5.00 in L2 AND Linf. The per-point Godunov max/min is the entropy (upwind) fix of Osher-Sethian (1988) / Rouy-Tourin (1992): it selects the one-sided derivative along the incoming characteristic through the |grad| kinks (points where u_x changes sign) that the entropy fix resolves. EXACT on a constant field (every divided difference is 0 to the bit, so u_x^\u00b1 = 0 and |u_x| = 0 exactly, the null-space property) and on an affine field u = a x + b (every v_k equals a, so u_x^- = u_x^+ = a and sqrt(max(a,0)^2 + min(a,0)^2) = |a| with no truncation error, verified to 3e-14). Match-less named template; the boundary-condition layer (rules/hjweno_norm_D1_periodic.esm) wraps it with periodic faces for the near-boundary cells i in {1,2,3} and {N-2,N-1,N} (the seven-point stencil reaches three cells on each side). dx is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_1d",
+      "op:grad_norm",
+      "axes:x",
+      "order:5",
+      "stencil_width:7"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Peng, D. (2000). Weighted ENO Schemes for Hamilton-Jacobi Equations. SIAM Journal on Scientific Computing, 21(6), 2126-2143. The HJ-WENO construction: fifth-order WENO reconstruction of the one-sided derivatives u_x^- and u_x^+ from the divided differences of u, combined by the Godunov / Osher-Sethian Hamiltonian.",
+        "doi": "10.1137/S106482759732455X"
+      },
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The max/min upwind (entropy) construction of |grad phi| for the level-set Hamilton-Jacobi term.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. The Godunov Hamiltonian sqrt(max(D-,0)^2 + min(D+,0)^2) as the monotone discretization of the eikonal |grad u|; HJ-WENO raises the one-sided differences D-, D+ to fifth order.",
+        "doi": "10.1137/0729053"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient Implementation of Weighted ENO Schemes. Journal of Computational Physics, 126(1), 202-228. Smoothness indicators beta_k (eq. 2.17), nonlinear weights (eqs. 2.9-2.10), and the fifth-order reconstruction reused here on the one-sided divided differences.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Borges, R., Carmona, M., Costa, B., & Don, W. S. (2008). An improved weighted essentially non-oscillatory scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6), 3191-3211. The WENO-Z weights alpha_k = d_k (1 + (tau_5/(eps+beta_k))^2) with tau_5 = |beta_0 - beta_2|, which recover the full fifth order at first-order critical points (u_x = 0) where the classic Jiang-Shu weights degrade.",
+        "doi": "10.1016/j.jcp.2007.11.038"
+      },
+      {
+        "citation": "Henrick, A. K., Aslam, T. D., & Powers, J. M. (2005). Mapped weighted essentially non-oscillatory schemes: Achieving optimal order near critical points. Journal of Computational Physics, 207(2), 542-567. The demonstration that classic WENO5 drops below fifth order at simple critical points (u_x=0, u_xx!=0), motivating the WENO-Z remedy used here.",
+        "doi": "10.1016/j.jcp.2005.01.023"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./hjweno_recon_minus.esm"
+    },
+    {
+      "ref": "./hjweno_recon_plus.esm"
+    }
+  ],
+  "expression_templates": {
+    "hjweno_norm_D1_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            4,
+            {
+              "op": "-",
+              "args": [
+                "N",
+                3
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "sqrt",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "hjweno_recon_minus",
+                          "bindings": {
+                            "v0": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    3
+                                  ]
+                                }
+                              ]
+                            },
+                            "v1": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                }
+                              ]
+                            },
+                            "v2": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "v3": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i"
+                              ]
+                            },
+                            "v4": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "v5": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "hjweno_recon_plus",
+                          "bindings": {
+                            "v0": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                }
+                              ]
+                            },
+                            "v1": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "v2": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i"
+                              ]
+                            },
+                            "v3": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "v4": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                }
+                              ]
+                            },
+                            "v5": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    3
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

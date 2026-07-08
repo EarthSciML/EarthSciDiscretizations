@@ -1,25 +1,32 @@
 baseURL = "https://discretizations.earthsci.dev/"
 languageCode = "en-us"
-title = "EarthSciDiscretizations — Discretization Catalog"
-# No theme — layouts are provided directly under layouts/.
+title = "EarthSciDiscretizations — Discretization Standard Library"
+# No theme — layouts are provided directly under layouts/ (ported from the
+# pre-0.8.0 archive site, archive/docs/).
 
 # Use docs/ as the site root when building from this repo.
 # CI invokes `hugo --source docs --minify --destination public`.
 
-enableGitInfo = true
 enableRobotsTXT = true
 
 [params]
-  description = "Browsable catalog of discretization rules and grid families used by ESD."
-  repoURL = "https://github.com/EarthSciML/EarthSciDiscretizations"
+  description = "The ESM discretization standard library: grids, finite-difference/finite-volume rewrite rules, regridding and reprojection expressions, with cross-language conformance goldens."
+  repoURL = "https://github.com/EarthSciML/earthscidiscretizations"
+  # Client-side Pagefind search, ported from the archive site's setup
+  # (archive/.github/workflows/docs.yml): CI runs `pagefind --site docs/public`
+  # after the Hugo build, dropping the index + UI bundle under /pagefind/.
+  # The head/header partials wire the UI only when this is enabled; the UI
+  # script no-ops gracefully in a bare local `hugo` build with no index.
+  pagefind = true
 
-# Taxonomies drive faceted navigation. Each key is the singular frontmatter
-# field name; the value is the plural used in the URL
-# (/families/finite_difference/, /grid_families/cartesian/, ...).
+# Taxonomies drive faceted navigation, adapted to the 0.8.0 tags contract
+# (AGENTS.md §4): `family:` -> families, `op:` -> ops, `bc:` -> bcs, plus the
+# raw esd tags. Each key is the singular frontmatter field name; the value is
+# the plural used in the URL (/families/finite_difference/, /ops/d2/, ...).
 [taxonomies]
   family = "families"
-  grid_family = "grid_families"
-  rule_kind = "rule_kinds"
+  op = "ops"
+  bc = "bcs"
   tag = "tags"
 
 [markup]
@@ -28,7 +35,9 @@ enableRobotsTXT = true
     unsafe = true
   # Pass math delimiters through untouched so Goldmark does not mangle LaTeX
   # (underscores as emphasis, `\_` -> `_`, etc.). KaTeX auto-render then picks
-  # up the raw `$$...$$` / `\(...\)` delimiters in the final HTML.
+  # up the raw `$$...$$` / `\(...\)` delimiters in the final HTML. Generated
+  # pages render math as Unicode text in code spans; hand-written guide pages
+  # may use LaTeX.
   [markup.goldmark.extensions.passthrough]
     enable = true
     [markup.goldmark.extensions.passthrough.delimiters]
@@ -45,8 +54,7 @@ enableRobotsTXT = true
   taxonomy = ["HTML"]
   term = ["HTML"]
 
-# Don't try to syntax-check Hugo's "page bundles" — every page lives in
-# its own directory as `index.md` so it can carry sibling plot artifacts.
+# Every generated grid page lives in its own directory as index.md (a page
+# bundle) so it can carry sibling artifacts if ever needed.
 [permalinks]
   grids = "/grids/:slug/"
-  rules = "/rules/:slug/"

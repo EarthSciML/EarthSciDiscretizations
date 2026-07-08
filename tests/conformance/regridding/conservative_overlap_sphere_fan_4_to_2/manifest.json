@@ -1,0 +1,60 @@
+{
+  "category": "regridding",
+  "version": "1.0",
+  "case": "conservative_overlap_sphere_fan_4_to_2",
+  "description": "Cross-binding conformance for the conservative-overlap regrid library (regridding/conservative_overlap.esm) on a SPHERICAL 4 -> 2 meridian-fan coarsening -- the spherical variant the esm-spec 9.6.1 scalar-field template-parameter substitution enables: the SAME library file as the planar 3x3 -> 2x2 exemplar, with the geometry manifold bound to 'spherical' at the conservative_overlap_A_ij invocation instead of 'planar' (no near-duplicate spherical library entry exists or is needed). GEOMETRY (hand-exact by Girard, unit sphere, steradians): apex E = (0E, 0N), base vertices on the meridian lon = 90E at latitudes 0/15/30/45/60 degrees. E is a pole of the lon = +-90 great circle (that circle is the set of points orthogonal to x-hat), so every fan arc E -> (90E, phi) meets the meridian at a right angle; each fan triangle has angles (delta_phi, 90, 90) and by Girard area = delta_phi in radians exactly. Every edge in both grids is a great-circle arc (no parallel edges anywhere), so the CONFORMANCE_SPEC 5.8.4 great-circle-edge caveat carries ZERO modelling error here and the source triangles tile each target exactly. HAND-DERIVED EXACT QUANTITIES (reference_weights discipline; non-golden, eyeball checking only): source areas pi/12 = 0.2617993877991494 sr each; A_ij = pi/12 for the four nested pairs (S1,S2 in T1; S3,S4 in T2), exactly 0 elsewhere; A_j = pi/6 = 0.5235987755982988 sr for both targets; W_ij = 1/2 EXACTLY for the surviving pairs; TOTAL SPHERE-PATCH AREA sum_j A_j = pi/3 = 1.0471975511965976 sr (the enclosing fan triangle, excess 60 degrees = one sixth of the hemisphere's boundary great circle... derived directly as Girard excess of the (60, 90, 90) triangle); with F_src = [1,2,3,4]: F_tgt = [1.5, 3.5] and both mass sums equal 5*pi/6 = 2.6179938779914944. The committed golden (golden/weights.json) is produced by the official ESS Julia runner (GeometryOps spherical backend via the EarthSciSerializationGeometryOpsExt extension, Van Oosterom-Strackee spherical-excess area) through scripts/regenerate-goldens.sh, per the repo's single-pathway doctrine. Gate structure per CONFORMANCE_SPEC.md 5.8: partition-of-unity and conservation are EXACT invariants on the sphere too -- PoU because the apply divides by the row-sum of the SAME computed areas under the SAME sliver filter (backend- and manifold-independent), conservation because the targets tile the source patch along shared great-circle seams and src_area carries the hand-exact Girard areas -- while per-pair spherical overlap areas and weights are tolerance-gated (combined rel + abs with the 5.8.2 sliver floor): Julia (reference) clips with GeometryOps, Rust with s2geometry -- different spherical kernels compared under the SAME declared manifold (5.8.4), agreement inherited from the exact-tiling geometry (each surviving clip is the source triangle itself, so cross-kernel disagreement is pure snap/rounding noise). BINDINGS: julia and rust are required. PYTHON IS BLOCKED UPSTREAM, not scope-excluded: earthsci_toolkit's spherical clip delegates to the pinned optional dependency spherely==0.1.0 (S2 via s2geography, the '[geometry]' extra), which currently has no cp314 macOS-arm64 wheel and whose source build requires the s2geography/s2geometry C++ stack (CMake find_package(s2geography) fails in a bare venv) -- the Python KERNEL exists (geometry.py spherical path, ESS CONFORMANCE_SPEC 5.8 scope) and this case activates for python the moment the pinned dependency installs; its planar sibling is unaffected. go/typescript stay scope-excluded exactly as in the planar exemplar (rewrite-only ports; no aggregate lowering / simulator).",
+  "fixture": "fixture.esm",
+  "library": "../../../../regridding/conservative_overlap.esm",
+  "model": "Regrid",
+  "tests": [
+    "exact_invariants"
+  ],
+  "manifold": "spherical",
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "rust"
+  ],
+  "blocked_upstream_bindings": {
+    "python": "spherical clip requires the pinned optional dependency spherely==0.1.0 ([geometry] extra; S2 via s2geography) — no cp314 macOS-arm64 wheel and the source build needs the s2geography C++ stack, so the kernel's backend is uninstallable in the conformance venv today; the planar sibling case is unaffected and this case activates for python as soon as the pinned dep installs"
+  },
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "_doc": "Keys follow the planar exemplar (ESS tests/conformance/geometry/manifest.json lineage). Areas are in steradians on the unit sphere; characteristic_length is the base-arc scale ~pi/6 rounded up to 1.0 rad so the sliver floor atol = area_atol_factor * L^2 = 1e-15 sr sits far below the true overlaps (0.26 sr) and safely above any snap-rounding sliver from the measure-zero shared-arc contacts (~1e-16 sr for S2-style 1e-15-rad snapping on 0.5-rad edges). area_rtol spans the GeometryOps-vs-s2geometry kernel pair under the same manifold declaration (5.8.4); the fixture-level filter atol = 1e-12 sr is what actually drops slivers from A_j/W_ij/apply. Partition-of-unity is exact by construction (tight epsilon); conservation is exact because the targets tile the source patch, gated at a tight epsilon rather than the resolution-dependent tolerance of 5.8.3.",
+    "area_rtol": 1e-09,
+    "area_atol_factor": 1e-15,
+    "characteristic_length": 1.0,
+    "weight_rtol": 1e-09,
+    "weight_atol": 1e-12,
+    "partition_of_unity_atol": 1e-12,
+    "conservation_atol": 1e-09,
+    "conservation_exact": true
+  },
+  "reference_weights": {
+    "_doc": "NON-GOLDEN hand-derived expected values for eyeball checking only (Girard derivation in the description above; every value is an exact multiple of pi or an exact binary rational). The golden weights come from the official Julia runner. Triples are [i, j, value] with 1-based indices, i over the four fan sources (south to north), j over the two fan targets. pi/12 = 0.2617993877991494, pi/6 = 0.5235987755982988.",
+    "A_ij_sr": [
+      [1, 1, 0.2617993877991494],
+      [2, 1, 0.2617993877991494],
+      [3, 2, 0.2617993877991494],
+      [4, 2, 0.2617993877991494]
+    ],
+    "A_j_sr": [
+      [1, 0.5235987755982988],
+      [2, 0.5235987755982988]
+    ],
+    "W_ij": [
+      [1, 1, 0.5],
+      [2, 1, 0.5],
+      [3, 2, 0.5],
+      [4, 2, 0.5]
+    ],
+    "F_tgt": [1.5, 3.5],
+    "mass_both_sides": 2.6179938779914944,
+    "total_patch_area_sr": 1.0471975511965976
+  },
+  "golden": "golden/weights.json",
+  "status": "active"
+}

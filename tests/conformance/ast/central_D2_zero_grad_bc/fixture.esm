@@ -1,0 +1,61 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_zero_grad_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc: a minimal consuming model binding N=8 at the import edge. The compound match D(D(u,x),x) must fire through the section-9.6.3 fixpoint (priority 10, before any plain-D rule could lower the inner derivative) and lower to the rule's makearray — interior [2,7] holding the imported 3-point stencil aggregate, faces i=1 and i=8 holding the ghost-eliminated zero-gradient one-sided differences — with all metaparameters folded and the free name dx surviving in the expanded body (the grid's consumer-supplied geometry contract). The model fulfills that contract with x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:central_D2_zero_grad_bc"]
+  },
+  "models": {
+    "CentralD2ZeroGradBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
+          "bindings": { "N": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": ["x"],
+          "description": "Temperature field over the x index set."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 8] },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

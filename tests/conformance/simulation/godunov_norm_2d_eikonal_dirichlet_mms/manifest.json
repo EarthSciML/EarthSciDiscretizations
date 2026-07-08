@@ -1,0 +1,42 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "godunov_norm_2d_eikonal_dirichlet_mms",
+  "description": "MMS gate: run the inline esm-spec 6.6.5 tests of ../../../../problems/godunov_norm_2d_eikonal_dirichlet_mms.esm (model GodunovEikonal2DDirichletMMS, test mms_eikonal_dirichlet) at the problem's default resolution through each binding's official simulation pathway. The assertions (ic wiring at t=0; bounded error at t=T) live in the problem file itself; this manifest only routes the runners. The order-of-accuracy claim is gated by the matching convergence case.",
+  "problem": "../../../../problems/godunov_norm_2d_eikonal_dirichlet_mms.esm",
+  "model": "GodunovEikonal2DDirichletMMS",
+  "tests": [
+    "mms_eikonal_dirichlet"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "laplace_beltrami_lon_periodic_lat_zero_grad_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad, bound to NLON=6, NLAT=5 at the import edge. The bare laplacian(u) (where u:{shape:[lon,lat]}) must fire through the section-9.6.3 fixpoint and lower to the rule's nine-region metric-weighted makearray -- the doubly-interior Laplace-Beltrami stencil over [2,5]x[2,4] plus the eight boundary regions (periodic zonal wrap at i=1/i=6, zero-flux Neumann rows at j=1/j=5) -- with all metaparameters folded, zero apply_expression_template nodes and zero unlowered laplacian ops, and the consumer-supplied free names R_sphere/dlon_deg/dlat_deg/lat0_deg surviving as names. The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:latlon",
+      "rule:laplace_beltrami_lon_periodic_lat_zero_grad"
+    ]
+  },
+  "models": {
+    "LaplaceBeltramiAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad.esm",
+          "bindings": {
+            "NLON": 6,
+            "NLAT": 5
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Field over the lon x lat index sets."
+        },
+        "R_sphere": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2.0,
+          "description": "Sphere radius free name (survives as a name in the lowered AST)."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 30.0,
+          "description": "Band southern edge; grid lat0_deg free name."
+        },
+        "dlon_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 60.0,
+          "description": "360/NLON = 60 (NLON closed at 6); grid dlon_deg free name."
+        },
+        "dlat_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 7.5,
+          "description": "(60-30)/(NLAT-1) = 7.5 (NLAT closed at 5); grid dlat_deg free name."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "laplacian",
+            "args": [
+              "u"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

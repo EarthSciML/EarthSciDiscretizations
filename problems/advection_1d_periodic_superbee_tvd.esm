@@ -1,0 +1,211 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_periodic_superbee_tvd",
+    "description": "Monotonicity / TVD driver for grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic (superbee flux limiter (second-order TVD, compressive)) on the periodic unit interval [0,1], c = 1. A piecewise-linear tent profile u0(x) = max(0, 1 - 4|x - 1/2|) (peak 1 at x=1/2, min 0, mean 1/4; zero at the domain edges so the periodic wrap carries no seam) is advected to t=0.5. A TVD / monotonicity-preserving scheme develops NO new extrema (total variation non-increasing): it neither overshoots above the initial maximum (max stays under ~0.99, whereas a dispersive/non-TVD scheme would exceed 1) nor undershoots below the initial minimum (min stays >= -0.03; a non-TVD central scheme undershoots to about -0.04 on this profile), and the flux-difference form conserves the mean EXACTLY (1/4 to machine precision). Because the assertion evaluator cannot evaluate a state-dependent observed at assertion time, the gate drives the STATE and asserts REDUCTIONS of the state directly (max/min bounds + mean conservation), never an observed of the operator output — the sim-expressible form of the monotonicity claim. De-risked in numpy at N=64, t=0.5: this scheme's max/min/mean sit inside the asserted bands with comfortable margin. The grid geometry contract is fulfilled for [0,1] (x0 = 0, dx = 1/N); the tent ic is spelled inline from literals and N (build-time cellwise evaluation is scope-free). Companion MMS accuracy driver: problems/advection_1d_periodic_superbee.esm.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "monotonicity"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 6 (TVD / total-variation-diminishing methods)."
+      },
+      {
+        "citation": "Harten, A. (1983). High resolution schemes for hyperbolic conservation laws. J. Comput. Phys. 49(3):357-393 (TVD property).",
+        "doi": "10.1016/0021-9991(83)90136-5"
+      }
+    ]
+  },
+  "models": {
+    "AdvectionSuperbeeTVD": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x"
+          ],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; +x upwind convention)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "max",
+              "args": [
+                0,
+                {
+                  "op": "-",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        4,
+                        {
+                          "op": "abs",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "c"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "tvd_monotone",
+          "description": "Monotonicity / TVD gate: the tent u0(x) = max(0, 1 - 4|x - 1/2|) (max 1, min 0, mean 1/4) advected at c=1 to t=0.5. Assert (all STATE reductions, the sim-expressible form of the TVD claim): mean = 1/4 to machine precision at t=0 and t=0.5 (exact conservation of the flux-difference form); max(u) <= the no-overshoot bound at t=0.5 (a dispersive scheme would exceed 1); min(u) >= the no-undershoot bound at t=0.5 (a non-TVD scheme undershoots below 0). Bands de-risked in numpy at N=64.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.5
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.25,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "mean"
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.25,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "mean"
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.91,
+              "tolerance": {
+                "abs": 0.08
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.035,
+              "tolerance": {
+                "abs": 0.065
+              },
+              "reduce": "min"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

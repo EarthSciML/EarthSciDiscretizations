@@ -1,0 +1,21 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "gradient_mpas",
+  "description": "Exactness gate: run the inline esm-spec 6.6.5 tests of problems/gradient_mpas.esm (model Gradient, test grad_of_const_is_zero) on the icosahedral level-0 mesh (12 cells / 30 edges / 20 vertices) through each binding's official simulation pathway. The gradient's null-space mimetic property grad(const) = 0 makes u(t) = u(0) exact to rounding: the assertions pin the rule output itself (grad_phi max/min = 0 within 1e-13, asserted DIRECTLY on the array observed — the 6.6.5 observed-assertion form), ic preservation (relative L2 of u vs the ic field u0(e) = e, 0 at t=0 within 1e-12 and at t=1 within 1e-9), and preservation independently (mean(u) = 15.5 within 1e-9). The assertions and their tolerances live in the problem file itself; this manifest only routes the runners. This is the mimetic dual of the divergence_mpas gate (div(curl) = 0): the fv_gradient_edge rule body is a pure connectivity map over the edges axis (output over edges, no ragged contraction — each edge reads its two cellsOnEdge-flanking cell values), the mesh data arrives as const-op subsystem observeds re-exposed as bare-name aliases (the MPAS keyed-factor wiring contract), and grad_phi is a general edge-indexed aggregate observed — the same tree_walk capabilities the divergence gate exercises (aggregate array-observed inlining; const-op/alias observed materialization; model-scope keyed-factor resolution), minus the ragged dynamic bounds.",
+  "problem": "../../../../problems/gradient_mpas.esm",
+  "model": "Gradient",
+  "tests": ["grad_of_const_is_zero"],
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "status": "active"
+}

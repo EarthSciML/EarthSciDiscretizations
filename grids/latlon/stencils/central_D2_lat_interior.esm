@@ -1,0 +1,46 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_lat_interior",
+    "description": "Interior-only 3-point centered second derivative along latitude on the latlon grid: (f[i,j+1] - 2 f[i,j] + f[i,j-1]) / dlat_deg^2 over all i, j in [2, NLAT-1] — a PER-DEGREE second derivative (the diffusion/Laplacian companion to central_D_lat_interior; see grids/latlon/grid.esm for the physical-units metric recipe, of which the full metric spherical Laplacian with cos(lat) weighting is a documented FOLLOW-UP, not this operator). Match-less named template consumed by boundary-condition layers (rules/). `dlat_deg` is a free name resolving to the consuming model's meridional spacing variable (the grid's consumer-supplied geometry contract). The 3-point centered weights [1, -2, 1] are the Fornberg formula for the 2nd derivative on a uniform stencil; O(dlat_deg^2) on this uniform axis.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:latlon", "op:D2", "order:2", "stencil_width:3"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "central_D2_lat_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": [2, { "op": "-", "args": ["NLAT", 1] }]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                { "op": "index", "args": ["f", "i", { "op": "+", "args": ["j", 1] }] },
+                { "op": "*", "args": [-2, { "op": "index", "args": ["f", "i", "j"] }] },
+                { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 1] }] }
+              ]
+            },
+            { "op": "*", "args": ["dlat_deg", "dlat_deg"] }
+          ]
+        }
+      }
+    }
+  }
+}

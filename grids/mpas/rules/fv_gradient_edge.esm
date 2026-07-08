@@ -1,0 +1,49 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "fv_gradient_edge",
+    "description": "Finite-volume edge-normal gradient of a cell scalar on the MPAS Voronoi grid (the TRiSK discrete gradient, Ringler et al. 2010 eq. 22): grad_e = (phi(cellsOnEdge(e,2)) - phi(cellsOnEdge(e,1))) / dcEdge(e) — the component, along each edge's positive normal, of the gradient of the cell field phi, formed as the two-point difference of the flanking cell values divided by the center-to-center arc dcEdge(e). The positive normal points from cellsOnEdge(e,1) to cellsOnEdge(e,2) (the MPAS orientation shared with edgeSignOnCell and with the divergence rule's flux convention), so the difference is taken head-minus-tail in that direction and dcEdge is the great-circle distance the difference spans. This is the exact MIMETIC DUAL of grids/mpas/rules/fv_divergence_cell: that rule maps an edge-normal flux to a cell divergence over cells; this rule maps a cell scalar to an edge-normal gradient over edges, and the two are negative adjoints of one another (see Accuracy). Matches the open-namespace rewrite-target {op: grad, args: [phi]} (esm-spec 9.6.8, 4.2: grad is author sugar with no evaluable core, and a rule MAY match it directly on the bare op and emit a one-shot scheme rather than routing through the D-sugar identity grad(f,dim:x)=D(f,wrt:x)), match-scoped with `where: {phi: {shape: [cells]}}` (esm-spec 9.6.1) so it fires ONLY on the gradient of a bare field declared over this grid's `cells` index set — the axis-less grad pattern would otherwise fire on every grad in a consuming component. The shape constraint is the mechanism that lets two MPAS meshes coexist in one document: import this rule twice under distinct index-set renames (esm-spec 9.7.7), and each instance's `where` shape follows its renamed cell set (e.g. [meshA.cells] vs [meshB.cells]), so each grad lowers by its own mesh's rule with no first-declared-wins tie-break. Because the constraint requires a bare variable of exactly that shape, a consumer that takes the gradient of a COMPOUND inline cell expression (e.g. grad(a*b)) must first bind it to a declared cell-shaped observed. The body is a single aggregate over the `edges` axis with output index e and NO contracted index — a pure connectivity map, one two-point stencil per edge — because on the MPAS C-grid the gradient is intrinsically edge-local: every edge separates exactly two cells and the edge-normal derivative reads only those two, unlike the divergence whose body contracts the ragged edges_of_cell set. There is no makearray and no boundary region because a closed sphere has no boundary: every edge has both a cellsOnEdge(e,1) and a cellsOnEdge(e,2) (bc:none; a rule for a limited-area MPAS mesh would instead special-case the boundary edges that have only one interior cell, and would be a different rule). The free names cellsOnEdge, dcEdge are the grid's keyed-factor contract (see grids/mpas/grid.esm): the consuming model must expose them as bare-name arrays, normally as observed aliases of a grids/mpas/mesh/ subsystem's const data (problems/gradient_mpas.esm is the pattern). Accuracy: exactly annihilates spatially-constant fields (phi(c2)-phi(c1) = 0 for phi = const, hence grad_e = 0 at every edge to rounding — problems/gradient_mpas.esm asserts this), which is the gradient's null-space mimetic property and the discrete statement that grad(const) = 0. The rule is the negative discrete adjoint of fv_divergence_cell under the TRiSK inner products <a,b>_cells = sum_i areaCell(i)*a_i*b_i and <u,v>_edges = sum_e dvEdge(e)*dcEdge(e)*u_e*v_e: summation by parts on the closed sphere carries no boundary term, so sum_i areaCell(i)*phi_i*div(F)_i = -sum_e dvEdge(e)*dcEdge(e)*grad(phi)_e*F_e for any cell field phi and edge field F, the discrete Gauss/Green identity the two operators share (Ringler et al. 2010, section 3). The order tag is the guaranteed first-order bound on arbitrarily distorted Voronoi meshes, though the two-point difference is second-order on centroidal/symmetric meshes where the edge midpoint bisects the cell-center arc (Ringler et al. 2010, section 3.2). A convergence-order sweep on refined MPAS meshes is a possible follow-up, out of scope for the exactness gate that ships with this rule.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_volume", "grid:mpas", "op:grad", "axes:edges", "order:1", "bc:none", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090. Eq. (22) and the discrete Green/adjoint (grad = -div^T) identities of section 3."
+      },
+      {
+        "citation": "Thuburn, J., Ringler, T. D., Skamarock, W. C., & Klemp, J. B. (2009). Numerical representation of geostrophic modes on arbitrarily structured C-grids. Journal of Computational Physics, 228(22), 8321-8335."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "fv_gradient_edge": {
+      "params": ["phi"],
+      "match": { "op": "grad", "args": ["phi"] },
+      "where": { "phi": { "shape": ["cells"] } },
+      "body": {
+        "op": "aggregate",
+        "args": ["phi", "cellsOnEdge", "dcEdge"],
+        "output_idx": ["e"],
+        "semiring": "sum_product",
+        "ranges": {
+          "e": { "from": "edges" }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["phi", { "op": "index", "args": ["cellsOnEdge", "e", 2] }] },
+                { "op": "index", "args": ["phi", { "op": "index", "args": ["cellsOnEdge", "e", 1] }] }
+              ]
+            },
+            { "op": "index", "args": ["dcEdge", "e"] }
+          ]
+        }
+      }
+    }
+  }
+}

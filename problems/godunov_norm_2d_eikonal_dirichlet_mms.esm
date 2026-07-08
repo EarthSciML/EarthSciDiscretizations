@@ -1,0 +1,670 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "godunov_norm_2d_eikonal_dirichlet_mms",
+    "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_2d/rules/godunov_norm_D2_dirichlet_bc on the unit box [0,1]x[0,1] with inhomogeneous DIRICHLET (state-constraint) boundaries on all four walls, the Dirichlet companion of problems/godunov_norm_2d_eikonal_mms.esm (doubly-periodic) and the 2-D companion of godunov_norm_1d_eikonal_dirichlet_mms. Forced-steady eikonal u_t = -S|grad u| + S|grad g| with the manufactured solution g(x,y) = 0.5 + sin(pi x) sin(pi y): because u_t = -S|grad g| + S|grad g| = 0, g is the EXACT solution of the continuous forced PDE for all t, so the analytic reference at every time is g. The forcing S|grad g| = S pi sqrt(cos^2(pi x) sin^2(pi y) + sin^2(pi x) cos^2(pi y)) balances the operator. Discretely u_t = S*(|grad g| - godunov(u)); the imbalance is the first-order Godunov truncation S*(|grad g| - godunov(g)) = O(dx + dy), so ||u(T) - g|| = O(h) -- expected order 1. The chosen g is CONSTANT (= 0.5) on all four walls (sin(pi x) = 0 at x = 0, 1 and sin(pi y) = 0 at y = 0, 1), so the prescribed constant-along-wall Dirichlet free names are gL = gR = gB = gT = 0.5 (nonzero, matched; homogeneous case is 0). g is antisymmetric about each wall (sin(pi x) is odd about x = 0 and about x = 1), so the antisymmetric mirror ghost 2*g_wall - u reproduces g's true smooth extension across every wall and the edge/corner faces converge at the same order-1 rate as the interior -- a clean order-1 gate with nothing to exempt (unlike a doubly-periodic ramp, which is a contradiction). THE KINKS ARE NOT A PROBLEM: |grad g| has slope-sign kinks where each gradient component changes sign and a norm cusp at the interior extremum (1/2,1/2) where grad g vanishes, yet the per-axis Rouy-Tourin/Osher-Sethian entropy fix selects the correct one-sided branch, so the scheme stays first order in L2 AND Linf. EXACTNESS: the operator annihilates a constant field exactly (null-space |grad const| = 0) and, because every wall trace of g is the constant 0.5, the mirror-ghost closure is compatible with the scalar wall values (a general non-constant affine field would have wall traces varying along each wall, out of scope for scalar Dirichlet data). Geometry contract fulfilled for the unit box: x0 = y0 = 0, dx = 1/NX, dy = 1/NY. The ic, forcing, and test references spell x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY inline from literals and NX, NY (build-time scope-free). Per-resolution error norms pinned in tests/conformance/convergence/godunov_norm_2d_eikonal_dirichlet_mms/golden/errors.json.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:hamilton_jacobi",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. Convergence of the monotone Godunov Hamiltonian to the viscosity solution of the eikonal equation at first order.",
+        "doi": "10.1137/0729053"
+      },
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed. Journal of Computational Physics, 79(1), 12-49. The upwind entropy construction of |grad phi| for level-set Hamilton-Jacobi terms.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (cell-centered Dirichlet via mirror ghost)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "GodunovEikonal2DDirichletMMS": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/godunov_norm_D2_dirichlet_bc.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Level-set field integrated under the forced eikonal u_t = -S*godunov(u) + S|grad g|; starts at and stays near g(x,y) = 0.5 + sin(pi x) sin(pi y), deviating by the O(h) truncation error."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "1/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi speed. The forcing carries the matching S so g is exact for any S > 0."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.5,
+          "description": "Prescribed value on the left x-wall x=x0 (rule Dirichlet free name), equal to the manufactured wall trace g(0,y) = 0.5 (constant along the wall)."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.5,
+          "description": "Prescribed value on the right x-wall x=x0+NX*dx, equal to g(1,y) = 0.5."
+        },
+        "gB": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.5,
+          "description": "Prescribed value on the bottom y-wall y=y0, equal to g(x,0) = 0.5."
+        },
+        "gT": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.5,
+          "description": "Prescribed value on the top y-wall y=y0+NY*dy, equal to g(x,1) = 0.5."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          },
+          "description": "x-spacing 1/NX: the grid's dx free name. NX substituted as an integer literal at load (esm-spec 9.7.6)."
+        },
+        "dy": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          },
+          "description": "y-spacing 1/NY: the grid's dy free name. NY substituted at load."
+        },
+        "forcing": {
+          "type": "observed",
+          "units": "1/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "The manufactured source |grad g| = pi sqrt(cos^2(pi x_i) sin^2(pi y_j) + sin^2(pi x_i) cos^2(pi y_j)) (S folded via the du/dt scaling; x_i,y_j spelled inline). It balances the continuous operator so g is the steady exact solution; the residual is the O(h) truncation error.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                3.141592653589793,
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        3.141592653589793,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NX"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                2
+                              ]
+                            },
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "sin",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        3.141592653589793,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NY"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                2
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "sin",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        3.141592653589793,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NX"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                2
+                              ]
+                            },
+                            {
+                              "op": "^",
+                              "args": [
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        3.141592653589793,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NY"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                2
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                0.5,
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "S",
+              {
+                "op": "-",
+                "args": [
+                  "forcing",
+                  {
+                    "op": "sqrt",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "x"
+                              },
+                              2
+                            ]
+                          },
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "y"
+                              },
+                              2
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_eikonal_dirichlet",
+          "description": "Manufactured solution g(x,y) = 0.5 + sin(pi x) sin(pi y), S = 1, prescribed Dirichlet walls gL=gR=gB=gT=0.5 (the constant wall trace of g). u_t = -S|grad u| + S|grad g| with u(0) = g gives u_t = 0 continuously, so g is exact for all t; discretely u_t = S*(|grad g| - godunov(u)) and the imbalance is the truncation S*(|grad g| - godunov(g)) = O(h), so ||u(T) - g|| = O(h). g is antisymmetric about each wall so the mirror-ghost closure reproduces g's smooth extension and the edges/corners converge at order 1. References evaluate g at cell centers x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY inline per esm-spec 6.6.5. The t=0 assertion pins ic wiring (L2_error 0 within 1e-9); the t=0.2 assertion bounds the first-order error under the 0.1 cap. Exact per-resolution errors pinned in tests/conformance/convergence/godunov_norm_2d_eikonal_dirichlet_mms/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.2
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.2,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.1
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

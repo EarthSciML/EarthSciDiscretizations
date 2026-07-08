@@ -1,0 +1,261 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon_advection_zonal_upwind",
+    "description": "MMS driver: solid-body zonal advection on the global latlon grid, u_t = -omega_deg * D(u, lon) with constant angular velocity omega_deg (deg/s), discretized by grids/latlon/rules/upwind1_D_lon_periodic (first-order upwind backward difference, explicit periodic wrap). The dissipative first-order companion to problems/latlon_advection_zonal_periodic (which drives the 2nd-order centered rule); same manufactured solution, same geometry wiring, but the expected observed order is 1 instead of 2. Exact solution u(lon, lat, t) = sin((pi/180)(lon - omega_deg t)) * cos((pi/180) lat) — the m=1 zonal wave transported rigidly (constant ANGULAR velocity is latitude-independent, so no metric factor enters the angular-form equation; the cos(lat) profile is carried passively and vanishes at the poles). omega_deg > 0 means eastward flow (toward increasing lon), so the backward-difference upwind stencil takes its neighbor from upstream — the sign convention the rule assumes. Periodic in lon with period 360, matching the global recipe closure; no lat operator appears, so no lat BC is exercised here. GRID CONTRACT WIRING (grids/latlon/grid.esm): NLAT is closed to 5 at the import edge (the lat axis is passive; 5 pole-to-pole rows at dlat_deg = 45 suffice), NLON stays open (default 144, rebound by the convergence sweep via the loader API); dlon_deg = 360/NLON is an observed whose expression divides by the metaparameter NAME NLON (substituted at load per esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline the grid's coordinate conventions (lon_i = (i - 1/2) * 360/NLON via the NLON name; lat_j = -90 + (j - 1) * 45 as literals, NLAT being edge-closed) instead of invoking the lon_coord/lat_coord templates: free-name geometry is not resolvable in the bindings' build-time ic/reference evaluator (parameters and observeds are out of scope there — upstream limitation, EarthSciSerialization tree-walk _eval_cellwise), so geometry in ic/reference positions must fold to constants at load. ERROR MODEL: first-order upwind differencing of a single Fourier mode is dominated by AMPLITUDE DAMPING (numerical diffusion), the modified-equation diffusivity ~ omega_deg dlon_deg / 2 per degree; the relative L2 error at time t falls as O(dlon_deg) — analytically 1.42e-1 at NLON=16, 7.41e-2 at 32, 3.78e-2 at 64, 1.91e-2 at 128, and 1.70e-2 at the default 144 (omega_deg = 90, t = 0.5) — an O(dlon) ladder (contrast the centered case's O(dlon^2) phase-lag ladder). The 0.2 t=0.5 assertion bound therefore holds across the entire convergence ladder (the coarsest NLON=16 error 1.42e-1 is the worst case). The upwind + wrap scheme telescopes, so sum(u) is conserved exactly and the zonal mean of the m=1 wave is 0 to rounding at all times, exactly as in the centered case.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:latlon", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. Test case 1 (advection of a field by solid-body rotation), restricted to zonal flow."
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 8 (modified equations and numerical diffusion of the upwind method)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "ZonalAdvectionUpwind": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon/rules/upwind1_D_lon_periodic.esm",
+          "bindings": { "NLAT": 5 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": ["lon", "lat"],
+          "description": "Advected tracer field over the lon x lat index sets."
+        },
+        "omega_deg": {
+          "type": "parameter",
+          "units": "deg/s",
+          "default": 90,
+          "description": "Constant angular velocity of the solid-body zonal flow (positive eastward, toward increasing lon; the upwind rule assumes this sign)."
+        },
+        "dlon_deg": {
+          "type": "observed",
+          "units": "deg",
+          "expression": { "op": "/", "args": [360, "NLON"] },
+          "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name (consumer-supplied geometry contract, grids/latlon/grid.esm). NLON is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlon_deg consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "sin",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "/", "args": [3.141592653589793, 180] },
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i", "j"],
+                        "args": [],
+                        "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            { "op": "-", "args": ["i", 0.5] },
+                            { "op": "/", "args": [360, "NLON"] }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      { "op": "/", "args": [3.141592653589793, 180] },
+                      {
+                        "op": "aggregate",
+                        "output_idx": ["i", "j"],
+                        "args": [],
+                        "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            { "op": "*", "args": [{ "op": "-", "args": ["j", 1] }, 45] }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["omega_deg"] },
+              { "op": "D", "args": ["u"], "wrt": "lon" }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_solid_body_rotation_upwind",
+          "description": "Exact solution u = sin((pi/180)(lon - omega_deg t)) cos((pi/180) lat) with omega_deg = 90. Derivation: u_t = -omega_deg (pi/180) cos((pi/180)(lon - omega_deg t)) cos((pi/180) lat) = -omega_deg u_lon exactly (u_lon the per-degree derivative the rule discretizes); periodic in lon with period 360; no forcing term. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.5 assertion (the wave has moved 45 degrees) bounds the first-order upwind amplitude damping, a relative L2 error ~O(dlon_deg): 1.70e-2 at the default NLON=144 and at worst 1.42e-1 at the sweep's coarsest NLON=16, so the 0.2 bound holds across the whole convergence ladder (exact per-resolution errors pinned in tests/conformance/convergence/latlon_advection_zonal_upwind/golden/errors.json). The mean assertion pins exact conservation of the upwind + wrap scheme (sum(u) telescopes) together with the zero zonal mean of the m=1 wave.",
+          "time_span": { "start": 0.0, "end": 0.5 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "sin",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i", "j"],
+                            "args": [],
+                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                { "op": "-", "args": ["i", 0.5] },
+                                { "op": "/", "args": [360, "NLON"] }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i", "j"],
+                            "args": [],
+                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                { "op": "*", "args": [{ "op": "-", "args": ["j", 1] }, 45] }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.2 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "sin",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "op": "aggregate",
+                                "output_idx": ["i", "j"],
+                                "args": [],
+                                "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                                "expr": {
+                                  "op": "*",
+                                  "args": [
+                                    { "op": "-", "args": ["i", 0.5] },
+                                    { "op": "/", "args": [360, "NLON"] }
+                                  ]
+                                }
+                              },
+                              45
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "aggregate",
+                            "output_idx": ["i", "j"],
+                            "args": [],
+                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "expr": {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                { "op": "*", "args": [{ "op": "-", "args": ["j", 1] }, 45] }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "mean"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

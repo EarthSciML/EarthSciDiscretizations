@@ -1,0 +1,55 @@
+{
+  "category": "regridding",
+  "version": "1.0",
+  "case": "conservative_overlap_gated_clusters_4_to_2",
+  "description": "Cross-binding conformance for the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm with GENUINE broad-phase pruning: two disjoint cell clusters ten degrees apart (cluster A: source [0,1]+[1,2] -> target [0,2]; cluster B: source [10,11]+[11,12] -> target [10,12]; all x [0,1] in lat, planar manifold). With bin_dx = bin_dy = 4.0 and bbox-min representatives (derived in-library by the reduce-min templates), cluster A quantizes to floor bin 0 and cluster B to bin 2, so the bin-Skolem equi-join admits only the 4 same-cluster pairs and prunes the 4 cross-cluster pairs -- the candidate set is a PROPER SUBSET of the cross product, unlike the degenerate-safe sibling conservative_overlap_gated_3x3_to_2x2. The binning is admissible (pruned pairs have zero true overlap), so the dense path computed side by side reaches the identical surviving set and the inline gated_equals_dense test asserts the total A_ij/A_j/W_ij L1 residual is 0.0 at tolerance abs 0.0. Hand-exact expectations (non-golden): A_ij = 1.0 deg^2 on the four surviving pairs (source cells nest exactly in their cluster's target), 0 elsewhere; A_j = 2.0 both targets; W_ij = 1/2 on surviving pairs; F_tgt = [1.5, 3.5] with F_src = [1..4]; both masses 10. Exact 5.8.3 invariant gates (partition-of-unity, conservation) plus the committed golden per-pair weights from the official Julia runner (scripts/regenerate-goldens.sh, BuildInspection setup arrays).",
+  "fixture": "fixture.esm",
+  "library": "../../../../regridding/conservative_overlap.esm",
+  "model": "Regrid",
+  "tests": [
+    "exact_invariants",
+    "gated_equals_dense"
+  ],
+  "manifold": "planar",
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "_doc": "Same 5.8 contract as the other planar regridding cases: sliver floor atol = area_atol_factor * characteristic_length^2; partition-of-unity exact by construction; conservation exact because each target tiles its cluster's source cells. The gated-vs-dense value identity is gated in-fixture at abs 0.0.",
+    "area_rtol": 1e-09,
+    "area_atol_factor": 1e-15,
+    "characteristic_length": 1.0,
+    "weight_rtol": 1e-09,
+    "weight_atol": 1e-12,
+    "partition_of_unity_atol": 1e-12,
+    "conservation_atol": 1e-09,
+    "conservation_exact": true
+  },
+  "reference_weights": {
+    "_doc": "NON-GOLDEN hand-derived values for eyeball checking (derivation in the description). Triples are [i, j, value], 1-based; pairs not listed are exactly 0 (cross-cluster pairs are PRUNED by the broad phase and zero-overlap in the dense path).",
+    "A_ij_deg2": [
+      [1, 1, 1.0],
+      [2, 1, 1.0],
+      [3, 2, 1.0],
+      [4, 2, 1.0]
+    ],
+    "A_j_deg2": [2.0, 2.0],
+    "W_ij": [
+      [1, 1, 0.5],
+      [2, 1, 0.5],
+      [3, 2, 0.5],
+      [4, 2, 0.5]
+    ],
+    "F_tgt_with_F_src_1_to_4": [1.5, 3.5],
+    "candidate_pairs": "4 of 8 possible pairs: {(1,1),(2,1),(3,2),(4,2)} -- bins ('bin',0,0) for cluster A, ('bin',2,0) for cluster B"
+  },
+  "golden": "golden/weights.json",
+  "status": "active"
+}

@@ -1,0 +1,43 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "latlon_diffusion_zonal_periodic",
+  "description": "MMS gate: run the inline esm-spec 6.6 tests of problems/latlon_diffusion_zonal_periodic.esm (model ZonalDiffusion, test mms_zonal_diffusion_decay) at the problem's default resolution (NLON=144, NLAT edge-bound to 5) through each binding's official simulation pathway. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners.",
+  "problem": "../../../../problems/latlon_diffusion_zonal_periodic.esm",
+  "model": "ZonalDiffusion",
+  "tests": [
+    "mms_zonal_diffusion_decay"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14,
+      "_doc": "Pinned so Python temporal truncation is negligible against the spatial goldens: LSODA at 1e-12/1e-14 handles the stiff diffusion sweep and agrees with the Julia Tsit5 reference to well under the error_vs_golden tolerance on every resolution, where a loose explicit RK method would leave a temporal residue comparable to the spatial error."
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

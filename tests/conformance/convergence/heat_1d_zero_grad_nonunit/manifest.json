@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_1d_zero_grad_nonunit",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc on a NON-UNIT, NON-ORIGIN domain (x in [-1.5, 2.5], L=4), driven by problems/heat_1d_zero_grad_nonunit.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4); the consumer-defined dx = 4/N observed tracks each rebinding automatically, which is exactly the consumer-supplied-geometry property this case gates. The manufactured solution exp(-alpha (pi/L)^2 t) cos(pi (x - a)/L) is exact for the continuous PDE (derivation in the problem file); the recorded L2/Linf errors at t=0.1 are pure spatial-discretization error, expected to fall as O(dx^2).",
+  "problem": "../../../../problems/heat_1d_zero_grad_nonunit.esm",
+  "model": "HeatNonunit",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14, "_doc": "Pinned so Python temporal truncation is negligible against the spatial goldens: scipy explicit RK45 leaves ~1e-3 relative residue on the stiff heat sweep at any feasible tolerance, while LSODA at 1e-12/1e-14 agrees with the Julia Tsit5 reference to <2e-6 relative on every resolution." },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

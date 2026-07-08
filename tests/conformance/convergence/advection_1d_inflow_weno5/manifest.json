@@ -1,0 +1,40 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_inflow_weno5",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/weno5_D_inflow_bc (open-boundary WENO5: fifth-order WENO5-Z interior, reduced-order WENO3 one-sided inflow-ghost reconstruction at the left wall, non-reflecting zeroth-order extrapolation at the right wall) driven by problems/advection_1d_inflow_weno5.esm (model AdvectionWENO5Inflow), loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) -- no per-resolution fixture files. The manufactured steady solution cos(pi x) is SMOOTH and MONOTONE (no interior extrema), so the interior WENO weights stay near-optimal and the recorded L2/Linf errors at t=0.1 are governed by the ONE-SIDED, reduced-order (WENO3, third-order) boundary reconstruction and the prescribed-inflow / extrapolation wall-flux closures, NOT the fifth-order interior. HONEST BOUNDARY-REDUCED ORDER (pinned from the Julia golden, NOT the nominal interior 5): the fifth-order interior sits behind a small O(1)-count set of lower-order boundary cells, so the observed order is well below 5 and rises PRE-ASYMPTOTICALLY as the grid refines and the interior term overtakes the (small-constant) boundary term. The Julia golden gives pairwise orders over N=16->32->64->128 of L2 [2.19, 2.69, 3.66] (median 2.69) and Linf [1.77, 2.09, 3.62] (median 2.09) -- norm-dependent because Linf tracks the single worst (boundary) cell while L2 averages the mostly-fifth-order interior. expected_order 2.4 brackets both norm medians (deviation 0.29 in L2, 0.31 in Linf); order_tolerance is widened to 0.4 (above the 0.2 typical) precisely because this is a mixed-order boundary-reduced scheme whose median-pairwise order is norm-dependent and not yet asymptotic at these resolutions -- it is emphatically NOT a fifth-order claim.",
+  "problem": "../../../../problems/advection_1d_inflow_weno5.esm",
+  "model": "AdvectionWENO5Inflow",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/weno5_D_inflow_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 2.4,
+  "order_tolerance": 0.4,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Same huge nonlinear WENO5-Z reconstruction RHS (stencils/weno5_recon, repeated per face, plus the WENO3 boundary reconstruction) that hangs earthsci-toolkit-rs's diffsol integrator on the periodic WENO5 case (tests/conformance/convergence/advection_1d_periodic_weno5): diffsol has no dtmin/max-step fail-fast guard, so on this large nonlinear RHS it drives dt->0 without terminating instead of erroring. Blocked by structural analogy to the periodic WENO5 sweep (identical reconstruction chain); Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard / is verified on this case."
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_2d_varcoeff_y_neumann",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_neumann_bc (conservative finite-volume variable-coefficient Laplacian div(k grad u), arithmetic-mean y-faces) driven by problems/heat_2d_varcoeff_y_neumann.esm. The problem is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — NY is the open metaparameter (NX is edge-closed at 8; the solution is constant in the passive x axis and no x-operator appears), and the problem's spacing observeds and inlined coordinates use the NY name so the geometry follows each rebinding automatically. The manufactured solution with its closed-form MMS forcing makes u exact for the continuous variable-coefficient PDE (derivation in the problem file); the recorded relative-L2 and Linf errors at t=0.1 are pure spatial-discretization error, expected to fall as O(dy^2). Identical per-resolution to the 1-D sibling heat_1d_varcoeff_neumann because u/k are replicated across the passive axis.",
+  "problem": "../../../../problems/heat_2d_varcoeff_y_neumann.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_neumann_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NY": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NY": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NY": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NY": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Preemptively excluded, mirroring the same-operator sibling heat_1d_varcoeff_neumann: earthsci-toolkit-rs's diffsol integrator has no dtmin/max-step fail-fast guard and wedges (drives dt->0 without terminating) on this stiff variable-coefficient large-AST RHS. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}

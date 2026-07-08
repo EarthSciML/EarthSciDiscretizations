@@ -1,0 +1,158 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_1d_neumann_flux",
+    "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the unit interval [0, 1] with inhomogeneous Neumann (fixed-flux) boundaries, discretized by grids/cartesian_uniform_1d/rules/central_D2_neumann_bc. Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) + b x with b = 1: the decaying cosine satisfies the heat equation and has u_x = -pi exp(...) sin(pi x) vanishing at both walls, while the steady linear ramp b x satisfies u_t = alpha u_xx = 0 and contributes a constant wall gradient u_x = b at x=0 and x=1. So the exact solution has a constant, nonzero wall flux b, matched by the rule's free names qL = qR = b = 1 (declared as ordinary real parameters; the rule reduces to central_D2_zero_grad_bc at qL=qR=0). The ramp b x is represented exactly by the discrete operator — its interior second difference and its Neumann-face ghost residual both vanish identically — so the discretization error comes solely from the cosine mode and falls as O(dx^2), exactly as in heat_1d_zero_grad. The grid geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N. qL/qR appear only in the runtime rule body; the build-time ic/reference expressions spell the manufactured solution from literals and the metaparameter N alone (AGENTS.md build-time scope caveat), with the ramp coefficient written as the literal 1.0 that matches the qL/qR parameter values.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_1d/rules/central_D2_neumann_bc.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "K",
+          "shape": ["x"],
+          "description": "Temperature field over the x index set."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "qL": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 1.0,
+          "description": "Prescribed df/dx at the left wall (the rule's Neumann free name), equal to the manufactured ramp slope b = 1."
+        },
+        "qR": {
+          "type": "parameter",
+          "units": "K/m",
+          "default": 1.0,
+          "description": "Prescribed df/dx at the right wall (the rule's Neumann free name), equal to the manufactured ramp slope b = 1."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, "N"] },
+          "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i"],
+            "args": [],
+            "ranges": { "i": { "from": "x" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "cos",
+                  "args": [
+                    { "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                  ]
+                },
+                { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_neumann_flux_decay",
+          "description": "Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) + b x with alpha = 0.01, b = 1. Derivation: the cosine mode gives u_t = -alpha pi^2 u_cos and u_xx = -pi^2 u_cos (so u_t = alpha u_xx) with zero wall gradient; the ramp b x is steady (u_t = 0 = alpha u_xx) with constant wall gradient b, prescribed to the rule as qL = qR = 1. The ramp is discretely exact, so the error is the cosine mode's O(dx^2). References evaluate at cell centers x_i = (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only; the ramp coefficient 1.0 matches the qL/qR parameter values). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error. Exact per-resolution errors are pinned in tests/conformance/convergence/heat_1d_neumann_flux/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        { "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-4 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "x" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "exp", "args": [{ "op": "*", "args": [-0.01, 9.869604401089358, 0.1] }] },
+                        {
+                          "op": "cos",
+                          "args": [
+                            { "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                          ]
+                        }
+                      ]
+                    },
+                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

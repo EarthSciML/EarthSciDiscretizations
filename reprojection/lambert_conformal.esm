@@ -1,1139 +1,288 @@
 {
-  "esm": "0.6.0",
+  "esm": "0.8.0",
   "metadata": {
     "name": "lambert_conformal",
-    "description": "RFC pure-io-data-loaders §5.1 + Appendix B (bead esd-47z.2): the spherical Lambert Conformal Conic projection, authored as a plain declarative .esm over the EXISTING expression operator set (sin/cos/tan/atan/atan2/log/^/sqrt/sign + the built-in `pi` op) with NO new rule-schema, scaffold, validation, resolver, or per-binding code — exactly the longlat.esm template (esd-47z.1) it mirrors. The projection is PARAMETERIZED by {lat_1, lat_2, lat_0, lon_0, R} (scalar `parameter`s driven via parameter_overrides, as the regridder drives dx/dy/atol), and the FORWARD (geographic→projected) and INVERSE (projected→geographic) maps are SCALAR `observed`s defined by ordinary equations over the operator set — a coordinate transform is a point-wise scalar formula (the engine's tree-walk evaluator admits array-shaped parameters/observeds only under an active geometry/value-invention kernel; a pure transform has neither, so the declarative form is the scalar kernel a binding applies over a coordinate array). FORWARD (Appendix B), inputs in degrees, x/y in metres: n = log(cos φ₁/cos φ₂)/log(tan(π/4+φ₂/2)/tan(π/4+φ₁/2)); F = cos φ₁·tan(π/4+φ₁/2)^n/n; ρ = R·F/tan(π/4+φ/2)^n; ρ₀ = R·F/tan(π/4+φ₀/2)^n; x = ρ·sin(n(λ−λ₀)); y = ρ₀ − ρ·cos(n(λ−λ₀)). INVERSE (Appendix B), closed form: ρ = sign(n)·sqrt(x²+(ρ₀−y)²); θ = atan2(x, ρ₀−y); λ = λ₀ + θ/n; φ = 2·atan((R·F/ρ)^(1/n)) − π/2. The inverse observeds compose on the forward observeds (rho0_my, rho_inv, theta_inv read proj_x/proj_y), so inverse∘forward is the identity BY CONSTRUCTION — the round-trip the acceptance gate checks. Each map is surfaced through build_evaluator via the regridder's zero-IC state idiom: a state whose D-equation is d(state)/dt = <observed> from a zero IC, so du = f!(u0) IS the map value. forward_x/forward_y surface the forward map (checked against independently-computed proj4/Snyder reference points); roundtrip_lon/roundtrip_lat surface the round-trip (checked == input). The cone constant n depends only on the standard parallels, so the WRF (30/60/38.999996/−97/6370000, n≈0.7156) and NEI2016 (33/45/40/−97/6370997, n≈0.6305) parameter sets flow through this ONE rule with different outputs — the declarative-or-fail proof that the .esm format binds a genuinely parameterized transform, not a hard-coded constant. Each observed carries both a schema-canonical `expression` (read by the non-Julia bindings) and a mirrored `equation` (read by the non-geometry tree-walk evaluator, whose expression→equation synthesis is geometry/value-invention-gated, RFC §8.1). NO NEW PHYSICAL OPERATOR: composes from +,−,*,/,^,sin,cos,tan,atan,atan2,log,sqrt,sign,pi over scalar parameter/observed/state — all already landed. The second member of the reprojection/ family after longlat, and the first with a non-trivial (non-identity) forward/inverse pair.",
-    "authors": [
-      "earthscidiscretizations/gastown.furiosa"
-    ],
-    "tags": [
-      "reprojection",
-      "coordinate-transform",
-      "lambert-conformal-conic",
-      "lcc",
-      "spherical",
-      "projected-crs",
-      "wrf",
-      "nei2016",
-      "forward-inverse",
-      "round-trip",
-      "parameterized-transform",
-      "observed",
-      "declarative",
-      "pure-io-data-loaders",
-      "esd-47z.2"
+    "description": "Spherical Lambert Conformal Conic (PROJ +proj=lcc +R=...), as a template library (esm-spec 9.7) following the reprojection signature convention established by reprojection/longlat.esm: four public scalar templates lambert_conformal_forward_x / _forward_y (inputs lon, lat in DEGREES plus the projection constants; outputs easting/northing x, y in METRES) and lambert_conformal_inverse_lon / _inverse_lat (inputs x, y in metres plus the same constants; outputs degrees), plus five stem-prefixed helper templates (_t, _n, _F, _rho, _theta) that factor Snyder's intermediate quantities -- helper invocations inline at registration time by pure substitution (9.7.3), so every public template lowers to a closed scalar AST over the evaluable core (tan, atan, atan2, log, ^, sqrt, sign, sin, cos; all esm-spec 4.2 elementary functions). The projection constants {lat_1, lat_2 (standard parallels, deg), lat_0 (origin latitude, deg), lon_0 (central meridian, deg), R (sphere radius, m)} are TEMPLATE PARAMETERS, not metaparameters: metaparameters are load-time integers (9.7.6) while these are real-valued, and template parameters bind arbitrary expressions at each apply site -- numeric literals for a fixed CRS, or parameter references so one document drives several parameter sets (the WRF CONUS and NEI2016 sets of the conformance manifest flow through this ONE library with different bindings). THE MATH (Snyder 1987, PP 1395, pp. 104-110, sphere; the same closed form as archive/reprojection/lambert_conformal.esm, re-expressed in the 0.8.0 library form): with phi = lat*pi/180 etc., cone constant n = ln(cos phi_1 / cos phi_2) / ln(tan(pi/4 + phi_2/2) / tan(pi/4 + phi_1/2)) (eq. 15-3), F = cos phi_1 * tan(pi/4 + phi_1/2)^n / n (15-2), rho = R*F / tan(pi/4 + phi/2)^n (15-1, and rho_0 = rho at phi_0), theta = n*(lambda - lambda_0) (14-4); FORWARD x = rho*sin(theta) (14-1), y = rho_0 - rho*cos(theta) (14-2); INVERSE rho = sign(n)*sqrt(x^2 + (rho_0 - y)^2) (14-10), theta = atan2(x, rho_0 - y) (14-11, n > 0 branch: for n < 0 Snyder reverses the signs of x, y, and rho_0 - y first -- both documented parameter sets have n > 0, approx. 0.7156 for WRF 30/60 and 0.6305 for NEI2016 33/45), lat = (2*atan((R*F/rho)^(1/n)) - pi/2)*180/pi (15-5), lon = lon_0 + (theta/n)*180/pi (14-9). inverse(forward(...)) is the algebraic identity wherever the forward map is defined (singular only at the far pole phi = -90 deg for n > 0). Radian-degree conversions are inlined as the double-precision literals pi/180 = 0.017453292519943295, 180/pi = 57.29577951308232, pi/4 = 0.7853981633974483, pi/360 = 0.008726646259971648, pi/2 = 1.5707963267948966. Independent analytic reference points (both parameter sets, forward + inverse + round-trip) live in tests/conformance/reprojection/lambert_conformal/golden/points.json.",
+    "license": "MIT",
+    "tags": ["esd:reproject", "crs:lambert_conformal", "forward-inverse", "spherical", "projected-crs", "wrf", "nei2016"],
+    "references": [
+      {
+        "citation": "Snyder, J. P. (1987). Map Projections -- A Working Manual. U.S. Geological Survey Professional Paper 1395, pp. 104-110: Lambert Conformal Conic, sphere. Forward eqs. 14-1, 14-2, 14-4, 15-1, 15-2, 15-3; inverse eqs. 14-9, 14-10, 14-11, 15-5; numerical check example pp. 295-296.",
+        "url": "https://pubs.usgs.gov/pp/1395/report.pdf"
+      }
     ]
   },
-  "models": {
-    "LambertConformal": {
-      "variables": {
-        "lon": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Input geographic longitude (degrees) of the point being projected — the λ of the forward map. Scalar parameter driven via parameter_overrides; a binding applies the kernel over a coordinate array at the runtime layer (the longlat precedent)."
-        },
-        "lat": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Input geographic latitude (degrees) of the point being projected — the φ of the forward map."
-        },
-        "lat_1": {
-          "type": "parameter",
-          "shape": [],
-          "description": "First standard parallel (degrees), PROJ `+lat_1`. WRF=30, NEI2016=33. A projection PARAMETER — the two datasets drive the one rule with different values."
-        },
-        "lat_2": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Second standard parallel (degrees), PROJ `+lat_2`. WRF=60, NEI2016=45."
-        },
-        "lat_0": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Latitude of origin (degrees), PROJ `+lat_0`. WRF=38.999996, NEI2016=40. The latitude that maps to northing y=0."
-        },
-        "lon_0": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Central meridian / longitude of origin (degrees), PROJ `+lon_0`. Both datasets use −97. Maps to easting x=0."
-        },
-        "R": {
-          "type": "parameter",
-          "shape": [],
-          "description": "Sphere radius (metres), PROJ `+R` (the WRF/NEI ellipsoid is spherical, +a=+b). WRF=6370000, NEI2016=6370997. Sets the absolute scale of x,y."
-        },
-        "deg2rad": {
-          "type": "observed",
-          "shape": [],
-          "description": "Degrees→radians conversion factor π/180. proj4/PROJ takes geographic coordinates and standard parallels in DEGREES (the WRF/NEI2016 +lat_1/+lat_2/+lat_0/+lon_0 values are degrees); Appendix B's trig is in radians. A constant observed (π is the built-in `pi` op); inlined wherever an angle is converted.",
-          "expression": {
-            "op": "/",
+  "expression_templates": {
+    "lambert_conformal_t": {
+      "params": ["lat"],
+      "description": "Helper: the conformal tangent t(lat) = tan(pi/4 + phi/2) with phi = lat*pi/180 (so the half-angle is lat*pi/360). The building block of Snyder eqs. 15-1..15-3.",
+      "body": {
+        "op": "tan",
+        "args": [
+          {
+            "op": "+",
             "args": [
-              3.141592653589793,
-              180.0
+              0.7853981633974483,
+              { "op": "*", "args": ["lat", 0.008726646259971648] }
             ]
           }
-        },
-        "rad2deg": {
-          "type": "observed",
-          "shape": [],
-          "description": "Radians→degrees conversion factor 180/π — the inverse of deg2rad. Converts the closed-form inverse's radian longitude/latitude back to degrees so the round-trip lands in the same units as the input.",
-          "expression": {
-            "op": "/",
+        ]
+      }
+    },
+    "lambert_conformal_n": {
+      "params": ["lat_1", "lat_2"],
+      "description": "Helper: cone constant n = ln(cos phi_1 / cos phi_2) / ln(t(lat_2)/t(lat_1)) (Snyder eq. 15-3). Depends only on the standard parallels: approx. 0.715567 for WRF (30/60), 0.630478 for NEI2016 (33/45). Requires lat_1 != lat_2 (for equal parallels Snyder's limit is n = sin phi_1, eq. 15-4 -- not expressed here).",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "log",
             "args": [
-              180.0,
-              3.141592653589793
+              {
+                "op": "/",
+                "args": [
+                  { "op": "cos", "args": [{ "op": "*", "args": ["lat_1", 0.017453292519943295] }] },
+                  { "op": "cos", "args": [{ "op": "*", "args": ["lat_2", 0.017453292519943295] }] }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "log",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_2" } },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_1" } }
+                ]
+              }
             ]
           }
-        },
-        "phi1": {
-          "type": "observed",
-          "shape": [],
-          "description": "First standard parallel φ₁ in radians (lat_1·π/180). Appendix B's φ₁; drives the cone constant n and the scale factor F.",
-          "expression": {
+        ]
+      }
+    },
+    "lambert_conformal_F": {
+      "params": ["lat_1", "lat_2"],
+      "description": "Helper: F = cos phi_1 * t(lat_1)^n / n (Snyder eq. 15-2), the constant tying the cone to the unit sphere.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
             "op": "*",
             "args": [
-              "lat_1",
-              "deg2rad"
-            ]
-          }
-        },
-        "phi2": {
-          "type": "observed",
-          "shape": [],
-          "description": "Second standard parallel φ₂ in radians (lat_2·π/180). Appendix B's φ₂; with φ₁ it fixes the cone constant n.",
-          "expression": {
-            "op": "*",
-            "args": [
-              "lat_2",
-              "deg2rad"
-            ]
-          }
-        },
-        "phi0": {
-          "type": "observed",
-          "shape": [],
-          "description": "Origin latitude φ₀ in radians (lat_0·π/180). Sets ρ₀, the radius of the latitude that maps to the projection's false origin y=0.",
-          "expression": {
-            "op": "*",
-            "args": [
-              "lat_0",
-              "deg2rad"
-            ]
-          }
-        },
-        "phi": {
-          "type": "observed",
-          "shape": [],
-          "description": "Input latitude φ in radians (lat·π/180) — the point being projected.",
-          "expression": {
-            "op": "*",
-            "args": [
-              "lat",
-              "deg2rad"
-            ]
-          }
-        },
-        "t1": {
-          "type": "observed",
-          "shape": [],
-          "description": "Conformal tangent at φ₁: tan(π/4 + φ₁/2). Appears in both n and F; named once so the deep chain stays readable.",
-          "expression": {
-            "op": "tan",
-            "args": [
+              { "op": "cos", "args": [{ "op": "*", "args": ["lat_1", 0.017453292519943295] }] },
               {
-                "op": "+",
+                "op": "^",
                 "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi1",
-                      2.0
-                    ]
-                  }
+                  { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat_1" } },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
                 ]
               }
             ]
-          }
-        },
-        "t2": {
-          "type": "observed",
-          "shape": [],
-          "description": "Conformal tangent at φ₂: tan(π/4 + φ₂/2). The φ₂ term of the cone constant.",
-          "expression": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi2",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "t0": {
-          "type": "observed",
-          "shape": [],
-          "description": "Conformal tangent at the origin latitude: tan(π/4 + φ₀/2). Sets ρ₀.",
-          "expression": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi0",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "tphi": {
-          "type": "observed",
-          "shape": [],
-          "description": "Conformal tangent at the input latitude: tan(π/4 + φ/2). Sets ρ for the point. Singular (→0, ρ→∞) at the far pole φ=−90°·sign(n); the projection is undefined there by construction, so points must avoid that pole.",
-          "expression": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "n": {
-          "type": "observed",
-          "shape": [],
-          "description": "Cone constant n = log(cos φ₁ / cos φ₂) / log( tan(π/4+φ₂/2) / tan(π/4+φ₁/2) ) (Appendix B). Depends only on the two standard parallels, so it differs between the WRF (≈0.7156) and NEI2016 (≈0.6305) parameter sets — this is what makes the rule genuinely parameterized rather than hard-coded.",
-          "expression": {
-            "op": "/",
-            "args": [
-              {
-                "op": "log",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      {
-                        "op": "cos",
-                        "args": [
-                          "phi1"
-                        ]
-                      },
-                      {
-                        "op": "cos",
-                        "args": [
-                          "phi2"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "log",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      "t2",
-                      "t1"
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "F": {
-          "type": "observed",
-          "shape": [],
-          "description": "Scale factor F = cos φ₁ · tan(π/4+φ₁/2)^n / n (Appendix B). The constant that ties the cone to the sphere; combined with R it sets every radius.",
-          "expression": {
-            "op": "/",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "cos",
-                    "args": [
-                      "phi1"
-                    ]
-                  },
-                  {
-                    "op": "^",
-                    "args": [
-                      "t1",
-                      "n"
-                    ]
-                  }
-                ]
-              },
-              "n"
-            ]
-          }
-        },
-        "RF": {
-          "type": "observed",
-          "shape": [],
-          "description": "R·F — the radius scale in metres (R is the sphere radius). A convenience observed: ρ, ρ₀ and the inverse latitude all read R·F, so naming it keeps those three simple.",
-          "expression": {
+          },
+          { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+        ]
+      }
+    },
+    "lambert_conformal_rho": {
+      "params": ["lat", "lat_1", "lat_2", "R"],
+      "description": "Helper: rho = R*F / t(lat)^n (Snyder eq. 15-1), the cone radius of the parallel at lat (metres). rho_0 is this template invoked with lat bound to lat_0. Singular at the far pole (t -> 0 for n > 0 as lat -> -90).",
+      "body": {
+        "op": "/",
+        "args": [
+          {
             "op": "*",
             "args": [
               "R",
-              "F"
+              { "op": "apply_expression_template", "name": "lambert_conformal_F", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
             ]
-          }
-        },
-        "rho0": {
-          "type": "observed",
-          "shape": [],
-          "description": "ρ₀ = R·F / tan(π/4+φ₀/2)^n (Appendix B). Radius from the cone apex to the origin parallel; the y-axis is measured down from here.",
-          "expression": {
-            "op": "/",
+          },
+          {
+            "op": "^",
             "args": [
-              "RF",
-              {
-                "op": "^",
-                "args": [
-                  "t0",
-                  "n"
-                ]
-              }
+              { "op": "apply_expression_template", "name": "lambert_conformal_t", "args": [], "bindings": { "lat": "lat" } },
+              { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
             ]
           }
-        },
-        "rho": {
-          "type": "observed",
-          "shape": [],
-          "description": "ρ = R·F / tan(π/4+φ/2)^n (Appendix B). Radius from the cone apex to the input latitude.",
-          "expression": {
-            "op": "/",
-            "args": [
-              "RF",
-              {
-                "op": "^",
-                "args": [
-                  "tphi",
-                  "n"
-                ]
-              }
-            ]
-          }
-        },
-        "theta": {
-          "type": "observed",
-          "shape": [],
-          "description": "θ = n·(λ−λ₀), the polar angle on the cone, with the longitude difference (lon−lon_0) converted to radians. Appendix B writes x = ρ·sin(n(λ−λ₀)).",
-          "expression": {
+        ]
+      }
+    },
+    "lambert_conformal_theta": {
+      "params": ["lon", "lon_0", "lat_1", "lat_2"],
+      "description": "Helper: theta = n * (lon - lon_0) * pi/180 (Snyder eq. 14-4), the polar angle on the developed cone (radians).",
+      "body": {
+        "op": "*",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } },
+          {
             "op": "*",
             "args": [
-              "n",
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "lon",
-                      "lon_0"
-                    ]
-                  },
-                  "deg2rad"
-                ]
-              }
+              { "op": "-", "args": ["lon", "lon_0"] },
+              0.017453292519943295
             ]
           }
-        },
-        "proj_x": {
-          "type": "observed",
-          "shape": [],
-          "description": "FORWARD map, easting (metres): x = ρ·sin θ (Appendix B). At lon=lon_0, θ=0 ⇒ x=0 (the central meridian is the y-axis).",
-          "expression": {
+        ]
+      }
+    },
+    "lambert_conformal_forward_x": {
+      "params": ["lon", "lat", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "FORWARD, easting (metres): x = rho(lat) * sin(theta) (Snyder eq. 14-1). At lon = lon_0, theta = 0 so x = 0 (the central meridian is the y-axis). lat_0 is unused (x is independent of the origin latitude; uniform reprojection signature).",
+      "body": {
+        "op": "*",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+          {
+            "op": "sin",
+            "args": [
+              { "op": "apply_expression_template", "name": "lambert_conformal_theta", "args": [], "bindings": { "lon": "lon", "lon_0": "lon_0", "lat_1": "lat_1", "lat_2": "lat_2" } }
+            ]
+          }
+        ]
+      }
+    },
+    "lambert_conformal_forward_y": {
+      "params": ["lon", "lat", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "FORWARD, northing (metres): y = rho_0 - rho(lat) * cos(theta) (Snyder eq. 14-2), with rho_0 = rho at the origin latitude (the _rho helper invoked with lat bound to lat_0). At (lon_0, lat_0): theta = 0 and rho = rho_0, so y = 0 -- the projection origin maps to the false origin (0, 0).",
+      "body": {
+        "op": "-",
+        "args": [
+          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+          {
             "op": "*",
             "args": [
-              "rho",
+              { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
               {
-                "op": "sin",
+                "op": "cos",
                 "args": [
-                  "theta"
+                  { "op": "apply_expression_template", "name": "lambert_conformal_theta", "args": [], "bindings": { "lon": "lon", "lon_0": "lon_0", "lat_1": "lat_1", "lat_2": "lat_2" } }
                 ]
               }
             ]
           }
-        },
-        "proj_y": {
-          "type": "observed",
-          "shape": [],
-          "description": "FORWARD map, northing (metres): y = ρ₀ − ρ·cos θ (Appendix B). At (lon_0,lat_0): θ=0 and ρ=ρ₀ ⇒ y=0 (the projection origin maps to the false origin (0,0)).",
-          "expression": {
-            "op": "-",
-            "args": [
-              "rho0",
-              {
-                "op": "*",
-                "args": [
-                  "rho",
-                  {
-                    "op": "cos",
-                    "args": [
-                      "theta"
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "rho0_my": {
-          "type": "observed",
-          "shape": [],
-          "description": "ρ₀ − y, the northing measured up from the cone apex. Composes on the FORWARD observed proj_y, so the inverse∘forward is the identity BY CONSTRUCTION (the longlat precedent: the inverse reads the forward observeds). Equals ρ·cos θ. Used by both ρ (inverse) and θ (inverse).",
-          "expression": {
-            "op": "-",
-            "args": [
-              "rho0",
-              "proj_y"
-            ]
-          }
-        },
-        "rho_inv": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE: ρ = sign(n)·sqrt(x² + (ρ₀−y)²) (Appendix B). Recovers the radius from the projected point; sign(n) keeps ρ on the correct side for either hemisphere's cone. For the round-trip this equals the forward ρ.",
-          "expression": {
+        ]
+      }
+    },
+    "lambert_conformal_inverse_lon": {
+      "params": ["x", "y", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "INVERSE, longitude (degrees): lon = lon_0 + (theta/n)*180/pi with theta = atan2(x, rho_0 - y) (Snyder eqs. 14-11, 14-9; n > 0 branch of 14-11 -- for n < 0 Snyder reverses the signs of x, y, rho_0 - y first, a case no documented parameter set exercises). atan2(rho*sin theta, rho*cos theta) = theta for rho > 0, so this inverts the forward polar angle exactly.",
+      "body": {
+        "op": "+",
+        "args": [
+          "lon_0",
+          {
             "op": "*",
             "args": [
               {
-                "op": "sign",
-                "args": [
-                  "n"
-                ]
-              },
-              {
-                "op": "sqrt",
+                "op": "/",
                 "args": [
                   {
-                    "op": "+",
+                    "op": "atan2",
                     "args": [
+                      "x",
                       {
-                        "op": "^",
+                        "op": "-",
                         "args": [
-                          "proj_x",
-                          2.0
-                        ]
-                      },
-                      {
-                        "op": "^",
-                        "args": [
-                          "rho0_my",
-                          2.0
+                          { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+                          "y"
                         ]
                       }
                     ]
-                  }
+                  },
+                  { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
                 ]
-              }
+              },
+              57.29577951308232
             ]
           }
-        },
-        "theta_inv": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE: θ = atan2(x, ρ₀−y) (Appendix B). Recovers the polar angle; atan2(ρ sinθ, ρ cosθ)=θ for ρ>0, so it inverts the forward θ.",
-          "expression": {
-            "op": "atan2",
+        ]
+      }
+    },
+    "lambert_conformal_inverse_lat": {
+      "params": ["x", "y", "lat_1", "lat_2", "lat_0", "lon_0", "R"],
+      "description": "INVERSE, latitude (degrees): lat = (2*atan((R*F/rho)^(1/n)) - pi/2)*180/pi (Snyder eq. 15-5), with rho = sign(n)*sqrt(x^2 + (rho_0 - y)^2) (14-10, taking the sign of n) and rho_0 = rho(lat_0). Since R*F/rho = t(lat)^n on the forward image, this recovers the input latitude: the round-trip identity. lon_0 is unused (uniform reprojection signature).",
+      "body": {
+        "op": "*",
+        "args": [
+          {
+            "op": "-",
             "args": [
-              "proj_x",
-              "rho0_my"
-            ]
-          }
-        },
-        "geo_lon": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE longitude (degrees): λ = λ₀ + θ/n, converted back to degrees: geo_lon = lon_0 + (θ_inv/n)·(180/π). inverse∘forward = lon_0 + (n(lon−lon_0))/n = lon — the round-trip identity the acceptance checks.",
-          "expression": {
-            "op": "+",
-            "args": [
-              "lon_0",
               {
                 "op": "*",
                 "args": [
+                  2.0,
                   {
-                    "op": "/",
+                    "op": "atan",
                     "args": [
-                      "theta_inv",
-                      "n"
-                    ]
-                  },
-                  "rad2deg"
-                ]
-              }
-            ]
-          }
-        },
-        "geo_lat": {
-          "type": "observed",
-          "shape": [],
-          "description": "INVERSE latitude (degrees): φ = 2·atan( (R·F/ρ)^(1/n) ) − π/2 (Appendix B), converted to degrees. Since R·F/ρ = tan(π/4+φ/2)^n, this returns the input latitude: inverse∘forward = φ. The round-trip identity in latitude.",
-          "expression": {
-            "op": "*",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      2.0,
                       {
-                        "op": "atan",
+                        "op": "^",
                         "args": [
                           {
-                            "op": "^",
+                            "op": "/",
                             "args": [
                               {
-                                "op": "/",
+                                "op": "*",
                                 "args": [
-                                  "RF",
-                                  "rho_inv"
+                                  "R",
+                                  { "op": "apply_expression_template", "name": "lambert_conformal_F", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
                                 ]
                               },
                               {
-                                "op": "/",
+                                "op": "*",
                                 "args": [
-                                  1.0,
-                                  "n"
+                                  {
+                                    "op": "sign",
+                                    "args": [
+                                      { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
+                                    ]
+                                  },
+                                  {
+                                    "op": "sqrt",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          { "op": "^", "args": ["x", 2.0] },
+                                          {
+                                            "op": "^",
+                                            "args": [
+                                              {
+                                                "op": "-",
+                                                "args": [
+                                                  { "op": "apply_expression_template", "name": "lambert_conformal_rho", "args": [], "bindings": { "lat": "lat_0", "lat_1": "lat_1", "lat_2": "lat_2", "R": "R" } },
+                                                  "y"
+                                                ]
+                                              },
+                                              2.0
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
                                 ]
                               }
+                            ]
+                          },
+                          {
+                            "op": "/",
+                            "args": [
+                              1.0,
+                              { "op": "apply_expression_template", "name": "lambert_conformal_n", "args": [], "bindings": { "lat_1": "lat_1", "lat_2": "lat_2" } }
                             ]
                           }
                         ]
                       }
                     ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      2.0
-                    ]
                   }
                 ]
               },
-              "rad2deg"
+              1.5707963267948966
             ]
-          }
-        },
-        "forward_x": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the forward easting: d(forward_x)/dt = proj_x from a zero IC ⇒ du = x. Lets the gate read the forward output and compare to the proj4 reference points."
-        },
-        "forward_y": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the forward northing: d(forward_y)/dt = proj_y ⇒ du = y."
-        },
-        "roundtrip_lon": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the inverse∘forward longitude: d(roundtrip_lon)/dt = geo_lon ⇒ du = lon_0 + (n(lon−lon_0))/n = lon. Acceptance: roundtrip_lon == lon."
-        },
-        "roundtrip_lat": {
-          "type": "state",
-          "shape": [],
-          "description": "SURFACING state for the inverse∘forward latitude: d(roundtrip_lat)/dt = geo_lat ⇒ du = lat. Acceptance: roundtrip_lat == lat."
-        }
-      },
-      "equations": [
-        {
-          "_comment": "Degrees→radians conversion factor π/180. proj4/PROJ takes geographic coordinates and standard parallels in DEGREES (the WRF/NEI2016 +lat_1/+lat_2/+lat_0/+lon_0 values are degrees); Appendix B's trig is in radians. A constant observed (π is the built-in `pi` op); inlined wherever an angle is converted.",
-          "lhs": "deg2rad",
-          "rhs": {
-            "op": "/",
-            "args": [
-              3.141592653589793,
-              180.0
-            ]
-          }
-        },
-        {
-          "_comment": "Radians→degrees conversion factor 180/π — the inverse of deg2rad. Converts the closed-form inverse's radian longitude/latitude back to degrees so the round-trip lands in the same units as the input.",
-          "lhs": "rad2deg",
-          "rhs": {
-            "op": "/",
-            "args": [
-              180.0,
-              3.141592653589793
-            ]
-          }
-        },
-        {
-          "_comment": "First standard parallel φ₁ in radians (lat_1·π/180). Appendix B's φ₁; drives the cone constant n and the scale factor F.",
-          "lhs": "phi1",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "lat_1",
-              "deg2rad"
-            ]
-          }
-        },
-        {
-          "_comment": "Second standard parallel φ₂ in radians (lat_2·π/180). Appendix B's φ₂; with φ₁ it fixes the cone constant n.",
-          "lhs": "phi2",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "lat_2",
-              "deg2rad"
-            ]
-          }
-        },
-        {
-          "_comment": "Origin latitude φ₀ in radians (lat_0·π/180). Sets ρ₀, the radius of the latitude that maps to the projection's false origin y=0.",
-          "lhs": "phi0",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "lat_0",
-              "deg2rad"
-            ]
-          }
-        },
-        {
-          "_comment": "Input latitude φ in radians (lat·π/180) — the point being projected.",
-          "lhs": "phi",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "lat",
-              "deg2rad"
-            ]
-          }
-        },
-        {
-          "_comment": "Conformal tangent at φ₁: tan(π/4 + φ₁/2). Appears in both n and F; named once so the deep chain stays readable.",
-          "lhs": "t1",
-          "rhs": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi1",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "Conformal tangent at φ₂: tan(π/4 + φ₂/2). The φ₂ term of the cone constant.",
-          "lhs": "t2",
-          "rhs": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi2",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "Conformal tangent at the origin latitude: tan(π/4 + φ₀/2). Sets ρ₀.",
-          "lhs": "t0",
-          "rhs": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi0",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "Conformal tangent at the input latitude: tan(π/4 + φ/2). Sets ρ for the point. Singular (→0, ρ→∞) at the far pole φ=−90°·sign(n); the projection is undefined there by construction, so points must avoid that pole.",
-          "lhs": "tphi",
-          "rhs": {
-            "op": "tan",
-            "args": [
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      4.0
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      "phi",
-                      2.0
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "Cone constant n = log(cos φ₁ / cos φ₂) / log( tan(π/4+φ₂/2) / tan(π/4+φ₁/2) ) (Appendix B). Depends only on the two standard parallels, so it differs between the WRF (≈0.7156) and NEI2016 (≈0.6305) parameter sets — this is what makes the rule genuinely parameterized rather than hard-coded.",
-          "lhs": "n",
-          "rhs": {
-            "op": "/",
-            "args": [
-              {
-                "op": "log",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      {
-                        "op": "cos",
-                        "args": [
-                          "phi1"
-                        ]
-                      },
-                      {
-                        "op": "cos",
-                        "args": [
-                          "phi2"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "log",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      "t2",
-                      "t1"
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "Scale factor F = cos φ₁ · tan(π/4+φ₁/2)^n / n (Appendix B). The constant that ties the cone to the sphere; combined with R it sets every radius.",
-          "lhs": "F",
-          "rhs": {
-            "op": "/",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "cos",
-                    "args": [
-                      "phi1"
-                    ]
-                  },
-                  {
-                    "op": "^",
-                    "args": [
-                      "t1",
-                      "n"
-                    ]
-                  }
-                ]
-              },
-              "n"
-            ]
-          }
-        },
-        {
-          "_comment": "R·F — the radius scale in metres (R is the sphere radius). A convenience observed: ρ, ρ₀ and the inverse latitude all read R·F, so naming it keeps those three simple.",
-          "lhs": "RF",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "R",
-              "F"
-            ]
-          }
-        },
-        {
-          "_comment": "ρ₀ = R·F / tan(π/4+φ₀/2)^n (Appendix B). Radius from the cone apex to the origin parallel; the y-axis is measured down from here.",
-          "lhs": "rho0",
-          "rhs": {
-            "op": "/",
-            "args": [
-              "RF",
-              {
-                "op": "^",
-                "args": [
-                  "t0",
-                  "n"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "ρ = R·F / tan(π/4+φ/2)^n (Appendix B). Radius from the cone apex to the input latitude.",
-          "lhs": "rho",
-          "rhs": {
-            "op": "/",
-            "args": [
-              "RF",
-              {
-                "op": "^",
-                "args": [
-                  "tphi",
-                  "n"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "θ = n·(λ−λ₀), the polar angle on the cone, with the longitude difference (lon−lon_0) converted to radians. Appendix B writes x = ρ·sin(n(λ−λ₀)).",
-          "lhs": "theta",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "n",
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "lon",
-                      "lon_0"
-                    ]
-                  },
-                  "deg2rad"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "FORWARD map, easting (metres): x = ρ·sin θ (Appendix B). At lon=lon_0, θ=0 ⇒ x=0 (the central meridian is the y-axis).",
-          "lhs": "proj_x",
-          "rhs": {
-            "op": "*",
-            "args": [
-              "rho",
-              {
-                "op": "sin",
-                "args": [
-                  "theta"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "FORWARD map, northing (metres): y = ρ₀ − ρ·cos θ (Appendix B). At (lon_0,lat_0): θ=0 and ρ=ρ₀ ⇒ y=0 (the projection origin maps to the false origin (0,0)).",
-          "lhs": "proj_y",
-          "rhs": {
-            "op": "-",
-            "args": [
-              "rho0",
-              {
-                "op": "*",
-                "args": [
-                  "rho",
-                  {
-                    "op": "cos",
-                    "args": [
-                      "theta"
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "ρ₀ − y, the northing measured up from the cone apex. Composes on the FORWARD observed proj_y, so the inverse∘forward is the identity BY CONSTRUCTION (the longlat precedent: the inverse reads the forward observeds). Equals ρ·cos θ. Used by both ρ (inverse) and θ (inverse).",
-          "lhs": "rho0_my",
-          "rhs": {
-            "op": "-",
-            "args": [
-              "rho0",
-              "proj_y"
-            ]
-          }
-        },
-        {
-          "_comment": "INVERSE: ρ = sign(n)·sqrt(x² + (ρ₀−y)²) (Appendix B). Recovers the radius from the projected point; sign(n) keeps ρ on the correct side for either hemisphere's cone. For the round-trip this equals the forward ρ.",
-          "lhs": "rho_inv",
-          "rhs": {
-            "op": "*",
-            "args": [
-              {
-                "op": "sign",
-                "args": [
-                  "n"
-                ]
-              },
-              {
-                "op": "sqrt",
-                "args": [
-                  {
-                    "op": "+",
-                    "args": [
-                      {
-                        "op": "^",
-                        "args": [
-                          "proj_x",
-                          2.0
-                        ]
-                      },
-                      {
-                        "op": "^",
-                        "args": [
-                          "rho0_my",
-                          2.0
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "INVERSE: θ = atan2(x, ρ₀−y) (Appendix B). Recovers the polar angle; atan2(ρ sinθ, ρ cosθ)=θ for ρ>0, so it inverts the forward θ.",
-          "lhs": "theta_inv",
-          "rhs": {
-            "op": "atan2",
-            "args": [
-              "proj_x",
-              "rho0_my"
-            ]
-          }
-        },
-        {
-          "_comment": "INVERSE longitude (degrees): λ = λ₀ + θ/n, converted back to degrees: geo_lon = lon_0 + (θ_inv/n)·(180/π). inverse∘forward = lon_0 + (n(lon−lon_0))/n = lon — the round-trip identity the acceptance checks.",
-          "lhs": "geo_lon",
-          "rhs": {
-            "op": "+",
-            "args": [
-              "lon_0",
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "/",
-                    "args": [
-                      "theta_inv",
-                      "n"
-                    ]
-                  },
-                  "rad2deg"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "_comment": "INVERSE latitude (degrees): φ = 2·atan( (R·F/ρ)^(1/n) ) − π/2 (Appendix B), converted to degrees. Since R·F/ρ = tan(π/4+φ/2)^n, this returns the input latitude: inverse∘forward = φ. The round-trip identity in latitude.",
-          "lhs": "geo_lat",
-          "rhs": {
-            "op": "*",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      2.0,
-                      {
-                        "op": "atan",
-                        "args": [
-                          {
-                            "op": "^",
-                            "args": [
-                              {
-                                "op": "/",
-                                "args": [
-                                  "RF",
-                                  "rho_inv"
-                                ]
-                              },
-                              {
-                                "op": "/",
-                                "args": [
-                                  1.0,
-                                  "n"
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "op": "/",
-                    "args": [
-                      3.141592653589793,
-                      2.0
-                    ]
-                  }
-                ]
-              },
-              "rad2deg"
-            ]
-          }
-        },
-        {
-          "_comment": "SURFACING state for the forward easting: d(forward_x)/dt = proj_x from a zero IC ⇒ du = x. Lets the gate read the forward output and compare to the proj4 reference points.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "forward_x"
-            ],
-            "wrt": "t"
           },
-          "rhs": "proj_x"
-        },
-        {
-          "_comment": "SURFACING state for the forward northing: d(forward_y)/dt = proj_y ⇒ du = y.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "forward_y"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "proj_y"
-        },
-        {
-          "_comment": "SURFACING state for the inverse∘forward longitude: d(roundtrip_lon)/dt = geo_lon ⇒ du = lon_0 + (n(lon−lon_0))/n = lon. Acceptance: roundtrip_lon == lon.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "roundtrip_lon"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "geo_lon"
-        },
-        {
-          "_comment": "SURFACING state for the inverse∘forward latitude: d(roundtrip_lat)/dt = geo_lat ⇒ du = lat. Acceptance: roundtrip_lat == lat.",
-          "lhs": {
-            "op": "D",
-            "args": [
-              "roundtrip_lat"
-            ],
-            "wrt": "t"
-          },
-          "rhs": "geo_lat"
-        }
-      ]
+          57.29577951308232
+        ]
+      }
     }
   }
 }

@@ -1,29 +1,32 @@
----
 name: docs
 
-# Mirrors EarthSciModels' Hugo doc-site deploy workflow (mdl-w8s).
-# The render → Hugo build → deploy ordering is the contract: example plots
-# MUST be produced before Hugo runs, otherwise PNGs referenced by markdown
-# under docs/content/ never ship to gh-pages.
+# Ported from the archive docs workflow (archive/.github/workflows/docs.yml).
+# The generate → Hugo build → deploy ordering is the contract: generated
+# content pages and convergence plots MUST be produced before Hugo runs,
+# otherwise pages under docs/content/grids/ and PNGs under docs/static/plots/
+# never ship. Generated files are never committed (.gitignore pins this —
+# see AGENTS.md "Generated files").
 
 on:
   push:
     branches: [main]
     paths:
-      - 'discretizations/**'
-      - 'tests/conformance/**'
-      - 'tools/render_doc_plots.py'
-      - 'tools/render_rule_matrix.py'
-      - 'docs/**'
-      - '.github/workflows/docs.yml'
+      - "docs/**"
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/conformance/convergence/**"
+      - ".github/workflows/docs.yml"
   pull_request:
     paths:
-      - 'discretizations/**'
-      - 'tests/conformance/**'
-      - 'tools/render_doc_plots.py'
-      - 'tools/render_rule_matrix.py'
-      - 'docs/**'
-      - '.github/workflows/docs.yml'
+      - "docs/**"
+      - "grids/**"
+      - "regridding/**"
+      - "reprojection/**"
+      - "problems/**"
+      - "tests/conformance/convergence/**"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 # Single deploy at a time; cancel in-flight superseded runs.
@@ -47,11 +50,18 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install Python plotting deps
+      - name: Install Python deps (plots)
+        run: python -m pip install --upgrade matplotlib
+
+      # Official ESS display path for math pretty-printing. Best-effort:
+      # generate_catalog.py falls back to structural rendering (with a
+      # warning) when the toolkit is unavailable, so an upstream breakage
+      # cannot take the docs build down with it.
+      - name: Install earthsci_toolkit (official display path, best-effort)
+        continue-on-error: true
         run: |
-          python -m pip install --upgrade matplotlib numpy sympy
           python -m pip install \
             "git+https://github.com/EarthSciML/EarthSciSerialization.git#subdirectory=packages/earthsci_toolkit"
 
@@ -61,22 +71,29 @@ jobs:
             "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
             | tar -xz -C /usr/local/bin hugo
 
-      - name: Render doc plots
-        run: python tools/render_doc_plots.py
-
-      - name: Render rule × grid matrix data
-        run: python tools/render_rule_matrix.py
+      - name: Generate catalog pages and convergence plots
+        run: python docs/generate_catalog.py
 
       - name: Build site with Hugo
         run: hugo --source docs --minify --destination public
+
+      # Pagefind search index, ported from the archive docs workflow
+      # (archive/.github/workflows/docs.yml). Runs BEFORE the link check so
+      # lychee also validates the /pagefind/pagefind-ui.{js,css} references the
+      # head partial emits (params.pagefind in docs/hugo.toml).
+      - name: Install Pagefind
+        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
+
+      - name: Build Pagefind search index
+        run: pagefind --site docs/public
 
       - name: Link-check built site (internal links only)
         uses: lycheeverse/lychee-action@v1
         with:
           # --offline ignores all network URLs (no third-party flake); --base
-          # resolves root-relative paths like /grids/ against docs/public/ so a
-          # broken internal link (e.g. the stale /EarthSciDiscretizations/ prefix
-          # this workflow exists to prevent) fails the build.
+          # resolves root-relative paths like /grids/ against docs/public/ so
+          # a broken internal link — e.g. a generated page referencing a plot
+          # that was never rendered — fails the build.
           args: >-
             --offline
             --base
@@ -85,11 +102,12 @@ jobs:
             docs/public
           fail: true
 
-      - name: Install Pagefind
-        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
-
-      - name: Build Pagefind search index
-        run: pagefind --site docs/public
+      - name: Upload built site (PR preview artifact)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: docs/public
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

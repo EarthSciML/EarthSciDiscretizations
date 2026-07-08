@@ -1,0 +1,40 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D2_6_dirichlet_face1",
+    "description": "Sixth-order one-sided second-derivative closure for the cell nearest a Dirichlet (fixed-value) wall on cartesian_uniform_1d, cell-centered. Match-less named scalar template; the boundary-condition rule (rules/central_D2_6_dirichlet_bc) applies it at the first interior row against a prescribed wall value. On this cell-centered grid the wall sits half a cell outside the first center, so the wall value g and the seven nearest cell values sit at offsets {0, 1/2, 3/2, 5/2, 7/2, 9/2, 11/2, 13/2}*dx from the wall. The unique degree-7 polynomial through those eight data, differentiated twice at the first center (offset 1/2 dx), gives D2 = (86016 g - 136136 f1 + 56628 f2 - 3861 f3 - 5720 f4 + 4290 f5 - 1404 f6 + 187 f7) / (25740 dx^2), where f1..f7 are the seven cells in order of increasing distance from the wall and g is the wall value (Fornberg 1988 weights for the offset node set). Because eight data fit a septic, the second derivative is exact for polynomials up to degree 7 and the local truncation error is O(dx^6) — matching the interior 7-point stencil central_D2_6_interior, so the interior order is preserved at the wall. A linear (degree-1) field is reproduced exactly and returns identically zero (the sum of all eight weights is zero: 86016 - 136136 + 56628 - 3861 - 5720 + 4290 - 1404 + 187 = 0), so a steady linear profile carrying the wall value is discretely exact. Reused unchanged at the right wall by reflection (the second derivative is even under x -> -x), with f1..f7 mapped to the cells in increasing distance from the right wall and g bound to the right wall value. `dx` is a free name resolving to the consuming model's spacing variable (the grid's consumer-supplied geometry contract; see grids/cartesian_uniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:cartesian_uniform_1d", "op:D2", "order:6", "stencil_width:8"],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_templates": {
+    "central_D2_6_dirichlet_face1": {
+      "params": ["g", "f1", "f2", "f3", "f4", "f5", "f6", "f7"],
+      "description": "D2 = (86016 g - 136136 f1 + 56628 f2 - 3861 f3 - 5720 f4 + 4290 f5 - 1404 f6 + 187 f7) / (25740 dx^2). g is the wall value; f1..f7 are the seven cells in order of increasing distance from the wall.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [86016, "g"] },
+              { "op": "*", "args": [-136136, "f1"] },
+              { "op": "*", "args": [56628, "f2"] },
+              { "op": "*", "args": [-3861, "f3"] },
+              { "op": "*", "args": [-5720, "f4"] },
+              { "op": "*", "args": [4290, "f5"] },
+              { "op": "*", "args": [-1404, "f6"] },
+              { "op": "*", "args": [187, "f7"] }
+            ]
+          },
+          { "op": "*", "args": [25740, "dx", "dx"] }
+        ]
+      }
+    }
+  }
+}

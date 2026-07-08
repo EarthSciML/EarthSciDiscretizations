@@ -1,0 +1,217 @@
+{
+  "category": "regridding",
+  "version": "1.0",
+  "case": "conservative_overlap_3x3_to_2x2",
+  "description": "Cross-binding conformance for the conservative-overlap regrid library (regridding/conservative_overlap.esm) on a uniform 3x3 -> 2x2 lat-lon coarsening: nine 1x1-degree source cells and four 1.5x1.5-degree target cells tiling the same [0,3]x[0,3] lon-lat domain, planar manifold in coordinate space. fixture.esm imports the library via expression_template_imports (bindings NSRC=9, NTGT=4, NVERT=4); the build-once geometry templates (conservative_overlap_A_ij / _A_j / _W_ij) are invoked as observeds of the receiving Regrid component -- the geometry manifold is bound at the A_ij invocation ('planar'), an esm-spec 9.6.1 scalar-field template parameter since the library's manifold parameterization (the spherical sibling case conservative_overlap_sphere_fan_4_to_2 binds 'spherical' through the SAME library file), and the coupling entries carry the apply in the NATIVE esm-spec 8.6/10.5 spelling: each variable_map's `transform` IS the regridding expression (an apply_expression_template invocation of conservative_overlap_apply on the source field, expanded at load per 9.6.4 against the receiving component's registry; the target parameter becomes the derived regridded field per 10.4) -- the library-factored form of the computation in ESS tests/valid/geometry/conservative_regrid_overlap_join.esm, respelled from the pre-widening param_to_var seam with bit-identical golden output. Gate structure per CONFORMANCE_SPEC.md 5.8 (mirroring ESS tests/conformance/geometry/manifest.json): the physical invariants are EXACT gates -- conservation is exact because the target tiles the source domain (5.8.3), and partition-of-unity is exact by construction because the apply divides by the row-sum of the same computed areas under the same sliver filter -- while per-pair areas and weights are tolerance-gated (combined rel+abs with the 5.8.2 sliver floor). DERIVATION of the expected weights (hand geometry, no evaluator): every 1.5-degree target edge splits a 1-degree source column/row at its midpoint, so each target cell overlaps exactly four source cells -- its CORNER source cell fully (A_ij = 1.0 deg^2), its two EDGE-adjacent cells by half (0.5 deg^2: a 1.0 x 0.5 rectangle), and the shared CENTER cell S5 by a quarter (0.25 deg^2: a 0.5 x 0.5 square). Row-sum A_j = 1 + 0.5 + 0.5 + 0.25 = 2.25 deg^2 = 1.5^2, the true target-cell area, for every j. Weights are therefore the exact rationals W = A_ij/A_j: corner 1/2.25 = 4/9, edge 0.5/2.25 = 2/9, center 0.25/2.25 = 1/9. With F_src = [1..9] the regridded field is [7/3, 11/3, 19/3, 23/3] and both mass sums equal 45. These appear below as reference_weights for eyeball checking ONLY -- they are NOT the golden: the committed golden (golden/weights.json) is produced by the official ESS binding pipeline via scripts/regenerate-goldens.sh (Julia reference), per the repo's single-pathway doctrine. HISTORY: per-pair emission was blocked upstream until 2026-07 -- no EarthSciSerialization.jl API exposed the build-time geometry setup arrays from build_evaluator, so the case ran as status 'active-invariants' with only the exact-invariant inline tests and the recorded pou/cons/regrid fields gated, and a blocked_upstream note in place of the golden. EarthSciSerialization.jl now exposes the materialized setup arrays through build_evaluator(...; inspect=BuildInspection()) (forwarded by simulate), the library gained the conservative_overlap_W_ij template (and the fixture the W_ij observed) so the weights come from the official declarative pathway rather than runner arithmetic, run-julia.jl emits A_ij/A_j/W_ij verbatim, and compare-outputs.py gates them against golden/weights.json at the 5.8 tolerances below; a binding whose runner does not emit the per-pair arrays is reported as SKIP on the per-pair-weights gate while its exact-invariant and cross-binding-field gates stay fully active; python emits them since 2026-07 through earthsci_toolkit's BuildInspection surface (simulate(..., inspect=BuildInspection()) setup arrays), mirrored from the Julia one, and run-python.py gates them like run-julia.jl.",
+  "fixture": "fixture.esm",
+  "library": "../../../../regridding/conservative_overlap.esm",
+  "model": "Regrid",
+  "tests": [
+    "exact_invariants"
+  ],
+  "manifold": "planar",
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "_doc": "Keys follow ESS tests/conformance/geometry/manifest.json. The 5.8 contract pins one literal: the sliver floor atol = area_atol_factor * characteristic_length^2 (5.8.2); area_rtol is the calibrated cross-binding band for the loosest binding pair; partition-of-unity is exact by construction (tight epsilon); conservation is exact here because the target tiles the source domain, so it is gated at a tight epsilon rather than the application-set resolution-dependent tolerance of 5.8.3.",
+    "area_rtol": 1e-09,
+    "area_atol_factor": 1e-15,
+    "characteristic_length": 1.0,
+    "weight_rtol": 1e-09,
+    "weight_atol": 1e-12,
+    "partition_of_unity_atol": 1e-12,
+    "conservation_atol": 1e-09,
+    "conservation_exact": true
+  },
+  "reference_weights": {
+    "_doc": "NON-GOLDEN hand-derived expected values for eyeball checking only (derivation in the description above; exact rationals of the uniform 3x3 -> 2x2 planar overlap). The golden weights come from the official binding runners. Triples are [i, j, value] with 1-based cell indices, i = (row-1)*3 + col over the source (south-to-north rows, west-to-east cols), j = (ROW-1)*2 + COL over the target.",
+    "A_ij_deg2": [
+      [
+        1,
+        1,
+        1.0
+      ],
+      [
+        2,
+        1,
+        0.5
+      ],
+      [
+        4,
+        1,
+        0.5
+      ],
+      [
+        5,
+        1,
+        0.25
+      ],
+      [
+        3,
+        2,
+        1.0
+      ],
+      [
+        2,
+        2,
+        0.5
+      ],
+      [
+        6,
+        2,
+        0.5
+      ],
+      [
+        5,
+        2,
+        0.25
+      ],
+      [
+        7,
+        3,
+        1.0
+      ],
+      [
+        4,
+        3,
+        0.5
+      ],
+      [
+        8,
+        3,
+        0.5
+      ],
+      [
+        5,
+        3,
+        0.25
+      ],
+      [
+        9,
+        4,
+        1.0
+      ],
+      [
+        6,
+        4,
+        0.5
+      ],
+      [
+        8,
+        4,
+        0.5
+      ],
+      [
+        5,
+        4,
+        0.25
+      ]
+    ],
+    "A_j_deg2": [
+      2.25,
+      2.25,
+      2.25,
+      2.25
+    ],
+    "W_ij": [
+      [
+        1,
+        1,
+        0.4444444444444444
+      ],
+      [
+        2,
+        1,
+        0.2222222222222222
+      ],
+      [
+        4,
+        1,
+        0.2222222222222222
+      ],
+      [
+        5,
+        1,
+        0.1111111111111111
+      ],
+      [
+        3,
+        2,
+        0.4444444444444444
+      ],
+      [
+        2,
+        2,
+        0.2222222222222222
+      ],
+      [
+        6,
+        2,
+        0.2222222222222222
+      ],
+      [
+        5,
+        2,
+        0.1111111111111111
+      ],
+      [
+        7,
+        3,
+        0.4444444444444444
+      ],
+      [
+        4,
+        3,
+        0.2222222222222222
+      ],
+      [
+        8,
+        3,
+        0.2222222222222222
+      ],
+      [
+        5,
+        3,
+        0.1111111111111111
+      ],
+      [
+        9,
+        4,
+        0.4444444444444444
+      ],
+      [
+        6,
+        4,
+        0.2222222222222222
+      ],
+      [
+        8,
+        4,
+        0.2222222222222222
+      ],
+      [
+        5,
+        4,
+        0.1111111111111111
+      ]
+    ],
+    "W_ij_rationals": "corner 4/9, edge 2/9, center 1/9 (all other pairs 0)",
+    "F_tgt_with_F_src_1_to_9": [
+      2.3333333333333335,
+      3.6666666666666665,
+      6.333333333333333,
+      7.666666666666667
+    ],
+    "F_tgt_rationals": "[7/3, 11/3, 19/3, 23/3]; mass_src = mass_tgt = 45"
+  },
+  "golden": "golden/weights.json",
+  "status": "active"
+}

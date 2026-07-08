@@ -1,0 +1,647 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_1d_nonuniform_zero_grad",
+    "description": "MMS driver: 1-D linear advection u_t = -c u_x + c g'(x) on the unit interval [0, 1] discretized on a SMOOTHLY STRETCHED non-uniform mesh by grids/cartesian_nonuniform_1d/rules/central_D1_nonuniform_zero_grad_bc (second-order centered nonuniform interior with second-order one-sided walls). Forced-steady manufactured solution u(x,t) = g(x) = cos(pi x), constant in time: substituting into u_t = -c u_x + c g'(x) gives 0 = -c g'(x) + c g'(x) exactly, so the exact field is steady and the source is S(x) = c g'(x) = -c pi sin(pi x). The discrete drift away from g is exactly the operator truncation error on the stretched mesh, which is second-order in L2 (supraconvergence) even though the pointwise truncation is O(h) where the spacing varies (LeVeque 2007 section 2.13). cos(pi x) has zero gradient at x=0 and x=1, matching the one-sided zero-gradient-family wall closure. The mesh follows the grid's EDGE-ARRAY contract (grids/cartesian_nonuniform_1d/grid.esm): the consumer supplies ONE node array xe (shape [x_nodes], N+1 values) for the quadratic stretch x(xi) = 0.6 xi + 0.4 xi^2 on uniform computational nodes xi_k = (k-1)/N, i.e. xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 (xe[1]=0, xe[N+1]=1), and the GRID derives the cell centers xc from it via nonuniform_cell_center -- a first derivative needs only centers, not the control widths dxw, so dxw is not materialized. A loader-API rebinding of N re-sizes x_nodes and re-derives the whole mesh consistently. The forcing observed src = c g'(x) reads xc at runtime (a runtime expression position where the free-name geometry resolves), while the initial condition and test references spell the stretched cell center xc[i] = (xe(i-1)+xe(i))/2 inline from literals and the metaparameter name N alone (the build-time 6.6.5/ic cellwise evaluation is scope-free; AGENTS.md build-time scope caveat), algebraically identical to the grid-derived xc, so the t=0 assertion is exact.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_nonuniform_1d",
+      "equation:advection",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids) and the supraconvergence discussion."
+      }
+    ]
+  },
+  "models": {
+    "Advection": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_nonuniform_1d/rules/central_D1_nonuniform_zero_grad_bc.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": [
+            "x"
+          ],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed."
+        },
+        "xe": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x_nodes"
+          ],
+          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` over x_nodes.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "k": {
+                "from": "x_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "xc": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by the rule body for the center-to-center stencil spacings and by the forcing observed src.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_center",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        },
+        "src": {
+          "type": "observed",
+          "units": "kg/(m^3 s)",
+          "shape": [
+            "x"
+          ],
+          "description": "MMS forcing S(x) = c g'(x) = -c pi sin(pi x) that makes u = cos(pi x) an exact steady solution of u_t = -c u_x + S. A runtime expression position, so it reads the grid-derived cell centers xc by index (the free-name geometry resolves at evaluation). Aggregation index `i` over x.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    "c"
+                  ]
+                },
+                3.141592653589793,
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "xc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "N"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "N"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              },
+              "src"
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_transport_nonuniform_zero_grad",
+          "description": "Forced-steady manufactured solution u(x,t) = cos(pi x) with c = 1 on the quadratic-stretch mesh (b=0.4). Source S(x) = c g'(x) = -c pi sin(pi x) makes u steady: u_t = -c u_x + S = 0. cos(pi x) has zero wall gradient (one-sided zero-gradient-family closure compatible). References evaluate at the stretched cell centers xc[i] = (xe(i-1)+xe(i))/2, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and the metaparameter N only), algebraically identical to the grid-derived xc observed used at runtime. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the L2 error, which falls at the supraconvergent order 2. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_nonuniform_zero_grad/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      3.141592653589793,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      3.141592653589793,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

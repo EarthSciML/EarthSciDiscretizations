@@ -1,0 +1,95 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D1x_dirichlet_bc",
+    "description": "Second-order centered first derivative along x with inhomogeneous DIRICHLET (fixed-value) conditions on the two x-walls, over the full 2-D field f[x,y] on cartesian_uniform_2d, cell-centered — the first-derivative companion of central_D2x_dirichlet_bc (same mirror ghost, different stencil). Interior i in [2, NX-1] (all j): the imported 3-point centered x-stencil (f[i+1,j]-f[i-1,j])/(2 dx). Faces i=1 and i=NX: mirror-ghost elimination against a prescribed wall value. `gL` and `gR` are consumer-supplied free names (the same free-name contract as the grid geometry `dx`; see grids/cartesian_uniform_2d/grid.esm) giving the field value on the left x-wall x=x0 and the right x-wall x=x0+NX*dx, constant along that wall (all j). On this cell-centered grid the wall sits half a cell outside the first center, so linear reconstruction to the wall gives the ghost f[0,j]=2*gL-f[1,j] (and f[NX+1,j]=2*gR-f[NX,j]); substituting into the centered stencil (f[2,j]-f[0,j])/(2 dx) and (f[NX+1,j]-f[NX-1,j])/(2 dx) yields D1x[1,j] = (f[2,j]+f[1,j]-2*gL)/(2 dx) and D1x[NX,j] = (2*gR-f[NX,j]-f[NX-1,j])/(2 dx). A consuming model declares gL/gR as ordinary real parameters; a parameter not overridden falls back to its default (esm-spec §6: default, or 0), so gL=gR=0 is the homogeneous-Dirichlet x-wall and both wall terms drop out. The gL/gR terms live only in the runtime rule body, never in build-time ic/reference positions (AGENTS.md build-time scope caveat). `dx` is the grid's consumer-supplied x-spacing free name. The face values are FULL-RANK aggregates (singleton output range on the x axis, all j) mirroring central_D2x_dirichlet_bc and central_D1x_zero_grad_bc, so every binding's simulator fills the (1 x NY) regions without rank promotion. FACE TRUNCATION: D1x[1,j] - u_x(x_1,y_j) = (dx/8) u_xx(x0,y_j) + O(dx^2), so the mirror-ghost face is O(dx) locally for a generic field (SUPERCONVERGENT to O(dx^2) when u_xx=0 at the wall). WELL-POSED USE: a fixed value pins the field at the wall, the DIFFUSION operator's natural boundary condition, so this gradient closure belongs in a well-posed advection-DIFFUSION setting (or flow into the wall), NOT a pure first-order advection with a fixed value at an OUTFLOW wall, where the pinned value reflects (a Kreiss/GKS-unstable mode); the MMS driver problems/advection_2d_x_dirichlet_central.esm exercises it as the advective x-term of an advection-diffusion decay problem whose physical x-diffusion supplies the boundary dissipation, confirming 2nd order. Matches plain D(f, wrt: x) at default priority, so compound rules (e.g. a second-derivative rule at priority 10) fire first, match-scoped with `where: {f: {shape: [x, y]}}` (esm-spec §9.6.1) so it fires only on the first x-derivative of a bare field declared over this 2-D grid's [x, y] index sets (distinct from the 1-D shape-[x] rules); under import-edge renaming (esm-spec §9.7.7) the wrt literal and the where shape follow the renamed axes together. A model imports exactly one first-derivative rule for x (this Dirichlet rule, the zero-gradient rule, or the periodic variant), never more than one.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:D", "axes:x,y", "order:2", "stencil_width:3", "bc:dirichlet", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (cell-centered Dirichlet via mirror ghost) and Chapter 10 (well-posed boundary conditions for advection-diffusion)."
+      },
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/central_D1x_interior.esm" }
+  ],
+  "expression_templates": {
+    "central_D1x_dirichlet_bc": {
+      "params": ["f"],
+      "match": { "op": "D", "args": ["f"], "wrt": "x" },
+      "where": { "f": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NX", 1] }], [1, "NY"]],
+          [[1, 1], [1, "NY"]],
+          [["NX", "NX"], [1, "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D1x_interior",
+            "bindings": { "f": "f" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": [1, 1], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        { "op": "index", "args": ["f", 2, "j"] },
+                        { "op": "index", "args": ["f", 1, "j"] }
+                      ]
+                    },
+                    { "op": "*", "args": [2, "gL"] }
+                  ]
+                },
+                { "op": "*", "args": [2, "dx"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["f"],
+            "ranges": { "i": ["NX", "NX"], "j": { "from": "y" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "*", "args": [2, "gR"] },
+                        { "op": "index", "args": ["f", "NX", "j"] }
+                      ]
+                    },
+                    { "op": "index", "args": ["f", { "op": "-", "args": ["NX", 1] }, "j"] }
+                  ]
+                },
+                { "op": "*", "args": [2, "dx"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

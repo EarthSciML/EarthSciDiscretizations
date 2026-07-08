@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_2d_y_dirichlet_central",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc driven by problems/advection_2d_y_dirichlet_central.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — NY is the open metaparameter (NX is edge-closed at 8; the solution is constant in x and no x-operator appears). The rule is exercised as the advective y-term of a well-posed advection-diffusion decay problem (a two-sided fixed-value gradient reflects at an outflow y-wall in pure advection, so the physical y-diffusion supplies the boundary dissipation that makes it well posed; derivation in the problem file). The exact unforced solution e^{2y} + e^{-lambda t} e^{y} sin(pi y) (nonzero fixed-value y-walls gB=1, gT=e^2) decays parabolically, so the recorded L2/Linf errors at t=0.05 are the clean O(dy^2) y-truncation dominated by the advective closure under test.",
+  "problem": "../../../../problems/advection_2d_y_dirichlet_central.esm",
+  "model": "Advection2DyDirichlet",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    { "n": 16, "bindings": { "NY": 16 } },
+    { "n": 32, "bindings": { "NY": 32 } },
+    { "n": 64, "bindings": { "NY": 64 } },
+    { "n": 128, "bindings": { "NY": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.05,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

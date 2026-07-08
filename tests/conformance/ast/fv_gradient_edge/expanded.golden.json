@@ -1,0 +1,193 @@
+{
+  "esm": "0.8.0",
+  "index_sets": {
+    "cells": {
+      "kind": "interval",
+      "size": 12
+    },
+    "edge_ends": {
+      "kind": "interval",
+      "size": 2
+    },
+    "edges": {
+      "kind": "interval",
+      "size": 30
+    },
+    "edges_of_cell": {
+      "kind": "ragged",
+      "of": [
+        "cells"
+      ],
+      "offsets": "nEdgesOnCell",
+      "values": "edgesOnCell"
+    },
+    "maxEdges": {
+      "kind": "interval",
+      "size": 5
+    },
+    "ring_coord": {
+      "kind": "interval",
+      "size": 2
+    },
+    "vertices": {
+      "kind": "interval",
+      "size": 20
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/mpas/rules/fv_gradient_edge: a minimal consuming model on the icosahedral level-0 mesh (metaparameters bound to NCELLS=12, NEDGES=30, NVERTICES=20, MAXEDGES=5 at the import edge). The single spatial operator grad(phi) must lower, through the section-9.6.3 fixpoint, to the rule's edge-normal finite-volume aggregate with all metaparameters folded — the golden pins the byte-identical post-lowering AST across bindings. The cell scalar is pure index arithmetic (phi(i) = i) so the fixture carries no data beyond the mesh subsystem; the mesh's const arrays enter the expanded AST only through the bare-name observed aliases (cellsOnEdge, dcEdge) that satisfy the grid's keyed-factor contract — the two factors the gradient stencil gathers, unlike the divergence rule which also needs edgeSignOnCell/edgesOnCell/areaCell.",
+    "license": "MIT",
+    "name": "fv_gradient_edge_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mpas",
+      "rule:fv_gradient_edge"
+    ]
+  },
+  "models": {
+    "FvGradientEdgeAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  "phi",
+                  "cellsOnEdge",
+                  "dcEdge"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "phi",
+                            {
+                              "args": [
+                                "cellsOnEdge",
+                                "e",
+                                2
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "phi",
+                            {
+                              "args": [
+                                "cellsOnEdge",
+                                "e",
+                                1
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    {
+                      "args": [
+                        "dcEdge",
+                        "e"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "/"
+                },
+                "op": "aggregate",
+                "output_idx": [
+                  "e"
+                ],
+                "ranges": {
+                  "e": {
+                    "from": "edges"
+                  }
+                },
+                "semiring": "sum_product"
+              }
+            ],
+            "op": "-"
+          }
+        }
+      ],
+      "subsystems": {
+        "mesh": {
+          "ref": "../../../../grids/mpas/mesh/level0.esm"
+        }
+      },
+      "variables": {
+        "cellsOnEdge": {
+          "description": "Bare-name alias of mesh.cellsOnEdge: the two cells flanking each edge; the gradient's flanking-cell gather (positive normal cellsOnEdge[e][1] -> cellsOnEdge[e][2]).",
+          "expression": "mesh.cellsOnEdge",
+          "shape": [
+            "edges",
+            "edge_ends"
+          ],
+          "type": "observed"
+        },
+        "dcEdge": {
+          "description": "Bare-name alias of mesh.dcEdge: cell-center-to-center arc across each edge (the gradient denominator).",
+          "expression": "mesh.dcEdge",
+          "shape": [
+            "edges"
+          ],
+          "type": "observed",
+          "units": "rad"
+        },
+        "phi": {
+          "description": "Data-free cell scalar phi(i) = i: enough structure to pin the flanking-cell gather pattern of the expanded gradient.",
+          "expression": {
+            "args": [],
+            "expr": "i",
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            }
+          },
+          "shape": [
+            "cells"
+          ],
+          "type": "observed",
+          "units": "1"
+        },
+        "u": {
+          "description": "Edge-normal field driven by the gradient (the rule's output axis is edges).",
+          "shape": [
+            "edges"
+          ],
+          "type": "state",
+          "units": "1"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_zero_grad_central",
+  "description": "Observed-order-of-accuracy sweep for grids/cartesian_uniform_1d/rules/central_D1_zero_grad_bc driven by problems/advection_1d_zero_grad_central.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files. The manufactured steady solution cos(2 pi x) is held by the exact forcing c dGdx (derivation and the boundary-compatibility argument in the problem file); the recorded L2/Linf errors at t=0.02 are the pure spatial truncation drift of the 2nd-order centered interior plus 2nd-order one-sided zero-gradient faces, expected to fall as O(dx^2). The window is short (t=0.02) so the drift stays dominated by the O(dx^2) spatial error rather than the weakly growing boundary transient of the both-ends one-sided centered closure (problem metadata.description).",
+  "problem": "../../../../problems/advection_1d_zero_grad_central.esm",
+  "model": "Advection",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/central_D1_zero_grad_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.02,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

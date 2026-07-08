@@ -1,0 +1,144 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "heat_2d_neumann_flux_o6",
+    "description": "MMS driver: 2-D heat equation u_t = alpha (u_xx + u_yy) on the unit box [0,1]x[0,1] with inhomogeneous NEUMANN (fixed-flux) boundaries on all four walls, discretized by grids/cartesian_uniform_2d/rules/central_D2x_6_neumann_bc + central_D2y_6_neumann_bc (the sixth-order Laplacian assembled as D(D(u,x),x)+D(D(u,y),y), each per-axis half a 7-point interior stencil plus sixth-order one-sided face closures). Manufactured solution u(x,y,t) = exp(-alpha 2 pi^2 t) cos(pi x) cos(pi y) + bx x + by y with bx = 1, by = 0.5: the decaying mode has Laplacian -2 pi^2 u_cos (so u_t = alpha Lap u) and zero normal gradient on every wall (sin(0)=sin(pi)=0), while the steady bilinear-free ramp bx x + by y has zero Laplacian and constant wall gradients (df/dx = bx on the x-walls, df/dy = by on the y-walls). So the exact solution has constant, nonzero wall fluxes, matched by the rule free names qXL=qXR=bx=1 and qYL=qYR=by=0.5. The ramp is represented exactly by the discrete sixth-order operator (all interior and boundary value-weight sums are zero and the boundary derivative terms supply the exact wall slope), so the discretization error comes solely from the cosine mode and falls as O(dx^6+dy^6) — observed order ~6, honestly pinned in tests/conformance/convergence/heat_2d_neumann_flux_o6. NX and NY sweep together. Geometry contract fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY. qXL/qXR/qYL/qYR appear only in the runtime rule body; the build-time ic/reference expressions spell the manufactured solution from literals and the metaparameters NX, NY alone (AGENTS.md build-time scope caveat), with the ramp coefficients 1.0 and 0.5 matching the flux parameter values.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:heat", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "models": {
+    "Heat2DO6": {
+      "expression_template_imports": [
+        { "ref": "../grids/cartesian_uniform_2d/rules/central_D2x_6_neumann_bc.esm" },
+        { "ref": "../grids/cartesian_uniform_2d/rules/central_D2y_6_neumann_bc.esm" }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "K", "shape": ["x", "y"], "description": "Temperature field over the 2-D [x, y] index sets." },
+        "alpha": { "type": "parameter", "units": "m^2/s", "default": 0.01, "description": "Thermal diffusivity." },
+        "qXL": { "type": "parameter", "units": "K/m", "default": 1.0, "description": "df/dx at the left x-wall, equal to the manufactured ramp slope bx = 1." },
+        "qXR": { "type": "parameter", "units": "K/m", "default": 1.0, "description": "df/dx at the right x-wall, equal to bx = 1." },
+        "qYL": { "type": "parameter", "units": "K/m", "default": 0.5, "description": "df/dy at the bottom y-wall, equal to the manufactured ramp slope by = 0.5." },
+        "qYR": { "type": "parameter", "units": "K/m", "default": 0.5, "description": "df/dy at the top y-wall, equal to by = 0.5." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge (unit box): the grid's x0 free name." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge (unit box): the grid's y0 free name." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name; NX substituted as an integer literal at load (esm-spec 9.7.6) so the loader-API convergence sweep stays consistent." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the convergence sweep stays consistent." }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                  ]
+                },
+                { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] },
+                { "op": "*", "args": [0.5, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              {
+                "op": "+",
+                "args": [
+                  { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" },
+                  { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "y" } ], "wrt": "y" }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_neumann_flux_2d_o6_decay",
+          "description": "Manufactured solution u(x,y,t) = exp(-alpha 2 pi^2 t) cos(pi x) cos(pi y) + bx x + by y with alpha = 0.01, bx = 1, by = 0.5. The cosine mode satisfies u_t = alpha (u_xx + u_yy) with zero wall gradients; the ramp is steady with constant wall gradients bx, by prescribed to the rules as qXL=qXR=1, qYL=qYR=0.5. The ramp is discretely exact for the sixth-order operator, so the error is the cosine mode's O(dx^6+dy^6). References evaluate at cell centers x_i=(i-1/2)/NX, y_j=(j-1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error. Exact per-resolution errors pinned in tests/conformance/convergence/heat_2d_neumann_flux_o6/golden/errors.json.",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                        { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] },
+                    { "op": "*", "args": [0.5, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-4 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        { "op": "exp", "args": [{ "op": "*", "args": [-0.01, 19.739208802178716, 0.1] }] },
+                        { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                        { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                      ]
+                    },
+                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] },
+                    { "op": "*", "args": [0.5, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

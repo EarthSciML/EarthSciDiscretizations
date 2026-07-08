@@ -1,0 +1,104 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_laplacian_y_zero_flux_bc",
+    "description": "The y-half of a 2-D conservative finite-volume VARIABLE-COEFFICIENT / NONLINEAR Laplacian div(k grad u) on cartesian_uniform_2d with zero-flux (homogeneous Neumann) conditions on the two y-walls, over the full 2-D field u[x,y], cell-centered. The operator carries a coefficient, so a bare laplacian match cannot express it; the rule matches the CONSERVATIVE COMPOUND the consumer writes, D( {op:*, args:[k, D(u,wrt:y)]}, wrt:y ) at priority 10, so under esm-spec 9.6.3 outermost-first compound precedence it fires on the whole compound before any plain-D rule could lower the inner derivative (exactly as central_D2y fires on D(D(u,y),y)). This is the 2-D per-axis lift of grids/cartesian_uniform_1d/rules/varcoeff_laplacian_zero_flux_bc: the operated axis y gets an interior band plus two dropped-flux y-faces, while the x axis is full-rank (all columns i treated identically). BOTH operands are match wildcards bound to consumer fields: `u` (the state) and `k` (the coefficient, the LEFT factor of the product); matching is structural and non-commutative, so the consumer MUST write k * D(u, wrt:y). Match-scoped with where {u:{shape:[x,y]}, k:{shape:[x,y]}} (esm-spec 9.6.1) so it fires only on this 2-D grid's declared [x,y]-shaped fields; under import-edge renaming (esm-spec 9.7.7) the wrt literals and both where shapes follow the renamed axes together. ONE rule serves the VARIABLE-COEFFICIENT case (k=k(x,y)) and the NONLINEAR case (k=f(u)); the body only reads k by index at the faces. AUTHORING CONTRACT for k: k is a declared [x,y]-shaped field; an aggregate-observed coefficient MUST loop over indices DISTINCT from the stencil's interior indices `i`,`j` (the library convention is `gi`/`gj`), because it is inlined into the stencil's [1,NX]x[2,NY-1] aggregate and a shared loop-index name is captured (silently wrong interior values). Face conductivity is the ARITHMETIC MEAN kf[i,j+1/2]=(k[i,j]+k[i,j+1])/2 (O(dy^2) at the face for a differentiable coefficient, affine in k so it composes with the nonlinear dual). Interior j in [2,NY-1] (all i): the imported conservative y-flux-difference stencil. The y-boundary faces impose zero flux exactly (natural for the finite-volume form -- no ghost geometry): at j=1 the bottom y-domain-face flux is dropped, giving Ly u[i,1] = kf[i,3/2](u[i,2]-u[i,1])/dy^2 = (k[i,1]+k[i,2])/2 (u[i,2]-u[i,1])/dy^2; at j=NY the top y-domain-face flux is dropped, giving Ly u[i,NY] = -kf[i,NY-1/2](u[i,NY]-u[i,NY-1])/dy^2 = (k[i,NY-1]+k[i,NY])/2 (u[i,NY-1]-u[i,NY])/dy^2. This is exactly varcoeff_laplacian_y_neumann_bc at qYL=qYR=0. The face values are FULL-RANK aggregates (singleton output range on the y axis, all i) mirroring central_D2y_neumann_bc. `dy` is the grid's consumer-supplied y-spacing free name; the zero-flux closure is dy-scale-invariant, so the rule serves any y-extent unchanged. The full variable-coefficient 2-D Laplacian is assembled in the consuming equation as D(k*D(u,x),x) + D(k*D(u,y),y): this rule lowers the second term. Reduces to the constant-coefficient zero-gradient y-half when k is spatially constant. Interior O(dy^2); the one-sided zero-flux faces are O(dy) locally, which preserves global 2nd-order L2 convergence for zero-flux-compatible solutions (flux k u_y vanishing at both y-walls). A model imports exactly one second-derivative/Laplacian rule for y.",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:finite_difference", "grid:cartesian_uniform_2d", "op:varcoeff_laplacian", "axes:x,y", "order:2", "stencil_width:3", "bc:zero_flux", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/varcoeff_laplacian_y_interior.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_laplacian_y_zero_flux_bc": {
+      "params": ["u", "k"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "k",
+              { "op": "D", "args": ["u"], "wrt": "y" }
+            ]
+          }
+        ],
+        "wrt": "y"
+      },
+      "where": { "u": { "shape": ["x", "y"] }, "k": { "shape": ["x", "y"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, "NX"], [2, { "op": "-", "args": ["NY", 1] }]],
+          [[1, "NX"], [1, 1]],
+          [[1, "NX"], ["NY", "NY"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_laplacian_y_interior",
+            "bindings": { "u": "u", "k": "k" }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["u"],
+            "ranges": { "i": { "from": "x" }, "j": [1, 1] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "*", "args": [0.5, { "op": "+", "args": [
+                      { "op": "index", "args": ["k", "i", 1] },
+                      { "op": "index", "args": ["k", "i", 2] }
+                    ] }] },
+                    { "op": "-", "args": [
+                      { "op": "index", "args": ["u", "i", 2] },
+                      { "op": "index", "args": ["u", "i", 1] }
+                    ] }
+                  ]
+                },
+                { "op": "*", "args": ["dy", "dy"] }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": ["u"],
+            "ranges": { "i": { "from": "x" }, "j": ["NY", "NY"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "*", "args": [0.5, { "op": "+", "args": [
+                      { "op": "index", "args": ["k", "i", { "op": "-", "args": ["NY", 1] }] },
+                      { "op": "index", "args": ["k", "i", "NY"] }
+                    ] }] },
+                    { "op": "-", "args": [
+                      { "op": "index", "args": ["u", "i", { "op": "-", "args": ["NY", 1] }] },
+                      { "op": "index", "args": ["u", "i", "NY"] }
+                    ] }
+                  ]
+                },
+                { "op": "*", "args": ["dy", "dy"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

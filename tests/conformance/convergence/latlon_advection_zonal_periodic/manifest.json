@@ -1,0 +1,77 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon_advection_zonal_periodic",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon/rules/central_D_lon_periodic driven by problems/latlon_advection_zonal_periodic.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4) — NLON is the open metaparameter (NLAT is edge-closed at 5; the lat axis is passive), and the problem's dlon_deg observed divides by the NLON name, so the geometry follows each rebinding automatically. Exact solution sin((pi/180)(lon - omega t)) cos((pi/180) lat) (derivation in the problem file); the recorded errors at t=0.5 are the pure centered-difference phase lag 2 sin(delta/2), delta = omega (pi/180) t (1 - sinc(2 pi/NLON)) — analytically 2.003e-2 / 5.037e-3 / 1.261e-3 / 3.154e-4 over the ladder, an exact O(dlon^2) sequence.",
+  "problem": "../../../../problems/latlon_advection_zonal_periodic.esm",
+  "model": "ZonalAdvection",
+  "rule": "../../../../grids/latlon/rules/central_D_lon_periodic.esm",
+  "grid": "latlon",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLON": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLON": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLON": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLON": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.5,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14,
+      "_doc": "Pinned to match the cartesian problems' convention: LSODA at 1e-12/1e-14 keeps Python temporal truncation negligible against the spatial goldens (the centered-advection system is non-stiff but neutrally stable, where loose explicit tolerances would add spurious dissipation)."
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-07,
+      "abstol": 1e-09
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

@@ -1,0 +1,92 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon",
+    "description": "Uniform longitude-latitude grid with consumer-supplied extent (global or regional). The `lon` and `lat` index sets are the iteration axes; NLON and NLAT (the point counts) are the esm-spec 9.7 metaparameters, bound at an import edge or the loader API. The real-valued geometry is NOT baked into this file: `lon0_deg`, `dlon_deg`, `lat0_deg`, `dlat_deg` (all in degrees) are free names in the coordinate/metric template bodies and in this grid's stencils/rules, resolving in the consuming component's scope at evaluation — the same keyed-factor contract grids/mpas uses for areaCell/dvEdge and grids/cartesian_uniform_1d uses for x0/dx. COORDINATE CONVENTIONS (pinned; every rule in this directory assumes them): longitude is CELL-BASED — NLON cells with centers lon_i = lon0_deg + (i - 1/2) dlon_deg, i = 1..NLON, so the axis covers [lon0_deg, lon0_deg + NLON dlon_deg) and closes into a periodic zonal circle exactly when NLON dlon_deg = 360; latitude is POINT-BASED and endpoint-inclusive — NLAT points lat_j = lat0_deg + (j - 1) dlat_deg, j = 1..NLAT, covering [lat0_deg, lat0_deg + (NLAT - 1) dlat_deg]. GLOBAL RECIPE (the default 144 x 91 sizes match the esm-spec 9.6.8 worked example): the consuming model defines lon0_deg = 0 (parameter), dlon_deg = 360/NLON, lat0_deg = -90 (parameter), dlat_deg = 180/(NLAT - 1) — the lat points then run pole to pole with lat_1 = -90 and lat_NLAT = +90. Spell the spacings as observed variables whose expressions divide by the METAPARAMETER NAME (e.g. dlon_deg = {op: /, args: [360, NLON]}), which esm-spec 9.7.6 substitutes as an integer literal at load, so a loader-API rebinding of NLON/NLAT — a convergence sweep — keeps the geometry consistent automatically. A model that binds NLON/NLAT at the import edge closes them before they reach the model's own scope and must spell the matching literals instead. REGIONAL RECIPE: any other origin/spacing (e.g. lon0_deg = -130, dlon_deg = 0.25 over CONUS); the zonal circle then does NOT close, so use the zero-gradient (or a future one-sided) lon rule, never the periodic one. PHYSICAL-UNITS RECIPE: every rule here differentiates PER DEGREE of arc; on a sphere of radius R_sphere (a further free name, meters, consumer-supplied) the eastward and northward physical derivatives are df/dx_east = (180/pi) D(f, lon) / (R_sphere * coslat) and df/dy_north = (180/pi) D(f, lat) / R_sphere — compose these metric factors in the consuming equation (the `coslat` template below supplies cos(lat) over the lat axis; 180/pi = 57.29577951308232). Keeping the metric composition in the consumer keeps the rule count low and the rules exact on the index space.",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:latlon", "ndim:2", "spacing:uniform", "axis:lon", "axis:lat"]
+  },
+  "metaparameters": {
+    "NLON": { "type": "integer", "default": 144, "description": "Number of cells along longitude (cell-based axis; the global recipe closes the zonal circle with dlon_deg = 360/NLON)." },
+    "NLAT": { "type": "integer", "default": 91, "description": "Number of points along latitude (point-based, endpoint-inclusive axis; the global recipe is pole-to-pole with dlat_deg = 180/(NLAT - 1))." }
+  },
+  "index_sets": {
+    "lon": { "kind": "interval", "size": "NLON" },
+    "lat": { "kind": "interval", "size": "NLAT" }
+  },
+  "expression_templates": {
+    "lon_coord": {
+      "params": [],
+      "description": "Cell-center longitudes lon_i = lon0_deg + (i - 1/2) dlon_deg (degrees), shaped over the lon index set. lon0_deg and dlon_deg are free names supplied by the consuming model (see metadata.description for the contract and the global recipe).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i"],
+        "args": [],
+        "ranges": { "i": { "from": "lon" } },
+        "expr": {
+          "op": "+",
+          "args": [
+            "lon0_deg",
+            {
+              "op": "*",
+              "args": [
+                { "op": "-", "args": ["i", 0.5] },
+                "dlon_deg"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "lat_coord": {
+      "params": [],
+      "description": "Point latitudes lat_j = lat0_deg + (j - 1) dlat_deg (degrees), shaped over the lat index set (endpoint-inclusive; the global recipe runs pole to pole). lat0_deg and dlat_deg are free names supplied by the consuming model (see metadata.description).",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["j"],
+        "args": [],
+        "ranges": { "j": { "from": "lat" } },
+        "expr": {
+          "op": "+",
+          "args": [
+            "lat0_deg",
+            {
+              "op": "*",
+              "args": [
+                { "op": "-", "args": ["j", 1] },
+                "dlat_deg"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "coslat": {
+      "params": [],
+      "description": "Metric factor cos(lat_j) over the lat index set: the cosine of lat_coord converted to radians inside (pi/180 with pi = 3.141592653589793). Used by consumers composing physical-units zonal derivatives, df/dx_east = (180/pi) D(f, lon) / (R_sphere * coslat) — see metadata.description. Inherits lat_coord's free names lat0_deg and dlat_deg.",
+      "body": {
+        "op": "cos",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [3.141592653589793, 180] },
+              { "op": "apply_expression_template", "args": [], "name": "lat_coord", "bindings": {} }
+            ]
+          }
+        ]
+      }
+    },
+    "deg2rad": {
+      "params": ["angle_deg"],
+      "description": "Degree-to-radian helper: angle_deg * pi/180 (pi = 3.141592653589793). Invoke with any scalar or array expression binding; pure sugar for metric-factor compositions.",
+      "body": {
+        "op": "*",
+        "args": [
+          "angle_deg",
+          { "op": "/", "args": [3.141592653589793, 180] }
+        ]
+      }
+    }
+  }
+}

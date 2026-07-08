@@ -1,0 +1,1119 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "hjweno_norm_D1_periodic",
+    "description": "Fifth-order Hamilton-Jacobi WENO (Jiang-Peng 2000) discretization of the gradient magnitude |u_x| for a non-negative-speed Hamilton-Jacobi term (psi_t = -S|grad psi|, S >= 0; the level-set / eikonal norm) on cartesian_uniform_1d, with a periodic boundary. It is the high-order companion of grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic: the SAME Godunov / Osher-Sethian Hamiltonian |u_x| = sqrt(max(u_x^-, 0)^2 + min(u_x^+, 0)^2), but with the first-order one-sided differences D-, D+ replaced by the fifth-order WENO-Z one-sided derivative reconstructions u_x^-, u_x^+ (see stencils/hjweno_norm_D1_interior.esm for the closed-form reconstruction, the smoothness indicators, and the WENO-Z weights). COMPOUND MATCH (esm-spec 9.6.3 compound precedence, the canonical Godunov-Hamiltonian example): the rule matches the whole compound sqrt((D(u, wrt: x))^2) rooted at the outer sqrt, IDENTICAL to godunov_norm_D1_periodic's match, and carries the SAME priority 10, so under the section-9.6.3 outermost-first fixpoint it fires on the entire sqrt(D^2) term BEFORE any plain first-derivative rule could lower the inner D(u, wrt: x); the whole compound is replaced by this one makearray in a single step. hjweno_norm_D1_periodic and godunov_norm_D1_periodic are therefore IMPORT-SELECTED ALTERNATIVES: a consuming model imports EXACTLY ONE gradient-magnitude rule for x (the first-order Godunov for a monotone, TVD-robust scheme, or this fifth-order HJ-WENO for a smooth high-order scheme); they never compete within one document. Match-scoped with `where: {u: {shape: [x]}}` (esm-spec 9.6.1) so it fires only on the gradient magnitude of a bare field declared over this grid's `x` index set; under import-edge renaming (esm-spec 9.7.7) the `wrt` literal and the where shape follow the renamed axis together, so two cartesian instances coexist scoped to their own grids. Because the constraint requires a bare shaped variable, a consumer forming the gradient magnitude of a COMPOUND inner expression must first bind it to a declared x-shaped observed. THE SCHEME (per point i): u_x^- and u_x^+ are the backward- and forward-biased WENO-Z reconstructions of the divided differences v_k = (u[m+1]-u[m])/dx (the seven-point stencil u[i-3..i+3]), and |u_x|_i = sqrt(max(u_x^-,0)^2 + min(u_x^+,0)^2). Fifth-order accurate in smooth regions (observed order 5.00 in L2 AND Linf on the smooth eikonal MMS, WENO-Z holding full order through the critical points u_x=0), entropy-satisfying at |grad| kinks (the Godunov max/min selects the incoming-characteristic branch). EXACT on a constant field (every divided difference is 0 to the bit, |u_x| = 0 exactly, the null-space property that annihilates constants) and on affine data (u_x^- = u_x^+ = a, sqrt(max(a,0)^2+min(a,0)^2) = |a|). The interior [4, N-3] holds the imported HJ-WENO aggregate; the six near-boundary cells i in {1,2,3} and {N-2,N-1,N} are explicit makearray faces holding the same Godunov-HJ-WENO norm with the out-of-range neighbors wrapped PERIODICALLY (index j<1 -> j+N, j>N -> j-N), three wrap cells on each side because the seven-point stencil reaches i+-3. The seven regions tile [1, N] exactly (N >= 7). A periodic linear field is a contradiction (a non-zero ramp cannot wrap), so the exactness property is the interior statement; the periodic gate that ships with this rule (problems/hjweno_norm_1d_periodic_exact.esm) uses the constant/interior form, and the nontrivial fifth-order accuracy is exercised on smooth data by the convergence sweep (problems/hjweno_norm_1d_eikonal_mms.esm). `dx` is a free name resolving to the consuming model's spacing variable (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract); the periodic wrap is dx-scale-invariant, so the rule serves any domain extent unchanged. SCOPE NOTE: the 2-D companion (hjweno_norm_D2_periodic) is DEFERRED \u2014 the 2-D Godunov-HJ-WENO norm carries four one-sided WENO-Z reconstructions per cell across the nine periodic-tiling regions, giving an estimated ~15 MB lowered AST (over the ~10 MB tractability budget); the 1-D rule is the sufficient demonstration of the HJ-WENO composition (WENO reconstruction composed with the Godunov min/max Hamiltonian).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_1d",
+      "op:grad_norm",
+      "axes:x",
+      "order:5",
+      "stencil_width:7",
+      "bc:periodic",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Peng, D. (2000). Weighted ENO Schemes for Hamilton-Jacobi Equations. SIAM Journal on Scientific Computing, 21(6), 2126-2143. The HJ-WENO construction: fifth-order WENO reconstruction of the one-sided derivatives u_x^- and u_x^+ from the divided differences of u, combined by the Godunov / Osher-Sethian Hamiltonian.",
+        "doi": "10.1137/S106482759732455X"
+      },
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The max/min upwind (entropy) construction of |grad phi| for the level-set Hamilton-Jacobi term.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM Journal on Numerical Analysis, 29(3), 867-884. The Godunov Hamiltonian sqrt(max(D-,0)^2 + min(D+,0)^2) as the monotone discretization of the eikonal |grad u|; HJ-WENO raises the one-sided differences D-, D+ to fifth order.",
+        "doi": "10.1137/0729053"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient Implementation of Weighted ENO Schemes. Journal of Computational Physics, 126(1), 202-228. Smoothness indicators beta_k (eq. 2.17), nonlinear weights (eqs. 2.9-2.10), and the fifth-order reconstruction reused here on the one-sided divided differences.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Borges, R., Carmona, M., Costa, B., & Don, W. S. (2008). An improved weighted essentially non-oscillatory scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6), 3191-3211. The WENO-Z weights alpha_k = d_k (1 + (tau_5/(eps+beta_k))^2) with tau_5 = |beta_0 - beta_2|, which recover the full fifth order at first-order critical points (u_x = 0) where the classic Jiang-Shu weights degrade.",
+        "doi": "10.1016/j.jcp.2007.11.038"
+      },
+      {
+        "citation": "Henrick, A. K., Aslam, T. D., & Powers, J. M. (2005). Mapped weighted essentially non-oscillatory schemes: Achieving optimal order near critical points. Journal of Computational Physics, 207(2), 542-567. The demonstration that classic WENO5 drops below fifth order at simple critical points (u_x=0, u_xx!=0), motivating the WENO-Z remedy used here.",
+        "doi": "10.1016/j.jcp.2005.01.023"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/hjweno_norm_D1_interior.esm"
+    },
+    {
+      "ref": "../stencils/hjweno_recon_minus.esm"
+    },
+    {
+      "ref": "../stencils/hjweno_recon_plus.esm"
+    }
+  ],
+  "expression_templates": {
+    "hjweno_norm_D1_periodic": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "sqrt",
+        "args": [
+          {
+            "op": "^",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              },
+              2
+            ]
+          }
+        ]
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  3
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              2,
+              2
+            ]
+          ],
+          [
+            [
+              3,
+              3
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "N",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              "N",
+              "N"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "hjweno_norm_D1_interior",
+            "bindings": {
+              "u": "u"
+            }
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  4
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  4
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  4
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  5
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  4
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  5
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  4
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  5
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  6
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      5
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      4
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      3
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      4
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      3
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      4
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      3
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      3
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sqrt",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "max",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_minus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      3
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "hjweno_recon_plus",
+                            "bindings": {
+                              "v0": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v1": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "N",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "v2": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  "N"
+                                ]
+                              },
+                              "v3": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  1
+                                ]
+                              },
+                              "v4": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  2
+                                ]
+                              },
+                              "v5": {
+                                "op": "index",
+                                "args": [
+                                  "u",
+                                  3
+                                ]
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

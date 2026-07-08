@@ -1,0 +1,105 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "mpas",
+    "description": "MPAS unstructured spherical centroidal-Voronoi (icosahedral) C-grid on the unit sphere: NCELLS Voronoi cells, NEDGES edges, NVERTICES triangle vertices, with cell valence bounded by MAXEDGES (on a closed sphere the Euler relations give NEDGES = 3*(NCELLS - 2) and NVERTICES = 2*(NCELLS - 2), but the three counts stay independent metaparameters so planar or open meshes can reuse the file). Unlike the rectangular grids there is no coordinate axis: the iteration domains are the three entity interval sets (cells, edges, vertices) plus the ragged connectivity set `edges_of_cell` (esm-schema IndexSet kind \"ragged\"; RFC semiring-faq-unified-ir 5.2), which binds by NAME to two keyed factors the consuming document must expose as cell-shaped arrays: `nEdgesOnCell` (offsets: the valence of each cell) and `edgesOnCell` (values: the edge ids around each cell, counterclockwise, zero-padded to maxEdges). Geometry is likewise DATA, not formula: mesh files under grids/mpas/mesh/ (section-4.7 subsystem files with literal `const` arrays) supply the factors nEdgesOnCell, edgesOnCell, edgeSignOnCell, cellsOnEdge, verticesOnEdge, dvEdge, dcEdge, areaCell, latCell, lonCell -- and, since the 2026-07 regridding wave WIDENED the mesh contract, the VERTEX-GEOMETRY factors latVertex, lonVertex (vertex = Delaunay-triangle circumcenter, radians, lon in (-pi, pi], same convention as latCell/lonCell) and verticesOnCell (vertex ids around each cell, counterclockwise viewed from outside, zero-padded to maxEdges exactly like edgesOnCell; verticesOnCell[i][k] is the vertex SHARED by consecutive CCW edges edgesOnCell[i][k] and edgesOnCell[i][k+1 cyclic]; on a closed mesh every cell has exactly as many vertices as edges, so nEdgesOnCell doubles as the per-cell vertex count and there is no separate offsets factor) -- under exactly those names; a consuming model mounts one as a subsystem and re-exposes the factors a rule needs as bare-name observed aliases (e.g. areaCell := mesh.areaCell), since keyed factors resolve by bare name in the model scope (see problems/divergence_mpas.esm for the pattern). The widened contract makes CELL POLYGON RINGS derivable in-document: the match-less template `mpas_cell_rings_deg` gathers each cell's vertex ring into the [cells, maxEdges, ring_coord] lon-lat-DEGREE stack the conservative regridder consumes as src_poly/tgt_poly (regridding/conservative_overlap.esm; ring vertex = [lon, lat] in degrees, CCW), clamping the gather with min(k, nEdgesOnCell(i)) so PADDING SLOTS REPEAT THE CELL'S LAST REAL VERTEX -- rectangular (padded) ring storage rather than a ragged ring, chosen because the polygon_intersection_area kernels accept trailing-duplicate padded rings value-identically (verified empirically against the Julia planar and spherical clip kernels: padded and unpadded rings agree at 0 ulp as subject and as clip operand; on a mesh whose MAXEDGES equals every cell's valence, e.g. the level-0 pentagons, no padding ever occurs). The other closed-form geometry is the resolution scale: `cell_area_mean` = 4*pi/NCELLS, the mean cell area on the unit sphere (the h^2 measure for convergence sweeps, h ~ sqrt(cell_area_mean)). Orientation conventions are fixed by the mesh data (positive edge normal from cellsOnEdge[e][1] to cellsOnEdge[e][2]; positive tangent v1->v2 with t = k x n; edgeSignOnCell = +1 where the positive normal leaves the cell), per Ringler et al. (2010).",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:mpas", "ndim:2", "topology:unstructured_voronoi", "staggering:c-grid", "sphere:unit"],
+    "references": [
+      {
+        "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090."
+      },
+      {
+        "citation": "Thuburn, J., Ringler, T. D., Skamarock, W. C., & Klemp, J. B. (2009). Numerical representation of geostrophic modes on arbitrarily structured C-grids. Journal of Computational Physics, 228(22), 8321-8335."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NCELLS": { "type": "integer", "default": 12, "description": "Number of Voronoi cells (generators). Default: the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm)." },
+    "NEDGES": { "type": "integer", "default": 30, "description": "Number of edges (cell-pair interfaces; 3*(NCELLS-2) on a closed sphere)." },
+    "NVERTICES": { "type": "integer", "default": 20, "description": "Number of mesh vertices (Delaunay-triangle circumcenters; 2*(NCELLS-2) on a closed sphere)." },
+    "MAXEDGES": { "type": "integer", "default": 5, "description": "Maximum cell valence: the padded row length of the per-cell connectivity arrays (5 for level0, 6 for level1 and all larger icosahedral meshes)." }
+  },
+  "index_sets": {
+    "cells": { "kind": "interval", "size": "NCELLS" },
+    "edges": { "kind": "interval", "size": "NEDGES" },
+    "vertices": { "kind": "interval", "size": "NVERTICES" },
+    "maxEdges": { "kind": "interval", "size": "MAXEDGES" },
+    "edge_ends": { "kind": "interval", "size": 2 },
+    "edges_of_cell": {
+      "kind": "ragged",
+      "of": ["cells"],
+      "offsets": "nEdgesOnCell",
+      "values": "edgesOnCell"
+    },
+    "ring_coord": { "kind": "interval", "size": 2 }
+  },
+  "expression_templates": {
+    "cell_area_mean": {
+      "params": [],
+      "description": "Mean Voronoi-cell area on the unit sphere, 4*pi/NCELLS: the grid's resolution measure (nominal mesh spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d.",
+      "body": { "op": "/", "args": [12.566370614359172, "NCELLS"] }
+    },
+    "mpas_cell_rings_deg": {
+      "params": ["latVertex", "lonVertex", "verticesOnCell", "nEdgesOnCell"],
+      "description": "Cell polygon rings from the widened mesh contract, regridder-ready: ring[i,k,c] = [lonVertex, latVertex](verticesOnCell[i, min(k, nEdgesOnCell(i))]) * 180/pi -- the [cells, maxEdges, ring_coord] closed CCW lon-lat-DEGREE vertex-ring stack that regridding/conservative_overlap.esm consumes as src_poly/tgt_poly (ring vertex = [lon, lat] degrees; CCW is inherited from verticesOnCell's counterclockwise order). The gather is CLAMPED, min(k, nEdgesOnCell(i)), so a cell with fewer than MAXEDGES vertices pads its ring by REPEATING ITS LAST REAL VERTEX rather than dereferencing a zero pad slot -- trailing-duplicate padded rings are accepted value-identically by the polygon_intersection_area kernels (empirically verified, 0 ulp, planar and spherical), which is why the ring ships rectangular instead of ragged. The four mesh factors are TEMPLATE PARAMETERS (this template is match-less and explicitly applied, so params are the natural mechanism -- unlike the div rule, whose match-fired body must use the bare-name keyed-factor contract): bind them to the mounted mesh subsystem's factors DIRECTLY under their subsystem-scoped names (e.g. latVertex: 'mesh.latVertex'), which keeps the ring expression's references const-backed -- the build-time geometry-setup evaluator materializes aggregates over const data, and routing through bare-name VarExpr aliases would put a non-const reference inside the setup closure (the alias re-exposure pass and the geometry-setup pass do not compose in that order upstream). Radians-to-degrees (factor 57.29577951308232 = 180/pi) is part of the template because the mesh files publish radians (MPAS convention) while the geometry kernels take degrees. Build-time CONST: the rings fold into the regridder's overlap-matrix setup.",
+      "body": {
+        "op": "aggregate",
+        "semiring": "sum_product",
+        "output_idx": ["i", "k", "c"],
+        "ranges": {
+          "i": { "from": "cells" },
+          "k": { "from": "maxEdges" },
+          "c": { "from": "ring_coord" }
+        },
+        "args": ["latVertex", "lonVertex", "verticesOnCell", "nEdgesOnCell"],
+        "expr": {
+          "op": "ifelse",
+          "args": [
+            { "op": "==", "args": ["c", 1] },
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "lonVertex",
+                    {
+                      "op": "index",
+                      "args": [
+                        "verticesOnCell",
+                        "i",
+                        { "op": "min", "args": ["k", { "op": "index", "args": ["nEdgesOnCell", "i"] }] }
+                      ]
+                    }
+                  ]
+                },
+                57.29577951308232
+              ]
+            },
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "latVertex",
+                    {
+                      "op": "index",
+                      "args": [
+                        "verticesOnCell",
+                        "i",
+                        { "op": "min", "args": ["k", { "op": "index", "args": ["nEdgesOnCell", "i"] }] }
+                      ]
+                    }
+                  ]
+                },
+                57.29577951308232
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

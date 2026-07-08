@@ -1,0 +1,98 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "weno5_D_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/weno5_D_periodic: a minimal consuming model binding N=8 at the import edge. The spatial D(u, wrt: x) in the advection RHS must fire through the section-9.6.3 rewrite fixpoint and lower to the rule's makearray - the interior WENO5-Z conservative flux-difference aggregate over [4,6] plus the five periodic-wrap faces i in {1,2,3,7,8} - with the imported interior stencil inlined (zero apply_expression_template), zero unlowered spatial D, zero surviving metaparameter names, and the free name dx surviving (the grid's consumer-supplied geometry contract). The model fulfills the geometry contract with x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the import edge binds N, closing it before this document's scope. N=8 is the smallest size that keeps the six makearray regions disjoint ({1,2,3}, [4,6], {7,8} tile [1,8]).",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:weno5_D_periodic"
+    ]
+  },
+  "models": {
+    "Weno5DPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_1d/rules/weno5_D_periodic.esm",
+          "bindings": {
+            "N": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "kg/m^3",
+          "shape": [
+            "x"
+          ],
+          "description": "Advected tracer field over the x index set."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed (non-negative; WENO5 rule is upwind for flow in +x)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          },
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "c"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

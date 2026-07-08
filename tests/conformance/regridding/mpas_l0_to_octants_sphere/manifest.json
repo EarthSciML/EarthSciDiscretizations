@@ -1,0 +1,43 @@
+{
+  "category": "regridding",
+  "version": "1.0",
+  "case": "mpas_l0_to_octants_sphere",
+  "description": "SMOKE cross-binding conformance: MPAS cell rings derived IN-DOCUMENT feeding the conservative regridder on the sphere. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as a subsystem; the mesh files are the library's one allowed precomputation, provenance in their _doc), with src_poly produced by grids/mpas/grid.esm's mpas_cell_rings_deg template over the WIDENED mesh contract (latVertex/lonVertex/verticesOnCell; rad->deg conversion in the template; the min(k, nEdgesOnCell) pad clamp never fires at level 0 where every cell has exactly MAXEDGES = 5 vertices). Target: the 8 spherical octants (inline const triangles, exactly-shared pole/equator vertex spellings, tiling the sphere: A_j expected pi/2 each). Mixed vertex counts (pentagon sources x triangle targets) exercise the narrow phase's whole-ring slicing -- the production MPAS-to-latlon shape. Dense narrow phase at manifold 'spherical' (GeometryOps great-circle clipping in Julia, s2geometry in Rust; CONFORMANCE_SPEC 5.8.4 -- different kernels, same manifold declaration, agreement tolerance-gated). Gates: partition-of-unity exact by construction (tight epsilon); conservation at 1e-9 sr (the octants tile the sphere, mass_src = 26*pi from the committed areaCell); per-pair A_ij/A_j/W_ij against the Julia-runner golden at the 5.8 tolerances below. Several dodecahedron vertices lie EXACTLY on the octant boundary great circles, so boundary-degenerate clips are deliberately in scope -- the 5.8.2 sliver floor absorbs them identically in numerator and denominator.",
+  "fixture": "fixture.esm",
+  "library": "../../../../regridding/conservative_overlap.esm",
+  "model": "Regrid",
+  "tests": [
+    "exact_invariants"
+  ],
+  "manifold": "spherical",
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "rust"
+  ],
+  "blocked_upstream_bindings": {
+    "python": "spherical clip requires the pinned optional dependency spherely==0.1.0 ([geometry] extra; S2 via s2geography) -- no cp314 macOS-arm64 wheel and the source build needs the s2geography C++ stack, so the kernel's backend is uninstallable in the conformance venv today; the planar cases are unaffected and this case activates for python as soon as the pinned dep installs"
+  },
+  "scope_excluded": {
+    "go": "rewrite-only port; no aggregate lowering / simulator",
+    "typescript": "rewrite-only port; no aggregate lowering / simulator"
+  },
+  "tolerances": {
+    "_doc": "Keys follow the spherical exemplar conservative_overlap_sphere_fan_4_to_2 (areas in steradians on the unit sphere). characteristic_length 1.0 rad puts the sliver floor at 1e-15 sr, far below the true pentagon-octant overlaps (order 0.1 sr) and above backend snap slivers from the exactly-on-boundary dodecahedron vertices. Conservation is gated at 1e-9 (exact tiling; residual is clip noise), partition-of-unity at the tight epsilon (exact by construction).",
+    "area_rtol": 1e-09,
+    "area_atol_factor": 1e-15,
+    "characteristic_length": 1.0,
+    "weight_rtol": 1e-09,
+    "weight_atol": 1e-12,
+    "partition_of_unity_atol": 1e-12,
+    "conservation_atol": 1e-09,
+    "conservation_exact": true
+  },
+  "reference_expectations": {
+    "_doc": "NON-GOLDEN eyeball anchors (no hand-exact per-pair values exist for pentagon-octant clips): A_j = pi/2 = 1.5707963267948966 sr for every octant (they tile the sphere and the denominator row-sums the computed areas); sum_j A_j = 4*pi; mass_src = mass_tgt = 26*pi = 81.68140899333463 with F_src = [1..12] and the committed areaCell = pi/3 per cell; every W_ij column sums to 1.",
+    "A_j_sr": 1.5707963267948966,
+    "mass": 81.68140899333463
+  },
+  "golden": "golden/weights.json",
+  "status": "active"
+}

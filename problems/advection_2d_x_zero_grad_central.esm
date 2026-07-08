@@ -1,0 +1,134 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "advection_2d_x_zero_grad_central",
+    "description": "MMS driver: forced-steady linear advection along x on the unit box [0,1]x[0,1] with zero-gradient x-walls, discretized by grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc (second-order centered interior, 2nd-order one-sided face columns). Manufactured STEADY solution u*(x) = cos(pi x) — constant in y — held steady by the exactly matching forcing c * gx with gx = du*/dx = -pi sin(pi x): the continuous balance is u_t = -c u*_x + c u*_x = 0, so u(t) = u* for all t and the discrete field drifts only by the spatial truncation of the x-operator. BC COMPATIBILITY (why cos(pi x)): u*_x = -pi sin(pi x) vanishes on BOTH walls (sin(0)=sin(pi)=0) — u* is genuinely zero-gradient-compatible — and its third x-derivative -pi^3(-sin) also vanishes there, so the rule's 2nd-order one-sided face residual is superconvergent (O(dx^3)) and the global drift is clean interior O(dx^2), mirroring the cos^4 polar-cap trick of problems/latlon_advection_meridional_zero_grad.esm. The one-sided x-operator is weakly non-normal, so the transport time is kept short (t=0.03, so c*t=0.03) to stay in the linear-drift regime where the observed order is a pristine 2 through NX=256 (a longer transport slowly pollutes it). The y axis is PASSIVE: u* is constant in y, no y-operator appears, and NY is closed to 8 at the import edge; NX stays open (grid default 64, rebound by the convergence sweep). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX (observed dividing by the metaparameter name NX per esm-spec 9.7.6), dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free-name dx survives only in the runtime rule body; the ic, forcing observed, and test references spell x_i = 0 + (i-1/2)(1/NX) inline from literals and NX, never invoking the grid's x_coord free-name template.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:advection", "mms"],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (boundary-compatible manufactured solutions and one-sided closures)."
+      }
+    ]
+  },
+  "models": {
+    "Advection2DxZeroGrad": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc.esm",
+          "bindings": { "NY": 8 }
+        }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected tracer field over the 2-D [x, y] index sets (constant in y in this problem)." },
+        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed along x; multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge (unit box): the grid's y0 free name (unused here; the solution is constant in y)." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dx consistent." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name; NY closed to 8 at the import edge." },
+        "gx": {
+          "type": "observed",
+          "units": "kg/m^4",
+          "shape": ["x", "y"],
+          "description": "Analytic x-derivative of the manufactured solution: gx(x) = du*/dx = -pi sin(pi x). Constant in time and y; c * gx is the manufactured forcing that holds u* = cos(pi x) steady. Coordinates spelled inline from literals and NX (build-time scope caveat).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "*",
+              "args": [
+                -3.141592653589793,
+                {
+                  "op": "sin",
+                  "args": [
+                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "cos",
+              "args": [
+                { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              { "op": "*", "args": [{ "op": "-", "args": ["c"] }, { "op": "D", "args": ["u"], "wrt": "x" }] },
+              { "op": "*", "args": ["c", "gx"] }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_steady_x_zero_grad",
+          "description": "Manufactured steady solution u*(x) = cos(pi x) with c = 1. Derivation: the continuous balance is u_t = -c u*_x + c u*_x = 0 with u*_x = gx = -pi sin(pi x), which vanishes on both walls, so u* is zero-gradient-compatible and the one-sided face residual is superconvergent (see metadata.description); the discrete drift is pure interior O(dx^2). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.03 assertion bounds the truncation-driven drift against the SAME steady reference (relative L2 far under the bound at the default NX=64; exact per-resolution errors pinned in tests/conformance/convergence/advection_2d_x_zero_grad_central/golden/errors.json). References evaluate at cell centers x_i = 0 + (i - 1/2)/NX, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only).",
+          "time_span": { "start": 0.0, "end": 0.03 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "cos",
+                  "args": [
+                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.03,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": ["i", "j"],
+                "args": [],
+                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "expr": {
+                  "op": "cos",
+                  "args": [
+                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

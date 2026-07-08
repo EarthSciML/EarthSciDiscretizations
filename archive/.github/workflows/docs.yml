@@ -1,0 +1,109 @@
+---
+name: docs
+
+# Mirrors EarthSciModels' Hugo doc-site deploy workflow (mdl-w8s).
+# The render → Hugo build → deploy ordering is the contract: example plots
+# MUST be produced before Hugo runs, otherwise PNGs referenced by markdown
+# under docs/content/ never ship to gh-pages.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'discretizations/**'
+      - 'tests/conformance/**'
+      - 'tools/render_doc_plots.py'
+      - 'tools/render_rule_matrix.py'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'discretizations/**'
+      - 'tests/conformance/**'
+      - 'tools/render_doc_plots.py'
+      - 'tools/render_rule_matrix.py'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# Single deploy at a time; cancel in-flight superseded runs.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: "0.131.0"
+      PAGEFIND_VERSION: "1.1.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python plotting deps
+        run: |
+          python -m pip install --upgrade matplotlib numpy sympy
+          python -m pip install \
+            "git+https://github.com/EarthSciML/EarthSciSerialization.git#subdirectory=packages/earthsci_toolkit"
+
+      - name: Install Hugo extended
+        run: |
+          curl -sSL \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin hugo
+
+      - name: Render doc plots
+        run: python tools/render_doc_plots.py
+
+      - name: Render rule × grid matrix data
+        run: python tools/render_rule_matrix.py
+
+      - name: Build site with Hugo
+        run: hugo --source docs --minify --destination public
+
+      - name: Link-check built site (internal links only)
+        uses: lycheeverse/lychee-action@v1
+        with:
+          # --offline ignores all network URLs (no third-party flake); --base
+          # resolves root-relative paths like /grids/ against docs/public/ so a
+          # broken internal link (e.g. the stale /EarthSciDiscretizations/ prefix
+          # this workflow exists to prevent) fails the build.
+          args: >-
+            --offline
+            --base
+            docs/public
+            --no-progress
+            docs/public
+          fail: true
+
+      - name: Install Pagefind
+        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
+
+      - name: Build Pagefind search index
+        run: pagefind --site docs/public
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

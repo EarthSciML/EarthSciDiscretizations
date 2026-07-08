@@ -1,0 +1,45 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D1y_dirichlet_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc: a minimal consuming model binding NX=NY=4 at the import edge. The plain match D(u,y) must lower, through the section-9.6.3 fixpoint, to the rule's makearray — interior rows [2,3] (all i) holding the centered y-stencil aggregate, the j=1 and j=4 y-faces holding the mirror-ghost fixed-value differences over the (NX x 1) strips — with all metaparameters folded and the free names dy, gB, gT surviving in the expanded body. The model declares gB and gT as ordinary real parameters (gB homogeneous, gT a nonzero fixed value) so both the default-zero and the inhomogeneous face term appear in the golden. The model fulfills the geometry contract with x0=y0=0 and dx=dy=1/4; the dx/dy expressions are spelled with the literal 4 because the edge binding closes NX/NY before this document's scope (grids/cartesian_uniform_2d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_2d", "rule:central_D1y_dirichlet_bc"]
+  },
+  "models": {
+    "CentralD1yDirichletBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc.esm",
+          "bindings": { "NX": 4, "NY": 4 }
+        }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected tracer field over the 2-D [x, y] index sets." },
+        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed." },
+        "gB": { "type": "parameter", "units": "kg/m^3", "default": 0.0, "description": "Prescribed value on the bottom y-wall y=y0 (the rule's Dirichlet free name). Zero default = homogeneous bottom wall." },
+        "gT": { "type": "parameter", "units": "kg/m^3", "default": 1.0, "description": "Prescribed value on the top y-wall (the rule's Dirichlet free name), nonzero so the inhomogeneous face term appears in the expanded golden." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge: the grid's x0 free name." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge b = 0: the grid's y0 free name (consumer-supplied geometry contract)." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)." }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["c"] },
+              { "op": "D", "args": ["u"], "wrt": "y" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

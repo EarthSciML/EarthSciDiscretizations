@@ -1,0 +1,219 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "two_cartesian_grids_coexist",
+    "description": "Two-instance coexistence driver: ONE grid+rule family (grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc, which transitively pulls the interior stencil and the grid) imported TWICE into one model under distinct namespace prefixes (esm-spec 9.7.7) — the composition that was inexpressible before import-renaming + match-scoping landed. Edge A: prefix meshA, N closed to 8 at the edge, free spacing name dx rebound to meshA_dx. Edge B: prefix meshB, N closed to 16, dx rebound to meshB_dx. Renaming is transitive and simultaneous: the index set x arrives as meshA.x / meshB.x, the rule instance's compound match wrt follows it (D(D(f, meshA.x), meshA.x)), the metaparameter N was folded per edge into the makearray regions and ranges, and — the point of this case — each instance's `where: {f: {shape: [x]}}` shape constraint (esm-spec 9.6.1) is rewritten to [meshA.x] / [meshB.x], so instance A is eligible ONLY on second derivatives of fields declared over meshA.x and instance B only over meshB.x. The two 8- and 16-cell heat fields evolve completely independently, each lowered by its own mesh's rule with its own spacing, with no first-declared-wins collision and no priority arbitration. The free-name rebind of dx is the same mechanism the MPAS keyed-factor family uses to point two meshes at their own arrays; here it lets each grid instance carry its own physical spacing (1/8 vs 1/16). MMS: each field solves the 1-D heat equation u_t = alpha u_xx on the unit interval [0,1] with zero-gradient (homogeneous Neumann) boundaries and manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x) (alpha = 0.01): cos(pi x) has u_x = 0 at x=0 and x=1, so it is compatible with the zero-gradient rule and needs no forcing, and u_xx = -pi^2 u gives u_t = alpha u_xx exactly (the same manufactured solution as problems/heat_1d_zero_grad.esm, run here at two resolutions in one document). Initial condition and test references spell the grid's index-to-coordinate conversion x_i = (i - 1/2) dx inline with load-foldable constants ((i - 0.5)*(1/8) and (i - 0.5)*(1/16)), never invoking the renamed x_coord templates: these coordinates fold from constants at load time, independent of build-time scope. The spacing factor inside each coordinate aggregate is spelled as the integer ratio {op:/,args:[1,N]} (1/8, 1/16); it serializes byte-identically across all five bindings because the canonical-number rule (CONFORMANCE_SPEC 5.5.3.1) narrows an integral, Int64-representable float in an args array back to an integer on every emission path, including the template-import ast-golden path (which formerly let JSON3's context-dependent widening emit 1.0/8.0 for a bare 1/8 nested inside a float-heavy aggregate). The physical-spacing observeds meshA_dx/meshB_dx keep the integer-ratio 1/N spelling because they sit outside any aggregate (the rule body's free dx resolves to them) and render identically as integers. The zero-gradient D2 stencil telescopes, so the discrete mean of each field is conserved exactly (and equals 0, since cos(pi x) is antisymmetric about the cell-center-symmetric x=1/2 for both even cell counts) — the mean assertions pin that conservation independently of the truncation-bounded L2 assertions.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms", "spec:9.7.7", "spec:9.6.1"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.12 (Neumann boundary conditions by ghost-point elimination)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "TwoGrids": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
+          "prefix": "meshA",
+          "bindings": { "N": 8 },
+          "rebind": { "dx": "meshA_dx" }
+        },
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
+          "prefix": "meshB",
+          "bindings": { "N": 16 },
+          "rebind": { "dx": "meshB_dx" }
+        }
+      ],
+      "variables": {
+        "uA": {
+          "type": "state",
+          "units": "K",
+          "shape": ["meshA.x"],
+          "description": "Temperature field on the 8-cell instance (index set meshA.x)."
+        },
+        "uB": {
+          "type": "state",
+          "units": "K",
+          "shape": ["meshB.x"],
+          "description": "Temperature field on the 16-cell instance (index set meshB.x)."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity (shared by both fields)."
+        },
+        "meshA_dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 8] },
+          "description": "Grid spacing of the meshA instance, 1/N = 1/8: the target of the edge-A rebind of the grid's free name dx. Spelled with the literal 8 because the edge binding closes N before this document's scope."
+        },
+        "meshB_dx": {
+          "type": "observed",
+          "units": "m",
+          "expression": { "op": "/", "args": [1, 16] },
+          "description": "Grid spacing of the meshB instance, 1/N = 1/16: the target of the edge-B rebind of the grid's free name dx. Spelled with the literal 16 because the edge binding closes N before this document's scope."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["uA"] },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": ["i"],
+                    "args": [],
+                    "ranges": { "i": { "from": "meshA.x" } },
+                    "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 8] } ] }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "ic", "args": ["uB"] },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": ["i"],
+                    "args": [],
+                    "ranges": { "i": { "from": "meshB.x" } },
+                    "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 16] } ] }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["uA"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["uA"], "wrt": "meshA.x" } ], "wrt": "meshA.x" }
+            ]
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["uB"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "alpha",
+              { "op": "D", "args": [ { "op": "D", "args": ["uB"], "wrt": "meshB.x" } ], "wrt": "meshB.x" }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "two_grids_heat_decay",
+          "description": "Each instance's heat field decays as its own manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x), alpha = 0.01, proving the two renamed rule instances lowered correctly on their own axes with their own rebound spacing (meshA_dx = 1/8, meshB_dx = 1/16). For each field: the t=0 assertion pins the coordinate-expression ic wiring (reference = the initial field, abs 1e-9); the t=0.1 assertion bounds the zero-gradient heat truncation error against the exact decayed solution; the mean assertion pins the exact conservation of the telescoping zero-gradient D2 stencil (the discrete mean stays 0 to rounding for both even cell counts). If the two instances collided (first-wins), uB would be lowered with meshA's 8-cell stencil and its L2 assertion would fail by orders of magnitude.",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "uA",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  { "op": "*", "args": [ 3.141592653589793,
+                    { "op": "aggregate", "output_idx": ["i"], "args": [], "ranges": { "i": { "from": "meshA.x" } },
+                      "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 8] } ] } } ] }
+                ]
+              }
+            },
+            {
+              "variable": "uA",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  { "op": "exp", "args": [ { "op": "*", "args": [-0.01, 9.869604401089358, 0.1] } ] },
+                  { "op": "cos", "args": [
+                    { "op": "*", "args": [ 3.141592653589793,
+                      { "op": "aggregate", "output_idx": ["i"], "args": [], "ranges": { "i": { "from": "meshA.x" } },
+                        "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 8] } ] } } ] } ] }
+                ]
+              }
+            },
+            {
+              "variable": "uA",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "mean"
+            },
+            {
+              "variable": "uB",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "cos",
+                "args": [
+                  { "op": "*", "args": [ 3.141592653589793,
+                    { "op": "aggregate", "output_idx": ["i"], "args": [], "ranges": { "i": { "from": "meshB.x" } },
+                      "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 16] } ] } } ] }
+                ]
+              }
+            },
+            {
+              "variable": "uB",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-3 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  { "op": "exp", "args": [ { "op": "*", "args": [-0.01, 9.869604401089358, 0.1] } ] },
+                  { "op": "cos", "args": [
+                    { "op": "*", "args": [ 3.141592653589793,
+                      { "op": "aggregate", "output_idx": ["i"], "args": [], "ranges": { "i": { "from": "meshB.x" } },
+                        "expr": { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, 16] } ] } } ] } ] }
+                ]
+              }
+            },
+            {
+              "variable": "uB",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-9 },
+              "reduce": "mean"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

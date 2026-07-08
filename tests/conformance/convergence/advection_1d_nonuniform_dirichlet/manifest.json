@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "advection_1d_nonuniform_dirichlet",
+  "description": "Observed-order-of-accuracy sweep for the centered nonuniform first-derivative rule central_D1_nonuniform_dirichlet_bc (the rule under test, advective term) driven by problems/advection_1d_nonuniform_dirichlet.esm on the quadratic-stretch mesh (b=0.4); the diffusive term uses central_D2_nonuniform_dirichlet_bc, whose physical dissipation makes the two-sided fixed-value problem well posed (a pure-advection two-sided Dirichlet driver is GKS-unstable and does NOT converge). The problem file is loaded once per resolution with the loader-API metaparameter binding of N (esm-spec 9.7.6 binding site 4); the consumer re-derives the x-shaped geometry observeds xc and dxw from N at each resolution. The exact unforced solution e^{2x} + e^{-lambda t} e^{x} sin(pi x) (steady mode plus decaying first Dirichlet eigenfunction, shared walls gL=1, gR=e^2) gives a discrete drift that is pure spatial-discretization error at t=0.05, dominated by the advective D1 term. The gate checks the L2 norm ONLY: the centered nonuniform operator with second-order fixed-value Dirichlet walls is second-order in L2 by supraconvergence even though the interior pointwise truncation is O(h) where the spacing varies (LeVeque 2007 section 2.13); a broken/first-order D1 closure would degrade the order below 2, so this is a real order test of the rule.",
+  "problem": "../../../../problems/advection_1d_nonuniform_dirichlet.esm",
+  "model": "Advection",
+  "rule": "../../../../grids/cartesian_nonuniform_1d/rules/central_D1_nonuniform_dirichlet_bc.esm",
+  "grid": "cartesian_nonuniform_1d",
+  "resolutions": [
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } },
+    { "n": 128, "bindings": { "N": 128 } }
+  ],
+  "norms": ["L2_error"],
+  "assert_time": 0.05,
+  "expected_order": 2.0,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

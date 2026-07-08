@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_1d_dirichlet_o4",
+  "description": "Observed-order-of-accuracy sweep for the fourth-order inhomogeneous-Dirichlet rule central_D2_4_dirichlet_bc driven by problems/heat_1d_dirichlet_o4.esm. The problem file is loaded once per resolution with the loader-API metaparameter binding of N (esm-spec 9.7.6 binding site 4) — no per-resolution fixture files. The manufactured solution exp(-alpha pi^2 t) sin(pi x) + gL + (gR - gL) x is exact for the continuous PDE with constant wall values gL = 0.5, gR = 1.5 (derivation in the problem file); the steady linear profile is discretely exact (all interior and boundary closure weight-sums are zero), so the recorded L2/Linf errors at t=0.1 are pure spatial-discretization error from the sine mode. Both the interior 5-point stencil and the one-sided boundary-row closures are O(dx^4) (Fornberg 1988 offset-node weights), so the error falls cleanly at fourth order: the Julia sweep gives median pairwise orders 3.98 (L2, pairwise 3.87/3.98/4.00) and 3.99 (Linf, pairwise 3.96/3.99/4.00) over n=8..64, converging to 4 with no boundary reduction — hence expected_order 4.0 with the tight 0.2 tolerance. Resolutions n=8..64 mirror the heat_1d_periodic_o4 sweep so the tiny high-order errors stay above the integrator temporal floor; tolerances are tightened to 1e-12/1e-14 so the errors stay spatial-dominated and cross-binding reproducible.",
+  "problem": "../../../../problems/heat_1d_dirichlet_o4.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/cartesian_uniform_1d/rules/central_D2_4_dirichlet_bc.esm",
+  "grid": "cartesian_uniform_1d",
+  "resolutions": [
+    { "n": 8, "bindings": { "N": 8 } },
+    { "n": 16, "bindings": { "N": 16 } },
+    { "n": 32, "bindings": { "N": 32 } },
+    { "n": 64, "bindings": { "N": 64 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.1,
+  "expected_order": 4.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 1e-4,
+    "error_vs_golden_atol": 1e-9
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-12, "abstol": 1e-14 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-12, "abstol": 1e-14 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

@@ -1,0 +1,43 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D1x_zero_grad_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc: a minimal consuming model binding NX=NY=4 at the import edge. The plain match D(u,x) must lower, through the section-9.6.3 fixpoint, to the rule's makearray — interior columns [2,3] (all j) holding the centered x-stencil aggregate, the i=1 and i=4 x-faces holding the 2nd-order one-sided differences over the (1 x NY) strips — with all metaparameters folded and the free name dx surviving in the expanded body. The model fulfills the geometry contract with x0=y0=0 and dx=dy=1/4; the dx/dy expressions are spelled with the literal 4 because the edge binding closes NX/NY before this document's scope (grids/cartesian_uniform_2d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:cartesian_uniform_2d", "rule:central_D1x_zero_grad_bc"]
+  },
+  "models": {
+    "CentralD1xZeroGradBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/central_D1x_zero_grad_bc.esm",
+          "bindings": { "NX": 4, "NY": 4 }
+        }
+      ],
+      "variables": {
+        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected tracer field over the 2-D [x, y] index sets." },
+        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed." },
+        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)." },
+        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge: the grid's y0 free name." },
+        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)." },
+        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY." }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "*",
+            "args": [
+              { "op": "-", "args": ["c"] },
+              { "op": "D", "args": ["u"], "wrt": "x" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "advection_1d_periodic_minmod",
+  "description": "Monotonicity / TVD gate: run the inline esm-spec 6.6 test tvd_monotone of problems/advection_1d_periodic_minmod.esm (model AdvectionMinmodTVD) at the default resolution (N=64) through each binding's official simulation pathway. The tent profile is advected at c=1; the assertions bound the state's max (no overshoot), min (no undershoot), and mean (exact conservation) — the sim-expressible form of the TVD claim. Assertions and tolerances live in the problem file; this manifest routes runners.",
+  "problem": "../../../../problems/advection_1d_periodic_minmod_tvd.esm",
+  "model": "AdvectionMinmodTVD",
+  "tests": [
+    "tvd_monotone"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "No Rust tolerance both terminates and passes: it terminates only at reltol >= 1e-7 (looser hangs the diffsol integrator -- no dtmin/max-step guard), but at 1e-7 its temporal error exceeds the 1e-9 cross-binding-actuals tolerance vs the Julia reference; a tolerance tight enough to meet the gate hangs. Julia (Tsit5) and Python (LSODA) verify it."
+  }
+}
