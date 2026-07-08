@@ -28,7 +28,7 @@ Usage:
                                     tests/invalid/lint/expected_errors.json
 
 Requires: jsonschema (pip install jsonschema). CI installs it; locally the
-EarthSciSerialization Python venv also carries it.
+EarthSciAST Python venv also carries it.
 """
 
 from __future__ import annotations
@@ -327,7 +327,7 @@ def validate_schema(files, findings: Findings) -> None:
     except ImportError:
         sys.stderr.write(
             "error: jsonschema not importable; pip install jsonschema "
-            "(or run with the EarthSciSerialization venv python)\n"
+            "(or run with the EarthSciAST venv python)\n"
         )
         sys.exit(2)
     schema = load_json(ess_root() / "esm-schema.json")

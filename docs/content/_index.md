@@ -6,7 +6,7 @@ description: "The ESM discretization standard library: grids, finite-difference/
 # EarthSciDiscretizations
 
 The standard library of discretization rules for the
-[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization)
+[EarthSciAST](https://github.com/EarthSciML/EarthSciAST)
 (ESS/ESM) format: grids, finite-difference/finite-volume rewrite rules,
 regridding and reprojection expressions — together with the cross-language
 conformance goldens, convergence suites, and MMS tests that pin their behavior

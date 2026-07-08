@@ -2,12 +2,12 @@
 # run-julia.jl — the official Julia conformance runner for EarthSciDiscretizations.
 #
 # THIN WRAPPER (AGENTS.md §2, single pathway): every number and byte this script
-# emits comes from official EarthSciSerialization.jl entry points driven over the
+# emits comes from official EarthSciAST.jl entry points driven over the
 # one canonical pipeline (.esm → parse → §9.7 import/metaparameter resolution →
 # §9.6.3 rewrite fixpoint → official runner). No evaluator, rule engine, or
 # numeric kernel lives here — only argument marshalling and JSON I/O.
 #
-# CLI (EarthSciSerialization CONFORMANCE_SPEC.md §4.2):
+# CLI (EarthSciAST CONFORMANCE_SPEC.md §4.2):
 #   julia scripts/runners/run-julia.jl --output-dir <path> \
 #         [--categories ast,simulation,convergence,regridding,reprojection] \
 #         [--files <manifest.json>[,<manifest.json>…]] [--verbose]
@@ -32,7 +32,7 @@
 #                null) → evaluate_expr at every golden point
 #
 # Environment: the dedicated ESS pde_sim_adapter project (pins the dev'd
-# EarthSciSerialization + OrdinaryDiffEqTsit5 + JSON3) — the same env the ESS
+# EarthSciAST + OrdinaryDiffEqTsit5 + JSON3) — the same env the ESS
 # PDE-simulation conformance adapter runs in.
 
 import Pkg
@@ -41,31 +41,31 @@ import Pkg
 # Locate repos + bootstrap the official solver-bearing environment.
 # ---------------------------------------------------------------------------
 const ESD_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-const ESS_ROOT = get(ENV, "ESS_ROOT", normpath(joinpath(ESD_ROOT, "..", "EarthSciSerialization")))
+const ESS_ROOT = get(ENV, "ESS_ROOT", normpath(joinpath(ESD_ROOT, "..", "EarthSciAST")))
 isfile(joinpath(ESS_ROOT, "esm-schema.json")) ||
-    error("EarthSciSerialization not found at '$ESS_ROOT'; set ESS_ROOT " *
+    error("EarthSciAST not found at '$ESS_ROOT'; set ESS_ROOT " *
           "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
 
-let env = joinpath(ESS_ROOT, "packages", "EarthSciSerialization.jl", "scripts", "pde_sim_adapter")
+let env = joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl", "scripts", "pde_sim_adapter")
     Pkg.activate(env; io=devnull)
     isfile(joinpath(env, "Manifest.toml")) ||
         Pkg.develop(path=normpath(joinpath(env, "..", "..")); io=devnull)
     Pkg.instantiate(; io=devnull)
 end
 
-using EarthSciSerialization
-using EarthSciSerialization: resolve_template_machinery, lower_expression_templates,
+using EarthSciAST
+using EarthSciAST: resolve_template_machinery, lower_expression_templates,
     JSONLikeDict
 using JSON3
 import OrdinaryDiffEqTsit5
 # The spherical geometry kernel (manifold "spherical" on intersect_polygon /
-# polygon_intersection_area) lives in the EarthSciSerializationGeometryOpsExt
+# polygon_intersection_area) lives in the EarthSciASTGeometryOpsExt
 # package extension, which loads only when GeometryOps + GeoInterface are in
 # the session (both are pinned deps of the pde_sim_adapter environment). The
 # planar path never needs them; the spherical regridding conformance case does.
 import GeometryOps, GeoInterface
 const ODE = OrdinaryDiffEqTsit5
-const ESS = EarthSciSerialization
+const ESS = EarthSciAST
 
 const ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
 const CONF = joinpath(ESD_ROOT, "tests", "conformance")

@@ -18,7 +18,7 @@ else (AGENTS.md §3). Docs pages are generated; never commit them.
   is produced by an official ESS binding runner through
   `.esm → parse → import/metaparameter resolution → §9.6.3 rewrite fixpoint →
   official runner`. If a binding lacks a capability, file the issue upstream in
-  EarthSciSerialization — never patch a local shim.
+  EarthSciAST — never patch a local shim.
 - Everything specific to a grid lives under `grids/<grid>/`. There is no
   grid-generic rule file: the same scheme takes a different form on different
   grids.
@@ -93,7 +93,7 @@ python scripts/validate-library.py            # schema + policy lint L001–L008
 python scripts/validate-library.py --invalid  # lint-fixture expectations
 ```
 
-This needs a sibling `EarthSciSerialization` checkout (or `ESS_ROOT`) for the
+This needs a sibling `EarthSciAST` checkout (or `ESS_ROOT`) for the
 JSON schema, and `pip install jsonschema`.
 
 ## 5. Fixtures

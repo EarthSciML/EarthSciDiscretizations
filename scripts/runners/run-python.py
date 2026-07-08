@@ -2,12 +2,12 @@
 """run-python.py — the official Python conformance runner for EarthSciDiscretizations.
 
 THIN WRAPPER (AGENTS.md §2, single pathway): every number and byte this script
-emits comes from official earthsci_toolkit entry points driven over the one
+emits comes from official earthsci_ast entry points driven over the one
 canonical pipeline (.esm → parse → §9.7 import/metaparameter resolution →
 §9.6.3 rewrite fixpoint → official runner). No evaluator, rule engine, or
 numeric kernel lives here — only argument marshalling and JSON I/O.
 
-CLI (EarthSciSerialization CONFORMANCE_SPEC.md §4.2):
+CLI (EarthSciAST CONFORMANCE_SPEC.md §4.2):
   run-python.py --output-dir <path> \
       [--categories ast,simulation,convergence] \
       [--files <manifest.json>[,<manifest.json>…]] [--verbose]
@@ -17,7 +17,7 @@ Outputs (§4.4 layout, mirroring scripts/runners/run-julia.jl):
   <output-dir>/python_summary.json               roll-up
   <output-dir>/ast/<case>/expanded.golden.json   canonical post-lowering bytes
 
-Category → official earthsci_toolkit pathway:
+Category → official earthsci_ast pathway:
   ast          raw §9.7 pipeline (template_imports.resolve_template_machinery →
                lower_expression_templates), canonical bytes byte-identical to
                the Julia reference writer (sorted keys, 2-space indent, JSON3
@@ -28,7 +28,7 @@ Category → official earthsci_toolkit pathway:
   convergence  parse.load(problem, metaparameters=…) per manifest resolution →
                simulate → evaluate_cellwise(reference) → field_reduce norms
 
-Environment: the earthsci_toolkit venv ($ESS_ROOT/packages/earthsci_toolkit/
+Environment: the earthsci_ast venv ($ESS_ROOT/pkg/earthsci-ast-py/
 .venv) or any interpreter with numpy+scipy; the package is imported from the
 ESS checkout's src tree (the same layout its own pytest suite runs in).
 """
@@ -43,14 +43,14 @@ import sys
 from pathlib import Path
 
 ESD_ROOT = Path(__file__).resolve().parent.parent.parent
-ESS_ROOT = Path(os.environ.get("ESS_ROOT", ESD_ROOT.parent / "EarthSciSerialization"))
+ESS_ROOT = Path(os.environ.get("ESS_ROOT", ESD_ROOT.parent / "EarthSciAST"))
 if not (ESS_ROOT / "esm-schema.json").is_file():
-    sys.exit(f"error: EarthSciSerialization not found at '{ESS_ROOT}'; set ESS_ROOT "
+    sys.exit(f"error: EarthSciAST not found at '{ESS_ROOT}'; set ESS_ROOT "
              "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
-sys.path.insert(0, str(ESS_ROOT / "packages" / "earthsci_toolkit" / "src"))
+sys.path.insert(0, str(ESS_ROOT / "packages" / "earthsci_ast" / "src"))
 
-from earthsci_toolkit.lower_expression_templates import lower_expression_templates
-from earthsci_toolkit.template_imports import resolve_template_machinery
+from earthsci_ast.lower_expression_templates import lower_expression_templates
+from earthsci_ast.template_imports import resolve_template_machinery
 
 CONF = ESD_ROOT / "tests" / "conformance"
 ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
@@ -291,7 +291,7 @@ def run_ast(output_dir: Path, files, verbose):
 
 
 def run_simulation(output_dir: Path, files, verbose):
-    from earthsci_toolkit.pde_inline_tests import run_pde_tests
+    from earthsci_ast.pde_inline_tests import run_pde_tests
 
     cases = {}
     for case_dir, manifest in discover_manifests("simulation", files):
@@ -333,8 +333,8 @@ def run_simulation(output_dir: Path, files, verbose):
 
 
 def run_convergence(output_dir: Path, files, verbose):
-    from earthsci_toolkit.parse import load
-    from earthsci_toolkit.pde_inline_tests import (
+    from earthsci_ast.parse import load
+    from earthsci_ast.pde_inline_tests import (
         evaluate_cellwise, field_reduce, simulate_states, state_cells)
 
     cases = {}
@@ -431,10 +431,10 @@ def _rows(m):
 
 
 def run_regridding(output_dir: Path, files, verbose):
-    from earthsci_toolkit.parse import load
-    from earthsci_toolkit.pde_inline_tests import (
+    from earthsci_ast.parse import load
+    from earthsci_ast.pde_inline_tests import (
         run_pde_tests, simulate_states, state_cells)
-    from earthsci_toolkit.simulation import BuildInspection
+    from earthsci_ast.simulation import BuildInspection
 
     cases = {}
     for case_dir, manifest in discover_manifests("regridding", files):
@@ -524,8 +524,8 @@ def _reproj_wrapper_doc(params):
 
 
 def run_reprojection(output_dir: Path, files, verbose):
-    from earthsci_toolkit.numpy_interpreter import evaluate
-    from earthsci_toolkit.parse import load
+    from earthsci_ast.numpy_interpreter import evaluate
+    from earthsci_ast.parse import load
 
     cases = {}
     for case_dir, manifest in discover_manifests("reprojection", files):

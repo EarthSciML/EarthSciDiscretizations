@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-conformance.sh — cross-binding conformance orchestrator.
 #
-# Mirrors the shape of EarthSciSerialization's scripts/test-conformance.sh:
+# Mirrors the shape of EarthSciAST's scripts/test-conformance.sh:
 # probe each binding's availability, run the available runners for the
 # requested categories into conformance-results/<binding>/, then gate every
 # output against the committed goldens (and against the reference binding)
@@ -42,23 +42,23 @@ done
 # ---------------------------------------------------------------------------
 probe_julia() {
   command -v julia >/dev/null 2>&1 &&
-    [[ -f "$ESS_ROOT/packages/EarthSciSerialization.jl/Project.toml" ]]
+    [[ -f "$ESS_ROOT/pkg/EarthSciAST.jl/Project.toml" ]]
 }
 run_julia() { # $1 = output dir
   julia "$REPO/scripts/runners/run-julia.jl" \
     --output-dir "$1" --categories "$CATEGORIES" $VERBOSE
 }
 
-# Python (earthsci_toolkit): prefer the binding's own venv interpreter (the
+# Python (earthsci_ast): prefer the binding's own venv interpreter (the
 # layout its pytest suite runs in); fall back to whatever python3 is on PATH
 # (e.g. a CI image provisioning numpy/scipy globally).
 _python_bin() {
-  local venv="$ESS_ROOT/packages/earthsci_toolkit/.venv/bin/python3"
+  local venv="$ESS_ROOT/pkg/earthsci-ast-py/.venv/bin/python3"
   [[ -x "$venv" ]] && { echo "$venv"; return; }
   command -v python3
 }
 probe_python() {
-  [[ -d "$ESS_ROOT/packages/earthsci_toolkit/src/earthsci_toolkit" ]] &&
+  [[ -d "$ESS_ROOT/pkg/earthsci-ast-py/src/earthsci_ast" ]] &&
     [[ -n "$(_python_bin)" ]]
 }
 run_python() { # $1 = output dir
@@ -68,7 +68,7 @@ run_python() { # $1 = output dir
 
 probe_rust() {
   command -v cargo >/dev/null 2>&1 &&
-    [[ -f "$ESS_ROOT/packages/earthsci-toolkit-rs/Cargo.toml" ]]
+    [[ -f "$ESS_ROOT/pkg/earthsci-ast-rs/Cargo.toml" ]]
 }
 run_rust() { # $1 = output dir
   "$REPO/scripts/runners/run-rust.sh" \
@@ -77,7 +77,7 @@ run_rust() { # $1 = output dir
 
 probe_typescript() {
   command -v node >/dev/null 2>&1 &&
-    [[ -f "$ESS_ROOT/packages/earthsci-toolkit/dist/cjs/index.js" ]]
+    [[ -f "$ESS_ROOT/pkg/earthsci-ast-ts/dist/cjs/index.js" ]]
 }
 run_typescript() { # $1 = output dir
   node "$REPO/scripts/runners/run-typescript.js" \
@@ -86,7 +86,7 @@ run_typescript() { # $1 = output dir
 
 probe_go() {
   command -v go >/dev/null 2>&1 &&
-    [[ -d "$ESS_ROOT/packages/esm-format-go/pkg/esm" ]]
+    [[ -d "$ESS_ROOT/pkg/earthsci-ast-go/pkg/esm" ]]
 }
 run_go() { # $1 = output dir
   "$REPO/scripts/runners/run-go.sh" \

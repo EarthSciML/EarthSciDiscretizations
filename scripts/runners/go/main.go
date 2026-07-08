@@ -2,12 +2,12 @@
 // (invoked through scripts/runners/run-go.sh, which resolves the ESS module).
 //
 // THIN WRAPPER (AGENTS.md §2, single pathway): every byte this program emits
-// comes from the official esm-format-go entry point esm.ResolveAndLower —
+// comes from the official earthsci-ast-go entry point esm.ResolveAndLower —
 // the raw §9.7 pipeline (.esm → parse → import/metaparameter resolution →
 // §9.6.3 rewrite fixpoint). No evaluator, rule engine, or numeric kernel
 // lives here — only argument marshalling and JSON I/O.
 //
-// CLI (EarthSciSerialization CONFORMANCE_SPEC.md §4.2):
+// CLI (EarthSciAST CONFORMANCE_SPEC.md §4.2):
 //
 //	run-go --output-dir <path> [--categories ast]
 //	       [--files <manifest.json>[,…]] [--verbose]
@@ -36,7 +36,7 @@ import (
 	"strconv"
 	"strings"
 
-	esm "github.com/ctessum/EarthSciSerialization/packages/esm-format-go/pkg/esm"
+	esm "github.com/EarthSciML/EarthSciAST/pkg/earthsci-ast-go/pkg/esm"
 )
 
 // ---------------------------------------------------------------------------

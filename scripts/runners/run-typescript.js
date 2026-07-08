@@ -3,12 +3,12 @@
 // EarthSciDiscretizations.
 //
 // THIN WRAPPER (AGENTS.md §2, single pathway): every byte this script emits
-// comes from official earthsci-toolkit entry points driven over the one
+// comes from official earthsci-ast-ts entry points driven over the one
 // canonical pipeline (.esm → parse → §9.7 import/metaparameter resolution →
 // §9.6.3 rewrite fixpoint). No evaluator, rule engine, or numeric kernel
 // lives here — only argument marshalling and JSON I/O.
 //
-// CLI (EarthSciSerialization CONFORMANCE_SPEC.md §4.2):
+// CLI (EarthSciAST CONFORMANCE_SPEC.md §4.2):
 //   node run-typescript.js --output-dir <path> [--categories ast]
 //        [--files <manifest.json>[,…]] [--verbose]
 //
@@ -23,8 +23,8 @@
 //                                                  bytes (byte-compared vs
 //                                                  the golden)
 //
-// Environment: requires the built earthsci-toolkit dist
-// ($ESS_ROOT/packages/earthsci-toolkit → npm ci && npm run build).
+// Environment: requires the built earthsci-ast-ts dist
+// ($ESS_ROOT/pkg/earthsci-ast-ts → npm ci && npm run build).
 
 'use strict'
 
@@ -34,16 +34,16 @@ const path = require('path')
 const ESD_ROOT = path.resolve(__dirname, '..', '..')
 const ESS_ROOT = process.env.ESS_ROOT
   ? path.resolve(process.env.ESS_ROOT)
-  : path.resolve(ESD_ROOT, '..', 'EarthSciSerialization')
+  : path.resolve(ESD_ROOT, '..', 'EarthSciAST')
 if (!fs.existsSync(path.join(ESS_ROOT, 'esm-schema.json'))) {
-  console.error(`error: EarthSciSerialization not found at '${ESS_ROOT}'; ` +
+  console.error(`error: EarthSciAST not found at '${ESS_ROOT}'; ` +
     'set ESS_ROOT or clone it as a sibling checkout (scripts/ess-locate.sh contract)')
   process.exit(1)
 }
-const DIST = path.join(ESS_ROOT, 'packages', 'earthsci-toolkit', 'dist', 'cjs', 'index.js')
+const DIST = path.join(ESS_ROOT, 'pkg', 'earthsci-ast-ts', 'dist', 'cjs', 'index.js')
 if (!fs.existsSync(DIST)) {
-  console.error(`error: earthsci-toolkit dist not built at '${DIST}' ` +
-    '(cd packages/earthsci-toolkit && npm ci && npm run build)')
+  console.error(`error: earthsci-ast-ts dist not built at '${DIST}' ` +
+    '(cd pkg/earthsci-ast-ts && npm ci && npm run build)')
   process.exit(1)
 }
 const { resolveTemplateMachinery, lowerExpressionTemplates } = require(DIST)
