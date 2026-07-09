@@ -1,7 +1,7 @@
 # EarthSciDiscretizations
 
 The standard library of discretization rules for the
-[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization) (ESS/ESM)
+[EarthSciAST](https://github.com/EarthSciML/EarthSciAST) (ESS/ESM)
 format: grids, finite-difference/finite-volume rewrite rules, regridding and
 reprojection expressions — together with the cross-language conformance goldens,
 convergence suites, and MMS tests that pin their behavior across every ESS binding.
@@ -74,8 +74,8 @@ own spacing (`problems/two_cartesian_grids_coexist.esm`).
 ## Quickstart
 
 ```sh
-# Sibling checkout of EarthSciSerialization (or set ESS_ROOT):
-git clone https://github.com/EarthSciML/EarthSciSerialization ../EarthSciSerialization
+# Sibling checkout of EarthSciAST (or set ESS_ROOT):
+git clone https://github.com/EarthSciML/EarthSciAST ../EarthSciAST
 
 # Validate every library file (JSON schema + policy lint):
 pip install jsonschema
@@ -97,7 +97,7 @@ and TypeScript are rewrite-only ports (`scope_excluded` from numeric).
 Rust runs every numeric case its ODE solver can handle. The remaining nonlinear / high-order /
 stiff cases are marked `blocked_upstream_bindings.rust` — for a specific reason established by
 a **per-case tolerance sweep** (all three Rust solvers `Erk`/`Bdf`/`Sdirk` tested):
-`earthsci-toolkit-rs`'s diffsol integrator has **no `dtmin`/max-step fail-fast guard**, so at
+`earthsci-ast-rs`'s diffsol integrator has **no `dtmin`/max-step fail-fast guard**, so at
 the tight tolerance the cross-binding gates require it drives `dt → 0` without terminating.
 **33 cases** are blocked, in two honest classes — **22 hang at _every_ tolerance** (down to the
 loosest `reltol 1e-6`: genuinely-stiff 2-D Laplacians, the `sqrt(0)`-singular Godunov

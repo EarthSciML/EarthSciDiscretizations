@@ -1,6 +1,6 @@
 name: Nightly upstream drift
 
-# Runs the full validate + conformance suite against EarthSciSerialization main
+# Runs the full validate + conformance suite against EarthSciAST main
 # HEAD (instead of the pinned PR-time checkout) so upstream lowering or
 # canonicalization changes surface here before they break a PR. Opens an issue
 # on failure.
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           ref: main
           path: ess
       - uses: actions/setup-python@v5
@@ -39,7 +39,7 @@ jobs:
         with:
           version: "1.11"
       - name: Instantiate upstream Julia binding
-        run: julia --project=ess/packages/EarthSciSerialization.jl -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=ess/pkg/EarthSciAST.jl -e 'using Pkg; Pkg.instantiate()'
       - name: Julia conformance against upstream HEAD
         run: ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh --bindings julia
       - name: Open issue on drift
@@ -47,11 +47,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `Nightly upstream drift: conformance vs EarthSciSerialization main failed (${new Date().toISOString().slice(0,10)})`;
+            const title = `Nightly upstream drift: conformance vs EarthSciAST main failed (${new Date().toISOString().slice(0,10)})`;
             const open = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, state: "open", labels: "upstream-drift" });
             if (open.data.some(i => i.title.startsWith("Nightly upstream drift"))) return;
             await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo, title,
               labels: ["upstream-drift"],
-              body: `The nightly run against EarthSciSerialization main HEAD failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nEither upstream changed lowering/canonicalization (regenerate goldens with a stated cause per AGENTS.md) or a real regression landed upstream (file it there).`
+              body: `The nightly run against EarthSciAST main HEAD failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nEither upstream changed lowering/canonicalization (regenerate goldens with a stated cause per AGENTS.md) or a real regression landed upstream (file it there).`
             });

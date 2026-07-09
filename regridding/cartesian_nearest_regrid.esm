@@ -1,0 +1,188 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "cartesian_nearest_regrid",
+    "description": "Nearest-neighbour (containing-cell) regridding from a uniform cartesian SOURCE grid onto an arbitrary target grid, factored as a template library (esm-spec 9.7) so a coupling can import it by reference instead of restating the gather inline — the companion to regridding/conservative_overlap.esm. Conservative overlap area-AVERAGES and is correct for continuous fields (elevation, temperature, wind); this GATHERS the source value unchanged and is the correct choice for CATEGORICAL fields (integer class codes — fuel model, land cover, soil type), where averaging codes 5 and 91 into 48 is physically meaningless. It is also a pure index map (no polygon_intersection_area), so it is far cheaper than the conservative narrow phase. One template: cartesian_nearest_regrid_apply. See its description for the exact floor-quantised source-cell lookup and the determinism/tie-breaking contract.",
+    "license": "MIT",
+    "tags": [
+      "esd:regrid",
+      "method:nearest",
+      "categorical",
+      "gather"
+    ],
+    "references": [
+      {
+        "citation": "EarthSciAST esm-spec.md 8.6 (regridding is a coupling expression) / 9.7 (expression-template libraries); the categorical-regrid gotcha (gt-categorical) noted in components/earthsci_data/landfire.esm — the upstream EarthSciData.jl LANDFIRE loader used nearest-neighbour (BSpline(Constant())) for exactly this reason."
+      }
+    ]
+  },
+  "metaparameters": {
+    "NSRC": {
+      "type": "integer",
+      "default": 9,
+      "description": "Number of SOURCE cells (F_src is shaped over this flattened enumeration). Default matches the 3x3 exemplar."
+    },
+    "NTGT": {
+      "type": "integer",
+      "default": 4,
+      "description": "Number of TARGET cells. Default matches the 2x2 exemplar."
+    },
+    "GX_SRC": {
+      "type": "integer",
+      "default": 3,
+      "description": "Source-grid cell count along x (the row-major stride: c = (sy-1)*GX_SRC + sx). Default matches the 3x3 exemplar."
+    },
+    "GY_SRC": {
+      "type": "integer",
+      "default": 3,
+      "description": "Source-grid cell count along y (used only to clamp the located row into range)."
+    }
+  },
+  "index_sets": {
+    "src_cells": {
+      "kind": "interval",
+      "size": "NSRC"
+    },
+    "tgt_cells": {
+      "kind": "interval",
+      "size": "NTGT"
+    }
+  },
+  "expression_templates": {
+    "cartesian_nearest_regrid_apply": {
+      "params": [
+        "F_src",
+        "tgt_lon",
+        "tgt_lat",
+        "src_x0",
+        "src_dx",
+        "src_y0",
+        "src_dy"
+      ],
+      "description": "NEAREST-NEIGHBOUR (containing-cell) regrid onto a target grid: F_tgt[j] = F_src[c(j)], where c(j) is the flattened index of the SOURCE cell whose extent contains target cell j's centre. Unlike conservative_overlap (area-weighted AVERAGE — correct for continuous fields), this is a verbatim GATHER — the source value is copied unchanged, so CATEGORICAL fields (integer class codes: land cover, fuel model, soil type) keep exact valid codes with no meaningless between-class averages. It is also far cheaper: a pure index map, no polygon intersection. The source cell is located by floor-quantising the target centre into the source's uniform cartesian lattice: sx = clamp(floor((tgt_lon[j]-src_x0)/src_dx)+1, 1, GX_SRC), sy likewise with src_y0/src_dy/GY_SRC, and c = (sy-1)*GX_SRC + sx over the x-fastest row-major enumeration cartesian_cell_rings uses. floor makes the pick DETERMINISTIC (a centre on a cell boundary resolves to the east/north cell — no argmin tie), so the result is byte-identical across bindings. tgt_lon/tgt_lat are the per-target-cell centres (bind cartesian_cell_rings_lon/lat); src_x0/src_dx/src_y0/src_dy + the GX_SRC/GY_SRC metaparameters describe the SOURCE lattice. F_src is shaped [src_cells]; the clamp keeps a target cell outside the source extent on the nearest edge cell rather than out of bounds. For a non-uniform or unstructured source, a centroid-argmin nearest (min-distance value-at-argmin, the lev_min idiom) is the general form; this template is the uniform-cartesian case.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "j"
+        ],
+        "ranges": {
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "args": [
+          "F_src",
+          "tgt_lon",
+          "tgt_lat"
+        ],
+        "expr": {
+          "op": "index",
+          "args": [
+            "F_src",
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "max",
+                          "args": [
+                            1,
+                            {
+                              "op": "min",
+                              "args": [
+                                "GY_SRC",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "floor",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "index",
+                                                  "args": [
+                                                    "tgt_lat",
+                                                    "j"
+                                                  ]
+                                                },
+                                                "src_y0"
+                                              ]
+                                            },
+                                            "src_dy"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "GX_SRC"
+                  ]
+                },
+                {
+                  "op": "max",
+                  "args": [
+                    1,
+                    {
+                      "op": "min",
+                      "args": [
+                        "GX_SRC",
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": [
+                                            "tgt_lon",
+                                            "j"
+                                          ]
+                                        },
+                                        "src_x0"
+                                      ]
+                                    },
+                                    "src_dx"
+                                  ]
+                                }
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

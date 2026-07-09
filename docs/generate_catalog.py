@@ -26,14 +26,14 @@ Pretty-printing policy (AGENTS.md "single pathway"):
   * This script reads .esm JSON structurally and NEVER evaluates library math.
   * Float constants display at <= 12 significant digits ("%.12g", trailing
     zeros stripped) in BOTH display paths: that is the official
-    earthsci_toolkit.display convention (_format_number), and the structural
+    earthsci_ast.display convention (_format_number), and the structural
     fallback here normalizes to the same so generated pages are byte-identical
     regardless of which renderer handled an expression. Presentation-layer
     only — full precision always lives in the .esm sources the pages link.
   * Math display prefers the OFFICIAL ESS display path
-    (earthsci_toolkit.display.to_unicode), used in-process when the toolkit is
+    (earthsci_ast.display.to_unicode), used in-process when the toolkit is
     importable (the CI docs job pip-installs it) or through
-    docs/_render_bridge.py in the EarthSciSerialization toolkit venv when a
+    docs/_render_bridge.py in the EarthSciAST toolkit venv when a
     local checkout is available.
   * Node types the official renderer does not display usefully — index
     arithmetic, aggregate, makearray, apply_expression_template, nested D — are
@@ -151,15 +151,15 @@ def md_cell(text: str) -> str:
 
 
 class OfficialDisplay:
-    """Best-effort handle on earthsci_toolkit's to_unicode()."""
+    """Best-effort handle on earthsci_ast's to_unicode()."""
 
     def __init__(self) -> None:
         self.mode: str | None = None
         self._proc = None
         self._inproc = None
         try:
-            from earthsci_toolkit.display import to_unicode  # type: ignore
-            from earthsci_toolkit.parse import _parse_expression  # type: ignore
+            from earthsci_ast.display import to_unicode  # type: ignore
+            from earthsci_ast.parse import _parse_expression  # type: ignore
 
             self._inproc = (to_unicode, _parse_expression)
             self.mode = "in-process"
@@ -169,8 +169,8 @@ class OfficialDisplay:
         self._try_bridge()
 
     def _try_bridge(self) -> None:
-        ess_root = Path(os.environ.get("ESS_ROOT") or (REPO.parent / "EarthSciSerialization"))
-        toolkit = ess_root / "packages" / "earthsci_toolkit"
+        ess_root = Path(os.environ.get("ESS_ROOT") or (REPO.parent / "EarthSciAST"))
+        toolkit = ess_root / "packages" / "earthsci_ast"
         venv_py = toolkit / ".venv" / "bin" / "python"
         if not venv_py.exists():
             return
@@ -453,7 +453,7 @@ class MathRenderer:
             value = int(value)
         if isinstance(value, float):
             # Float display convention: at most 12 significant digits, matching
-            # the official earthsci_toolkit.display path (display.py
+            # the official earthsci_ast.display path (display.py
             # _format_number: f"{num:.12g}" for regular-magnitude floats), so
             # official-rendered and structurally-rendered pages agree.
             # Presentation only — the underlying .esm bytes are untouched.
@@ -1371,7 +1371,7 @@ def generate(content_root: Path, static_root: Path) -> None:
         print(f"[info] official ESS display path: {official.mode}")
     else:
         warn(
-            "official ESS display path unavailable (earthsci_toolkit not importable and no "
+            "official ESS display path unavailable (earthsci_ast not importable and no "
             "ESS toolkit venv found) — all math rendered structurally"
         )
     renderer = MathRenderer(official)

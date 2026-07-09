@@ -6,6 +6,6 @@ module github.com/EarthSciML/earthscidiscretizations/scripts/runners/go-runner
 
 go 1.21
 
-require github.com/ctessum/EarthSciSerialization/packages/esm-format-go v0.0.0
+require github.com/EarthSciML/EarthSciAST/pkg/earthsci-ast-go v0.0.0
 
-replace github.com/ctessum/EarthSciSerialization/packages/esm-format-go => ../../../../EarthSciSerialization/packages/esm-format-go
+replace github.com/EarthSciML/EarthSciAST/pkg/earthsci-ast-go => ../../../../EarthSciAST/pkg/earthsci-ast-go

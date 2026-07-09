@@ -17,7 +17,7 @@
 #                (format per scripts/check_convergence_order.py docstring)
 #   regridding   tests/conformance/regridding/<case>/golden/weights.json
 #                (the per-pair A_ij/A_j/W_ij setup arrays the runner reads
-#                from the official EarthSciSerialization.jl BuildInspection
+#                from the official EarthSciAST.jl BuildInspection
 #                surface; gated by compare-outputs.py per manifest §5.8)
 #
 # Manifests whose golden this run fulfills have "status": "pending-golden"

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """_render_bridge.py — line-oriented bridge to the official ESS display path.
 
-Runs INSIDE the EarthSciSerialization earthsci_toolkit environment (the
-packages/earthsci_toolkit/.venv interpreter, with PYTHONPATH pointing at
-packages/earthsci_toolkit/src when the venv has no installed copy).
-docs/generate_catalog.py spawns it when earthsci_toolkit is not importable
+Runs INSIDE the EarthSciAST earthsci_ast environment (the
+pkg/earthsci-ast-py/.venv interpreter, with PYTHONPATH pointing at
+pkg/earthsci-ast-py/src when the venv has no installed copy).
+docs/generate_catalog.py spawns it when earthsci_ast is not importable
 in-process, so the docs generator can use the official unicode renderer
 without vendoring any display logic (AGENTS.md "single pathway": docs may
 call official ESS display/pretty-print APIs; they never evaluate math).
@@ -19,8 +19,8 @@ import sys
 
 def main() -> int:
     try:
-        from earthsci_toolkit.display import to_unicode
-        from earthsci_toolkit.parse import _parse_expression
+        from earthsci_ast.display import to_unicode
+        from earthsci_ast.parse import _parse_expression
     except Exception as exc:  # toolkit not importable in this interpreter
         sys.stdout.write(json.dumps({"ok": False, "error": f"import: {exc}"}) + "\n")
         sys.stdout.flush()

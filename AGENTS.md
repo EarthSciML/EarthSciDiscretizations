@@ -2,8 +2,8 @@
 
 This repo is the ESM discretization standard library: pure data (`.esm` files) plus the
 test harness and docs pipeline that pin its behavior. The sibling spec repo is
-[EarthSciSerialization](https://github.com/EarthSciML/EarthSciSerialization) (`$ESS_ROOT`,
-default `../EarthSciSerialization` — resolved everywhere by `scripts/ess-locate.sh`).
+[EarthSciAST](https://github.com/EarthSciML/EarthSciAST) (`$ESS_ROOT`,
+default `../EarthSciAST` — resolved everywhere by `scripts/ess-locate.sh`).
 
 ## 1. AST first
 
@@ -20,7 +20,7 @@ fixpoint → official runner`.
 
 - `scripts/runners/*` are thin argument-marshalling wrappers over ESS binding entry
   points. If a binding lacks a capability (e.g. a canonical-emit CLI), file the issue
-  upstream in EarthSciSerialization — **never** patch a local shim, shadow evaluator, or
+  upstream in EarthSciAST — **never** patch a local shim, shadow evaluator, or
   per-rule special case here. The archive's retired shadow evaluators are the cautionary
   tale.
 - `tools/` and `docs/generate_catalog.py` may *structurally* read `.esm` JSON (offsets,

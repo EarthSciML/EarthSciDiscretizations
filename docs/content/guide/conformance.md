@@ -21,7 +21,7 @@ binding runner* through the one canonical pipeline:
 `scripts/runners/*` are thin argument-marshalling wrappers over ESS binding
 entry points — they contain no logic of their own. If a binding lacks a
 capability (say, a canonical-emit CLI), the fix is an upstream issue in
-EarthSciSerialization, **never** a local shim, shadow evaluator, or per-rule
+EarthSciAST, **never** a local shim, shadow evaluator, or per-rule
 special case here. The archive's retired shadow evaluators are the cautionary
 tale: the moment a second pathway exists, "conformance" tests the shim, not
 the binding.

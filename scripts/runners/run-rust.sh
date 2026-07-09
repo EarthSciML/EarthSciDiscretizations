@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # run-rust.sh — the official Rust conformance runner for EarthSciDiscretizations.
 #
-# Thin shell over two earthsci-toolkit-rs examples (upstream in
-# $ESS_ROOT/packages/earthsci-toolkit-rs/examples/):
+# Thin shell over two earthsci-ast-rs examples (upstream in
+# $ESS_ROOT/pkg/earthsci-ast-rs/examples/):
 #
 #   canonical_expand   the official raw §9.7 pipeline
 #                      (resolve_template_machinery → lower_expression_templates)
@@ -34,9 +34,9 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$REPO/scripts/ess-locate.sh"
 
-MANIFEST_PATH="$ESS_ROOT/packages/earthsci-toolkit-rs/Cargo.toml"
+MANIFEST_PATH="$ESS_ROOT/pkg/earthsci-ast-rs/Cargo.toml"
 [[ -f "$MANIFEST_PATH" ]] || {
-  echo "error: earthsci-toolkit-rs not found at '$MANIFEST_PATH'" >&2
+  echo "error: earthsci-ast-rs not found at '$MANIFEST_PATH'" >&2
   exit 1
 }
 

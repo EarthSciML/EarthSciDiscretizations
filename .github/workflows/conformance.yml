@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: actions/setup-python@v5
         with:
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: julia-actions/setup-julia@v2
         with:
@@ -71,7 +71,7 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Instantiate the ESS Julia binding
         run: |
-          julia --project=ess/packages/EarthSciSerialization.jl \
+          julia --project=ess/pkg/EarthSciAST.jl \
             -e 'using Pkg; Pkg.instantiate()'
       - name: Conformance (julia; all categories)
         run: |
@@ -85,7 +85,7 @@ jobs:
           name: conformance-results-julia
           path: conformance-results/
 
-  # The Python binding (earthsci_toolkit): full category coverage — ast bytes,
+  # The Python binding (earthsci_ast): full category coverage — ast bytes,
   # §6.6.5 simulation + convergence via pde_inline_tests/run_pde_tests,
   # regridding invariants, reprojection points (scripts/runners/run-python.py).
   python:
@@ -94,15 +94,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: ess/packages/earthsci_toolkit/pyproject.toml
-      - name: Install earthsci_toolkit
-        run: pip install -e ess/packages/earthsci_toolkit
+          cache-dependency-path: ess/pkg/earthsci-ast-py/pyproject.toml
+      - name: Install earthsci_ast
+        run: pip install -e ess/pkg/earthsci-ast-py
       - name: Conformance (python; all categories)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
@@ -115,7 +115,7 @@ jobs:
           name: conformance-results-python
           path: conformance-results/
 
-  # The Rust binding (earthsci-toolkit-rs): ast bytes (upstream canonical_expand)
+  # The Rust binding (earthsci-ast-rs): ast bytes (upstream canonical_expand)
   # plus the numeric categories for every case Rust can solve. The nonlinear /
   # high-order / genuinely-stiff-2-D cases whose ODE hangs the diffsol integrator
   # (no dtmin/max-step guard; Erk/Bdf/Sdirk all wedge) are marked
@@ -126,12 +126,12 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ess/packages/earthsci-toolkit-rs
+          workspaces: ess/pkg/earthsci-ast-rs
       - name: Conformance (rust; ast + numeric)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
@@ -144,7 +144,7 @@ jobs:
           name: conformance-results-rust
           path: conformance-results/
 
-  # The TypeScript binding (earthsci-toolkit): ast bytes over the built dist
+  # The TypeScript binding (earthsci-ast-ts): ast bytes over the built dist
   # (scripts/runners/run-typescript.js). Rewrite-only port — see the
   # manifests' scope_excluded notes.
   typescript:
@@ -153,15 +153,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: ess/packages/earthsci-toolkit/package-lock.json
-      - name: Build earthsci-toolkit dist
-        working-directory: ess/packages/earthsci-toolkit
+          cache-dependency-path: ess/pkg/earthsci-ast-ts/package-lock.json
+      - name: Build earthsci-ast-ts dist
+        working-directory: ess/pkg/earthsci-ast-ts
         run: |
           npm ci
           npm run build
@@ -176,7 +176,7 @@ jobs:
           name: conformance-results-typescript
           path: conformance-results/
 
-  # The Go binding (esm-format-go): ast bytes via esm.ResolveAndLower
+  # The Go binding (earthsci-ast-go): ast bytes via esm.ResolveAndLower
   # (scripts/runners/run-go.sh). Rewrite-only port — see the manifests'
   # scope_excluded notes.
   go:
@@ -185,12 +185,12 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: EarthSciML/EarthSciSerialization
+          repository: EarthSciML/EarthSciAST
           path: ess
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-          cache-dependency-path: ess/packages/esm-format-go/go.sum
+          cache-dependency-path: ess/pkg/earthsci-ast-go/go.sum
       - name: Conformance (go; ast)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
