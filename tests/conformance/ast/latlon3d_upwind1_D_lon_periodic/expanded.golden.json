@@ -1,0 +1,225 @@
+{
+  "esm": "0.8.0",
+  "index_sets": {
+    "lat": {
+      "kind": "interval",
+      "size": 5
+    },
+    "lev": {
+      "kind": "interval",
+      "size": 4
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 5
+    },
+    "lon": {
+      "kind": "interval",
+      "size": 8
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/latlon3d/rules/upwind1_D_lon_periodic, bound to NLON=8, NLAT=5, NLEV=4 at the import edge. The match D(u,lon) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 two-region makearray — interior columns [2,8] x [1,5] x [1,4] holding the imported backward-difference stencil, and the i=1 wrap-face slab [1,1] x [1,5] x [1,4] holding the periodic gather (f[1]-f[8])/dlon_deg — with all metaparameters folded and the consumer-supplied spacing surviving as the free name dlon_deg (declared here as a parameter, 360/8 = 45). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "name": "latlon3d_upwind1_D_lon_periodic_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:latlon3d",
+      "rule:upwind1_D_lon_periodic"
+    ]
+  },
+  "models": {
+    "Latlon3dUpwindLonPeriodicAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      2,
+                      8
+                    ],
+                    [
+                      1,
+                      5
+                    ],
+                    [
+                      1,
+                      4
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      1
+                    ],
+                    [
+                      1,
+                      5
+                    ],
+                    [
+                      1,
+                      4
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [
+                      "u"
+                    ],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "u",
+                                "i",
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "u",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "-"
+                                },
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "-"
+                        },
+                        "dlon_deg"
+                      ],
+                      "op": "/"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "ranges": {
+                      "i": [
+                        2,
+                        8
+                      ],
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    }
+                  },
+                  {
+                    "args": [
+                      "u"
+                    ],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [
+                                "u",
+                                1,
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "u",
+                                8,
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "-"
+                        },
+                        "dlon_deg"
+                      ],
+                      "op": "/"
+                    },
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "ranges": {
+                      "i": [
+                        1,
+                        1
+                      ],
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "op": "-"
+          }
+        }
+      ],
+      "variables": {
+        "dlon_deg": {
+          "default": 45,
+          "description": "The grid's dlon_deg free name (inherited consumer-supplied geometry contract): 360/NLON = 45 spelled as a literal because NLON is closed at the import edge.",
+          "type": "parameter",
+          "units": "deg"
+        },
+        "u": {
+          "description": "Field over the lon x lat x lev index sets.",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "type": "state",
+          "units": "1"
+        }
+      }
+    }
+  }
+}
