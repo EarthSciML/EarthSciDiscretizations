@@ -1,0 +1,76 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lat_interior",
+    "description": "Interior conservative finite-volume PPM meridional flux-difference for the per-degree latitude derivative u_lat on the latlon3d grid: D f[i,j,k] = (F_{j+1/2} - F_{j-1/2})/dlat_deg over all i (lon), j in [4, NLAT-2], all k (lev), with F the semi-discrete PPM upwind meridional face flux (stencils/ppm_flux.esm, shared with the zonal PPM operator — grid-agnostic CW84 scalar algebra). The meridional analogue of ppm_D_lon_interior applied on every (lon, lev) column, differencing along the lat index j: F_{j+1/2}=ppm_flux(f[i,j-2..j+2,k]) and F_{j-1/2}=ppm_flux(f[i,j-3..j+1,k]) share the interface cell reconstruction, so the same float face flux is added in row j and subtracted in row j+1 -> the meridional divergence telescopes and the interior conserves to the bit. The interior touches f[i,j-3..j+2,k] (6 meridional cells); the three south rows j=1,2,3 and two north rows j=NLAT-1,NLAT (whose 5-cell support reaches outside [1,NLAT]) are supplied by the zero-gradient boundary faces in rules/ppm_D_lat_zero_grad_bc.esm. Nominal 3rd-order (parabolic) reconstruction; the unlimited flux-difference reduces algebraically to the standard 4th-order central first derivative, and the Colella-Woodward limiter clips only near extrema. `dlat_deg` is the grid's consumer-supplied meridional spacing free name; a PER-DEGREE derivative (see grids/latlon3d/grid.esm and grids/latlon for the physical-units metric recipe). Sign convention: upwind for flow toward +lat (northward); a southward variant belongs in a separate stencil. Match-less; wrapped into the complete rule by rules/ppm_D_lat_zero_grad_bc.esm.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:3",
+      "stencil_width:6"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "./ppm_flux.esm" }
+  ],
+  "expression_templates": {
+    "ppm_D_lat_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": [4, { "op": "-", "args": ["NLAT", 2] }],
+          "k": { "from": "lev" }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_flux",
+                  "bindings": {
+                    "um2": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 2] }, "k"] },
+                    "um1": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 1] }, "k"] },
+                    "u0": { "op": "index", "args": ["f", "i", "j", "k"] },
+                    "up1": { "op": "index", "args": ["f", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                    "up2": { "op": "index", "args": ["f", "i", { "op": "+", "args": ["j", 2] }, "k"] }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_flux",
+                  "bindings": {
+                    "um2": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 3] }, "k"] },
+                    "um1": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 2] }, "k"] },
+                    "u0": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["j", 1] }, "k"] },
+                    "up1": { "op": "index", "args": ["f", "i", "j", "k"] },
+                    "up2": { "op": "index", "args": ["f", "i", { "op": "+", "args": ["j", 1] }, "k"] }
+                  }
+                }
+              ]
+            },
+            "dlat_deg"
+          ]
+        }
+      }
+    }
+  }
+}
