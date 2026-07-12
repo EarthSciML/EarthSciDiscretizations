@@ -176,7 +176,14 @@ the grid deriving cell centers and widths through its own `nonuniform_cell_cente
 finite-volume Laplacian with exact zero-flux walls, second-order in L2 by
 supraconvergence), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
-rules; global and regional recipes), and the MPAS unstructured grid;
+rules; global and regional recipes), its 3-D `latlon3d` extension for
+GEOS-Chem-Classic-style tracer transport (importing the lat-lon horizontal
+geometry and adding a hybrid non-uniform vertical through the Design-B
+consumer-supplied edge-array pattern, with first-order-upwind zonal,
+zero-gradient meridional, and non-uniform zero-gradient vertical advection rules
+that compose — all three firing on one `[lon,lat,lev]` field — into a full 3-D
+advection driver, each verified by its own MMS convergence case), and the MPAS
+unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs
