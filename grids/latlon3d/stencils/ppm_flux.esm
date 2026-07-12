@@ -1,0 +1,52 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_flux",
+    "description": "PPM upwind zonal face flux for non-negative transport speed on latlon3d: the Colella-Woodward (1984) limited right-edge reconstruction of the upwind (west) cell, F_{i+1/2} = qr_lim(cell i). Given the 5-cell zonal neighbourhood (um2,um1,u0,up1,up2) centered on the upwind cell u0 it forms the two raw 4th-order edges via ppm_face_value (aL over um2,um1,u0,up1 and aR over um1,u0,up1,up2) and limits them via ppm_limit_right to the monotone right-edge value crossing the u0/up1 interface. This is the SEMI-DISCRETE (method-of-lines) PPM flux: the reconstructed cell-edge value itself, with time integration left to the ODE solver (no Courant/dt factor), so it composes with the ESS simulate() method-of-lines pathway exactly as the sibling first-derivative rules do. Grid-agnostic scalar algebra (operates on five cell values from one lat/lev column) — the latlon3d re-authoring of grids/cartesian_uniform_1d/stencils/ppm_flux, kept local per the library's per-grid self-containment convention. Match-less; the 5-cell zonal support wraps periodically in rules/ppm_D_lon_periodic.esm. dlon_deg-free (an edge value).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:flux",
+      "order:3",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./ppm_face_value.esm" },
+    { "ref": "./ppm_limit_right.esm" }
+  ],
+  "expression_templates": {
+    "ppm_flux": {
+      "params": ["um2", "um1", "u0", "up1", "up2"],
+      "description": "F_{i+1/2}=CW84 limited right edge of the upwind cell u0",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "ppm_limit_right",
+        "bindings": {
+          "ql": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_face_value",
+            "bindings": { "a": "um2", "b": "um1", "c": "u0", "d": "up1" }
+          },
+          "qr": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_face_value",
+            "bindings": { "a": "um1", "b": "u0", "c": "up1", "d": "up2" }
+          },
+          "qi": "u0"
+        }
+      }
+    }
+  }
+}
