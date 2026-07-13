@@ -146,8 +146,13 @@ a **mixed `∂²/∂x∂y`** cross-derivative on cartesian, the **metric spheric
 Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
 Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
 **WENO-Z advection** and the **Jiang–Peng HJ-WENO** `|∇u|` (both observed order 5.00),
-Colella–Woodward **PPM** conservative transport, and TVD **Lax–Friedrichs / minmod /
-superbee** limiters. Sub-nominal observed orders (PPM's smooth-extremum clip, limiter
+Colella–Woodward **PPM** conservative transport — reconstructed with the *full* CW84
+limiter pair (eq. (1.8) monotonized slopes **and** the eq. (1.10) parabola limiter), so a
+non-negative tracer with sharp jumps stays exactly within its initial range; using eq.
+(1.10) alone, as this library formerly did, leaves the scheme unbounded and it manufactures
+negative concentrations — and TVD **Lax–Friedrichs / minmod / superbee** limiters.
+Sub-nominal observed orders (PPM's smooth-extremum clip — most visibly on the meridional
+`cos⁴` case, whose smooth equatorial maximum the limiter flattens to first order — limiter
 clipping, Lax–Friedrichs reducing to first-order upwind for a linear flux) are pinned as
 *observed*, never forced to a design order. Regridding is now **end-to-end
 declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →

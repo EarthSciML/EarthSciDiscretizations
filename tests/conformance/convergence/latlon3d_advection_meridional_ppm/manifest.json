@@ -2,23 +2,50 @@
   "category": "convergence",
   "version": "1.0",
   "case": "latlon3d_advection_meridional_ppm",
-  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/ppm_D_lat_zero_grad_bc (Piecewise Parabolic Method, Colella-Woodward 1984, semi-discrete method-of-lines flux, zero-gradient pole ghosts) driven by problems/latlon3d_advection_meridional_ppm.esm — the rank-3 meridional analogue of the 1-D bounded sibling advection_1d_inflow_ppm, with passive lon (NLON=8) and lev (NLEV=4) axes. The problem is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4): NLAT is the open metaparameter; dlat_deg = 180/(NLAT-1) follows each rebinding. Manufactured steady u*(lat)=cos^4((pi/180)lat); the t=0.2 drift is the operator truncation. HONEST ORDER: PPM is nominally 3rd order and the unlimited interior flux-difference is exactly the 4th-order central first derivative, but the global order is set by the one-sided PPM boundary reconstruction at the poles (and the CW84 limiter can clip the equatorial smooth maximum), so it is sub-nominal. The Julia golden gives median observed order 2.00 in L2 (pairwise 2.00, 1.93, 2.01) but only 1.68 in Linf (pairwise 1.42, 1.68, 2.18): u*=cos^4 has an interior MAXIMUM at the equator, which the CW84 limiter clips (flattening the parabola there), so the pointwise Linf order lags the L2 order (unlike the monotone-profile 1-D bounded sibling advection_1d_inflow_ppm, whose cos(pi x) has no interior extremum and stays near 2 in both norms). expected_order 1.85 with order_tolerance 0.25 brackets BOTH norm medians honestly (deviation 0.15 in L2, 0.17 in Linf). NOT a claim of 3rd order.",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/ppm_D_lat_zero_grad_bc (Piecewise Parabolic Method, Colella-Woodward 1984, semi-discrete method-of-lines flux, zero-gradient pole ghosts) driven by problems/latlon3d_advection_meridional_ppm.esm \u2014 the rank-3 meridional analogue of the 1-D bounded sibling advection_1d_inflow_ppm, with passive lon (NLON=8) and lev (NLEV=4) axes. The problem is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4): NLAT is the open metaparameter; dlat_deg = 180/(NLAT-1) follows each rebinding. Manufactured steady u*(lat)=cos^4((pi/180)lat); the t=0.2 drift is the operator truncation. HONEST ORDER: PPM is nominally 3rd order and the unlimited interior flux-difference is exactly the 4th-order central first derivative, but the global order is set by the one-sided PPM boundary reconstruction at the poles (and the CW84 limiter can clip the equatorial smooth maximum), so it is sub-nominal. The Julia golden gives median observed order 2.00 in L2 (pairwise 2.00, 1.93, 2.01) but only 1.68 in Linf (pairwise 1.42, 1.68, 2.18): u*=cos^4 has an interior MAXIMUM at the equator, which the CW84 limiter clips (flattening the parabola there), so the pointwise Linf order lags the L2 order (unlike the monotone-profile 1-D bounded sibling advection_1d_inflow_ppm, whose cos(pi x) has no interior extremum and stays near 2 in both norms). expected_order 1.85 with order_tolerance 0.25 brackets BOTH norm medians honestly (deviation 0.15 in L2, 0.17 in Linf). NOT a claim of 3rd order. MONOTONICITY UPGRADE (2026-07-13) -- ORDER RESET: stencils/ppm_flux now builds its edges on the CW84 eq. (1.8) MONOTONIZED slopes (ppm_face_value_mono) instead of the raw eq. (1.7) slopes. The previous eq.(1.10)-only chain was NOT bounded: verified IN-PIPELINE on rules/ppm_D_periodic with sharp non-negative ICs (square / spike / sawtooth, N=32/64/128), it drove the tracer to -5.3e-2 and overshot to 1.053, while the upgraded chain holds it EXACTLY in [0, 1] (min 0.0, max 1.0) on every profile and resolution. Both limiters are load-bearing -- eq. (1.8) bounds the interpolated edge, eq. (1.10)'s extremum-flattening branch stops outflux from a local minimum -- and neither alone suffices. The observed order therefore changes, and this manifest's expected_order is reset from the new Julia golden. NEW ORDER (upgraded) -- THIS ONE GOT WORSE, and the reason is understood and expected: L2 median 1.22 (pairwise 1.66, 0.74, 1.22), Linf median 1.02 (1.24, 0.38, 1.02), down from the old eq.(1.10)-only chain's 2.00 / 1.68. The meridional manufactured solution u* = cos^4(Phi) has a SMOOTH INTERIOR MAXIMUM at the equator, and CW84 eq. (1.8) cannot distinguish a smooth maximum from an oscillation: it ZEROES the slope of the extremum cell, and because edge j+1/2 is built from the slopes of cells j and j+1, that zero also pollutes the two neighbouring edges -- something the eq.(1.10)-only chain never did. Probing the real pipeline confirms it exactly: the residual of the forced-steady state (i.e. the spatial truncation error) attains its maximum at lat = 0.00 -- the equator -- at EVERY resolution (NLAT=17/33/65/129), and converges at ~1.5 (L2) / ~1.0 (Linf), the signature of an isolated first-order point in an otherwise high-order field. This is the classic, well-documented failure of the original 1984 limiter at smooth extrema, and it is the price of the boundedness this rule now guarantees; it is NOT a defect of the transcription. The extremum-preserving Colella-Sekora (2008) limiter is the documented follow-on that would recover the order while keeping the bound. expected_order 1.10 +/- 0.30 brackets both medians (deviation 0.12 in L2, 0.08 in Linf). The pairwise orders are not monotone; that is limiter-activation noise, not a bad golden -- the set of cells where the CW84 clip fires shifts with resolution, so a smooth-MMS order estimate for a LIMITED scheme is intrinsically ragged. The gate brackets both norm medians with enough tolerance to absorb it.",
   "problem": "../../../../problems/latlon3d_advection_meridional_ppm.esm",
   "model": "MeridionalAdvectionPPM3d",
   "rule": "../../../../grids/latlon3d/rules/ppm_D_lat_zero_grad_bc.esm",
   "grid": "latlon3d",
   "resolutions": [
-    { "n": 17, "bindings": { "NLAT": 17 } },
-    { "n": 33, "bindings": { "NLAT": 33 } },
-    { "n": 65, "bindings": { "NLAT": 65 } },
-    { "n": 129, "bindings": { "NLAT": 129 } }
+    {
+      "n": 17,
+      "bindings": {
+        "NLAT": 17
+      }
+    },
+    {
+      "n": 33,
+      "bindings": {
+        "NLAT": 33
+      }
+    },
+    {
+      "n": 65,
+      "bindings": {
+        "NLAT": 65
+      }
+    },
+    {
+      "n": 129,
+      "bindings": {
+        "NLAT": 129
+      }
+    }
   ],
-  "norms": ["L2_error", "Linf_error"],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
   "assert_time": 0.2,
-  "expected_order": 1.85,
-  "order_tolerance": 0.25,
+  "expected_order": 1.1,
+  "order_tolerance": 0.3,
   "reference_binding": "julia",
-  "bindings_required": ["julia", "python", "rust"],
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
@@ -28,9 +55,21 @@
     "error_vs_golden_atol": 1e-09
   },
   "integrators": {
-    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
-    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
-    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
   },
   "golden": "golden/errors.json",
   "status": "active",

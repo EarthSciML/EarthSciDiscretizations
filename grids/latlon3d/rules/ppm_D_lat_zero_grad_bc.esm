@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "ppm_D_lat_zero_grad_bc",
-    "description": "Piecewise Parabolic Method (PPM; Colella & Woodward 1984) conservative finite-volume meridional first derivative u_lat on the latlon3d grid with zero-gradient (Neumann) pole boundaries, for meridional advection with non-negative velocity (a consumer writes u_t = -v_deg*D(u, wrt: lat), v_deg >= 0) in a 3-D tracer-transport model such as GEOS-Chem Classic. The higher-order GC-faithful counterpart of the sibling central_D_lat_zero_grad_bc, and the bounded (non-periodic) meridional analogue of the periodic zonal ppm_D_lon_periodic: same semi-discrete method-of-lines PPM edge flux, with the periodic wrap replaced by zero-gradient boundary GHOST bindings (the ghost fill IS the boundary reconstruction — no new algebra; it reuses the exact same ppm_flux/ppm_face_value/ppm_limit_right chain the zonal PPM uses, and the both-ends zeroth-order extrapolation technique of the 1-D sibling ppm_D_inflow_bc's outflow wall applied at BOTH poles). Matches D(f, wrt: lat), a PER-DEGREE derivative. FLUX FORM: F_{j+1/2} = qr_lim(cell j), the CW84-limited right edge of the upwind (south) cell; D f[i,j,k] = (F_{j+1/2} - F_{j-1/2})/dlat_deg. The interior interfaces share byte-identical fluxes so the meridional divergence telescopes and the interior conserves to the bit; the poles are an OPEN zero-gradient closure (not a conserving ring), matching the forced-steady MMS use. COMPOSITIONAL BODY: a makearray tiling [lon, lat, lev] with exactly six regions, each a thin apply of a factored stencil -- interior rows [4, NLAT-2] use ../stencils/ppm_D_lat_interior; the south rows j=1,2,3 use ../stencils/ppm_D_lat_zg_row{1,2,3} and the north rows j=NLAT-1,NLAT use ../stencils/ppm_D_lat_zg_row{Nm1,N} (PPM's 5-cell support needs three ghost-filled rows at the south end and two at the north end). Every region is a full-rank slab aggregate (output_idx [i, j, k]) so every binding's simulator fills the boundary slabs without rank promotion. BC COMPATIBILITY: a manufactured solution whose meridional derivative vanishes at the poles (e.g. cos^4 latitude) keeps the zeroth-order-extrapolation ghost residual small, so the observed order is set by the one-sided boundary reconstruction -- sub-nominal, near 2nd order in practice (see tests/conformance/convergence/latlon3d_advection_meridional_ppm), NOT a claim of 3rd order. ORDER (honest): the CW84 limiter can also clip smooth extrema (a mid-domain maximum such as the equatorial peak of cos^4) to lower order; the convergence case pins the observed value. Match scoping: `wrt: lat` plus `where: {f: {shape: [lon, lat, lev]}}` (esm-spec 9.6.1) at priority 10 so it wins over any default-priority first-derivative rule sharing the lat axis and fires only on the meridional derivative of a bare field declared over THIS grid's lon x lat x lev index sets; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together. The constraint requires a bare shaped field; a consumer differentiating a compound expression must bind it to a declared lon x lat x lev observed first. `dlat_deg` is the inherited consumer-supplied meridional spacing free name (grids/latlon3d/grid.esm). Sign convention: upwind for flow toward +lat (northward); a southward variant belongs in a separate rule. Crude at the poles (a per-degree zero-gradient closure, not a physical polar cap); half-polar caps and polar-cap averaging remain documented follow-ons (grids/latlon3d/grid.esm).",
+    "description": "Piecewise Parabolic Method (PPM; Colella & Woodward 1984) conservative finite-volume meridional first derivative u_lat on the latlon3d grid with zero-gradient (Neumann) pole boundaries, for meridional advection with non-negative velocity (a consumer writes u_t = -v_deg*D(u, wrt: lat), v_deg >= 0) in a 3-D tracer-transport model such as GEOS-Chem Classic. The higher-order GC-faithful counterpart of the sibling central_D_lat_zero_grad_bc, and the bounded (non-periodic) meridional analogue of the periodic zonal ppm_D_lon_periodic: same semi-discrete method-of-lines PPM edge flux, with the periodic wrap replaced by zero-gradient boundary GHOST bindings (the ghost fill IS the boundary reconstruction \u2014 no new algebra; it reuses the exact same ppm_flux/ppm_face_value/ppm_limit_right chain the zonal PPM uses, and the both-ends zeroth-order extrapolation technique of the 1-D sibling ppm_D_inflow_bc's outflow wall applied at BOTH poles). Matches D(f, wrt: lat), a PER-DEGREE derivative. FLUX FORM: F_{j+1/2} = qr_lim(cell j), the CW84-limited right edge of the upwind (south) cell; D f[i,j,k] = (F_{j+1/2} - F_{j-1/2})/dlat_deg. The interior interfaces share byte-identical fluxes so the meridional divergence telescopes and the interior conserves to the bit; the poles are an OPEN zero-gradient closure (not a conserving ring), matching the forced-steady MMS use. COMPOSITIONAL BODY: a makearray tiling [lon, lat, lev] with exactly six regions, each a thin apply of a factored stencil -- interior rows [4, NLAT-2] use ../stencils/ppm_D_lat_interior; the south rows j=1,2,3 use ../stencils/ppm_D_lat_zg_row{1,2,3} and the north rows j=NLAT-1,NLAT use ../stencils/ppm_D_lat_zg_row{Nm1,N} (PPM's 5-cell support needs three ghost-filled rows at the south end and two at the north end). Every region is a full-rank slab aggregate (output_idx [i, j, k]) so every binding's simulator fills the boundary slabs without rank promotion. BC COMPATIBILITY: a manufactured solution whose meridional derivative vanishes at the poles (e.g. cos^4 latitude) keeps the zeroth-order-extrapolation ghost residual small, so the observed order is set by the one-sided boundary reconstruction -- sub-nominal, near 2nd order in practice (see tests/conformance/convergence/latlon3d_advection_meridional_ppm), NOT a claim of 3rd order. ORDER (honest): the CW84 limiter can also clip smooth extrema (a mid-domain maximum such as the equatorial peak of cos^4) to lower order; the convergence case pins the observed value. Match scoping: `wrt: lat` plus `where: {f: {shape: [lon, lat, lev]}}` (esm-spec 9.6.1) at priority 10 so it wins over any default-priority first-derivative rule sharing the lat axis and fires only on the meridional derivative of a bare field declared over THIS grid's lon x lat x lev index sets; under import-edge renaming (esm-spec 9.7.7) the wrt literal and the where shape follow the renamed axis together. The constraint requires a bare shaped field; a consumer differentiating a compound expression must bind it to a declared lon x lat x lev observed first. `dlat_deg` is the inherited consumer-supplied meridional spacing free name (grids/latlon3d/grid.esm). Sign convention: upwind for flow toward +lat (northward); a southward variant belongs in a separate rule. Crude at the poles (a per-degree zero-gradient closure, not a physical polar cap); half-polar caps and polar-cap averaging remain documented follow-ons (grids/latlon3d/grid.esm). *** MONOTONICITY UPGRADE (2026-07-13) -- READ THIS. *** This rule is now genuinely BOUNDED. Its flux (../stencils/ppm_flux) previously reconstructed edges with the UNLIMITED eq. (1.7) slopes and relied on the eq. (1.10) parabola limiter alone; that combination does NOT bound the scheme. Verified in-pipeline on rules/ppm_D_periodic with sharp non-negative initial data (square / spike / sawtooth at N=32/64/128): the old chain drove a tracer in [0,1] down to -5.3e-2 and up to 1.053, i.e. it manufactured negative concentrations -- not survivable in a chemistry-transport model, where they propagate into the chemistry and aerosol solvers, and where the usual fix (clip to zero) silently destroys mass conservation. The edges are now built on the CW84 eq. (1.8) MONOTONIZED slopes (../stencils/ppm_face_value_mono -> ppm_slope_mono), and the same in-pipeline test now holds the tracer EXACTLY in [0, 1] (min 0.0, max 1.0) on every profile and resolution. BOTH limiters are load-bearing and neither alone suffices: eq. (1.8) forces the interpolated EDGE to lie between the two cells it separates, while eq. (1.10)'s extremum-flattening branch is what stops outflux from a local minimum. (Independently re-derived on the stretched vertical; see grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc.) ORDER CONSEQUENCES (honest): on a smooth MMS the upgrade IMPROVES the observed order for the periodic cases (1-D 1.5 -> 1.87 L2; zonal 1.64 -> 1.88 L2), because eq.(1.10)-alone clips more erratically. But where the manufactured solution has a SMOOTH INTERIOR EXTREMUM the upgrade LOWERS it: the meridional cos^4 case falls from 2.00 to 1.22 (L2), because eq. (1.8) zeroes the slope at the extremum cell and that zero also pollutes the two neighbouring edges. That is the classic 1984-limiter smooth-extremum clip, and it is the price of boundedness; the extremum-preserving Colella-Sekora (2008) limiter is the documented follow-on that would recover the order while keeping the bound. COST: the lowered AST grows ~8.5x, because ppm_limit_right must inline both edges ~5x each and a let-free AST cannot share them, so the now-larger monotonized edge is paid for ten times over; a CSE/let construct in ESM would remove this (documented follow-on). The rule's regions, stencil support (5 cells) and boundary faces are UNCHANGED -- only the edge reconstruction inside ppm_flux changed -- so this is a drop-in fix, not a new operator.",
     "license": "MIT",
     "tags": [
       "esd:rule",
@@ -23,41 +23,211 @@
       {
         "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
         "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Colella, P., & Sekora, M. D. (2008). A limiter for PPM that preserves accuracy at smooth extrema. Journal of Computational Physics, 227(15), 7069-7076.",
+        "doi": "10.1016/j.jcp.2008.03.034"
       }
     ]
   },
   "expression_template_imports": [
-    { "ref": "../stencils/ppm_D_lat_interior.esm" },
-    { "ref": "../stencils/ppm_D_lat_zg_row1.esm" },
-    { "ref": "../stencils/ppm_D_lat_zg_row2.esm" },
-    { "ref": "../stencils/ppm_D_lat_zg_row3.esm" },
-    { "ref": "../stencils/ppm_D_lat_zg_rowNm1.esm" },
-    { "ref": "../stencils/ppm_D_lat_zg_rowN.esm" }
+    {
+      "ref": "../stencils/ppm_D_lat_interior.esm"
+    },
+    {
+      "ref": "../stencils/ppm_D_lat_zg_row1.esm"
+    },
+    {
+      "ref": "../stencils/ppm_D_lat_zg_row2.esm"
+    },
+    {
+      "ref": "../stencils/ppm_D_lat_zg_row3.esm"
+    },
+    {
+      "ref": "../stencils/ppm_D_lat_zg_rowNm1.esm"
+    },
+    {
+      "ref": "../stencils/ppm_D_lat_zg_rowN.esm"
+    }
   ],
   "expression_templates": {
     "ppm_D_lat_zero_grad_bc": {
-      "params": ["f"],
+      "params": [
+        "f"
+      ],
       "priority": 10,
-      "match": { "op": "D", "args": ["f"], "wrt": "lat" },
-      "where": { "f": { "shape": ["lon", "lat", "lev"] } },
+      "match": {
+        "op": "D",
+        "args": [
+          "f"
+        ],
+        "wrt": "lat"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        }
+      },
       "body": {
         "op": "makearray",
         "args": [],
         "regions": [
-          [[1, "NLON"], [4, { "op": "-", "args": ["NLAT", 2] }], [1, "NLEV"]],
-          [[1, "NLON"], [1, 1], [1, "NLEV"]],
-          [[1, "NLON"], [2, 2], [1, "NLEV"]],
-          [[1, "NLON"], [3, 3], [1, "NLEV"]],
-          [[1, "NLON"], [{ "op": "-", "args": ["NLAT", 1] }, { "op": "-", "args": ["NLAT", 1] }], [1, "NLEV"]],
-          [[1, "NLON"], ["NLAT", "NLAT"], [1, "NLEV"]]
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  2
+                ]
+              }
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              3,
+              3
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              "NLAT",
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ]
         ],
         "values": [
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_interior", "bindings": { "f": "f" } },
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_zg_row1", "bindings": { "f": "f" } },
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_zg_row2", "bindings": { "f": "f" } },
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_zg_row3", "bindings": { "f": "f" } },
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_zg_rowNm1", "bindings": { "f": "f" } },
-          { "op": "apply_expression_template", "args": [], "name": "ppm_D_lat_zg_rowN", "bindings": { "f": "f" } }
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_interior",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_zg_row1",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_zg_row2",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_zg_row3",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_zg_rowNm1",
+            "bindings": {
+              "f": "f"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_D_lat_zg_rowN",
+            "bindings": {
+              "f": "f"
+            }
+          }
         ]
       }
     }

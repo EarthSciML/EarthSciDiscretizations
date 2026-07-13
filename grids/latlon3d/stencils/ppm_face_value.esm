@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "ppm_face_value",
-    "description": "4th-order Colella-Woodward (1984) eq. (1.6) edge interpolation of cell-averaged data to the interface between the two central cells: face = (7/12)(b+c) - (1/12)(a+d) for four consecutive cell averages a,b,c,d. Grid-agnostic scalar algebra (no index set, no metric, no dx) — the latlon3d re-authoring of the same CW84 edge template as grids/cartesian_uniform_1d/stencils/ppm_face_value, kept local per the library's per-grid self-containment convention (every grid owns its scheme algebra; only grid geometry is imported across grids). Match-less named template composed by stencils/ppm_flux.esm to build both cell edges of a zonal column (the left edge of a cell shares the stencil of the right edge of its neighbor). No boundary logic here; the periodic zonal wrap lives in rules/ppm_D_lon_periodic.esm. Scale-invariant (an edge value).",
+    "description": "4th-order Colella-Woodward (1984) eq. (1.6) edge interpolation of cell-averaged data to the interface between the two central cells: face = (7/12)(b+c) - (1/12)(a+d) for four consecutive cell averages a,b,c,d. Grid-agnostic scalar algebra (no index set, no metric, no dx) \u2014 the latlon3d re-authoring of the same CW84 edge template as grids/cartesian_uniform_1d/stencils/ppm_face_value, kept local per the library's per-grid self-containment convention (every grid owns its scheme algebra; only grid geometry is imported across grids). Match-less named template composed by stencils/ppm_flux.esm to build both cell edges of a zonal column (the left edge of a cell shares the stencil of the right edge of its neighbor). No boundary logic here; the periodic zonal wrap lives in rules/ppm_D_lon_periodic.esm. Scale-invariant (an edge value). NOT IN THE SHIPPED PATH (since 2026-07-13): this is the UNLIMITED edge -- eq. (1.6) evaluated on RAW eq. (1.7) slopes, which collapses to this closed form -- and it is not bounded (the edge can overshoot the range of cells b and c, so the upwind flux creates new extrema and drives a tracer negative). ../stencils/ppm_flux now composes ../stencils/ppm_face_value_mono instead. Retained as the reference CW84 atom: ppm_face_value_mono is exactly this combination with the eq. (1.8) monotonized slope substituted, and reduces to it identically when the slopes are unlimited (verified).",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -21,7 +21,12 @@
   },
   "expression_templates": {
     "ppm_face_value": {
-      "params": ["a", "b", "c", "d"],
+      "params": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
       "description": "face = (7/12)(b+c) - (1/12)(a+d)",
       "body": {
         "op": "-",
@@ -29,15 +34,39 @@
           {
             "op": "*",
             "args": [
-              { "op": "/", "args": [7, 12] },
-              { "op": "+", "args": ["b", "c"] }
+              {
+                "op": "/",
+                "args": [
+                  7,
+                  12
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  "b",
+                  "c"
+                ]
+              }
             ]
           },
           {
             "op": "*",
             "args": [
-              { "op": "/", "args": [1, 12] },
-              { "op": "+", "args": ["a", "d"] }
+              {
+                "op": "/",
+                "args": [
+                  1,
+                  12
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  "a",
+                  "d"
+                ]
+              }
             ]
           }
         ]
