@@ -1,0 +1,265 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lev_mono_nf_k2",
+    "description": "No-flux near-surface boundary face (k=2 slab) for the MONOTONE conservative vertical PPM flux-divergence on latlon3d: D f[i,j,2] = (F_{5/2} - F_{3/2})/dz[2] over all i, all j. F_{5/2} = ppm_lev_flux_mono(f1,f1,f2,f3,f4; dz1,dz1,dz2,dz3,dz4; w_edge[3]) uses one zero-gradient sub-surface ghost (cell 0 = cell 1); F_{3/2} is written byte-identically to the k=1 face's high flux. Ghost cells outside [1,NLEV] use the zero-gradient closure (cell m -> cell clamp(m,1,NLEV), width likewise). The wall flux itself is literally 0: the vertical velocity w_edge vanishes at the surface (w_edge[1]) and model top (w_edge[NLEV+1]), so this is a genuine no-flux finite-volume boundary and mass is conserved to the bit. CRITICAL: every interface flux shared with a neighbouring cell is written here BYTE-IDENTICALLY to the way that neighbour writes it, so the flux divergence telescopes exactly. One of five factored no-flux boundary faces consumed by rules/ppm_D_lev_mono_noflux_bc; a full (NLON x NLAT x 1) slab AGGREGATE in its own single-purpose stencil so the rule body stays a thin makearray of apply calls. Reads free names dz (widths) and w_edge (interface velocity).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:3",
+      "stencil_width:4"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./ppm_lev_flux_mono.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppm_D_lev_mono_nf_k2": {
+      "params": [
+        "f"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "f"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            2,
+            2
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux_mono",
+                  "bindings": {
+                    "amm": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "am": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "a0": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        2
+                      ]
+                    },
+                    "ap": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        3
+                      ]
+                    },
+                    "app": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        4
+                      ]
+                    },
+                    "dmm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "dm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "d0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        2
+                      ]
+                    },
+                    "dp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        3
+                      ]
+                    },
+                    "dpp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        4
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "w_edge",
+                        3
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux_mono",
+                  "bindings": {
+                    "amm": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "am": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "a0": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "ap": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        2
+                      ]
+                    },
+                    "app": {
+                      "op": "index",
+                      "args": [
+                        "f",
+                        "i",
+                        "j",
+                        3
+                      ]
+                    },
+                    "dmm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "dm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "d0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "dp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        2
+                      ]
+                    },
+                    "dpp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        3
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "w_edge",
+                        2
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                2
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
