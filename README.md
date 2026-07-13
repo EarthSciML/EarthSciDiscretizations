@@ -183,10 +183,15 @@ consumer-supplied edge-array pattern, with first-order-upwind, centered, and a
 full rank-3 Colella–Woodward **PPM** family per direction — periodic-wrap zonal,
 zero-gradient meridional, and a conservative **flux-form** vertical PPM whose
 velocity vanishes at the model top/surface for exact machine-precision mass
-conservation and verified 4th-order accuracy on the non-uniform mesh — each
-verified by its own MMS convergence case, with the upwind trio composing on one
-`[lon,lat,lev]` field into a full 3-D advection driver), and the MPAS
-unstructured grid;
+conservation, offered in two variants: an *unlimited* reconstruction with verified
+4th-order accuracy on the non-uniform mesh, and a **monotone** one (full CW84: eq
+(1.6) edge on eq (1.8) monotonized slopes plus the eq (1.10) parabola limiter) that
+is the production choice for chemistry-transport tracers — it holds a positive
+tracer non-negative across sharp vertical gradients, where the unlimited scheme
+measurably goes negative, at the cost of dropping to ~2.4 (L2) / ~1.9 (Linf) order;
+both conserve mass to the bit — each verified by its own MMS convergence case, with
+the upwind trio composing on one `[lon,lat,lev]` field into a full 3-D advection
+driver), and the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs

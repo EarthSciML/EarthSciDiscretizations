@@ -1,8 +1,8 @@
 {
   "esm": "0.8.0",
   "metadata": {
-    "name": "latlon3d_advection_vertical_ppm",
-    "description": "MMS driver: conservative flux-form vertical advection on the 3-D latlon3d grid, u_t = -D(u, lev) + src, discretized by grids/latlon3d/rules/ppm_D_lev_noflux_bc (Piecewise Parabolic Method, Colella-Woodward 1984; non-uniform 4th-order finite-volume flux divergence (w u)_z with genuine no-flux top/surface, rank-3). The genuinely mass-conserving GC-faithful counterpart of latlon3d_advection_vertical_zero_grad: FLUX-FORM (the velocity w_edge enters inside the operator, so the consumer writes u_t=-D(u,lev)+src, NOT -w*D). PASSIVE lon (NLON=8) and lat (NLAT=5). Manufactured STEADY solution u*(z)=cos(pi z) (as cell averages) with vertical velocity w(z)=sin(pi z) that VANISHES at the surface and model top (natural no-flux, exact mass conservation) and matching steady forcing src = cell-average of (w u*)_z; u_t=0 continuously, discrete drift is pure flux-divergence truncation, verified 4th-order in L2 and Linf on the quadratic-stretch mesh (UNLIMITED CW84 reconstruction; the bounded counterpart is problems/latlon3d_advection_vertical_ppm_mono, identical in every respect but the imported rule, so the two convergence goldens isolate exactly what monotonicity costs in order). WELL-POSEDNESS: integrated as a finite-time IVP (the operator's marginal constant null mode -- w vanishing at both walls -- drifts only slightly over the short window), giving clean 4th-order drift. VERTICAL MESH: the consumer supplies pe (quadratic stretch, shape [lev_nodes]); the grid derives dz via lev_thickness; w_edge=sin(pi pe) is the interface velocity. HYGIENE: pe over kn, w_edge over kw, dz via gk -- all distinct from the operator's k. ic/references spell the cell-average of cos(pi z) inline from the stretch formula and the NLEV name (build-time scope caveat).",
+    "name": "latlon3d_advection_vertical_ppm_mono",
+    "description": "MMS driver: MONOTONE conservative flux-form vertical advection on the 3-D latlon3d grid, u_t = -D(u, lev) + src, discretized by grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc (full Colella-Woodward 1984 PPM: eq (1.6) edge on eq (1.8) monotonized slopes plus the eq (1.10) parabola limiter; non-uniform finite-volume flux divergence (w u)_z with genuine no-flux top/surface, rank-3). The PRODUCTION-grade counterpart of latlon3d_advection_vertical_ppm (same operator, unlimited reconstruction): identical manufactured solution, identical mesh, identical forcing -- the ONLY difference is the imported rule, so the two convergence goldens isolate exactly what the monotonicity limiter costs in order (4.0 -> ~2.5 L2 / ~2.0 Linf) and, read alongside the rule's boundedness claim, what it buys. FLUX-FORM (the velocity w_edge enters inside the operator, so the consumer writes u_t=-D(u,lev)+src, NOT -w*D). PASSIVE lon (NLON=8) and lat (NLAT=5). Manufactured STEADY solution u*(z)=cos(pi z) (as cell averages) with vertical velocity w(z)=sin(pi z) that VANISHES at the surface and model top (natural no-flux, exact mass conservation) and matching steady forcing src = cell-average of (w u*)_z; u_t=0 continuously, so the discrete drift is pure flux-divergence truncation. NOTE the limiter's fingerprint: cos(pi z) has its extrema exactly AT the two walls (cos'(0)=cos'(pi)=0), which is where eq (1.8)/(1.10) clip hardest, so Linf lags L2. VERTICAL MESH: the consumer supplies pe (quadratic stretch, shape [lev_nodes]); the grid derives dz via lev_thickness; w_edge=sin(pi pe) is the interface velocity. HYGIENE: pe over kn, w_edge over kw, dz via gk -- all distinct from the operator's k. ic/references spell the cell-average of cos(pi z) inline from the stretch formula and the NLEV name (build-time scope caveat).",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -16,6 +16,10 @@
         "doi": "10.1016/0021-9991(84)90143-8"
       },
       {
+        "citation": "Colella, P., & Sekora, M. D. (2008). A limiter for PPM that preserves accuracy at smooth extrema. Journal of Computational Physics, 227(15), 7069-7076.",
+        "doi": "10.1016/j.jcp.2008.03.034"
+      },
+      {
         "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
         "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
       },
@@ -26,10 +30,10 @@
     ]
   },
   "models": {
-    "VerticalAdvectionPPM3d": {
+    "VerticalAdvectionPPMMono3d": {
       "expression_template_imports": [
         {
-          "ref": "../grids/latlon3d/rules/ppm_D_lev_noflux_bc.esm",
+          "ref": "../grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc.esm",
           "bindings": {
             "NLON": 8,
             "NLAT": 5
@@ -641,8 +645,8 @@
       ],
       "tests": [
         {
-          "id": "mms_steady_vertical_ppm_3d",
-          "description": "Manufactured steady u*(z)=cos(pi z) (cell averages) transported by w(z)=sin(pi z) in flux form, u_t = -(w u)_lev + src with src the analytic cell-average flux divergence, so u_t=0 continuously; the discrete field drifts only by flux-divergence truncation. t=0 pins the cell-average ic wiring; t=0.1 bounds the drift (verified ~4th order in L2 and Linf on the stretched mesh). Because w vanishes at both walls the scheme is exactly mass-conserving (structural, verified machine-zero; not asserted here since the source term makes the forced total non-invariant). Per-resolution errors in the convergence golden.",
+          "id": "mms_steady_vertical_ppm_mono_3d",
+          "description": "Manufactured steady u*(z)=cos(pi z) (cell averages) transported by w(z)=sin(pi z) in flux form, u_t = -(w u)_lev + src with src the analytic cell-average flux divergence, so u_t=0 continuously; the discrete field drifts only by flux-divergence truncation. t=0 pins the cell-average ic wiring; t=0.1 bounds the drift (measured ~2.5 order in L2 / ~2.0 in Linf on the stretched mesh -- the CW84 eq (1.8)+(1.10) limiters clip the smooth extrema of cos(pi z), which sit AT the two walls, so the order falls from the unlimited chain's clean 4.0; that is the deliberate cost of boundedness). Because w vanishes at both walls the scheme is still exactly mass-conserving (limiting changes edge VALUES, not the single-valued-ness of each face flux; verified machine-zero, not asserted here since the source term makes the forced total non-invariant). This smooth MMS measures ORDER, not the property the monotone variant exists for: boundedness on SHARP gradients (where the unlimited sibling drives the tracer negative and this one does not) is a separate, structural claim carried by the rule. Per-resolution errors in the convergence golden.",
           "time_span": {
             "start": 0.0,
             "end": 0.1

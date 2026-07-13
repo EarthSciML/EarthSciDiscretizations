@@ -1,0 +1,79 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_vertical_ppm_mono",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc (MONOTONE conservative flux-form vertical PPM: full Colella-Woodward 1984 -- eq (1.6) edge on eq (1.8) monotonized slopes plus the eq (1.10) parabola limiter -- no-flux top/surface) driven by problems/latlon3d_advection_vertical_ppm_mono.esm, with passive lon (NLON=8) and lat (NLAT=5). Loaded once per resolution binding NLEV; pe / dz / w_edge re-derive from NLEV each rebinding. Forced-steady u*=cos(pi z) transported by w=sin(pi z) (vanishing at both walls -> exact no-flux mass conservation, unaffected by limiting); the t=0.1 drift is the flux-divergence truncation on the quadratic-stretch mesh. HONEST ORDER: this is the LIMITED chain, so the order is deliberately sub-nominal. The Julia golden gives median observed order ~2.44 in L2 and ~1.92 in Linf on the NLEV = 8/16/32/64 ladder (~2.48/~1.97 asymptotically, on a finer ladder), versus the clean 4.0/3.9 of the identical-in-every-other-respect UNLIMITED sibling sweep latlon3d_advection_vertical_ppm -- the two goldens differ ONLY by the imported rule, so their ratio IS the measured cost of monotonicity. The cause is the classic CW84 smooth-extremum clip: cos(pi z) has its extrema exactly AT the two walls (cos'(0)=cos'(pi)=0), which is where eqs (1.8)/(1.10) clip hardest, so the error concentrates in a few boundary cells and Linf lags L2. expected_order 2.2 with order_tolerance 0.4 brackets BOTH norm medians honestly (deviation ~0.24 in L2, ~0.28 in Linf); this is NOT a claim of 3rd-order convergence, which the CW84 limiter forecloses on any smooth profile whose extrema trigger the clip (the extremum-preserving Colella-Sekora (2008) limiter is the documented follow-on that would recover it). This smooth-MMS sweep measures ORDER only; the property the monotone rule EXISTS for -- boundedness on sharp gradients, where the unlimited sibling drives a tracer negative -- is a structural claim carried by the rule, not by this sweep. expected_order and order_tolerance are set from the Julia golden. RESOLUTION LADDER (why 8/16/32/64, not the unlimited sibling's 16/32/64/128): the eq (1.10) parabola limiter must inline BOTH of the upwind cell's reconstructed edges about five times each, and a let-free expression AST cannot share them, so the lowered monotone body is ~25x the unlimited body (13.9 MB vs 0.55 MB of expanded AST at NLEV=6) and the RHS is ~25x costlier to evaluate. The coarser ladder measures the same order (L2 2.44 / Linf 1.92 here vs 2.48 / 1.97 at 16-128, pairwise orders converging monotonically) at about a quarter of the cost, keeping the sweep tractable in CI. This AST blow-up is a property of the let-free AST, not of the scheme; a common-subexpression / let construct in ESM (or a formulation that materializes the cell-edge reconstruction as its own array) would remove it, and is the documented follow-on.",
+  "problem": "../../../../problems/latlon3d_advection_vertical_ppm_mono.esm",
+  "model": "VerticalAdvectionPPMMono3d",
+  "rule": "../../../../grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc.esm",
+  "grid": "latlon3d",
+  "resolutions": [
+    {
+      "n": 8,
+      "bindings": {
+        "NLEV": 8
+      }
+    },
+    {
+      "n": 16,
+      "bindings": {
+        "NLEV": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLEV": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLEV": 64
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.2,
+  "order_tolerance": 0.4,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Same non-smooth limiter RHS that hangs earthsci-ast-rs's diffsol integrator on every other CW84-LIMITED PPM sweep (advection_1d_ppm_periodic, advection_1d_inflow_ppm, latlon3d_advection_zonal_ppm, latlon3d_advection_meridional_ppm): the eq (1.8)/(1.10) limiters lower to a large non-smooth min/max/abs/ifelse AST, and diffsol has no dtmin/max-step fail-fast guard, so it drives dt->0 without terminating instead of erroring. Note the UNLIMITED sibling sweep latlon3d_advection_vertical_ppm is NOT blocked -- its RHS is smooth precisely because it has no limiter, which is the cleanest available confirmation that the limiter is what diffsol chokes on. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+  }
+}
