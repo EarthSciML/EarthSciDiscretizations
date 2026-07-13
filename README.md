@@ -143,9 +143,11 @@ simulation (Julia; div∘curl exact to ~3e-14). This wave adds the full
 Laplacian companions, plus a **variable-coefficient / nonlinear Laplacian** `∇·(k∇u)` and
 a **mixed `∂²/∂x∂y`** cross-derivative on cartesian — lifted to rank 3 on a non-uniform
 vertical as the **`K_zz` boundary-layer mixing** operator with a **Robin surface-exchange**
-(dry-deposition + emission) ground — the first **advection rule that matches the wind as an
-operand**, `D(W·q, lev)`, taking a genuinely 3-D face-staggered velocity and picking its
-donor from the *sign* of the local face velocity — the **metric spherical
+(dry-deposition + emission) ground — the first **advection rules that match the wind as an
+operand**, `D(W·q, lev)`, taking a genuinely 3-D face-staggered velocity and picking their
+donor from the *sign* of the local face velocity (donor-cell and upwind-biased PPM), together
+with the **air-mass continuity** rule that makes them *free-stream preserving to the bit* —
+the **metric spherical
 (Laplace–Beltrami)** Laplacian on lat-lon, the **MPAS TRiSK edge-gradient and cell
 Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
 Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
@@ -237,11 +239,32 @@ constraint and the advection rule is filtered out at that node *before* priority
 ever runs. The separation is a structural guarantee of the shape-constraint semantics, not a
 priority race — verified by carrying both terms in one equation, where diffusion contributes
 exactly zero on a constant field and advection exactly `−∂w/∂z` (agreement 2.2e-16), with the
-column mass budget closing to 1.9e-16 relative, under one ulp. What this does *not* yet buy
-is **free-stream preservation**: with a divergent wind a constant tracer does not stay
-constant, because that requires consistency with continuity — the air-mass equation carried
-alongside, `Δp·q` prognostic, with the *same* discrete face mass-fluxes driving both), and
-the MPAS unstructured grid;
+column mass budget closing to 1.9e-16 relative, under one ulp. On that operator the wave then
+closes the two properties a transport core actually needs. **Consistency with continuity**:
+carrying the air mass alongside the tracer — states `m` (pressure thickness) and `m·q`, with
+`q = mq/m` observed and the *same* face mass-flux `M` driving both the continuity equation
+`∂m/∂t = −D(M,lev)` and the tracer `∂(mq)/∂t = −D(M·q,lev)` — makes a constant tracer stay
+constant under a divergent wind **exactly**, not approximately: measured `max|q−1| = 0.0` with
+`mq` *bit-identical* to `m` in every cell at every step, while a quarter of the air mass
+relocates. (The donor flux collapses to `F = ½[M·2 − |M|·0] = M` with every step exact in
+IEEE, so the two divergences cancel to the last bit.) The mixing-ratio form, driven by the
+same wind, drifts by ~44 %. The continuity operator is a second rule, `D(M,lev)` with `M`
+declared over `lev_nodes`; the disjoint index set is what keeps it from colliding with
+`D(q,lev)`, the same §9.6.1 mechanism again. And **accuracy**: an upwind-biased PPM
+reconstruction drops into the same face-flux and divergence structure, buying 29–249× lower
+error than donor-cell at matched resolution (observed order 2.49 L2 / 1.98 Linf limited,
+3.99/3.94 unlimited) while staying bounded at exactly zero and conserving mass to the bit.
+Two findings there are worth stating plainly. An *unlimited* upwind-biased PPM is a null
+concept — unlimited CW84 parabolas are continuous across a face, so the two one-sided values
+coincide and the donor branch is vacuous; upwind bias only acquires content *after* per-cell
+limiting. And the donor flux is best written `F = max(w,0)·a_R^L + min(w,0)·a_L^R`, which
+mentions each reconstruction *once* (the `abs` form mentions each twice — doubling a 35 MB
+AST) and returns the donor flux *bit-exactly*, where the `abs` form carries ~1e-13. The
+pre-existing vertical PPM rules, by contrast, hard-wire the donor to the lower cell and
+document the restriction (`upwind for w >= 0`); pointed at a downward wind they do not merely
+overshoot but **diverge** (measured min −6.2e+07 on a top-hat under subsidence), so
+`ppm_flux_D_lev_mono_noflux_bc` is the first vertical PPM here that survives real met, where
+descent is the normal state over much of the globe), and the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs
