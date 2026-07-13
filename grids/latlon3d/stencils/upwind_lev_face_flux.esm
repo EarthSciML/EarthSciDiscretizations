@@ -1,0 +1,81 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind_lev_face_flux",
+    "description": "Scalar atom: the DONOR-CELL (first-order upwind) advective mass flux F = w q* through the cell face shared by two vertically adjacent cells. Cell L (value qL) lies BELOW the face, cell R (qR) above it, and w is the face-normal velocity at the face, POSITIVE UPWARD (in the direction of increasing lev index). The upwind donor value q* is q_L when w > 0 and q_R when w < 0. This is spelled in the standard BRANCH-FREE algebraic form F = 1/2 [ w (qL + qR) - |w| (qR - qL) ]: for w > 0, |w| = w and the bracket collapses to 2 w qL; for w < 0, |w| = -w and it collapses to 2 w qR; for w = 0 it is exactly 0. This is IDENTICAL to ifelse(w > 0, w*qL, w*qR) but carries no boolean subexpression and no division, so it is cheap, vectorises, and has no removable singularity (unlike a sign(w) = w/|w| formulation, which is undefined at w = 0). SIGN CONVENTION: F is the flux in the +lev direction, so the consuming divergence stencils return (F_upper - F_lower)/dz, which is d/dz(w q) with the conventional sign; the transport equation is du/dt = -D(W*q, wrt: lev). WHY THE VELOCITY MUST BE INSIDE THE OPERATOR: this stencil differences the PRODUCT w*q at faces, not the derivative of q times a velocity. For a CONSTANT w the two coincide (w dq/dz = d(wq)/dz), which is why the pre-existing advective-form operators on this grid pass their tests with a scalar velocity parameter; for a SPATIALLY VARYING w they do not, and only the flux form conserves tracer mass. ACCURACY: the donor-cell face value is first-order, so the assembled divergence is O(dz). It is unconditionally monotone (positivity- and extremum-preserving) and is the base case that the upwind-biased PPM reconstruction refines by replacing q* with a parabola endpoint. Grid-agnostic scalar algebra -- no index sets, no free names; the caller supplies the three scalars.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lev",
+      "order:1",
+      "stencil_width:2",
+      "scheme:upwind"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux and its branch-free algebraic form F = 1/2[u(qL+qR) - |u|(qR-qL)])."
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      }
+    ]
+  },
+  "expression_templates": {
+    "upwind_lev_face_flux": {
+      "params": [
+        "qL",
+        "qR",
+        "w"
+      ],
+      "body": {
+        "op": "*",
+        "args": [
+          0.5,
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "w",
+                  {
+                    "op": "+",
+                    "args": [
+                      "qL",
+                      "qR"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "abs",
+                    "args": [
+                      "w"
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      "qR",
+                      "qL"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

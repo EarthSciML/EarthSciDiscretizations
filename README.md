@@ -143,7 +143,9 @@ simulation (Julia; div∘curl exact to ~3e-14). This wave adds the full
 Laplacian companions, plus a **variable-coefficient / nonlinear Laplacian** `∇·(k∇u)` and
 a **mixed `∂²/∂x∂y`** cross-derivative on cartesian — lifted to rank 3 on a non-uniform
 vertical as the **`K_zz` boundary-layer mixing** operator with a **Robin surface-exchange**
-(dry-deposition + emission) ground — the **metric spherical
+(dry-deposition + emission) ground — the first **advection rule that matches the wind as an
+operand**, `D(W·q, lev)`, taking a genuinely 3-D face-staggered velocity and picking its
+donor from the *sign* of the local face velocity — the **metric spherical
 (Laplace–Beltrami)** Laplacian on lat-lon, the **MPAS TRiSK edge-gradient and cell
 Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
 Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
@@ -212,7 +214,34 @@ the deposition velocity directly to the first-cell value — the obvious spellin
 *inconsistent*, committing an O(dz) flux error that the divergence then divides by
 `dz`, and it hides at coarse resolution (apparent order 1.98 at NLEV=32) before
 unravelling (1.52 at 64, 1.16 at 128). The series form holds a clean 2.00, so the
-surface exchange costs nothing in accuracy), and the MPAS unstructured grid;
+surface exchange costs nothing in accuracy. Advection then takes the step the rest of the
+transport stack is blocked on: **the wind becomes an operand of the rule**. The vertical PPM
+above is already flux-form, but it reads its velocity as a *free name* — `w_edge`, a 1-D,
+`lev`-only, time-static column profile — while every other advection rule (`upwind1_D_lon`,
+the `central_D_*` family, zonal/meridional PPM) matches a *bare* `D(q,axis)` and has a
+**scalar** velocity multiplied in from outside. That outside-multiplication is only correct
+for a *constant* wind — `w·∂q/∂z` and `∂(w·q)/∂z` coincide only then — and silently stops
+conserving tracer mass the moment the wind varies in space, as every real wind does. Worse,
+a bare-`D` stencil has no velocity argument at all (`upwind1_D_lon_interior` is literally
+`(f[i]−f[i−1])/dlon_deg`, a hard-coded backward difference), so it cannot switch donor when
+the wind reverses. Matching the *compound* `D(W·q,lev)` instead binds the wind as a rule
+parameter, which lets the operator take a real `[lon,lat,lev_nodes]` face-staggered field,
+difference the flux `w·q` at faces so mass telescopes for *any* wind, and see `sign(w)` at
+each face. The donor selection is written branch-free as `F = ½[w(q_L+q_R) − |w|(q_R−q_L)]`
+— identical to `ifelse(w>0, w·q_L, w·q_R)` but with no boolean subexpression and no
+removable singularity at `w=0`. Crucially, this compound match does **not** collide with the
+diffusion rule even though `D(kz·D(u,lev),lev)` is *also* a `D` of a two-factor product: by
+§9.6.1 a `where` shape constraint is satisfied only when the bound sub-AST is a **bare
+variable reference**, and "a compound sub-AST fails it", so binding `q := D(u,lev)` fails the
+constraint and the advection rule is filtered out at that node *before* priority selection
+ever runs. The separation is a structural guarantee of the shape-constraint semantics, not a
+priority race — verified by carrying both terms in one equation, where diffusion contributes
+exactly zero on a constant field and advection exactly `−∂w/∂z` (agreement 2.2e-16), with the
+column mass budget closing to 1.9e-16 relative, under one ulp. What this does *not* yet buy
+is **free-stream preservation**: with a divergent wind a constant tracer does not stay
+constant, because that requires consistency with continuity — the air-mass equation carried
+alongside, `Δp·q` prognostic, with the *same* discrete face mass-fluxes driving both), and
+the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs
