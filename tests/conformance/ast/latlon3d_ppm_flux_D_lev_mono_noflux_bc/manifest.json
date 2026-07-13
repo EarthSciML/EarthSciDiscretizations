@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_ppm_flux_D_lev_mono_noflux_bc",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/ppm_flux_D_lev_mono_noflux_bc -- the UPWIND-BIASED, MONOTONE, conservative flux-form vertical advection operator d/dz(w q), with the wind INSIDE the operator as a three-dimensional face-staggered matched operand and rigid no-flux walls at the surface and the model top. \n\nPins that the compound match D(W*q, wrt: lev) fires at priority 10 on the whole product (rather than a plain-D rule lowering a bare derivative), and that the SEVEN regions -- interior k in [4, NLEV-3], surface slabs k = 1,2,3, model-top slabs k = NLEV-2, NLEV-1, NLEV -- lower to the expected flux-difference structure, with each interior face flux written byte-identically in the two cells that share it (which is what makes the column mass sum telescope in floating point). Seven regions, not the pre-existing monotone chain's six, because upwind-biasing needs BOTH neighbours' limited parabola endpoints at every face and so widens the divergence support from six cells to seven. \n\nAlso pins the three structural properties that distinguish this operator from every pre-existing high-order vertical rule on this grid: (a) the velocity W is indexed as W[i,j,.] over [lon, lat, lev_nodes], a genuine 3-D face-staggered field, not the 1-D column profile the pre-existing ppm_D_lev_* chain reads from the free name w_edge; (b) each face flux carries `max` and `min` nodes against 0 -- the branch-free upwind donor selection F = max(w,0)*aR_L + min(w,0)*aL_R -- so the scheme picks its donor by the SIGN of the local face velocity and therefore survives a wind that reverses; and (c) the two operands of that selection are DIFFERENT expressions (aR_L from ppm_limit_right, aL_R from the new mirror ppmflux_limit_left), which is the whole content of upwind bias: under the UNLIMITED reconstruction they would be identical and the selection vacuous. The wall fluxes are LITERALLY ABSENT from the k=1 and k=NLEV slabs rather than formed and multiplied by zero, so W[i,j,1] and W[i,j,NLEV+1] must not appear anywhere in the golden. NLEV = 7 is the smallest grid exercising all seven regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lev_mono_noflux_bc.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dPpmFluxDLevMonoNofluxAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 5,
+    "NLEV": 7
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

@@ -1,0 +1,234 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_ppm_flux_D_lev_noflux_bc",
+    "description": "AST fixture for the unlimited centred CW84 flux-form vertical advection rule (wind as a matched operand).",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dPpmFluxDLevNofluxAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 6
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Advected tracer (cell means)."
+        },
+        "pe": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Level edges, stretched so the vertical mesh is genuinely non-uniform.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "dz": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses from the grid's lev_thickness template.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        "W": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Three-dimensional face-staggered vertical velocity; sign-reversing, vanishing at both walls.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [
+              "pe"
+            ],
+            "ranges": {
+              "iw": {
+                "from": "lon"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "sin",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    6.283185307179586,
+                    {
+                      "op": "index",
+                      "args": [
+                        "pe",
+                        "kw"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "W",
+                      "u"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
