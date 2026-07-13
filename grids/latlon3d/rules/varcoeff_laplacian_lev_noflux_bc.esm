@@ -1,0 +1,168 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_laplacian_lev_noflux_bc",
+    "description": "Conservative finite-volume VARIABLE-COEFFICIENT vertical diffusion d/dz(kz du/dz) on the latlon3d non-uniform vertical, with ZERO-FLUX (homogeneous Neumann) walls at BOTH the surface and the model top. This is the vertical turbulent-mixing / boundary-layer (Kzz) operator of a chemical transport model, for a tracer with no surface exchange. Three regions over the full [lon,lat] cross-section: interior k in [2, NLEV-1] (../stencils/varcoeff_D_lev_interior), the surface slab k = 1 (../stencils/varcoeff_D_lev_nf_k1) and the model-top slab k = NLEV (../stencils/varcoeff_D_lev_nf_kN); k = 1 is the ground because the grid's `pe` increases with the lev index. Requires NLEV >= 3. EXACT MASS CONSERVATION: every interior face flux is written byte-identically in the two cells that share it, and both wall fluxes are literally absent rather than formed and cancelled, so the column mass sum sum_k dz[k] D[i,j,k] telescopes to exactly 0 in floating point -- the operator cannot create or destroy tracer. Reads the free name `dz` (shape [lev], cell thicknesses; the grid's lev_thickness applied to the consumer's `pe`) and requires kz > 0. Second order (verified 2.00 in L2 and Linf; see tests/conformance/convergence/latlon3d_diffusion_vertical_noflux). For a depositing/emitting tracer use ./varcoeff_laplacian_lev_robin_surface_bc, which shares the interior and model-top slabs and differs ONLY at k = 1. MATCHING. The operator carries a coefficient, so a bare-D match cannot express it; the rule matches the CONSERVATIVE COMPOUND the consumer writes, D( kz * D(u, wrt:lev), wrt:lev ), at priority 10, so under esm-spec 9.6.3 outermost-first compound precedence it fires on the whole compound BEFORE any plain-D rule could lower the inner derivative. That is what lets this diffusion rule COMPOSE in one model with a plain-D vertical ADVECTION rule (e.g. ./ppm_D_lev_mono_noflux_bc, which matches D(f, wrt:lev)): the advective D(c,lev) and the diffusive D(kz*D(c,lev),lev) are structurally distinct patterns and each fires on its own term. Because matching is structural and NON-COMMUTATIVE the consumer MUST write the coefficient on the LEFT: kz * D(u, wrt:lev). A product spelled D(u,lev)*kz, or a compound coefficient expression, does not match (bind a compound coefficient to a declared [lon,lat,lev]-shaped observed first). Mirrors grids/cartesian_uniform_1d/rules/varcoeff_laplacian_zero_flux_bc, lifted to rank 3 on a non-uniform vertical axis.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:no-flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      },
+      {
+        "citation": "Patankar, S. V. (1980). Numerical Heat Transfer and Fluid Flow. Hemisphere. Chapter 4 (interface conductivity for the conservative control-volume discretisation of a variable-coefficient diffusion flux)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Section 8.4 (vertical turbulent diffusion of a tracer) and Section 20.1 (surface emission and dry-deposition flux boundary condition)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/varcoeff_D_lev_interior.esm"
+    },
+    {
+      "ref": "../stencils/varcoeff_D_lev_nf_k1.esm"
+    },
+    {
+      "ref": "../stencils/varcoeff_D_lev_nf_kN.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_laplacian_lev_noflux_bc": {
+      "params": [
+        "u",
+        "kz"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "kz",
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        },
+        "kz": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_D_lev_interior",
+            "bindings": {
+              "u": "u",
+              "kz": "kz"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_D_lev_nf_k1",
+            "bindings": {
+              "u": "u",
+              "kz": "kz"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_D_lev_nf_kN",
+            "bindings": {
+              "u": "u",
+              "kz": "kz"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

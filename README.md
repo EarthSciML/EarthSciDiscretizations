@@ -141,7 +141,9 @@ gates and the in-model LCC round-trip, and the ragged-MPAS divergence
 simulation (Julia; div∘curl exact to ~3e-14). This wave adds the full
 **first-derivative (gradient) family across all five grids** with second-derivative /
 Laplacian companions, plus a **variable-coefficient / nonlinear Laplacian** `∇·(k∇u)` and
-a **mixed `∂²/∂x∂y`** cross-derivative on cartesian, the **metric spherical
+a **mixed `∂²/∂x∂y`** cross-derivative on cartesian — lifted to rank 3 on a non-uniform
+vertical as the **`K_zz` boundary-layer mixing** operator with a **Robin surface-exchange**
+(dry-deposition + emission) ground — the **metric spherical
 (Laplace–Beltrami)** Laplacian on lat-lon, the **MPAS TRiSK edge-gradient and cell
 Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
 Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
@@ -196,7 +198,21 @@ tracer non-negative across sharp vertical gradients, where the unlimited scheme
 measurably goes negative, at the cost of dropping to ~2.4 (L2) / ~1.9 (Linf) order;
 both conserve mass to the bit — each verified by its own MMS convergence case, with
 the upwind trio composing on one `[lon,lat,lev]` field into a full 3-D advection
-driver), and the MPAS unstructured grid;
+driver; and, alongside transport, **vertical turbulent diffusion** `∂/∂z(K_zz ∂c/∂z)`
+— the boundary-layer mixing operator — as a conservative non-uniform flux-difference
+whose interior face fluxes telescope to machine-zero mass drift, offered with a
+zero-flux lid plus either a zero-flux ground or a **Robin surface-exchange** ground
+carrying dry deposition out and emission in. Because the diffusion rule matches the
+*compound* `D(kz·D(c,lev),lev)` at priority 10 while advection matches a plain
+`D(c,lev)`, the two fire on distinct terms and compose in one model — transport +
+mixing + surface exchange is the minimum viable chemical-transport column. The
+surface flux is closed by **resistance in series**, `(v_d·c₁ − E)·a/(a+v_d)` with
+`a = 2K₁/dz₁`, and that is not a refinement but a correctness requirement: applying
+the deposition velocity directly to the first-cell value — the obvious spelling — is
+*inconsistent*, committing an O(dz) flux error that the divergence then divides by
+`dz`, and it hides at coarse resolution (apparent order 1.98 at NLEV=32) before
+unravelling (1.52 at 64, 1.16 at 128). The series form holds a clean 2.00, so the
+surface exchange costs nothing in accuracy), and the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs

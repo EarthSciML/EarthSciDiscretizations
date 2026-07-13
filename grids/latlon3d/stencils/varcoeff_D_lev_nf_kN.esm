@@ -1,0 +1,158 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_D_lev_nf_kN",
+    "description": "MODEL-TOP slab (k = NLEV) of the variable-coefficient vertical diffusion operator with a ZERO-FLUX (homogeneous Neumann) lid: D u[i,j,NLEV] = -G_{NLEV-1/2} / dz[NLEV]. As at the surface, the domain-face flux G_{NLEV+1/2} through the lid is LITERALLY ABSENT from the expression rather than formed and cancelled, so no mass crosses the model top in exact OR floating-point arithmetic. k = NLEV is the model top because the grid's `pe` is monotone INCREASING with the lev index. A rigid lid is the right closure for tracer transport in a model whose top is well above the region of interest (the free-troposphere / stratosphere cap in a chemical transport model); it is shared by BOTH surface variants of this operator family (the no-flux ground ../rules/varcoeff_laplacian_lev_noflux_bc and the emission/deposition ground ../rules/varcoeff_laplacian_lev_robin_surface_bc), which differ ONLY in their k = 1 slab. Reads the free name `dz`. Second-order in solution error; see ./varcoeff_D_lev_nf_k1.esm on the boundary-cell truncation order.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Section 8.4 (vertical turbulent diffusion of a tracer) and Section 20.1 (surface emission and dry-deposition flux boundary condition)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./varcoeff_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_D_lev_nf_kN": {
+      "params": [
+        "u",
+        "kz"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "u",
+          "kz"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            "NLEV",
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "varcoeff_lev_face_flux",
+                  "bindings": {
+                    "q0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "q1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        "NLEV"
+                      ]
+                    },
+                    "k0": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "k1": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        "NLEV"
+                      ]
+                    },
+                    "dz0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dz1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "NLEV"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "NLEV"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
