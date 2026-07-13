@@ -179,11 +179,13 @@ production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
 rules; global and regional recipes), its 3-D `latlon3d` extension for
 GEOS-Chem-Classic-style tracer transport (importing the lat-lon horizontal
 geometry and adding a hybrid non-uniform vertical through the Design-B
-consumer-supplied edge-array pattern, with first-order-upwind and
-Colella–Woodward PPM zonal, zero-gradient meridional, and non-uniform
-zero-gradient vertical advection rules that compose — the upwind trio firing on
-one `[lon,lat,lev]` field — into a full 3-D advection driver, each verified by
-its own MMS convergence case), and the MPAS
+consumer-supplied edge-array pattern, with first-order-upwind, centered, and a
+full rank-3 Colella–Woodward **PPM** family per direction — periodic-wrap zonal,
+zero-gradient meridional, and a conservative **flux-form** vertical PPM whose
+velocity vanishes at the model top/surface for exact machine-precision mass
+conservation and verified 4th-order accuracy on the non-uniform mesh — each
+verified by its own MMS convergence case, with the upwind trio composing on one
+`[lon,lat,lev]` field into a full 3-D advection driver), and the MPAS
 unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
