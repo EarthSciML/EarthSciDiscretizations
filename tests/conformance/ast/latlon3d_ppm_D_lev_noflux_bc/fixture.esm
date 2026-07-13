@@ -1,0 +1,202 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_ppm_D_lev_noflux_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/latlon3d/rules/ppm_D_lev_noflux_bc, bound to NLON=8, NLAT=5, NLEV=6 at the import edge (NLEV>=5 so the flux-form PPM interior [3,NLEV-2] is non-empty). The match D(u,lev) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 five-region makearray -- interior conservative vertical flux-divergence (F_{k+1/2}-F_{k-1/2})/dz[k] over [1,8] x [1,5] x [3,4] with the CW84 non-uniform 4th-order reconstruction (ppm_lev_slope/ppm_lev_edge/ppm_lev_flux inlined), plus the four explicit no-flux boundary slab cells k=1,2,5,6 -- with zero apply_expression_template nodes, all metaparameters folded, and the consumer-supplied free names dz (widths) and w_edge (interface velocity) surviving. The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:latlon3d",
+      "rule:ppm_D_lev_noflux_bc"
+    ]
+  },
+  "models": {
+    "Latlon3dPpmDLevNofluxAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/ppm_D_lev_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 6
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Field over the lon x lat x lev index sets (cell averages)."
+        },
+        "pe": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 over node kn=1..NLEV+1 (pe[1]=0, pe[NLEV+1]=1). HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/w_edge[k] reads do not capture the operator's k.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "dz": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Cell thicknesses dz[k]=pe[k+1]-pe[k] via the grid's lev_thickness template: the grid's dz free name read by grids/latlon3d/rules/ppm_D_lev_noflux_bc. lev_thickness uses the grid-hygienic index gk, distinct from the operator's k.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        "w_edge": {
+          "type": "observed",
+          "units": "1/s",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Vertical velocity at cell interfaces, w_edge[kw]=sin(pi pe[kw]): the grid's w_edge free name read by the flux-form operator. VANISHES at the surface (pe[1]=0 -> sin 0 = 0) and model top (pe[NLEV+1]=1 -> sin pi = 0), so the wall fluxes are identically zero and the scheme is exactly mass-conserving. aggregates over `kw` (distinct from k).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "sin",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    3.141592653589793,
+                    {
+                      "op": "index",
+                      "args": [
+                        "pe",
+                        "kw"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
