@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "ppm_lev_edge",
-    "description": "Colella-Woodward (1984) eq. (1.6) non-uniform 4th-order interpolation of a cell-averaged field to the interface a_{j+1/2} between cells j and j+1, on an arbitrarily-spaced 1-D mesh. Given four consecutive cell averages (am,a0,ap,app) = (a_{j-1},a_j,a_{j+1},a_{j+2}) and their widths (dm,d0,dp,dpp), it returns a_{j+1/2} = a0 + d0/(d0+dp)(ap-a0) + (1/(dm+d0+dp+dpp))[ (2 dp d0/(d0+dp))((dm+d0)/(2d0+dp) - (dpp+dp)/(2dp+d0))(ap-a0) - d0(dm+d0)/(2d0+dp) da_{j+1} + dp(dp+dpp)/(2dp+d0) da_j ], where da_j, da_{j+1} are the CW84 eq.(1.7) non-uniform average slopes (../stencils/ppm_lev_slope) at cells j and j+1. On a uniform mesh this collapses exactly to the (7/12)(a0+ap) - (1/12)(am+app) edge of ppm_face_value, and on the quadratic-stretch vertical it is verified 4th-order accurate (interior). This is the UNLIMITED reconstruction (no monotonicity clip), so it keeps the full 4th-order convergence; the CW84 monotonicity limiter is a documented follow-on. Compositional middle piece: it composes two ppm_lev_slope calls and is itself composed by ppm_lev_flux (which scales the edge by the interface velocity). Grid-agnostic scalar algebra; match-less named template.",
+    "description": "Colella-Woodward (1984) eq. (1.6) non-uniform 4th-order interpolation of a cell-averaged field to the interface a_{j+1/2} between cells j and j+1, on an arbitrarily-spaced 1-D mesh, using the RAW (unlimited) eq. (1.7) average slopes. A thin wrapper: it supplies ../stencils/ppm_lev_slope at cells j and j+1 to the shared eq (1.6) combination ../stencils/ppm_lev_edge_core (which owns the algebra; the monotone sibling ../stencils/ppm_lev_edge_mono is the same wrapper with monotonized slopes, so the eq (1.6) body is written once). Given four consecutive cell averages (am,a0,ap,app) = (a_{j-1},a_j,a_{j+1},a_{j+2}) and their widths (dm,d0,dp,dpp) it returns a_{j+1/2}. On a uniform mesh this collapses exactly to the (7/12)(a0+ap) - (1/12)(am+app) edge of ppm_face_value, and on the quadratic-stretch vertical it is verified 4th-order accurate (interior). UNLIMITED: the raw slopes make this the maximally accurate reconstruction but it is NOT bounded -- the edge value can overshoot the range of the two cells it separates, which on a sharp vertical gradient (a plume, an inversion, the tropopause) produces new extrema and NEGATIVE tracer concentrations. Use the monotone chain (ppm_lev_edge_mono -> ppm_lev_flux_mono -> rules/ppm_D_lev_mono_noflux_bc) for production tracer transport, and this one where the field is smooth and the 4th order is wanted. Grid-agnostic scalar algebra; match-less named template; composed by ppm_lev_flux.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -20,83 +20,64 @@
     ]
   },
   "expression_template_imports": [
-    { "ref": "./ppm_lev_slope.esm" }
+    {
+      "ref": "./ppm_lev_slope.esm"
+    },
+    {
+      "ref": "./ppm_lev_edge_core.esm"
+    }
   ],
   "expression_templates": {
     "ppm_lev_edge": {
-      "params": ["am", "a0", "ap", "app", "dm", "d0", "dp", "dpp"],
-      "description": "CW84 eq.(1.6) non-uniform edge value a_{j+1/2}",
+      "params": [
+        "am",
+        "a0",
+        "ap",
+        "app",
+        "dm",
+        "d0",
+        "dp",
+        "dpp"
+      ],
+      "description": "CW84 eq.(1.6) non-uniform edge a_{j+1/2} using raw eq.(1.7) slopes",
       "body": {
-        "op": "+",
-        "args": [
-          {
-            "op": "+",
-            "args": [
-              "a0",
-              {
-                "op": "*",
-                "args": [
-                  { "op": "/", "args": ["d0", { "op": "+", "args": ["d0", "dp"] }] },
-                  { "op": "-", "args": ["ap", "a0"] }
-                ]
-              }
-            ]
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "ppm_lev_edge_core",
+        "bindings": {
+          "a0": "a0",
+          "ap": "ap",
+          "dm": "dm",
+          "d0": "d0",
+          "dp": "dp",
+          "dpp": "dpp",
+          "sj": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_lev_slope",
+            "bindings": {
+              "am": "am",
+              "a0": "a0",
+              "ap": "ap",
+              "dm": "dm",
+              "d0": "d0",
+              "dp": "dp"
+            }
           },
-          {
-            "op": "*",
-            "args": [
-              { "op": "/", "args": [1, { "op": "+", "args": ["dm", "d0", "dp", "dpp"] }] },
-              {
-                "op": "+",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      { "op": "/", "args": [{ "op": "*", "args": [2, "dp", "d0"] }, { "op": "+", "args": ["d0", "dp"] }] },
-                      {
-                        "op": "-",
-                        "args": [
-                          { "op": "/", "args": [{ "op": "+", "args": ["dm", "d0"] }, { "op": "+", "args": [{ "op": "*", "args": [2, "d0"] }, "dp"] }] },
-                          { "op": "/", "args": [{ "op": "+", "args": ["dpp", "dp"] }, { "op": "+", "args": [{ "op": "*", "args": [2, "dp"] }, "d0"] }] }
-                        ]
-                      },
-                      { "op": "-", "args": ["ap", "a0"] }
-                    ]
-                  },
-                  {
-                    "op": "*",
-                    "args": [
-                      {
-                        "op": "-",
-                        "args": [
-                          { "op": "/", "args": [{ "op": "*", "args": ["d0", { "op": "+", "args": ["dm", "d0"] }] }, { "op": "+", "args": [{ "op": "*", "args": [2, "d0"] }, "dp"] }] }
-                        ]
-                      },
-                      {
-                        "op": "apply_expression_template",
-                        "args": [],
-                        "name": "ppm_lev_slope",
-                        "bindings": { "am": "a0", "a0": "ap", "ap": "app", "dm": "d0", "d0": "dp", "dp": "dpp" }
-                      }
-                    ]
-                  },
-                  {
-                    "op": "*",
-                    "args": [
-                      { "op": "/", "args": [{ "op": "*", "args": ["dp", { "op": "+", "args": ["dp", "dpp"] }] }, { "op": "+", "args": [{ "op": "*", "args": [2, "dp"] }, "d0"] }] },
-                      {
-                        "op": "apply_expression_template",
-                        "args": [],
-                        "name": "ppm_lev_slope",
-                        "bindings": { "am": "am", "a0": "a0", "ap": "ap", "dm": "dm", "d0": "d0", "dp": "dp" }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
+          "sjp1": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_lev_slope",
+            "bindings": {
+              "am": "a0",
+              "a0": "ap",
+              "ap": "app",
+              "dm": "d0",
+              "d0": "dp",
+              "dp": "dpp"
+            }
           }
-        ]
+        }
       }
     }
   }
