@@ -1,0 +1,2812 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_transport_cwc_freestream",
+    "description": "CONSISTENCY WITH CONTINUITY (CWC) / FREE-STREAM PRESERVATION on latlon3d: the acid test that a CONSTANT tracer stays constant under a STRONGLY DIVERGENT vertical wind -- and stays constant BIT-FOR-BIT, not merely to within rounding. \n\nWHAT IS BROKEN WITHOUT IT. The flux-form advection rule grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc transports a MIXING RATIO with a prescribed wind: du/dt = -D(W*u, wrt: lev). Put u == 1 into that and the right-hand side is -dW/dz, which is nonzero wherever the wind diverges: a uniform tracer immediately develops structure out of nothing, growing linearly in time. That is not a discretization error -- refining the mesh does not remove it -- it is a MODELLING error. A mixing ratio is a ratio to an air mass, and the model was never carrying the air mass, so nothing in the equation knew that the air itself was being compressed and rarefied. \n\nTHE FIX: CARRY THE MASS. This driver evolves TWO states -- the air mass per unit area m (the pressure thickness dp) and the tracer mass mq -- and defines the mixing ratio as the OBSERVED q = mq / m: \n    d(m)/dt  = -D(M, wrt: lev)        [continuity;  face_flux_divergence_lev_noflux_bc] \n    d(mq)/dt = -D(M*q, wrt: lev)      [tracer;      upwind1_flux_D_lev_noflux_bc, unchanged] \nwith M the face air-mass flux on [lon, lat, lev_nodes]. Two rules, two terms, one model. The tracer rule is reused VERBATIM -- what changed is not the operator but what it is applied to. \n\nWHY q == 1 IS PRESERVED, AND WHY BITWISE. With q == 1 the donor-cell face flux collapses: F = 1/2[M(qL + qR) - |M|(qR - qL)] = 1/2[M*2 - |M|*0] = M. Every step of that collapse is EXACT in IEEE binary floating point -- 1 + 1 = 2 exactly, M*2 exactly (a power-of-two scaling), 1 - 1 = 0 exactly, |M|*0 = 0 exactly, 0.5*(2M) = M exactly -- so F is the mass flux to the LAST BIT, not to within an epsilon. The tracer divergence then differences the same faces, over the same thicknesses, with the same wall fluxes omitted (both rules delete the wall term rather than forming it and multiplying by zero), so it emits the identical double-precision numbers the continuity divergence emits. mq and m therefore see BITWISE IDENTICAL right-hand sides, every Runge-Kutta stage combines bitwise identical values with identical coefficients, and since mq(0) = m(0) by construction, mq == m bitwise for all time. q = mq/m is then the IEEE division of a double by itself: exactly 1.0. The measured max|q - 1| over the trajectory is 0.0. \n\nTHE WIND IS GENUINELY DIVERGENT. M = 4 z (1 - z)(1 - 2z) a(i) b(j) vanishes at BOTH walls -- no air flows through the ground or the lid, which is the only physically admissible choice and also what the no-flux closure assumes -- and reverses sign at z = 1/2, so air converges on the middle of the column from both directions and both branches of the donor-cell selection are exercised in every column. Its divergence 4 - 24z + 24z^2 is nonzero almost everywhere (it is +4 at the walls and -2 at mid-column), so the air mass m moves by up to ~30% of its initial value over the test window: the free-stream property is being tested against a wind that would visibly wreck the naive mixing-ratio scheme, not against a nearly-nondivergent one. The horizontal modulation a(i) b(j) is strictly positive, so it changes the magnitude of the divergence but not the sign pattern, and it means a stencil that mis-indexed M as a column profile would be caught rather than silently agreeing. \n\nTHE ASSERTIONS. The discrete continuity equation here is EXACT: the finite-volume divergence of the exact face fluxes IS the exact cell-mean divergence (fundamental theorem of calculus, no truncation error at any resolution), and the right-hand side is time-independent, so the semi-discrete solution is m(t) = mean(m0) - t * (M_{k+1} - M_k)/dz[k] in closed form. Both m AND mq are asserted against that same closed form at t = 0.1 with a tolerance of 1e-10 -- m because the continuity operator must be right, mq because free-stream preservation says the tracer mass must track the air mass. mq is additionally asserted against m(0) at t = 0 to pin q(0) = 1. (An inline test cannot assert q itself: esm-spec 6.6.5 assertions on an array OBSERVED are evaluated state-free, and q depends on the state. The bit-exactness of q is measured directly from the solver trajectory instead.) \n\nNLON and NLAT are pinned at both rule import edges; NLEV is left LIVE so the loader API can bind it per resolution and so this file's build-time ic/reference expressions can fold z from literals plus NLEV. A metaparameter pinned at an import edge is CONSUMED there and is not a live name in this document's runtime scope, which is why the horizontal extents appear as the literals 8 and 5 inside the runtime expressions for M.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:latlon3d",
+      "op:advection",
+      "op:div",
+      "form:flux",
+      "scheme:upwind",
+      "axes:lev",
+      "bc:no-flux",
+      "mms:free-stream"
+    ],
+    "references": [
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052.",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6."
+      }
+    ]
+  },
+  "models": {
+    "TransportCWCFreeStream": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5
+          }
+        },
+        {
+          "ref": "../grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5
+          }
+        }
+      ],
+      "variables": {
+        "m": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "AIR MASS per unit area in the cell (the pressure thickness dp); cell means. Initialised to the exact cell mean of m*(z) = 2 - z and then evolved by the continuity equation alone -- nothing forces it, so it genuinely moves under the divergent wind."
+        },
+        "mq": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "TRACER MASS in the cell; cell means. Initialised to mq(0) = m(0), i.e. a mixing ratio of exactly 1 everywhere. Free-stream preservation is the statement that it stays equal to m."
+        },
+        "pe": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Level-edge coordinate; pe[1] = 0 (ground), pe[NLEV+1] = 1 (model top). Stretched (0.6 s + 0.4 s^2, s = (kn-1)/NLEV) so the vertical mesh is genuinely non-uniform and cells are thin at the ground. Aggregate index `kn`, distinct from an operator's `k` (observeds are inlined non-hygienically).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "dz": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses dz[k] = pe[k+1] - pe[k], from the grid's lev_thickness template (aggregate index `gk`). Both the continuity divergence and the tracer flux divergence divide by THIS array, which is one of the three things the free-stream bit-exactness argument depends on (same faces, same thicknesses, same wall omissions).",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        "M": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Face AIR-MASS FLUX, positive upward, on the NLEV+1 face axis: M = 4 z (1 - z)(1 - 2z) a(i) b(j). Vanishes EXACTLY at both walls in floating point -- z(1-z) is 0.0 at z = 0 and at z = 1.0, unlike sin(2 pi z), whose model-top value is -2.4e-16 -- and reverses sign at z = 1/2, so the flow converges on mid-column and both donor branches run. Strongly divergent: div(M) = (4 - 24 z + 24 z^2) a(i) b(j), which is +4 a b at the walls and -2 a b at mid-column.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [
+              "pe"
+            ],
+            "ranges": {
+              "iw": {
+                "from": "lon"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    4.0,
+                    {
+                      "op": "index",
+                      "args": [
+                        "pe",
+                        "kw"
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "index",
+                          "args": [
+                            "pe",
+                            "kw"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        {
+                          "op": "*",
+                          "args": [
+                            2,
+                            {
+                              "op": "index",
+                              "args": [
+                                "pe",
+                                "kw"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "iw",
+                                        0.5
+                                      ]
+                                    },
+                                    8
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.2,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "jw",
+                                        1
+                                      ]
+                                    },
+                                    4
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "q": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "The MIXING RATIO q = mq / m: tracer mass divided by air mass, cell by cell. It is a BARE declared observed of shape [lon, lat, lev], which is exactly what the advection rule's esm-spec 9.6.1 `where` constraint demands -- a shape constraint is satisfied only by a bare variable reference, never by a compound sub-AST, so the equation MUST be written D(M*q) over a declared q rather than D(M*mq/m) inline. This single indirection is the whole of consistency with continuity: the tracer flux is built from the ratio to a mass the model actually carries. Aggregate indices `iq,jq,kq`, distinct from the operator's `i,j,k`.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iq",
+              "jq",
+              "kq"
+            ],
+            "args": [
+              "mq",
+              "m"
+            ],
+            "ranges": {
+              "iq": {
+                "from": "lon"
+              },
+              "jq": {
+                "from": "lat"
+              },
+              "kq": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mq",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "m",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "m"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                2,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.6,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                0.4,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.6,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                0.4,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "mq"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                2,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.6,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                0.4,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.6,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                0.4,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "m"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "M"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "mq"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "M",
+                      "q"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "freestream_q_stays_one",
+          "description": "Under a strongly divergent, sign-reversing air-mass flux, the tracer mass mq tracks the air mass m exactly, so the mixing ratio q = mq/m stays 1. Both states are asserted against the closed-form semi-discrete air mass m(t) = mean(m0) - t * div(M), which is exact because the finite-volume divergence of exact face fluxes carries no truncation error and the right-hand side is time-independent.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "mq",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "Linf_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    2,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "m",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-10
+              },
+              "reduce": "Linf_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        2,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        0.1,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        4.0,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                2,
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.6,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.4,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.25,
+                                            {
+                                              "op": "cos",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    6.283185307179586,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            0.5
+                                                          ]
+                                                        },
+                                                        8
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.2,
+                                            {
+                                              "op": "sin",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "j",
+                                                            1
+                                                          ]
+                                                        },
+                                                        4
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        4.0,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                2,
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.6,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.4,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.25,
+                                            {
+                                              "op": "cos",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    6.283185307179586,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            0.5
+                                                          ]
+                                                        },
+                                                        8
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.2,
+                                            {
+                                              "op": "sin",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "j",
+                                                            1
+                                                          ]
+                                                        },
+                                                        4
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "mq",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-10
+              },
+              "reduce": "Linf_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        2,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        0.1,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        4.0,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        {
+                                                          "op": "+",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            {
+                                                              "op": "+",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                2,
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.6,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.4,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                {
+                                                                  "op": "+",
+                                                                  "args": [
+                                                                    "k",
+                                                                    1
+                                                                  ]
+                                                                },
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.25,
+                                            {
+                                              "op": "cos",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    6.283185307179586,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            0.5
+                                                          ]
+                                                        },
+                                                        8
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.2,
+                                            {
+                                              "op": "sin",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "j",
+                                                            1
+                                                          ]
+                                                        },
+                                                        4
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        4.0,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "k",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "k",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "NLEV"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            1,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                2,
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.6,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "*",
+                                                      "args": [
+                                                        0.4,
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        },
+                                                        {
+                                                          "op": "/",
+                                                          "args": [
+                                                            {
+                                                              "op": "-",
+                                                              "args": [
+                                                                "k",
+                                                                1
+                                                              ]
+                                                            },
+                                                            "NLEV"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.25,
+                                            {
+                                              "op": "cos",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    6.283185307179586,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            0.5
+                                                          ]
+                                                        },
+                                                        8
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        1,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.2,
+                                            {
+                                              "op": "sin",
+                                              "args": [
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    3.141592653589793,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "j",
+                                                            1
+                                                          ]
+                                                        },
+                                                        4
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "k",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
