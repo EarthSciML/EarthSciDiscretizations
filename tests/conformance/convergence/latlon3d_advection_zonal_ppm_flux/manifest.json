@@ -1,0 +1,58 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_zonal_ppm_flux",
+  "description": "Spatial convergence of the UNLIMITED (centred) CW84 conservative flux-form ZONAL advection operator grids/latlon3d/rules/ppm_flux_D_lon_periodic, driven by problems/latlon3d_advection_zonal_ppm_flux. \n\nTHE ACCURACY CEILING OF THE ZONAL FLUX FAMILY. With no limiter the flux difference of the shared CW84 eq-(1.6) interface interpolant reduces algebraically to a 4th-order zonal derivative on the uniform lon mesh, and on this smooth MMS it attains it cleanly in both norms: median pairwise rate L2 3.99 (pairwise 3.99 / 4.00 / 3.86) and Linf 3.99 (3.99 / 3.99 / 2.48). The last Linf rung softens because by NLON = 256 the truncation error has fallen to 3e-8 and is approaching the integrator's own floor at reltol 1e-11 / abstol 1e-13 -- the spatial order is not degrading, the measurement is running out of room. The MEDIAN pairwise rate the gate uses is robust to that last rung, which is exactly why the gate takes a median; the ladder is not extended further because the next rung would be dominated by the temporal error. That is what makes this case the reference against which the MONOTONE sibling case latlon3d_advection_zonal_ppm_flux_mono is measured: the two differ ONLY in the rule they import, so the gap between the two measured orders is attributable to the eq (1.10) limiter alone. This operator is NOT upwind-biased and cannot be -- under the unlimited reconstruction the two cells straddling a face agree exactly at it, so there is no donor to choose -- and it OVERSHOOTS at a sharp gradient. It measures a ceiling; it is not the operator to run. \n\nFORCED-STEADY (TRUNCATION) IDIOM, on a MMS that is BIT-FOR-BIT the donor-cell driver's. q*(lambda) = 2 + sin(lambda) is an exact steady state of the forced equation (the state is seeded with its exact CELL MEAN, and src is the exact flux divergence -- for a finite-volume cell simply the difference of the exact face fluxes times the exact spherical weight), so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. Because latlon3d_advection_zonal_upwind_flux, latlon3d_advection_zonal_ppm_flux and latlon3d_advection_zonal_ppm_flux_mono differ ONLY in the rule they import, the three measured orders are directly comparable and every difference between them is a property of the OPERATOR alone. \n\nTHE SWEEP REFINES NLON ONLY, AND THAT IS THE POINT. NLAT = 5 and NLEV = 4 are pinned at the problem's rule-import edge. The polar metric weights are therefore EXERCISED but not REFINED: at NLAT = 5 the half-polar cap rows carry dphi_lat/dS_lat ~ 5.2 against ~1.0 in the tropics, so the cap rows dominate the Linf norm at every rung -- but because dphi never shrinks, the lat-lon coordinate singularity that stalls the MERIDIONAL operator's pointwise Linf under refinement cannot contaminate the zonal order. What is left is a clean zonal check. The ladder starts at 32 (the same rung the donor-cell zonal sweep starts at), well clear of the NLON >= 7 the seven-column monotone tiling needs. \n\nWHAT THIS GUARDS. The wind U = U0 (0.5 + cos lambda) a(j) b(k) is a declared THREE-DIMENSIONAL face-staggered field on the lon_nodes axis that CHANGES SIGN (westward on the 120-degree arc around lambda = 180), so both branches of the upwind donor selection fire in every row, and the a(j) b(k) modulation means a stencil that mis-indexed U as a column profile would be caught rather than silently agreeing. The rule enforces the periodic wrap ITSELF (cell NLON's east face reuses U[1], never U[NLON+1]), which makes sum_i D exactly 0.0; that is verified out-of-band rather than here, because this manifest measures ORDER, not conservation.",
+  "problem": "../../../../problems/latlon3d_advection_zonal_ppm_flux.esm",
+  "model": "ZonalAdvectionPPMFlux3d",
+  "grid": "latlon3d",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lon_periodic.esm",
+  "resolutions": [
+    {
+      "n": 32,
+      "bindings": {
+        "NLON": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLON": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLON": 128
+      }
+    },
+    {
+      "n": 256,
+      "bindings": {
+        "NLON": 256
+      }
+    }
+  ],
+  "assert_time": 0.1,
+  "expected_order": 4.0,
+  "order_tolerance": 0.15,
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "integrator": {
+    "algorithm": "Tsit5",
+    "reltol": 1e-11,
+    "abstol": 1e-13
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}
