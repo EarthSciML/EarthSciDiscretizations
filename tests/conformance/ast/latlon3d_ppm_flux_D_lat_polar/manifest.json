@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_ppm_flux_D_lat_polar",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/ppm_flux_D_lat_polar.esm. Pins that every region of the tiling lowers to the spherical flux divergence ( F_{j+1} coslat_e[j+1] - F_j coslat_e[j] ) / dS_lat[j] with the CW84 face reconstruction supplied by an axis-neutral atom that is REUSED, not cloned -- its `lev` name notwithstanding, its body is pure scalar algebra over cell values, cell WIDTHS and one face velocity, and it is here fed latitude quantities. \n\nFIVE REGIONS: interior j in [3, NLAT-2], south cap rows j = 1, 2 and north cap rows j = NLAT-1, NLAT. Each face flux is F = v * (the SHARED CW84 eq-(1.6) interpolant of the four rows straddling the face) -- ../stencils/ppm_lev_flux, with NO limiter and NO branch on the sign of v. The golden pins that the face value is a SINGLE shared expression (not a donor selection between two one-sided ones), which is the structural reason the support is five rows here and seven in the limited sibling. \n\nTHE CENTRAL CLAIM THE GOLDEN PINS: THE POLE-WALL FLUXES ARE LITERALLY ABSENT. Neither V[i,1,k] nor V[i,NLAT+1,k] may appear anywhere in the golden, and the two cap rows (j = 1 and j = NLAT) must carry a SINGLE weighted face flux -- not a difference of two, and not a difference in which one term is multiplied by a pole face length. That absence is the whole polar closure: cos(-/+pi/2) is 6.1e-17 in IEEE, NOT zero, so an operator that FORMED the wall flux and multiplied it by the pole face length would leak mass across the pole and would break the exact telescoping of the meridional budget. The north cap is spelled as a UNARY MINUS on its single southern face for exactly this reason. \n\nTHE FIXTURE ALSO PINS THE RULE-SEPARATION CLAIM. The compound match D(V*q, wrt: lat) at priority 10 sits on the same axis as the pre-existing plain-D lat rules, so the fixture imports BOTH this rule AND central_D_lat_zero_grad_bc, declares BOTH a face-staggered wind V over [lon, lat_nodes, lev] and a cell-centred tracer u over [lon, lat, lev], and writes BOTH derivatives into one right-hand side: du/dt = -D(V*u, wrt: lat) - D(u, wrt: lat). The golden shows the product lowered by the flux rule (esm-spec 9.6.3 outermost-first: the compound fires on the whole product before any inner derivative can be lowered) and the bare derivative lowered by the centred rule (the 9.6.1 shape constraint is satisfied only by a bare variable reference, so the flux rule cannot capture the cell-centred u and the centred rule cannot capture the product). \n\nAND IT PINS THE AGGREGATE-INDEX HYGIENE THE WHOLE FAMILY DEPENDS ON. The fixture declares phie = lat_edge() over [lat_nodes] and derives all FOUR geometry observeds from it -- coslat_e (coslat_edge, index gjc), dS_lat (latcell_area, gja) and dphi_lat (latcell_dphi, gjd) -- whose producer templates use FOUR DISTINCT aggregate indices for exactly this reason. The operator's own offset gathers (coslat_e[j+1], and the widths at j-3 .. j+3) must survive non-hygienic inlining with their offsets INTACT. A colliding index name silently degenerates an offset gather to a same-index one and returns exact zeros -- no error, no NaN -- which is precisely the failure this golden would catch.\n\nNLON = 8, NLAT = 7, NLEV = 5. NLAT = 7 is the SMALLEST global grid on which the 7-row support of the monotone rule leaves a non-empty interior ([4, NLAT-3] = [4, 4]), so the tiling is exercised with every one of its boundary slabs distinct and the interior present -- and the two PPM rules are gated on the SAME grid so their goldens are directly comparable.",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lat_polar.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dPpmFluxDLatPolarAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 7,
+    "NLEV": 5
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}
