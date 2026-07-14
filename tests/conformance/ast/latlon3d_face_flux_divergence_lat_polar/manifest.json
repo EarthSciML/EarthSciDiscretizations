@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_face_flux_divergence_lat_polar",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/face_flux_divergence_lat_polar -- the MERIDIONAL divergence of a FACE-STAGGERED flux, (1/(a cos phi)) d/dphi (cos(phi) My), which is the CONTINUITY half of the consistent-with-continuity (CWC) meridional transport pair (the tracer half being upwind1_flux_D_lat_polar). Pins that the three regions -- interior j in [2, NLAT-1], south cap j = 1, north cap j = NLAT -- lower to the telescoping weighted face difference ( My[i,j+1,k] coslat_e[j+1] - My[i,j,k] coslat_e[j] ) / dS_lat[j], with each interior face term written byte-identically in the two rows that share it (which is what makes the meridional mass sum telescope in floating point) and with the POLE TERMS LITERALLY ABSENT: My[i,1,k] and My[i,NLAT+1,k] must not appear anywhere in the golden. That absence is not cosmetic -- the pole face length cos(-/+pi/2) is 6.1e-17 in IEEE, NOT zero, so forming the wall term and multiplying it by that factor would leak mass -- and it is half of the reason a constant tracer is preserved BITWISE rather than merely to rounding, since the companion tracer slabs omit their pole fluxes in exactly the same positions. \n\nTHE GOLDEN IS THE BITWISE-AGREEMENT WITNESS. Compared side by side with the golden of latlon3d_upwind1_flux_D_lat_polar, it shows the two rules differencing the SAME faces, multiplying by the SAME coslat_e weights, dividing by the SAME dS_lat, and negating in the SAME position at the north cap. Free-stream preservation is exactly the claim that with q == 1 the donor-cell flux collapses BITWISE to My (1+1 = 2, My*2, 1-1 = 0, |My|*0 = 0, 0.5*(2My) = My are each exact in IEEE) and the two lowered expressions then evaluate to the identical doubles. Any divergence between the two goldens -- a different face pairing, a different metric factor, a pole term formed on one side and omitted on the other -- silently breaks that, and this pair of goldens is where it would show. \n\nTHE FIXTURE ALSO PINS THE RULE-SEPARATION CLAIM, which is the one property of this rule that could plausibly have been wrong. Its match pattern D(My, wrt: lat) is structurally IDENTICAL to that of the pre-existing plain-D lat rules on this grid (central_D_lat_zero_grad_bc, ppm_D_lat_zero_grad_bc); only the esm-spec 9.6.1 `where` shape constraint distinguishes them ([lon, lat_nodes, lev] here versus [lon, lat, lev] there). So the fixture imports BOTH this rule AND central_D_lat_zero_grad_bc, declares BOTH a face-staggered flux My and a cell-centred state m, and writes BOTH derivatives into one right-hand side: dm/dt = -D(My, wrt: lat) - D(m, wrt: lat). The golden shows each derivative lowered by its own rule, with no ambiguity error and no priority race. The two rules coexist because no declared field can satisfy both shape constraints. \n\nNLON = 8, NLAT = 6, NLEV = 5: the smallest global grid with a non-empty interior between the two half-polar caps.",
+  "rule": "../../../../grids/latlon3d/rules/face_flux_divergence_lat_polar.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dFaceFluxDivergenceLatPolarAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 6,
+    "NLEV": 5
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}
