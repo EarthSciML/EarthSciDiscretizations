@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_ppm_flux_D_lon_mono_periodic",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/ppm_flux_D_lon_mono_periodic -- the UPWIND-BIASED, MONOTONE, conservative flux-form ZONAL advection operator (1/(a cos phi)) d/dlambda (U q), with the velocity INSIDE the operator as a three-dimensional face-staggered matched operand and the PERIODIC WRAP INSIDE THE RULE. \n\nPins that the compound match D(U*q, wrt: lon) fires at priority 10 on the whole product (rather than a plain-D lon rule lowering a bare derivative), and that the SEVEN regions -- interior i in [4, NLON-3], west columns i = 1,2,3, east columns i = NLON-2, NLON-1, NLON -- lower to the expected flux-difference structure, with each face flux written byte-identically in the two columns that share it (which is what makes the zonal mass sum telescope in floating point). Seven regions, not the unlimited sibling's five, because upwind-biasing needs BOTH neighbours' limited parabola endpoints at every face and so widens the divergence support from five cells to seven. \n\nTHE ONE THING THIS GOLDEN EXISTS TO PIN: THE EAST FACE OF COLUMN NLON READS U[1], NOT U[NLON+1], AND ITS SIX CELLS ARE THE SAME SIX, IN THE SAME ORDER, THAT COLUMN 1 PASSES FOR ITS WEST FACE. Cell NLON's east face and cell 1's west face are THE SAME FACE of the closed zonal circle; the two columns must therefore write the identical expression -- q[NLON-2], q[NLON-1], q[NLON], q[1], q[2], q[3], velocity U[1] -- for the row sum to telescope to exactly 0.0. With NLON = 7 the face axis has 8 members and the index 8 MUST NOT APPEAR on U anywhere. Note that on a PERIODIC axis the boundary columns DROP NOTHING: unlike the vertical no-flux siblings, which structurally OMIT the wall flux, every wrap column here is a full-support seven-cell PPM whose out-of-range indices are ROTATED around the circle. \n\nALSO PINNED: (a) the velocity U is indexed as U[.,j,k] over [lon_nodes, lat, lev], a genuine 3-D face-staggered field, not the scalar angular velocity the pre-existing zonal rules multiply in from outside a bare derivative; (b) each face flux carries `max` and `min` nodes against 0 -- the branch-free upwind donor selection F = max(w,0)*aR_L + min(w,0)*aL_R -- so the scheme picks its donor by the SIGN of the local face velocity and survives a wind that reverses; (c) the two operands of that selection are DIFFERENT expressions (aR_L from ppm_limit_right, aL_R from ppmflux_limit_left), which is the whole content of upwind bias -- under the UNLIMITED reconstruction they would be identical and the selection vacuous; (d) the metric weight is dphi_lat[j] / ((dlon_deg pi/180) dS_lat[j]) with NO cos(phi) face-length factor, because on the zonal axis the metric's cos(phi) and the face length's cos(phi) cancel identically; and (e) all six cell-width slots of the face-flux atom are the SAME name dlon_deg, which is exact on the uniform lon axis because the CW84 reconstruction is degree-0 homogeneous in the widths (this is the one structural difference from the vertical siblings, which must pass six different dz[k]). \n\nNLON = 7 is the smallest grid exercising all seven regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lon_mono_periodic.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dPpmFluxDLonMonoPeriodicAst",
+  "bindings": {
+    "NLON": 7,
+    "NLAT": 5,
+    "NLEV": 3
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}
