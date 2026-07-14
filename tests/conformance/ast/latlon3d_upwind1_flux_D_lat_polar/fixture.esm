@@ -1,0 +1,254 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_upwind1_flux_D_lat_polar",
+    "description": "AST fixture for the flux-form first-order-upwind MERIDIONAL advection rule -- the tracer half of the meridional CWC transport pair. Carries BOTH a cell-centred tracer and a face-staggered meridional wind, and BOTH the compound flux-form rule and the plain-D lat rule, so the golden pins that the esm-spec 9.6.3 outermost-first precedence plus the 9.6.1 shape constraint route each derivative to its own rule with no ambiguity and no priority race.",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dUpwind1FluxDLatPolarAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/upwind1_flux_D_lat_polar.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 6,
+            "NLEV": 5
+          }
+        },
+        {
+          "ref": "../../../../grids/latlon3d/rules/central_D_lat_zero_grad_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 6,
+            "NLEV": 5
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Cell-centred tracer (cell means)."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": -90.0,
+          "description": "Southern domain edge; the grid's lat0_deg free name. -90 with dlat_deg = 36 and NLAT = 6 is the GLOBAL pole-to-pole recipe, whose end cells are the half-polar caps: phie = [-90, -72, -36, 0, 36, 72, 90]."
+        },
+        "dlat_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 36.0,
+          "description": "180/(NLAT-1) = 36 for NLAT = 6, spelled as a LITERAL: every metaparameter is pinned at the import edge of an AST fixture, so NLAT is consumed there and is not live in this document's runtime scope (esm-spec 9.7.6). Read by lat_edge and by central_D_lat_zero_grad_bc."
+        },
+        "phie": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        "coslat_e": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "coslat_edge",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "dS_lat": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "V": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ],
+          "description": "Face-staggered MERIDIONAL wind on the NLAT+1 face axis, positive northward: V = coslat_e[j] a(i) b(k), a wind that vanishes at the poles like cos(phi). It is the lat_nodes index-set NAME in this declared shape -- not its size -- that lets the rule's `where` constraint tell the face wind apart from the cell tracer u.",
+          "expression": {
+            "op": "aggregate",
+            "args": [
+              "coslat_e"
+            ],
+            "output_idx": [
+              "iv",
+              "jv",
+              "kv"
+            ],
+            "ranges": {
+              "iv": {
+                "from": "lon"
+              },
+              "jv": {
+                "from": "lat_nodes"
+              },
+              "kv": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "coslat_e",
+                    "jv"
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "iv",
+                                        0.5
+                                      ]
+                                    },
+                                    8
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kv",
+                                1
+                              ]
+                            },
+                            4
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "V",
+                          "u"
+                        ]
+                      }
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lat"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

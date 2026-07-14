@@ -1,0 +1,104 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "facediv_lat_cap_n",
+    "description": "NORTH POLAR CAP row (j = NLAT) of the meridional divergence of a face-staggered flux, closed with a ZERO-LENGTH POLE FACE (no flux through the pole): D[i,NLAT,k] = -My[i,NLAT,k] coslat_e[NLAT] / dS_lat[NLAT]. As at the south cap the pole-wall term My[i,NLAT+1,k] coslat_e[NLAT+1] is LITERALLY ABSENT rather than formed and multiplied by cos(+pi/2) = 6.1e-17, and the negation is applied to the single remaining weighted flux -- the identical position in which the companion tracer slab upwind1_D_lat_flux_cap_n negates its own single remaining weighted flux. My[i,NLAT+1,k] is never read. \n\nTOGETHER THE TWO CAPS MAKE THE SPHERE A CLOSED SURFACE. Summing dS_lat[j] D[i,j,k] over j = 1..NLAT telescopes to zero exactly: every interior face term My[i,j,k] coslat_e[j] appears once with each sign, written byte-identically in the two rows that share the face, and neither pole term is ever formed. The zonal ring of air mass is therefore conserved to the last bit, and a consumer's total-mass diagnostic is flat rather than drifting. This is the property that makes the operator usable as the continuity half of a CWC transport pair, and it is the meridional counterpart of the closed-column argument in facediv_lev_nf_kN. \n\nCONSISTENCY WITH CONTINUITY at the north cap follows the same argument as at the south: with q == 1 the donor-cell flux collapses bitwise to the mass flux, the same coslat_e[NLAT] multiplies it, the same dS_lat[NLAT] divides it, and the same unary negation wraps it -- so the tracer slab and this slab emit the identical double-precision number and mq tracks m exactly. \n\nGEOMETRY, FACE INDEXING AND FREE NAMES are exactly as in facediv_lat_interior and facediv_lat_cap_s: face j is the southern edge of cell j, so the north cap's only real face is its SOUTHERN one (face NLAT), My is positive northward, and coslat_e / dS_lat are the consumer's observeds built from the grid's coslat_edge and latcell_area templates.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052.",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "facediv_lat_cap_n": {
+      "params": [
+        "My"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "My"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": [
+            "NLAT",
+            "NLAT"
+          ],
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "My",
+                        "i",
+                        "NLAT",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "coslat_e",
+                        "NLAT"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dS_lat",
+                "NLAT"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
