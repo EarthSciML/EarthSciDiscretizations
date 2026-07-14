@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_face_flux_divergence_lon_periodic",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/face_flux_divergence_lon_periodic -- the ZONAL divergence of a FACE-STAGGERED flux, D(Mx, wrt: lon), which is the CONTINUITY half of the consistent-with-continuity (CWC) zonal transport pair (the tracer half being upwind1_flux_D_lon_periodic). Pins that the two regions -- interior i in [1, NLON-1] and the wrap column i = NLON -- lower to the telescoping face difference (Mx[i+1] - Mx[i]) times the metric weight dphi_lat[j] / ((dlon_deg pi/180) dS_lat[j]), and that AT i = NLON THE UPPER FACE IS Mx[1], NOT Mx[NLON+1]. With NLON = 6 the face axis has 7 members and the index 7 MUST NOT APPEAR on Mx anywhere in the golden: Mx[NLON+1] is never read, so the wrap -- and hence zonal mass conservation -- is a property of the operator that a consumer cannot break by supplying a non-periodic flux array. \n\nTHAT ABSENCE IS NOT COSMETIC: it is half of the reason a constant tracer is preserved BITWISE and not merely to rounding. The companion advection rule takes the east face of column NLON with the same wind element U[1], so at q == 1 -- where the donor flux F = 1/2[w(qL+qR) - |w|(qR-qL)] collapses to w through five exactly representable IEEE operations -- the two rules emit bit-identical numbers in every column, INCLUDING the wrap column, where a wrap present in one family and absent in the other would break free-stream preservation and nothing else would flag it. Measured out-of-band: D(U*1, wrt: lon) versus D(Mx, wrt: lon) at Mx := U differ by 0 ulp on every element. \n\nTHE FIXTURE ALSO PINS THE RULE-SEPARATION CLAIM, which is the one property of this rule that could plausibly have been wrong. Its match pattern D(Mx, wrt: lon) is structurally IDENTICAL to that of the pre-existing plain-D lon rules on this grid; only the esm-spec 9.6.1 `where` shape constraint distinguishes them ([lon_nodes, lat, lev] here versus [lon, lat, lev] there). So the fixture imports BOTH this rule AND upwind1_D_lon_periodic, declares BOTH a face-staggered flux Mx and a cell-centred state m, and writes BOTH derivatives into one right-hand side: dm/dt = -D(Mx, wrt: lon) - D(m, wrt: lon). The golden shows each derivative lowered by its own rule -- the face divergence to the weighted flux-difference form, the cell derivative to the backward upwind form -- with no ambiguity error and no priority race. The two rules coexist because no declared field can satisfy both shape constraints. \n\nNLON = 6 is the smallest grid exercising both regions with a non-empty interior and an unambiguous face axis.",
+  "rule": "../../../../grids/latlon3d/rules/face_flux_divergence_lon_periodic.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dFaceFluxDivergenceLonPeriodicAst",
+  "bindings": {
+    "NLON": 6,
+    "NLAT": 5,
+    "NLEV": 3
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

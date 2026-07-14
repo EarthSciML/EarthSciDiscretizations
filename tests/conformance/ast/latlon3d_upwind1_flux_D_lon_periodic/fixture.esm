@@ -1,0 +1,282 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_upwind1_flux_D_lon_periodic",
+    "description": "AST fixture for the flux-form first-order-upwind ZONAL advection rule, whose periodic wrap is enforced inside the rule. Carries the derived latitude geometry (phie -> dS_lat, dphi_lat) the rule reads as free names and a genuinely three-dimensional, sign-reversing face-staggered zonal wind on the lon_nodes axis.",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dUpwind1FluxDLonPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/upwind1_flux_D_lon_periodic.esm",
+          "bindings": {
+            "NLON": 6,
+            "NLAT": 5,
+            "NLEV": 3
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Advected tracer (cell means)."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": -90.0,
+          "description": "Southern domain edge: the grid's lat0_deg free name (global pole-to-pole recipe, so the lat_edge clamp yields half-polar caps)."
+        },
+        "dlat_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 45.0,
+          "description": "Meridional spacing 180/(NLAT-1) = 45 at NLAT = 5. A LITERAL, because NLAT is closed at the import edge and so is not a live name in this document's runtime scope."
+        },
+        "dlon_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 60.0,
+          "description": "Zonal spacing 360/NLON = 60 at NLON = 6 (the zonal circle closes). A LITERAL for the same metaparameter-scope reason as dlat_deg. The rule reads it to form dlam = dlon_deg pi/180."
+        },
+        "phie": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell edges in degrees, from the grid's lat_edge template. The single producer of the derived latitude geometry (aggregate index gje).",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        "dS_lat": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template (aggregate index gja). Read by both zonal flux rules as a free name.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "dphi_lat": {
+          "type": "observed",
+          "units": "rad",
+          "shape": [
+            "lat"
+          ],
+          "description": "Cell angular width in radians (half-width at the caps), from the grid's latcell_dphi template (aggregate index gjd). Read by both zonal flux rules as a free name.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_dphi",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "U": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ],
+          "description": "Three-dimensional face-staggered ZONAL wind on the NLON+1 face axis, positive eastward, evaluated at the cell west edges: U = (0.5 + cos(lame_i)) a(j) b(k). It REVERSES SIGN in longitude, so both branches of the donor-cell selection appear in the golden. Element U[NLON+1,j,k] is NEVER READ by the rule (the east face of cell NLON reuses U[1] -- that is the wrap), so the index 7 must not appear on U anywhere in the golden.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "iw": {
+                "from": "lon_nodes"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "iw",
+                                    1
+                                  ]
+                                },
+                                6
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "jw",
+                                        1
+                                      ]
+                                    },
+                                    4
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.2,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kw",
+                                1
+                              ]
+                            },
+                            3
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "U",
+                      "u"
+                    ]
+                  }
+                ],
+                "wrt": "lon"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
