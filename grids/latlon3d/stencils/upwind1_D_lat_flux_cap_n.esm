@@ -1,0 +1,140 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_lat_flux_cap_n",
+    "description": "NORTH POLAR CAP row (j = NLAT) of the flux-form first-order-upwind meridional advection operator, closed with a NO-FLUX pole: D[i,NLAT,k] = -F_NLAT coslat_e[NLAT] / dS_lat[NLAT]. As at the south cap the pole-wall flux F_{NLAT+1} is LITERALLY ABSENT rather than formed and multiplied by cos(+pi/2) = 6.1e-17, so the polar wall is exact in floating point and the meridional mass budget telescopes exactly; V[i,NLAT+1,k] is never read. The north cap carries the same accuracy trap as the south cap -- half-size area weight dS_lat[NLAT] ~ dphi^2/8 against an O(dphi/2) face, an O(1/dphi) amplification of the O(dphi) donor-cell error -- and is defused by the same condition: the PRODUCT V dq/dphi must vanish like cos(phi) at the pole, which fields that are smooth on the sphere supply automatically (either factor alone suffices). See upwind1_D_lat_flux_cap_s and the measured 2x2 in the rule upwind1_flux_D_lat_polar. Free names, face indexing and the reused donor-cell atom are exactly as in upwind1_D_lat_flux_interior.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:1",
+      "scheme:upwind",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux and its branch-free algebraic form F = 1/2[u(qL+qR) - |u|(qR-qL)])."
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./upwind_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "upwind1_D_lat_flux_cap_n": {
+      "params": [
+        "q",
+        "V"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "V"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": [
+            "NLAT",
+            "NLAT"
+          ],
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "upwind_lev_face_flux",
+                      "bindings": {
+                        "qL": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NLAT",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "qR": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            "NLAT",
+                            "k"
+                          ]
+                        },
+                        "w": {
+                          "op": "index",
+                          "args": [
+                            "V",
+                            "i",
+                            "NLAT",
+                            "k"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "coslat_e",
+                        "NLAT"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dS_lat",
+                "NLAT"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

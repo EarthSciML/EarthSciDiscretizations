@@ -1,0 +1,151 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "face_flux_divergence_lat_polar",
+    "description": "MERIDIONAL DIVERGENCE OF A FACE-STAGGERED FLUX on the latlon3d spherical grid, (1/(a cos phi)) d/dphi ( cos(phi) My ), with the pole treated as a ZERO-LENGTH FACE (no flux) at both ends. The consuming model writes its CONTINUITY equation as d(m)/dt = -D(My, wrt: lat), where m is the air mass per unit area in the cell (shape [lon, lat, lev]) and My is the face-staggered northward air-mass flux (shape [lon, lat_nodes, lev]). This is the exact MERIDIONAL TWIN of face_flux_divergence_lev_noflux_bc, and the continuity companion of the flux-form advection rule upwind1_flux_D_lat_polar. \n\nWHAT THE OPERATOR IS. In index form D[i,j,k] = ( My[i,j+1,k] coslat_e[j+1] - My[i,j,k] coslat_e[j] ) / dS_lat[j] on the interior rows, with the two POLE terms structurally omitted: D[i,1,k] = My[i,2,k] coslat_e[2] / dS_lat[1] and D[i,NLAT,k] = -My[i,NLAT,k] coslat_e[NLAT] / dS_lat[NLAT]. coslat_e is the FACE-LENGTH weight cos(phi_e) on the lat_nodes axis and dS_lat the EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]) on the lat axis; both are read as FREE NAMES from the consuming model's scope -- the same contract by which the vertical rules read dz -- and the consumer builds them from the grid templates: an observed phie = lat_edge() of shape [lat_nodes], then coslat_e = coslat_edge(phie) and dS_lat = latcell_area(phie). \n\nWHY IT EXISTS: CONSISTENCY WITH CONTINUITY. The flux-form advection rule upwind1_flux_D_lat_polar transports a MIXING RATIO with a PRESCRIBED wind: d(u)/dt = -D(V*u, wrt: lat). That is mass-conservative in u, but it is NOT free-stream preserving -- set u == 1 and the right-hand side becomes the discrete divergence of the wind itself, which is nonzero wherever the flow diverges, so a uniform tracer spontaneously develops structure out of nothing. The physical error is that a mixing ratio is a ratio to a mass the model never carried. The fix is to carry it: evolve the air mass m with THIS rule, evolve the tracer mass mq with the advection rule applied to the compound D(My*q, wrt: lat), and define the mixing ratio as the observed q = mq/m. A constant q is then preserved, because the tracer equation reduces term-by-term to the mass equation -- the property Jockel et al. (2001) call consistency with continuity, and the one Lin & Rood (1996) enforce by construction by having the tracer scheme reuse the continuity scheme's mass fluxes. \n\nAND IT IS PRESERVED BITWISE, NOT MERELY TO ROUNDING. With q == 1 the donor-cell face flux of the advection rule, F = 1/2[My(qL + qR) - |My|(qR - qL)], collapses to 1/2[My*2 - |My|*0] = My -- and every step of that collapse is EXACT in IEEE binary floating point (1+1 = 2 exactly, My*2 exactly, 1-1 = 0 exactly, |My|*0 = 0 exactly, 0.5*(2My) = My exactly). This rule and the advection rule then apply the IDENTICAL remaining operations in the IDENTICAL order -- the same face pairing, the same coslat_e face-length factors, the same dS_lat divisor, the same unary negation at the north cap -- so the tracer divergence emits, cell by cell, the identical double-precision numbers this rule emits, mq stays bit-for-bit equal to m through every Runge-Kutta stage, and q = mq/m evaluates to exactly 1.0 (IEEE division of a value by itself). Measured max|q - 1| over a trajectory under a strongly divergent meridional mass flux: 0.0, not 1e-16. \n\nTHE POLE OMISSION IS LOAD-BEARING FOR THAT EXACTNESS. Both rules DELETE the pole-wall terms rather than forming them and multiplying by the pole face length -- which on the global recipe is cos(-/+pi/2) = 6.1e-17 in IEEE double, NOT zero. Had one family formed its wall term and the other omitted it, the two would agree only to rounding, the meridional mass budget would leak, and a constant tracer would acquire structure at the caps. The same omission is what makes the operator EXACTLY conservative: sum_j dS_lat[j] D[i,j,k] telescopes to zero, since every interior face term appears once with each sign and neither pole term is ever formed. \n\nHOW IT IS SEPARATED FROM THE PLAIN-D LAT RULES, AND WHY THAT SEPARATION IS STRUCTURAL. The match pattern is a BARE derivative D(My, wrt: lat) -- structurally the same pattern as the pre-existing plain-D lat rules on this grid (central_D_lat_zero_grad_bc, ppm_D_lat_zero_grad_bc). What separates them is the esm-spec 9.6.1 `where` SHAPE CONSTRAINT, not priority: those rules constrain their operand to [lon, lat, lev] (cell centres) and this one to [lon, lat_nodes, lev] (the NLAT+1 face axis), and no declared field can satisfy both. It is likewise disjoint from the flux-form advection rule, whose pattern requires the operand to be a two-factor PRODUCT: D(My*q, wrt: lat) does not match a bare D(My, wrt: lat), and conversely this rule cannot capture D(My*q) because a shape constraint is satisfied only by a bare variable-reference string and never by a compound sub-AST. The three rules -- mass divergence, tracer flux divergence, cell-centred derivative -- coexist in a single model, each firing on its own term. \n\nEXACTNESS AND THE ORDER TAG. Read as a finite-volume operator on cell MEANS, this operator has NO truncation error: the integral of d/dphi(cos(phi) My) over the cell is exactly the difference of cos(phi) My at the two bounding edges (fundamental theorem of calculus), and dS_lat is the EXACT area weight, not a midpoint approximation. Given exact face fluxes the discrete continuity equation is therefore solved exactly at every resolution, INCLUDING at the polar caps -- the O(dphi/cos(phi)) accuracy story that governs the ADVECTION rule (see its ACCURACY AT THE POLES section) does not arise here, because there is no reconstruction to be inaccurate. The `order:1` tag is the conservative POINTWISE claim, following the convention of face_flux_divergence_lev_noflux_bc and grids/mpas/rules/fv_divergence_cell. Requires NLAT >= 3.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052. (Consistency with continuity: what breaks when the tracer scheme and the continuity scheme do not use the same mass fluxes.)",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the finite-volume divergence as a telescoping difference of face fluxes)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/facediv_lat_interior.esm"
+    },
+    {
+      "ref": "../stencils/facediv_lat_cap_s.esm"
+    },
+    {
+      "ref": "../stencils/facediv_lat_cap_n.esm"
+    }
+  ],
+  "expression_templates": {
+    "face_flux_divergence_lat_polar": {
+      "params": [
+        "My"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "My"
+        ],
+        "wrt": "lat"
+      },
+      "where": {
+        "My": {
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              "NLAT",
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lat_interior",
+            "bindings": {
+              "My": "My"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lat_cap_s",
+            "bindings": {
+              "My": "My"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lat_cap_n",
+            "bindings": {
+              "My": "My"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

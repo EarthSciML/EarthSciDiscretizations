@@ -1,0 +1,325 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_face_flux_divergence_lat_polar",
+    "description": "AST fixture for the meridional face-staggered flux divergence rule (the continuity half of the meridional CWC transport pair). Carries BOTH a cell-centred state and a face-staggered mass flux, and BOTH the plain-D lat rule and the face-divergence rule, so the golden pins that the esm-spec 9.6.1 shape constraint -- not priority -- is what routes each derivative to its own rule.",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dFaceFluxDivergenceLatPolarAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/face_flux_divergence_lat_polar.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 6,
+            "NLEV": 5
+          }
+        },
+        {
+          "ref": "../../../../grids/latlon3d/rules/central_D_lat_zero_grad_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 6,
+            "NLEV": 5
+          }
+        }
+      ],
+      "variables": {
+        "m": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Air mass per unit area (cell means)."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": -90.0,
+          "description": "Southern domain edge; the grid's lat0_deg free name. -90 with dlat_deg = 36 and NLAT = 6 is the GLOBAL pole-to-pole recipe, whose end cells are the half-polar caps: phie = [-90, -72, -36, 0, 36, 72, 90]."
+        },
+        "dlat_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 36.0,
+          "description": "180/(NLAT-1) = 36 for NLAT = 6, spelled as a LITERAL: every metaparameter is pinned at the import edge of an AST fixture, so NLAT is consumed there and is not live in this document's runtime scope (esm-spec 9.7.6). Read by lat_edge and by central_D_lat_zero_grad_bc."
+        },
+        "phie": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        "coslat_e": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "coslat_edge",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "dS_lat": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "My": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ],
+          "description": "Face MERIDIONAL air-mass flux on the NLAT+1 face axis, positive northward: My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) -- 5 cos^2(phi) sin(phi) written as a POLYNOMIAL IN sin so that it is EXACTLY 0.0 at both poles in IEEE (cos(+/-pi/2) is 6.1e-17, not zero). It reverses sign at the equator, so it is strongly divergent.",
+          "expression": {
+            "op": "aggregate",
+            "args": [
+              "phie"
+            ],
+            "output_idx": [
+              "im",
+              "jm",
+              "km"
+            ],
+            "ranges": {
+              "im": {
+                "from": "lon"
+              },
+              "jm": {
+                "from": "lat_nodes"
+              },
+              "km": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                5.0,
+                {
+                  "op": "-",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "phie",
+                                    "jm"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "phie",
+                                    "jm"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "phie",
+                            "jm"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "im",
+                                        0.5
+                                      ]
+                                    },
+                                    8
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "km",
+                                1
+                              ]
+                            },
+                            4
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "m"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "m"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "My"
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "m"
+                ],
+                "wrt": "lat"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

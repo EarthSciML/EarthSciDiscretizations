@@ -264,7 +264,49 @@ pre-existing vertical PPM rules, by contrast, hard-wire the donor to the lower c
 document the restriction (`upwind for w >= 0`); pointed at a downward wind they do not merely
 overshoot but **diverge** (measured min −6.2e+07 on a top-hat under subsidence), so
 `ppm_flux_D_lev_mono_noflux_bc` is the first vertical PPM here that survives real met, where
-descent is the normal state over much of the globe), and the MPAS unstructured grid;
+descent is the normal state over much of the globe.
+
+The **horizontal** half of that transport core follows, and it required a grid-contract change
+rather than just new rules: latitude was *point*-based with no cell edges at all, so conservative
+flux-form meridional transport could not be expressed. Putting edges halfway between the latitude
+points and clamping at ±90° turns the points into finite volumes and produces GEOS-Chem's
+**half-polar caps** for free — and gives each pole a **zero-length face**, so the polar no-flux
+condition becomes *geometry* rather than the zero-gradient hack it replaces. The pole terms are
+structurally *omitted* rather than multiplied by a zero weight, because `cos(π/2)` is `6.1e-17` in
+IEEE, not zero, and relying on the weight would leak. Zonally, the periodic wrap is enforced
+**inside the rule** — cell `NLON`'s east face reuses `U[1]`, so the flux difference telescopes to
+exactly zero and a consumer *cannot* break conservation by supplying a non-periodic wind; element
+`U[NLON+1]` is simply never read. The payoff is **3-D consistency with continuity**: six rules in
+one model — three bare-`D` face-flux divergences closing continuity, three compound flux-form
+rules carrying the tracer — hold `q ≡ 1` **to the last bit** (`max|q−1| = 0.0` exactly, `mq`
+bit-identical to `m`, zero differing ulps across 51 saved states) while up to **76 % of the air
+mass relocates**; the mixing-ratio form of the same transport, under the same wind, tears a
+constant tracer apart at `max|div M| ≈ 20`. That single assertion exercises the zonal wrap, the
+polar omission, the area weights and the vertical wall closure *simultaneously* — the cancellation
+is bitwise only if every pair of operators agrees exactly about which faces it reads and which
+weights it applies — and it is now gated in CI, which the CWC property had never been.
+
+One result there is worth stating plainly, because it bounds what a lat-lon grid can do. The
+truncation error scales as **O(Δφ / cos φ)**. So the scheme is cleanly first order at any *fixed*
+latitude (Linf for |lat|<60: orders 1.01/1.00/1.00) and first order in **mass-weighted** norms
+(1.02/1.01/1.01) — the area weight is `O(cos φ)` and cancels the `1/cos φ` *exactly* — but Linf
+over the **whole sphere can never converge**, because the row nearest the pole always sits at
+`cos φ ≈ Δφ` and so holds `O(1)` error at *every* resolution. This is the coordinate singularity,
+not a defect of the scheme, and two plausible fixes were measured and **do not work**: raising the
+reconstruction order does not help (2nd-order centred on both axes still decays, 0.72/0.53/0.34),
+and neither does a **true polar cap** — it fixes the cap *row* cleanly (order 0 → 1.00, because at
+the pole both `V` and `∂q/∂φ` are pure first harmonics in λ whose product has zero zonal mean) but
+rows 2, 3, … still carry `O(Δφ/cos φ)`. Nothing local to a method-of-lines operator fixes it; the
+operational remedy is a runtime polar filter, and the real fix is a quasi-uniform grid. Beware the
+seductive argument that fields smooth on the sphere are safe because a smooth vector field has
+`V → 0` at the poles and a smooth scalar has `∂q/∂φ → 0` there: **both premises hold only for
+latitude-only fields.** `q = cos φ cos λ` is merely the Cartesian *x*-coordinate — perfectly
+smooth — yet its pole derivative is `−cos λ ≠ 0`; and rotated solid-body rotation, the canonical
+smooth flow on a sphere, has `v = −u₀ sin λ sin α`, which does not vanish at the poles either. The
+spherical-component basis is singular where the vector field is not, and a latitude-only spike
+cannot see any of this.
+
+The library also ships the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs

@@ -1,0 +1,29 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "latlon3d_transport_cwc_3d",
+  "description": "Free-stream preservation (consistency with continuity) for the complete 3-D flux-form transport wave on latlon3d: the joint gate on SIX rules firing in one model -- three bare-D face-flux-divergence rules closing continuity (face_flux_divergence_lon_periodic, face_flux_divergence_lat_polar, face_flux_divergence_lev_noflux_bc) and three compound flux-form advection rules carrying the tracer (upwind1_flux_D_lon_periodic, upwind1_flux_D_lat_polar, upwind1_flux_D_lev_noflux_bc). The model carries the AIR MASS m alongside the TRACER MASS mq and derives q = mq/m, so that at q == 1 each compound divergence collapses BITWISE onto its bare-D twin -- the donor flux F = 0.5*(M*(1+1) - |M|*(1-1)) = M is IEEE-exact -- making dmq/dt equal dm/dt to the last bit, so mq tracks m forever and q stays EXACTLY 1 while the divergent wind relocates a large fraction of the air mass (measured: 29.4 % / 53.4 % / 76.1 % at (8,5,6) / (16,9,12) / (24,13,18), with max|q-1| = 0.0 exactly and mq bitwise identical to m -- zero differing ulps across 51 saved states at every resolution). The three winds are shape-disjoint (Mx over [lon_nodes,lat,lev], My over [lon,lat_nodes,lev], Mz over [lon,lat,lev_nodes]) against q over [lon,lat,lev], so the esm-spec 9.6.1 shape constraints -- which compare index-set NAMES, not sizes -- select each rule unambiguously with no priority games. WHY THIS ONE ASSERTION IS THE GATE FOR THE WHOLE WAVE: the cancellation is bitwise only if every pair of operators agrees exactly about which faces they read, which weights they apply and how they close at a wall. It therefore exercises the RULE-ENFORCED zonal wrap (cell NLON's east face reuses U[1], so a consumer cannot break conservation by supplying a non-periodic wind, and element NLON+1 is never read), the STRUCTURAL polar-face omission (the pole terms are absent rather than multiplied by a zero weight, because cos(pi/2) is 6.1e-17 in IEEE, not zero), the sin-difference area weights and cos(phi) face weights, and the vertical no-flux wall closure -- ALL SIMULTANEOUSLY. A single operator disagreeing about one face or one weight moves the error from 0.0 to O(10): that is the rate at which the mixing-ratio form of the same transport, the NEGATIVE CONTROL, destroys a constant tracer under this same wind (measured max|div M| = 7.6 / 13.9 / 19.8). The assertion tolerance is 1e-12 and the measured error is 0.0 exactly, so the gate has ~12 orders of headroom over the failure it is designed to catch.",
+  "problem": "../../../../problems/latlon3d_transport_cwc_3d.esm",
+  "model": "TransportCWC3d",
+  "tests": [
+    "freestream_q_stays_one_3d"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "scope_excluded": {
+    "python": "rank-3 makearray flux-form transport; not exercised by the python binding's simulator",
+    "rust": "rank-3 makearray flux-form transport; not exercised by the rust binding's simulator",
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "status": "active"
+}

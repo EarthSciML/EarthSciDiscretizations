@@ -1,0 +1,130 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "face_flux_divergence_lon_periodic",
+    "description": "ZONAL DIVERGENCE OF A FACE-STAGGERED FLUX, D(Mx, wrt: lon), on the latlon3d grid, with the PERIODIC WRAP ENFORCED INSIDE THE RULE. The consuming model writes its CONTINUITY equation as dm/dt = -D(Mx, wrt: lon) + ..., where m is the air mass per unit area in the cell (shape [lon, lat, lev]) and Mx the face air-mass flux (shape [lon_nodes, lat, lev], positive eastward). It is the CONTINUITY COMPANION of upwind1_flux_D_lon_periodic and the zonal sibling of face_flux_divergence_lev_noflux_bc. In index form D[i,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( Mx[i+1,j,k] - Mx[i,j,k] ), with dlam = dlon_deg pi/180 and the SAME wrap as the advection rule: at i = NLON the upper face value is Mx[1], NEVER Mx[NLON+1]. Assembled from two region stencils -- facediv_lon_interior (i = 1 .. NLON-1) and facediv_lon_wrap_iN -- and Mx[NLON+1,j,k] is consequently NEVER READ. \n\nWHY IT EXISTS: CONSISTENCY WITH CONTINUITY, AND WHY IT MUST BE EXACT. The flux-form advection rule transports a MIXING RATIO with a PRESCRIBED wind: du/dt = -D(U*u, wrt: lon). That is mass-conservative in u, but not free-stream preserving -- set u == 1 and the right-hand side becomes -dU/dlam (times the metric), which is nonzero wherever the wind converges, so a uniform tracer spontaneously develops structure out of nothing. The physical error is that a mixing ratio is a ratio to a mass the model never carried. The fix is to carry it: evolve the air mass m with THIS rule, the tracer mass mq with the advection rule applied to D(Mx*q, wrt: lon), and define q = mq/m. Then a constant q is preserved, because the tracer equation reduces term-by-term to the mass equation -- what Jockel et al. (2001) call consistency with continuity, and what Lin & Rood (1996) enforce by construction by having the tracer scheme reuse the continuity scheme's mass fluxes. \n\nAND IT IS PRESERVED BITWISE, NOT MERELY TO ROUNDING. With q == 1 the donor-cell face flux of the advection rule, F = 1/2[w(qL + qR) - |w|(qR - qL)], collapses to 1/2[Mx*2 - |Mx|*0] = Mx -- and every step of that collapse is EXACT in IEEE binary floating point (1+1 = 2 exactly, Mx*2 exactly, 1-1 = 0 exactly, |Mx|*0 = 0 exactly, 0.5*(2 Mx) = Mx exactly). Because this rule differences the SAME faces, WRAPS IN THE SAME PLACE, and multiplies by the SAME metric weight -- spelled as the same op tree with the same literals -- D(U*1, wrt: lon) is bit-for-bit D(Mx, wrt: lon) evaluated at Mx := U. MEASURED: 0 ulp on every element, i.e. the two arrays are `===` identical, not equal to 1e-16. Get the two rules out of step about ANY face, ANY weight or THE WRAP and free-stream preservation breaks silently. \n\nHOW IT IS SEPARATED FROM THE PLAIN-D LON RULES, AND WHY THAT SEPARATION IS STRUCTURAL. The match pattern is a BARE derivative D(Mx, wrt: lon) -- structurally the same pattern as the pre-existing plain-D lon rules on this grid (upwind1_D_lon_periodic, ppm_D_lon_periodic). What separates them is the esm-spec 9.6.1 `where` SHAPE CONSTRAINT, not priority: those rules constrain their operand to [lon, lat, lev] (cell centres) and this one to [lon_nodes, lat, lev] (the NLON+1 face axis), and no declared field can satisfy both. A model may therefore import this rule alongside any of them with no ambiguity and no priority race. It is likewise disjoint from the flux-form advection rule, whose pattern requires the operand to be a two-factor PRODUCT: D(Mx*q, wrt: lon) does not match a bare D(Mx, wrt: lon), and conversely this rule cannot capture D(Mx*q) because a shape constraint is satisfied only by a bare variable reference and never by a compound sub-AST. \n\nEXACTNESS AND THE ORDER TAG. Read as a finite-volume operator on cell MEANS, this operator has NO truncation error: the cell mean of the zonal flux divergence is the difference of the exact face fluxes times dphi_lat/(dlam dS_lat), identically. Given exact face fluxes the discrete continuity equation is solved exactly at every resolution, and the wrap makes the two boundary terms of the zonal sum cancel BIT-FOR-BIT (both are Mx[1]), so the row-summed air-mass budget is zero to machine precision -- measured max |sum_i D| = 5.0e-15 -- for any Mx, periodic or not. The `order:1` tag is the conservative POINTWISE claim, following the convention of grids/mpas/rules/fv_divergence_cell and the vertical sibling. Requires NLON >= 3 and a closing zonal circle (NLON dlon_deg = 360).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:periodic",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052. (Consistency with continuity: what breaks when the tracer scheme and the continuity scheme do not use the same mass fluxes.)",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux and its branch-free algebraic form F = 1/2[u(qL+qR) - |u|(qR-qL)])."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Spherical lat-lon metric factors for the zonal flux divergence.)",
+        "doi": "10.1016/S0021-9991(05)80016-6"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/facediv_lon_interior.esm"
+    },
+    {
+      "ref": "../stencils/facediv_lon_wrap_iN.esm"
+    }
+  ],
+  "expression_templates": {
+    "face_flux_divergence_lon_periodic": {
+      "params": [
+        "Mx"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "Mx"
+        ],
+        "wrt": "lon"
+      },
+      "where": {
+        "Mx": {
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              "NLON",
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lon_interior",
+            "bindings": {
+              "Mx": "Mx"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lon_wrap_iN",
+            "bindings": {
+              "Mx": "Mx"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

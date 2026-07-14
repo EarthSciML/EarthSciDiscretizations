@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_upwind1_flux_D_lon_periodic",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/upwind1_flux_D_lon_periodic -- the conservative FLUX-FORM first-order-upwind ZONAL advection operator (1/(a cos phi)) d/dlambda (U q), with the velocity INSIDE the operator and the PERIODIC WRAP INSIDE THE RULE. Pins that the compound match D(U*q, wrt: lon) fires at priority 10 on the whole product (rather than a plain-D lon rule lowering a bare derivative) and that the three regions -- interior i in [2, NLON-1], wrap column i = 1, wrap column i = NLON -- lower to the expected flux-difference structure, with each interior face flux written byte-identically in the two cells that share it (which is what makes the zonal mass sum telescope in floating point). \n\nTHE ONE THING THIS GOLDEN EXISTS TO PIN: THE EAST FACE OF COLUMN NLON READS U[1], NOT U[NLON+1]. Cell NLON's east face and cell 1's west face are the SAME face of the closed zonal circle, so the two columns must write the same donor expression -- same q values, same wind element -- for the row sum to telescope to exactly 0.0. The consequence is checkable by eye in the golden: with NLON = 6 the face axis has 7 members, and the index 7 MUST NOT APPEAR on U anywhere. Element U[NLON+1,j,k] is never read, so a consumer cannot break zonal conservation by supplying a non-periodic wind (measured out-of-band: setting it to 1e6 changes not one bit of the output). This is the same literal-absence discipline by which the vertical no-flux rules never read W at the wall faces. \n\nALSO PINNED: (a) the velocity U is indexed as U[.,j,k] over [lon_nodes, lat, lev], a genuine three-dimensional face-staggered field, not a scalar angular velocity multiplied in from outside a bare derivative (which is all the pre-existing zonal rules upwind1_D_lon_periodic / ppm_D_lon_periodic can accept, and is correct only for a CONSTANT wind); (b) each face flux carries an `abs` node -- the branch-free donor-cell selection F = 1/2[w(qL+qR) - |w|(qR-qL)] -- so the scheme picks its donor by the SIGN of the local face velocity and survives a wind that reverses; and (c) the metric weight is dphi_lat[j] / ((dlon_deg pi/180) dS_lat[j]) with NO cos(phi) face-length factor, because on the zonal axis the metric's cos(phi) and the face length's cos(phi) cancel identically. \n\nNLON = 6 is the smallest grid exercising all three regions with a non-empty interior and an unambiguous face axis.",
+  "rule": "../../../../grids/latlon3d/rules/upwind1_flux_D_lon_periodic.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dUpwind1FluxDLonPeriodicAst",
+  "bindings": {
+    "NLON": 6,
+    "NLAT": 5,
+    "NLEV": 3
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

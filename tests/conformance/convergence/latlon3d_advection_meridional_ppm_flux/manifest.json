@@ -1,0 +1,58 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_meridional_ppm_flux",
+  "description": "Spatial convergence of the UNLIMITED (centred) fourth-order CW84 flux-form MERIDIONAL advection operator grids/latlon3d/rules/ppm_flux_D_lat_polar, driven by problems/latlon3d_advection_meridional_ppm_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, identical to its siblings: q*(phi) = 2 + sin(phi) is an exact steady state of the forced equation, so the drift at t = 0.1 IS the truncation error. MEASURED medians: L2 1.989 (pairwise 1.979, 1.989, 1.994) and Linf 1.983 (pairwise 1.930, 1.983, 1.996). \n\nTHIS CASE IS ALSO THE MEASUREMENT THAT LOCALISES THE MONOTONE SIBLING'S ORDER. On the vertical, the unlimited case measures 3.99/3.94 against the monotone case's 2.49/1.98, and the entire gap is the limiter. On LATITUDE the two measure the SAME 2.0 -- their interior truncation-error fields are BIT-IDENTICAL on this smooth MMS, because the limiter never fires -- which proves the shortfall against the formal fourth order is NOT the limiter but the two phi-space floors set out below. \n\nn IS THE INTERVAL COUNT NLAT - 1, NOT NLAT. Latitude on this grid is a POINT axis (endpoint-inclusive, pole to pole), so the spacing the truncation error scales with is dphi = 180/(NLAT - 1) degrees. The ladder NLAT = 17/33/65/129 halves dphi exactly at each rung and n = 16/32/64/128 makes log(n_k/n_{k-1}) = log 2 exactly. NLON = 8 and NLEV = 4 are PINNED at the problem's rule-import edge; NLAT is the open metaparameter the loader API rebinds per rung (esm-spec 9.7.6 binding site 4), and dlat_deg = 180/(NLAT-1) plus the whole half-polar face geometry (phie, coslat_e, dS_lat, dphi_lat) follows each rebinding. The coarsest rung is NLAT = 17, comfortably above the NLAT >= 7 the monotone rule's seven-row support requires; the ladder is already ASYMPTOTIC at 16 (the pairwise orders below are flat across every rung, which is the actual test) and stops at 128 because the errors are still ~1e-6, far above the Tsit5 floor at reltol 1e-11. \n\nTHE MMS AND THE WIND ARE THE DONOR-CELL SIBLING'S, VERBATIM, so the three meridional flux cases measure the SAME manufactured solution against THREE face reconstructions and are directly comparable rung by rung. The wind VANISHES AT THE POLES like cos(phi) and REVERSES SIGN with height. It vanishes at the poles because this operator's truncation error scales as O(dphi / cos(phi)) FOR ANY RECONSTRUCTION ORDER -- raising the order does NOT restore pointwise polar convergence, which was measured and is documented in the rule grids/latlon3d/rules/upwind1_flux_D_lat_polar -- and this harness gates UNWEIGHTED L2/Linf. It reverses sign with height so that both branches of the donor selection are exercised in every column. See problems/latlon3d_advection_meridional_upwind_flux for the full argument. \n\nWHY expected_order IS 2.0 AND NOT 4.0 -- MEASURED, AND THE CAUSE IS LOCALISED. The CW84 reconstruction is formally FOURTH order, and the VERTICAL sibling case latlon3d_advection_vertical_ppm_flux measures a clean 3.99/3.94 with the SAME face atom. On LATITUDE it measures 2.0, and the shortfall is NOT the limiter (the monotone and unlimited cases measure the same 2.0, and their interior truncation-error fields are BIT-IDENTICAL on this smooth MMS -- the limiter never fires) and NOT a nonuniform-grid effect. It is TWO independent O(dphi^2) floors, both intrinsic to reconstructing in phi on a sphere: \n\n(1) THE MEASURE MISMATCH, in the interior. The conserved state is the AREA-weighted (i.e. sin-weighted) cell mean -- that is what the flux form advances -- while the parabola is fitted with the widths dphi_lat, i.e. it treats the state as a PHI-weighted mean. The two means differ by (dphi^2/12) q' tan(phi), an O(dphi^2) discrepancy the reconstruction cannot see. MEASURED DECISIVELY: feeding the SAME stencils dS_lat as the cell width instead of dphi_lat -- i.e. reconstructing in mu = sin(phi), where the state IS the exact cell mean -- drops the INTERIOR truncation error to MACHINE ZERO (8.0e-15 / 1.6e-14 / 4.7e-14 at NLAT = 17/33/65, against 4.2e-3 / 1.7e-3 / 4.8e-4 as shipped), because the manufactured q* = 2 + sin(phi) is LINEAR in mu and a PPM parabola reproduces a linear function exactly. That experiment simultaneously PROVES the stencil wiring is exactly right -- every window, offset, width and face velocity, and the exact telescoping -- since a single mis-indexed gather could not produce a 1e-14 residual. \n\n(2) THE POLAR CAP GHOST CLOSURE. The zero-gradient ghost rows behind each pole are a first-order-accurate closure, and the half-polar cap divides their reconstruction error by an O(dphi^2) area weight. This floor is O(dphi^2) and survives even the mu-width experiment above, where the interior is exact and the cap rows carry the ENTIRE remaining error (its global Linf IS its cap Linf, to the digit). Every scheme on this axis shows it: the donor-cell sibling's cap rows also converge at exactly 2.00. \n\nSo 2.0 is the honest, measured order of a phi-space PPM reconstruction on this grid, and it is REPORTED rather than dressed up. What the reconstruction does buy is the CONSTANT: at NLAT = 129 this scheme's L2 is 2.24e-6 against the donor cell's 4.92e-4 -- 219x better -- and the order is 2 rather than 1, so the gap widens with every refinement. Recovering the formal fourth order would mean reconstructing in mu (a one-line change at the PROBLEM's dphi_lat binding, with no change to any rule or stencil); it is the documented follow-on, deliberately not taken here because the brief for this operator is to replace the donor rule's FACE FLUX and nothing else. \n\norder_tolerance stays at the TIGHT 0.15 (not the 0.3 the vertical monotone case needed): both norms sit within 0.02 of 2.0 and their pairwise orders are flat across every rung.",
+  "problem": "../../../../problems/latlon3d_advection_meridional_ppm_flux.esm",
+  "model": "MeridionalAdvectionPPMFlux3d",
+  "grid": "latlon3d",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lat_polar.esm",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLAT": 17
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLAT": 33
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLAT": 65
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLAT": 129
+      }
+    }
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.15,
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "integrator": {
+    "algorithm": "Tsit5",
+    "reltol": 1e-11,
+    "abstol": 1e-13
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "golden": "golden/errors.json",
+  "status": "active"
+}

@@ -1,0 +1,58 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_meridional_upwind_flux",
+  "description": "Spatial convergence of the FLUX-FORM first-order-upwind MERIDIONAL advection operator grids/latlon3d/rules/upwind1_flux_D_lat_polar, driven by problems/latlon3d_advection_meridional_upwind_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, matching the vertical sibling latlon3d_advection_vertical_upwind_flux: q*(phi) = 2 + sin(phi) is an exact steady state of the forced equation (u is seeded with its exact cos-weighted cell mean and src is the exact flux divergence), so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. Donor-cell upwinding is first order, hence expected_order 1.0. \n\nn IS THE INTERVAL COUNT NLAT - 1, NOT NLAT. Latitude on this grid is a POINT axis (endpoint-inclusive, pole to pole), so the spacing that the truncation error actually scales with is dphi = 180/(NLAT - 1) degrees. The ladder NLAT = 17/33/65/129 halves dphi exactly at each rung, and n = 16/32/64/128 is what makes log(n_k/n_{k-1}) = log 2 exactly, so the reported order is the order in dphi and not a slightly inflated proxy for it. NLON = 8 and NLEV = 4 are PINNED at the problem's rule-import edge; NLAT is the open metaparameter that the loader API rebinds per rung (esm-spec 9.7.6 binding site 4), and dlat_deg = 180/(NLAT-1) plus the whole half-polar face geometry (phie, coslat_e, dS_lat) follows each rebinding. \n\nTHE WIND VANISHES AT THE POLES, AND THAT IS THE POINT OF THE CASE. This operator's truncation error scales as O(dphi / cos(phi)) -- see the ACCURACY AT THE POLES section of the rule, where the general-wind behaviour is measured in full. The consequence is sharp: at any FIXED latitude the scheme is cleanly first order and the AREA-WEIGHTED error is first order, but the UNWEIGHTED Linf over the WHOLE SPHERE cannot converge for a general 2-D wind, because the pole-adjacent row always sits at cos(phi) ~ dphi and so carries O(1) error at every resolution. That is the lat-lon coordinate singularity, and nothing local to the spatial operator fixes it. This harness gates EVERY norm in the manifest and its L2/Linf are UNWEIGHTED, so the gated MMS drives the operator with a wind whose meridional component vanishes at the poles like cos(phi) -- V = coslat_e[j] a(i) b(k) -- for which the 1/cos(phi) amplification is cancelled pointwise and the raw Linf converges at order 1 over the whole sphere. It is a legitimate verification case (it verifies the operator implements the intended discretization), it is the case a physical model actually runs (a wind smooth as a VECTOR on the sphere has v -> 0 at the poles), and it is NOT a gate loosened to accommodate a divergent norm: order_tolerance stays at 0.15. \n\nWHAT THIS GUARDS. The velocity is a declared THREE-DIMENSIONAL face-staggered field V[lon, lat_nodes, lev] that REVERSES SIGN with height (b(k) = cos(pi (k-1)/3) = +1, +1/2, -1/2, -1), so both branches of the donor-cell selection are exercised in every column, and the zonal modulation a(i) means a stencil that mis-indexed V as a latitude profile would be caught rather than silently agreeing. It is also the only convergence case in the library that exercises the grids/latlon half-polar face geometry (lat_edge -> coslat_edge / latcell_area) at all, and the only one whose operator divides by an O(dphi^2) polar-cap area weight.",
+  "problem": "../../../../problems/latlon3d_advection_meridional_upwind_flux.esm",
+  "model": "MeridionalAdvectionUpwindFlux3d",
+  "grid": "latlon3d",
+  "rule": "../../../../grids/latlon3d/rules/upwind1_flux_D_lat_polar.esm",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLAT": 17
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLAT": 33
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLAT": 65
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLAT": 129
+      }
+    }
+  ],
+  "assert_time": 0.1,
+  "expected_order": 1.0,
+  "order_tolerance": 0.15,
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "integrator": {
+    "algorithm": "Tsit5",
+    "reltol": 1e-11,
+    "abstol": 1e-13
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "golden": "golden/errors.json",
+  "status": "active"
+}

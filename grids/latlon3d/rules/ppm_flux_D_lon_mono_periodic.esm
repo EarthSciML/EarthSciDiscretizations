@@ -1,0 +1,302 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_flux_D_lon_mono_periodic",
+    "description": "UPWIND-BIASED, MONOTONE, conservative flux-form ZONAL advection D(U*q, wrt: lon) on the latlon3d grid, with the eastward wind as a MATCHED OPERAND and the PERIODIC WRAP ENFORCED INSIDE THE RULE. THE PRODUCTION ZONAL TRANSPORT OPERATOR ON THIS GRID: the only one that is simultaneously high-order, mass-conserving, bounded, and correct for a wind that reverses sign. A consuming model writes du/dt = -D(U*u, wrt: lon) + ... and this rule lowers the whole compound. It is the exact zonal analogue of rules/ppm_flux_D_lev_mono_noflux_bc, and closes the same gap on this axis that that rule closed on the vertical. \n\nWHAT IT COMBINES. rules/upwind1_flux_D_lon_periodic takes a genuine 3-D face-staggered wind and can SEE the sign of the face velocity, so it upwinds correctly through a reversal -- but its face value is the first-order DONOR CELL mean, O(dlam) and far too diffusive to carry a plume around the circle. rules/ppm_D_lon_periodic reconstructs a CW84 parabola -- but it matches a BARE D(f, wrt: lon), takes no velocity at all (a consumer multiplies a scalar angular velocity in from OUTSIDE, which is correct only for a CONSTANT wind), and its flux is the centred interface value with no branch on the sign of w. This rule is their join: the compound match and 3-D matched-operand wind of the former, the high-order limited reconstruction of the latter, and a genuine sign-of-w donor selection between them. \n\nTHE SCHEME. At each face PPM supplies TWO one-sided values: aR_L, the WEST cell's limited parabola at its own east endpoint, and aL_R, the EAST cell's limited parabola at its own west endpoint. The flux donates from the cell the flow comes FROM: F = U*aR_L for U > 0 and F = U*aL_R for U < 0, spelled branch-free as F = max(U,0)*aR_L + min(U,0)*aL_R by the AXIS-NEUTRAL atom ../stencils/ppmflux_lev_face_flux -- whose name says `lev` but whose body is pure scalar algebra with no axis knowledge, exactly like upwind_lev_face_flux, which the donor-cell zonal rule already reuses. It is REUSED HERE BY IMPORT, NOT CLONED. Both endpoints carry the full CW84 chain: eq (1.6) edge interpolation on eq (1.8) monotonized slopes, then the eq (1.10) parabola limiter. \n\nWHY UPWIND BIAS AND LIMITING ARE INSEPARABLE. For the UNLIMITED reconstruction the two one-sided face values are IDENTICAL -- cell i's parabola and cell i+1's parabola both pass exactly through the shared eq-(1.6) interpolant at the face between them -- so there is nothing for an upwind scheme to choose and 'unlimited upwind PPM' degenerates term-for-term onto the centred flux of the sibling rules/ppm_flux_D_lon_periodic. It is the eq (1.10) limiter, applied PER CELL, that pulls cell i's east endpoint and cell i+1's west endpoint apart, and only then does the donor choice carry information. \n\nCOST OF THE BIAS: SEVEN CELLS, SIX WRAP COLUMNS. Asking a face for BOTH neighbours' endpoints widens the divergence support to seven cells (i-3..i+3), so the interior is [4, NLON-3] and there are six wrap columns. Requires NLON >= 7 for a non-empty interior (the unlimited sibling needs only 5). \n\nBOUNDEDNESS AND ORDER. The eq (1.8) + eq (1.10) limiter pair keeps the reconstruction within the range of the neighbouring cell averages, so the scheme introduces no new extrema and keeps a chemical tracer NON-NEGATIVE across a sharp zonal gradient. The price is formal order: a limiter cannot distinguish a smooth extremum from an oscillation and clips it. MEASURED on the manufactured solution of problems/latlon3d_advection_zonal_ppm_flux_mono (NLON = 32/64/128/256, NLAT and NLEV pinned; median pairwise rate): L2 1.88, Linf 1.94 -- against the 3.99 / 3.99 the unlimited sibling measures on the IDENTICAL MMS, which localises the entire shortfall to the limiter. q*(lambda) = 2 + sin(lambda) has TWO smooth extrema on the circle and the limiter fires at both on every mesh however fine, which is the textbook second-order-at-smooth-extrema behaviour of the CW84 limiter -- the measured ~1.9 is that, not a wiring bug (the pairwise rates climb 1.78 / 1.88 / 1.90, approaching 2 from below). That is the deliberate trade: order you cannot realize on a real tracer field, exchanged for boundedness you always need. Colella-Sekora (2008) is the documented follow-on that would recover it. \n\nVERIFIED NUMERICALLY, NOT ASSERTED. Against an independently hand-coded CW84 chain the lowered operator agrees to 0.0e+00 (bitwise). Zonal conservation with the sign-reversing wind: max |sum_i D| = 5.8e-15, 6.4e-17 relative -- machine epsilon, as the bit-identical seam face requires. FREE-STREAM / CONSISTENCY WITH CONTINUITY: at q == 1 every CW84 correction term is proportional to a difference of equal values and is exactly 0.0 in IEEE, so the face value collapses to 1.0 exactly and F = w exactly; the resulting tendency is BITWISE IDENTICAL to the donor-cell rule's and to the pure mass divergence -weight*(U[i+1] - U[i]) (max|diff| = 0.0, and the tendency is genuinely non-zero -- it IS the mass divergence). Cyclic-shift equivariance, which is what actually pins all six wrap columns: max |shift(D) - D(shift)| = 0.0. \n\nCOMPOSITIONAL BODY: a makearray tiling [lon, lat, lev] with SEVEN regions, each a thin apply of a factored stencil -- the interior [4, NLON-3] uses ../stencils/ppmflux_D_lon_interior; the west columns i = 1,2,3 use ../stencils/ppmflux_D_lon_wrap_i{1,2,3}; the east columns i = NLON-2, NLON-1, NLON use ../stencils/ppmflux_D_lon_wrap_i{Nm2,Nm1,N}. Every region is a full-rank slab aggregate (output_idx [i, j, k]). \n\nTHE METRIC IS THE DONOR RULE'S, UNCHANGED. In index form D(U*q, lon)[i,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( F_{i+1} - F_i ) with dlam = dlon_deg pi/180: the discrete spherical zonal flux divergence (1/(a cos phi)) d/dlam (U q). The two free names dphi_lat (shape [lat], the cell's angular width in radians -- latcell_dphi applied to the consumer's phie, a HALF width at the caps) and dS_lat (shape [lat], the EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]) -- latcell_area applied to the same phie), plus the inherited dlon_deg, are read from the consuming model's scope: the same free-name contract by which the vertical rules read dz. NOTE WHAT IS ABSENT: no cos(phi) face-length factor, because on the zonal axis the cos(phi) of the metric and the cos(phi) of the zonal face length are the same number and cancel identically. The meridional rule needs coslat_e; this one does not. THIS RULE REPLACES ONLY THE FACE VALUE of rules/upwind1_flux_D_lon_periodic -- a limited/interpolated parabola in place of the donor cell mean -- and changes nothing else. \n\nTHE CELL WIDTHS ARE ALL ONE NUMBER, AND THAT IS EXACT, NOT AN APPROXIMATION. The lon axis is UNIFORM: at fixed j every cell in the row has the same physical width a cos(phi_j) dlam. The CW84 reconstruction is built from RATIOS of the widths and is degree-0 homogeneous in them, so scaling all of them by any positive constant leaves the face value bit-unchanged; the six width slots of the face-flux atom are therefore all fed the single scalar free name `dlon_deg` and the chain reduces to the exact uniform-mesh PPM. What matters is that they are IDENTICAL, which one name mentioned six times guarantees. (The VERTICAL siblings must pass six genuinely different dz[k] because the stretched vertical is non-uniform; that is the only structural difference between this family and theirs.) \n\nTHE PERIODIC WRAP IS ENFORCED BY THE RULE, SO CONSERVATION CANNOT BE BROKEN FROM OUTSIDE -- AND ON A PERIODIC AXIS THE BOUNDARY COLUMNS DROP NOTHING. They are not truncated one-sided stencils; they are FULL-SUPPORT PPM columns with ROTATED indices (cell 1's i-1 is NLON, its i-2 is NLON-1, its i-3 is NLON-2). Cell NLON's EAST face and cell 1's WEST face are THE SAME FACE of the closed circle, and the two wrap stencils build it from the SAME cells, the SAME widths and the SAME face velocity U[1] in the SAME argument order, so the two expressions lower to the same AST and evaluate to the SAME DOUBLE. sum_i (F_{i+1} - F_i) therefore telescopes to EXACTLY 0.0 in IEEE arithmetic, for ANY q and ANY U -- including a deliberately non-periodic one. ELEMENT U[NLON+1,j,k] IS NEVER READ (the east face of cell NLON reuses U[1]); whatever a consumer stores there is ignored. The lon_nodes axis is sized NLON+1 all the same, so a future REGIONAL (non-periodic) zonal rule has a genuine east boundary face to close against. This is the periodic-axis counterpart of the discipline by which the vertical no-flux rules STRUCTURALLY OMIT the wall flux rather than forming it and multiplying by zero. \n\nCOMPOUND MATCH, AND WHY IT CANNOT COLLIDE. The match is D(U*q, wrt: lon) at priority 10, so under the esm-spec 9.6.3 outermost-first compound precedence it fires on the whole product before any plain-D lon rule (upwind1_D_lon_periodic, ppm_D_lon_periodic) can lower an inner derivative. Matching is STRUCTURAL and NON-COMMUTATIVE: the wind MUST be written on the LEFT of the product. A model that also carries zonal diffusion contains D(kh*D(u, wrt: lon), wrt: lon), whose outer node is ALSO a D of a two-factor product; it is the esm-spec 9.6.1 `where` SHAPE CONSTRAINT, not priority, that separates them, because a shape constraint is satisfied only by a BARE VARIABLE-REFERENCE STRING and the diffusion term's inner factor is a compound D node. Advection and diffusion therefore compose in one equation, each firing on its own term. \n\nACCURACY SIBLINGS OVER ONE CONTRACT, SELECTED BY IMPORT. This rule matches the SAME compound D(U*q, wrt: lon) at the SAME priority 10 as rules/upwind1_flux_D_lon_periodic (first-order donor cell) and as the other member of this PPM pair. That is deliberate and is the established pattern on this grid (the vertical ppm_flux_D_lev_* pair does exactly the same): a consuming PROBLEM imports EXACTLY ONE of them, and there is no priority game to arbitrate between them and none is wanted. \n\nSemi-discrete (method-of-lines): the ODE integrator owns dt, so this is NOT the fully-discrete flux-form semi-Lagrangian TPCORE scheme of Lin & Rood (1996) that GEOS-Chem runs operationally (see the SCHEME CAVEAT in grids/latlon3d/grid.esm). The zonal circle must actually close (NLON dlon_deg = 360); on a regional mesh this rule is a modeling error.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:7",
+      "scheme:upwind",
+      "bc:periodic",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Colella, P., & Sekora, M. D. (2008). A limiter for PPM that preserves accuracy at smooth extrema. Journal of Computational Physics, 227(15), 7069-7076.",
+        "doi": "10.1016/j.jcp.2008.03.034"
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Spherical lat-lon metric factors for the zonal flux divergence.)",
+        "doi": "10.1016/S0021-9991(05)80016-6"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the donor-cell upwind flux; the upwind selection is the same whatever sub-grid reconstruction supplies the two one-sided face values)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/ppmflux_D_lon_interior.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_i1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_i2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_i3.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_iNm2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_iNm1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lon_wrap_iN.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppm_flux_D_lon_mono_periodic": {
+      "params": [
+        "q",
+        "U"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "U",
+              "q"
+            ]
+          }
+        ],
+        "wrt": "lon"
+      },
+      "where": {
+        "q": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        },
+        "U": {
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  3
+                ]
+              }
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              3,
+              3
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  2
+                ]
+              }
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLON",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ],
+          [
+            [
+              "NLON",
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_interior",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_i1",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_i2",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_i3",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_iNm2",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_iNm1",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lon_wrap_iN",
+            "bindings": {
+              "q": "q",
+              "U": "U"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
