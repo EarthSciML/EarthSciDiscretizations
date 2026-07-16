@@ -1,0 +1,28 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "latlon3d_transport_cwc_regional_inflow",
+  "description": "Consistency with continuity (CWC) / free-stream preservation for the REGIONAL LATERAL-INFLOW monotone PPM scheme on a limited-area latlon patch (lon [0,60], lat [20,60], no poles, no zonal wrap) at 12x9x4 -- the open-boundary counterpart of latlon3d_transport_cwc_3d_ppm. Four rules fire: two bare-D open-wall continuity divergences (lon, lat) and two compound monotone PPM flux-form inflow rules carrying the tracer with a prescribed Dirichlet halo qbc. At q == 1 with halo == 1 the reconstruction of the uniform halo is exactly uniform, every open wall flux collapses to F = M bitwise, and dev = mq - m stays 0. MEASURED (julia, Tsit5, reltol 1e-10 / abstol 1e-12): dev = 0.0 exactly at t=0 and t=0.1. The reference is the constant zero, so non-vacuity is established separately by problems/_falsifier_regional_inflow.esm (all four qbc halos x 1.000001), which injects a mismatched inflow concentration through the west/south walls and drives dev off zero, correctly failing -- re-run it if this problem changes. Only the t=0.1 assertion discriminates: dev is a state with dev(0)=0 by construction. See README.md.",
+  "problem": "../../../../problems/latlon3d_transport_cwc_regional_inflow.esm",
+  "model": "TransportCWCRegionalInflow",
+  "tests": [
+    "freestream_q_stays_one_regional_inflow"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "scope_excluded": {
+    "python": "rank-3 makearray flux-form transport; not exercised by the python binding's simulator",
+    "rust": "rank-3 makearray flux-form transport; not exercised by the rust binding's simulator",
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  }
+}
