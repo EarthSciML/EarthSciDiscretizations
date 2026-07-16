@@ -1,22 +1,21 @@
 {
   "esm": "0.8.0",
   "metadata": {
-    "name": "_falsifier_regional_inflow",
-    "description": "NON-VACUITY falsifier for latlon3d_transport_cwc_regional_inflow: identical except the four prescribed boundary halos qbc_{w,e,s,n} are 1.000001 instead of 1. With a mismatched inflow concentration the open-wall PPM flux no longer collapses to the mass flux, the tracer stops tracking the air mass at the inflow (west, south) walls, and dev drifts off zero -- so the gate correctly FAILS, proving the boundary condition is LIVE and not a silently-dead closure. Regenerated from the gate problem plus the single halo change; re-run if that problem changes.",
+    "name": "latlon3d_transport_per_tracer_inflow",
+    "description": "PER-TRACER LATERAL INFLOW on a limited-area latlon patch (12x9x4, lon [0,60], lat [20,60], no poles, no zonal wrap): two tracers ride the SAME air-mass flux through the SAME monotone PPM inflow rules on lon and lat, each carrying its OWN prescribed Dirichlet halo. Geometry, winds, metric and initial mass profile are taken verbatim from problems/latlon3d_transport_cwc_regional_inflow.esm, so the only new thing under test is halo independence. Tracer A's halo is 1.0 on all four walls and matches its uniform interior: every CW84 correction is a difference of equal values, exactly 0.0 in IEEE, each wall flux collapses to F = M bitwise, and devA = mqA - m stays EXACTLY 0. Tracer B is identical except its WEST halo is 2.0; the west wind blows into the domain, so that halo is donated and devB departs zero. This document is the regression gate for the halo being a rule PARAM rather than a free name: with a free name, one model scope holds exactly one `qbc_w` and the two tracers could not disagree. See also the sibling CWC case (all-halos-match) and _falsifier_regional_inflow.esm (all halos perturbed).",
     "license": "MIT",
     "tags": [
       "esd:problem",
       "grid:latlon3d",
-      "family:finite_volume",
-      "op:D",
-      "axes:lon,lat,lev",
-      "scheme:flux_form",
-      "property:free_stream",
-      "bc:inflow"
+      "op:advection",
+      "bc:inflow",
+      "form:flux",
+      "scheme:ppm",
+      "property:per_tracer_bc"
     ]
   },
   "models": {
-    "TransportCWCRegionalInflow": {
+    "TransportPerTracerInflow": {
       "expression_template_imports": [
         {
           "ref": "../grids/latlon3d/rules/face_flux_divergence_lon_open_bc.esm",
@@ -61,26 +60,6 @@
             "lev"
           ],
           "description": "Air mass per cell (a pressure thickness). Strictly positive."
-        },
-        "mq": {
-          "type": "state",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Tracer mass per cell. Initialised bitwise equal to m, so q == 1."
-        },
-        "dev": {
-          "type": "state",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Diagnostic deviation dev = mq - m, obtained by integrating the DIFFERENCE of the two right-hand sides from dev(0) = 0. This is the quantity the conformance assertion gates: at q == 1 the tracer divergence collapses bitwise onto the continuity divergence, so dev's own right-hand side is EXACTLY 0.0 in IEEE and dev never leaves zero. It exists because assertion `reference` expressions are build-time and cellwise and cannot read states or observeds, so q itself is not assertable and asserting mq would require re-spelling the entire discrete divergence by hand -- i.e. duplicating the operator inside its own test. Against a constant-zero reference there is nothing for the test to get wrong. dev feeds nothing back into m or mq."
         },
         "lon0_deg": {
           "type": "parameter",
@@ -420,7 +399,27 @@
             }
           }
         },
-        "q": {
+        "mqA": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Tracer A mass mixing-ratio density (mq = m*q), carried through the open walls against tracer A's OWN lateral halo."
+        },
+        "devA": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "CWC deviation for tracer A: dev = mqA - m. Zero iff tracer A's halo matches its uniform interior."
+        },
+        "qA": {
           "type": "observed",
           "units": "1",
           "shape": [
@@ -428,7 +427,7 @@
             "lat",
             "lev"
           ],
-          "description": "Mixing ratio mq/m. The quantity under test: it must stay EXACTLY 1.",
+          "description": "Tracer A mixing ratio, qA = mqA/m.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -437,7 +436,7 @@
               "kq"
             ],
             "args": [
-              "mq",
+              "mqA",
               "m"
             ],
             "ranges": {
@@ -457,7 +456,7 @@
                 {
                   "op": "index",
                   "args": [
-                    "mq",
+                    "mqA",
                     "iq",
                     "jq",
                     "kq"
@@ -476,111 +475,303 @@
             }
           }
         },
-        "qbc_w": {
+        "mqB": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Tracer B mass mixing-ratio density (mq = m*q), carried through the open walls against tracer B's OWN lateral halo."
+        },
+        "devB": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "CWC deviation for tracer B: dev = mqB - m. Zero iff tracer B's halo matches its uniform interior."
+        },
+        "qB": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Tracer B mixing ratio, qB = mqB/m.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iq",
+              "jq",
+              "kq"
+            ],
+            "args": [
+              "mqB",
+              "m"
+            ],
+            "ranges": {
+              "iq": {
+                "from": "lon"
+              },
+              "jq": {
+                "from": "lat"
+              },
+              "kq": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mqB",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "m",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "qbcA_w": {
           "type": "observed",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Prescribed tracer concentration in the WEST halo (Dirichlet inflow data), == 1 so the incoming tracer matches the interior and q stays 1. The falsifier perturbs this.",
+          "description": "Tracer A's inflow mixing ratio on the w wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
-              "gl",
-              "gl"
+              "ga",
+              "gb"
             ],
-            "args": [],
             "ranges": {
-              "gl": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
                 "from": "lev"
               }
             },
-            "expr": 1.000001
+            "args": [],
+            "expr": 1.0
           }
         },
-        "qbc_e": {
+        "qbcA_e": {
           "type": "observed",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Prescribed tracer concentration in the EAST halo, == 1.",
+          "description": "Tracer A's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
-              "gl",
-              "gl"
+              "ga",
+              "gb"
             ],
-            "args": [],
             "ranges": {
-              "gl": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
                 "from": "lev"
               }
             },
-            "expr": 1.000001
+            "args": [],
+            "expr": 1.0
           }
         },
-        "qbc_s": {
+        "qbcA_s": {
           "type": "observed",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Prescribed tracer concentration in the SOUTH halo, == 1.",
+          "description": "Tracer A's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
-              "gl",
-              "gl"
+              "ga",
+              "gb"
             ],
-            "args": [],
             "ranges": {
-              "gl": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
                 "from": "lev"
               }
             },
-            "expr": 1.000001
+            "args": [],
+            "expr": 1.0
           }
         },
-        "qbc_n": {
+        "qbcA_n": {
           "type": "observed",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Prescribed tracer concentration in the NORTH halo, == 1.",
+          "description": "Tracer A's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
-              "gl",
-              "gl"
+              "ga",
+              "gb"
             ],
-            "args": [],
             "ranges": {
-              "gl": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
                 "from": "lev"
               }
             },
-            "expr": 1.000001
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        "qbcB_w": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat",
+            "lev"
+          ],
+          "description": "Tracer B's inflow mixing ratio on the w wall = 2.0. DELIBERATELY MISMATCHED against the uniform interior (q=1): the west wind blows IN, so this halo is donated and drives devB off zero. This is the non-vacuity half.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 2.0
+          }
+        },
+        "qbcB_e": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat",
+            "lev"
+          ],
+          "description": "Tracer B's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        "qbcB_s": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lev"
+          ],
+          "description": "Tracer B's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        "qbcB_n": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lev"
+          ],
+          "description": "Tracer B's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
           }
         }
       },
       "tests": [
         {
-          "id": "falsifier_regional_inflow_dev_drifts",
-          "description": "MEASURED: on a mid-latitude regional patch with OPEN lateral walls carrying a prescribed boundary concentration qbc == 1, the mixing ratio q = mq/m stays EXACTLY 1 under a divergent air-mass flux with genuine inflow (west, south) and outflow (east, north). At q == 1 with the halo == 1 every CW84 slope is a difference of equal values and is exactly 0.0 in IEEE, the reconstruction is the constant 1 through the walls, and each open wall flux collapses to F = M bitwise, so the inflow PPM tracer divergence telescopes onto the open-wall continuity twin and dmq/dt equals dm/dt to the last bit. The reference is the CONSTANT ZERO, so 0.0 proves nothing alone -- non-vacuity is problems/_falsifier_regional_inflow.esm (all four qbc halos x 1.000001), which injects a mismatched boundary concentration through the inflow walls and drives dev off zero, correctly FAILING. Only the t>0 assertion discriminates: dev integrates from dev(0)=0.",
+          "id": "per_tracer_inflow_halos_are_independent",
+          "description": "Two tracers, one wind, one lon/lat monotone-PPM inflow rule, DIFFERENT west halos. Tracer A's halo (1.0) matches its uniform interior q==1: every CW84 correction is a difference of equal values, exactly 0.0 in IEEE, each open-wall flux collapses to F = M bitwise, and devA = mqA - m stays EXACTLY 0. Tracer B is identical except its WEST halo is 2.0; the west wind blows INTO the domain, so the mismatched halo is donated and devB departs zero, reaching Linf = 1.874264527785965 at t=0.1 (MEASURED: julia, Tsit5, reltol 1e-10 / abstol 1e-12). BOTH assertions are load-bearing. devA==0 pins that promoting the halo from a free name to a rule param left the scheme's free-stream property bitwise intact. devB's non-zero golden is the NON-VACUITY twin: it proves B's halo is actually READ, and read INDEPENDENTLY of A's — were the halo still a free name, one model scope would hold exactly one `qbc_w`, both tracers would resolve it, and devB would sit at 0.0 alongside devA, failing this assertion. A rule that silently ignored its halo operands would likewise pass devA and fail here.",
           "time_span": {
             "start": 0.0,
             "end": 0.1
           },
           "assertions": [
             {
-              "variable": "dev",
-              "time": 0.0,
+              "variable": "devA",
+              "time": 0.1,
               "expected": 0.0,
               "tolerance": {
                 "abs": 1e-12
@@ -609,11 +800,11 @@
               }
             },
             {
-              "variable": "dev",
+              "variable": "devB",
               "time": 0.1,
-              "expected": 0.0,
+              "expected": 1.874264527785965,
               "tolerance": {
-                "abs": 1e-12
+                "abs": 1e-09
               },
               "reduce": "Linf_error",
               "reference": {
@@ -746,7 +937,7 @@
           "lhs": {
             "op": "ic",
             "args": [
-              "mq"
+              "mqA"
             ]
           },
           "rhs": {
@@ -846,7 +1037,136 @@
           "lhs": {
             "op": "ic",
             "args": [
-              "dev"
+              "mqB"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": {
+              "op": "+",
+              "args": [
+                2.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.017453292519943295,
+                            {
+                              "op": "+",
+                              "args": [
+                                20.0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    5.0
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.1,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.017453292519943295,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                5.0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "devA"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "devB"
             ]
           },
           "rhs": {
@@ -908,7 +1228,7 @@
           "lhs": {
             "op": "D",
             "args": [
-              "mq"
+              "mqA"
             ],
             "wrt": "t"
           },
@@ -925,11 +1245,11 @@
                         "op": "*",
                         "args": [
                           "Mx",
-                          "q"
+                          "qA"
                         ]
                       },
-                      "qbc_w",
-                      "qbc_e"
+                      "qbcA_w",
+                      "qbcA_e"
                     ],
                     "wrt": "lon"
                   },
@@ -940,24 +1260,25 @@
                         "op": "*",
                         "args": [
                           "My",
-                          "q"
+                          "qA"
                         ]
                       },
-                      "qbc_s",
-                      "qbc_n"
+                      "qbcA_s",
+                      "qbcA_n"
                     ],
                     "wrt": "lat"
                   }
                 ]
               }
             ]
-          }
+          },
+          "_comment": "Tracer A: the halo travels as OPERANDS of the matched derivative (D(Mx*qA, qbcA_w, qbcA_e, wrt: lon)), so tracer A binds ITS OWN boundary field. Under the former free-name contract both tracers would have resolved the single model-scope `qbc_w`."
         },
         {
           "lhs": {
             "op": "D",
             "args": [
-              "dev"
+              "devA"
             ],
             "wrt": "t"
           },
@@ -977,11 +1298,11 @@
                             "op": "*",
                             "args": [
                               "Mx",
-                              "q"
+                              "qA"
                             ]
                           },
-                          "qbc_w",
-                          "qbc_e"
+                          "qbcA_w",
+                          "qbcA_e"
                         ],
                         "wrt": "lon"
                       },
@@ -992,11 +1313,11 @@
                             "op": "*",
                             "args": [
                               "My",
-                              "q"
+                              "qA"
                             ]
                           },
-                          "qbc_s",
-                          "qbc_n"
+                          "qbcA_s",
+                          "qbcA_n"
                         ],
                         "wrt": "lat"
                       }
@@ -1024,7 +1345,132 @@
                 ]
               }
             ]
-          }
+          },
+          "_comment": "Tracer A: the halo travels as OPERANDS of the matched derivative (D(Mx*qA, qbcA_w, qbcA_e, wrt: lon)), so tracer A binds ITS OWN boundary field. Under the former free-name contract both tracers would have resolved the single model-scope `qbc_w`."
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "mqB"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "Mx",
+                          "qB"
+                        ]
+                      },
+                      "qbcB_w",
+                      "qbcB_e"
+                    ],
+                    "wrt": "lon"
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "My",
+                          "qB"
+                        ]
+                      },
+                      "qbcB_s",
+                      "qbcB_n"
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              }
+            ]
+          },
+          "_comment": "Tracer B: the halo travels as OPERANDS of the matched derivative (D(Mx*qB, qbcB_w, qbcB_e, wrt: lon)), so tracer B binds ITS OWN boundary field. Under the former free-name contract both tracers would have resolved the single model-scope `qbc_w`."
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "devB"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              "Mx",
+                              "qB"
+                            ]
+                          },
+                          "qbcB_w",
+                          "qbcB_e"
+                        ],
+                        "wrt": "lon"
+                      },
+                      {
+                        "op": "D",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              "My",
+                              "qB"
+                            ]
+                          },
+                          "qbcB_s",
+                          "qbcB_n"
+                        ],
+                        "wrt": "lat"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "Mx"
+                        ],
+                        "wrt": "lon"
+                      },
+                      {
+                        "op": "D",
+                        "args": [
+                          "My"
+                        ],
+                        "wrt": "lat"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "_comment": "Tracer B: the halo travels as OPERANDS of the matched derivative (D(Mx*qB, qbcB_w, qbcB_e, wrt: lon)), so tracer B binds ITS OWN boundary field. Under the former free-name contract both tracers would have resolved the single model-scope `qbc_w`."
         }
       ]
     }

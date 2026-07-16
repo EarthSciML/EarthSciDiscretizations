@@ -1,0 +1,28 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "latlon3d_transport_per_tracer_inflow",
+  "description": "PER-TRACER lateral inflow for the regional monotone PPM stack on a limited-area latlon patch (12x9x4, lon [0,60], lat [20,60], no poles, no zonal wrap). Two tracers ride the SAME air-mass flux through the SAME lon/lat inflow rules, each binding its OWN prescribed Dirichlet halo to the rules' qbc_{w,e,s,n} PARAMS. Tracer A's halo is 1.0 on all four walls and matches its uniform interior q==1, so every CW84 correction is a difference of equal values, each open-wall flux collapses to F = M bitwise, and devA = mqA - m stays EXACTLY 0. Tracer B is identical except its WEST halo is 2.0; the west wind blows INTO the domain, so the mismatched halo is donated and devB departs zero. MEASURED (julia, Tsit5, reltol 1e-10 / abstol 1e-12): devA Linf = 0.0 exactly at t=0.1; devB Linf = 1.8742645277859651 at t=0.1. BOTH assertions are load-bearing and they fail in opposite directions. devA==0 pins that carrying the halo as a rule param left the scheme's free-stream property bitwise intact -- it is the same invariant latlon3d_transport_cwc_regional_inflow gates, re-checked in the two-tracer setting. devB's non-zero golden is the NON-VACUITY twin: it proves B's halo is actually READ and read INDEPENDENTLY of A's. This is the regression gate for qbc being a rule PARAM rather than a free name: were the halo a free name read from the consumer's scope, one model scope would hold exactly one `qbc_w`, both tracers would necessarily resolve it, devB would sit at 0.0 alongside devA, and this case would fail -- i.e. the document is unexpressible under the old contract, which is the point. A rule that silently ignored its halo operands would likewise pass devA and fail devB. Geometry, winds, metric and the initial mass profile are taken verbatim from problems/latlon3d_transport_cwc_regional_inflow.esm, so halo independence is the only new thing under test.",
+  "problem": "../../../../problems/latlon3d_transport_per_tracer_inflow.esm",
+  "model": "TransportPerTracerInflow",
+  "tests": [
+    "per_tracer_inflow_halos_are_independent"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "scope_excluded": {
+    "python": "rank-3 makearray flux-form transport; not exercised by the python binding's simulator",
+    "rust": "rank-3 makearray flux-form transport; not exercised by the rust binding's simulator",
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  }
+}
