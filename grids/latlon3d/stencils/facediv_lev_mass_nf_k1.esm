@@ -1,0 +1,75 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "facediv_lev_mass_nf_k1",
+    "description": "MASS-FORM (moving-grid) variant of facediv_lev_nf_k1: the RAW vertical face-flux difference with NO division by a cell thickness. Where facediv_lev_nf_k1 returns (M_{k+1/2} - M_{k-1/2})/dz[k] -- a fixed-grid pseudo-density tendency -- this returns just M_{k+1/2} - M_{k-1/2}, the extensive cell air-mass tendency, which is the only vertical divergence that stays conservative when the layer thicknesses vary in time (the /dz form silently omits the grid-motion term and drifts under a breathing surface pressure). It is the exact q == 1 limit of the terrain-following flux-form advection stencil ppmflux_D_lev_hyb_nf_k1 (there F collapses to the air-mass flux M bitwise), which is what makes a uniform tracer track the breathing air mass to the last bit. Rigid no-flux walls: the ground face (k=1) and the model-top face (k=NLEV+1) are absent, not zeroed.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      },
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052.",
+        "doi": "10.1002/qj.49712757318"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "facediv_lev_mass_nf_k1": {
+      "params": [
+        "M"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "M"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            1,
+            1
+          ]
+        },
+        "expr": {
+          "op": "index",
+          "args": [
+            "M",
+            "i",
+            "j",
+            2
+          ]
+        }
+      }
+    }
+  }
+}

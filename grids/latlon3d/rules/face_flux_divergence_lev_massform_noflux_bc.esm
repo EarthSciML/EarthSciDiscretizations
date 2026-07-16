@@ -1,0 +1,151 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "face_flux_divergence_lev_massform_noflux_bc",
+    "description": "MASS-FORM vertical DIVERGENCE OF A FACE-STAGGERED FLUX, the moving-grid continuity companion for a TERRAIN-FOLLOWING (hybrid sigma-pressure) vertical coordinate. The consumer writes its air-mass continuity as ddp/dt = -D(M, wrt: lev) + ... where dp is the cell air mass per unit area (the pressure thickness, shape [lon,lat,lev]) and M is the vertical air-mass flux (shape [lon,lat,lev_nodes], positive upward). Unlike its FIXED-GRID sibling face_flux_divergence_lev_noflux_bc, which returns (M_{k+1/2}-M_{k-1/2})/dz[k], this returns the RAW difference M_{k+1/2}-M_{k-1/2} with no thickness division: dividing by a time-varying dz omits the grid-motion term and is conservative only on a fixed grid, whereas the raw flux difference integrates the extensive cell mass directly and stays conservative while the layers breathe. It is the EXACT q == 1 limit of the terrain-following advection rule ppm_flux_D_lev_mono_hybrid_noflux_bc, so a tracer initialised to a uniform mixing ratio tracks the breathing air mass to the last bit -- the consistency-with-continuity property verified by tests/conformance/simulation/latlon3d_transport_cwc_moving_lid. Three regions (interior k=2..NLEV-1, ground k=1, model top k=NLEV) with rigid no-flux walls; M at faces 1 and NLEV+1 is never read.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052. (Consistency with continuity: what breaks when the tracer scheme and the continuity scheme do not use the same mass fluxes.)",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the finite-volume divergence as a telescoping difference of face fluxes)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/facediv_lev_mass_interior.esm"
+    },
+    {
+      "ref": "../stencils/facediv_lev_mass_nf_k1.esm"
+    },
+    {
+      "ref": "../stencils/facediv_lev_mass_nf_kN.esm"
+    }
+  ],
+  "expression_templates": {
+    "face_flux_divergence_lev_massform_noflux_bc": {
+      "params": [
+        "M"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "M"
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "M": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lev_mass_interior",
+            "bindings": {
+              "M": "M"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lev_mass_nf_k1",
+            "bindings": {
+              "M": "M"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "facediv_lev_mass_nf_kN",
+            "bindings": {
+              "M": "M"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_face_flux_divergence_lev_massform_noflux_bc",
+    "description": "AST fixture for the MASS-FORM vertical flux divergence (moving-grid continuity companion): the raw face-flux difference with no /dz, rigid no-flux walls.",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dFaceFluxDivergenceLevMassformNofluxAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/face_flux_divergence_lev_massform_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 6
+          }
+        }
+      ],
+      "variables": {
+        "m": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Air mass per unit area (pressure thickness)."
+        },
+        "M": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Vertical air-mass flux; sign-reversing, vanishing at both walls.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "iw": {
+                "from": "lon"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "sin",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    6.283185307179586,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kw",
+                            1
+                          ]
+                        },
+                        6
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "m"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "m"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "M"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

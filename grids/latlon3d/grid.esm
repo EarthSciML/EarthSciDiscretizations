@@ -75,6 +75,23 @@
           ]
         }
       }
+    },
+    "lev_thickness_3d": {
+      "params": ["pe"],
+      "description": "TERRAIN-FOLLOWING (rank-3) control thicknesses from a THREE-DIMENSIONAL edge array: lev_thickness_3d[gi,gj,gk] = pe[gi,gj,gk+1] - pe[gi,gj,gk] over [lon, lat, lev], gathering the [lon, lat, lev_nodes] edge array pe. This is the Psurf-coupled hybrid-sigma-pressure counterpart of lev_thickness: a consuming model builds a 3-D pressure-at-edges pe[i,j,kn] = Ap[kn] + Bp[kn]*Ps(i,j,t) (which varies in longitude, latitude and time whenever the surface pressure does) and applies this template to define its [lon,lat,lev]-shaped `dp` observed (positive when pe increases with the lev index — the required orientation). The physical `dp` is the reconstruction width consumed by the terrain-following flux-form vertical operators (ppm_flux_D_lev_mono_hybrid_noflux_bc). Aggregation indices gi/gj/gk (distinct from a rule's i/j/k) for the non-hygienic-inlining reason documented on lev_center and lev_thickness.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["gi", "gj", "gk"],
+        "args": ["pe"],
+        "ranges": { "gi": { "from": "lon" }, "gj": { "from": "lat" }, "gk": { "from": "lev" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            { "op": "index", "args": ["pe", "gi", "gj", { "op": "+", "args": ["gk", 1] }] },
+            { "op": "index", "args": ["pe", "gi", "gj", "gk"] }
+          ]
+        }
+      }
     }
   }
 }
