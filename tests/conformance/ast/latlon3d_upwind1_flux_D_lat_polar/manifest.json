@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_upwind1_flux_D_lat_polar",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/upwind1_flux_D_lat_polar -- the FLUX-FORM first-order-upwind MERIDIONAL advection operator D(V*q, wrt: lat), the tracer half of the meridional consistent-with-continuity pair (the continuity half being face_flux_divergence_lat_polar). Pins that the three regions -- interior j in [2, NLAT-1], south polar cap j = 1, north polar cap j = NLAT -- lower to the spherical flux divergence ( F_{j+1} coslat_e[j+1] - F_j coslat_e[j] ) / dS_lat[j], with the donor-cell flux F = 1/2[w(qL+qR) - |w|(qR-qL)] supplied by the axis-neutral atom upwind_lev_face_flux (whose body is pure scalar algebra and is REUSED here, not copied), and with the POLE-WALL FLUXES LITERALLY ABSENT: neither V[i,1,k] nor V[i,NLAT+1,k] may appear anywhere in the golden, and the cap expressions must carry a SINGLE weighted face flux, not a difference of two. That absence is the whole polar closure: cos(-/+pi/2) is 6.1e-17 in IEEE, NOT zero, so an operator that FORMED the wall flux and multiplied it by the pole face length would leak mass across the pole and would break the exact telescoping of the meridional budget. It is also half of the reason a constant tracer is preserved BITWISE by the CWC pair, since the companion continuity slabs omit their pole terms in exactly the same positions. \n\nTHE FIXTURE ALSO PINS THE RULE-SEPARATION CLAIM. The compound match D(V*q, wrt: lat) at priority 10 sits on the same axis as the pre-existing plain-D lat rules, so the fixture imports BOTH this rule AND central_D_lat_zero_grad_bc, declares BOTH a face-staggered wind V over [lon, lat_nodes, lev] and a cell-centred tracer u over [lon, lat, lev], and writes BOTH derivatives into one right-hand side: du/dt = -D(V*u, wrt: lat) - D(u, wrt: lat). The golden shows the product lowered by the flux rule (esm-spec 9.6.3 outermost-first: the compound fires on the whole product before any inner derivative can be lowered) and the bare derivative lowered by the centred rule (the 9.6.1 shape constraint is satisfied only by a bare variable reference, so the flux rule cannot capture the cell-centred u and the centred rule cannot capture the product). \n\nAND IT PINS THE GEOMETRY CONTRACT, which nothing else in the library exercised until this wave. The fixture declares phie = lat_edge() over [lat_nodes] and derives coslat_e = coslat_edge(phie) and dS_lat = latcell_area(phie) -- the two free names the rule reads, the same contract by which the vertical rules read dz. The golden therefore also pins the AGGREGATE-INDEX HYGIENE that the whole family depends on: the grid's four geometry templates use four DISTINCT aggregate indices (gje/gjc/gja/gjd), and the operator's own offset gathers coslat_e[j+1] and phie[gja+1] must survive non-hygienic inlining with their offsets INTACT. A colliding index name silently degenerates an offset gather to a same-index one and returns exact zeros -- no error, no NaN -- which is precisely the failure this golden would catch. \n\nNLON = 8, NLAT = 6, NLEV = 5: the smallest global grid with a non-empty interior between the two half-polar caps, on all three axes non-trivially sized.",
+  "rule": "../../../../grids/latlon3d/rules/upwind1_flux_D_lat_polar.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dUpwind1FluxDLatPolarAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 6,
+    "NLEV": 5
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

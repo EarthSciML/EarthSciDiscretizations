@@ -1,0 +1,87 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_lev_face_flux",
+    "description": "Scalar atom: the variable-coefficient diffusive GRADIENT-FLUX G = K dq/dz evaluated AT the cell face shared by two vertically adjacent cells, on a NON-UNIFORM mesh. Cell 0 (thickness dz0, value q0, diffusivity k0) lies BELOW the face; cell 1 (dz1, q1, k1) lies above. Both factors are second-order accurate AT THE FACE, which is what makes the assembled flux difference second order: (a) the face diffusivity is a true LINEAR INTERPOLATION of the two cell-centre values to the face position, K_face = (k0 dz1 + k1 dz0)/(dz0+dz1) -- the weight dz0/(dz0+dz1) is exactly (pe_face - zc0)/(zc1 - zc0), since zc0 = pe_face - dz0/2 and zc1 = pe_face + dz1/2 -- and it degenerates to the plain arithmetic mean (k0+k1)/2 on a uniform mesh, matching grids/cartesian_uniform_1d/stencils/varcoeff_laplacian_interior; (b) the face gradient is the two-point difference 2(q1-q0)/(dz0+dz1) over the centre-to-centre distance (dz0+dz1)/2. Fusing the two and cancelling gives the single division spelled here, G = 2 (k0 dz1 + k1 dz0)(q1 - q0) / (dz0 + dz1)^2. SIGN: G is the GRADIENT flux K dq/dz, i.e. MINUS the Fickian tracer flux (-K dq/dz); the consuming divergence stencils return (G_up - G_dn)/dz, which is d/dz(K dq/dz) with the conventional sign. Grid-agnostic scalar algebra -- no index sets, no free names; the caller supplies the six scalars. REQUIRES dz0 + dz1 > 0.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      },
+      {
+        "citation": "Patankar, S. V. (1980). Numerical Heat Transfer and Fluid Flow. Hemisphere. Chapter 4 (interface conductivity for the conservative control-volume discretisation of a variable-coefficient diffusion flux)."
+      }
+    ]
+  },
+  "expression_templates": {
+    "varcoeff_lev_face_flux": {
+      "params": [
+        "q0",
+        "q1",
+        "k0",
+        "k1",
+        "dz0",
+        "dz1"
+      ],
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              2,
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "k0",
+                      "dz1"
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      "k1",
+                      "dz0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "q1",
+                  "q0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "^",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  "dz0",
+                  "dz1"
+                ]
+              },
+              2
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

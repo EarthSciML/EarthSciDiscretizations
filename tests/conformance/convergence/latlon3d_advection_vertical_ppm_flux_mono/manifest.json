@@ -1,0 +1,62 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_vertical_ppm_flux_mono",
+  "description": "Spatial convergence of the UPWIND-BIASED, MONOTONE flux-form vertical advection operator grids/latlon3d/rules/ppm_flux_D_lev_mono_noflux_bc, driven by problems/latlon3d_advection_vertical_ppm_flux_mono. \n\nFORCED-STEADY (TRUNCATION) IDIOM, identical to the donor-cell sibling latlon3d_advection_vertical_upwind_flux: u*(z) = cos(pi z) is an exact steady state of the forced equation, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order.\n\nEXPECTED_ORDER IS WHAT WAS MEASURED, NOT WHAT THE PARABOLA PROMISES. Measured medians: L2 2.49 (pairwise 2.48, 2.49, 2.50) and Linf 1.98 (pairwise 1.93, 1.98, 1.99). The underlying CW84 reconstruction is formally FOURTH order, and the unlimited sibling case latlon3d_advection_vertical_ppm_flux measures a clean 3.99/3.94 on this very same manufactured solution -- so the shortfall here is caused by the limiter and by nothing else. The mechanism is specific and expected: the eq (1.8)/(1.10) limiter pair cannot distinguish a genuine SMOOTH EXTREMUM from an oscillation and flattens it, and u*(z) = cos(pi z) has a smooth extremum sitting exactly on the surface wall (du*/dz = 0 at z = 0), so the limiter fires there on every mesh however fine and caps the attainable rate. That is the documented, deliberate trade: formal order that a real vertical profile (a capping inversion, a stack plume, the tropopause) would never let you realize anyway, exchanged for the boundedness that keeps a chemical tracer non-negative (verified: min = +0.0 exactly on a top-hat plume under this rule, against -7.16 for the unlimited sibling).\n\nWHY expected_order 2.24 AND order_tolerance 0.3 RATHER THAN A TIGHTER GATE. The two norms genuinely converge at DIFFERENT rates here (L2 2.49, Linf 1.98) and check_convergence_order.py gates BOTH against a single expected_order, so the tolerance must span at least half their 0.51 spread (0.255). expected_order is set to the MIDPOINT of the two measured medians (2.24), which balances the two deviations at 0.25 each and leaves ~0.05 of margin under a 0.3 gate. The spread is STRUCTURAL, not a symptom of a short or pre-asymptotic ladder: the limiter's damage is concentrated in the handful of cells at the wall extremum, which Linf sees at full strength while L2 averages down over the column -- and the pairwise orders of BOTH norms are flat across every rung of the ladder, which is the actual test. (The pre-existing latlon3d_advection_vertical_ppm_mono case has the same structure and gates at 2.2 +- 0.4; this one is strictly tighter.)\n\nTHE LADDER IS 16/32/64/128, AND BOTH ENDS ARE CHOSEN, NOT INHERITED. The donor-cell sibling case latlon3d_advection_vertical_upwind_flux runs 32/64/128/256 because a FIRST-order scheme is still pre-asymptotic at 16 (its Linf pairwise orders there run 0.34, 0.78, 0.91). A high-order scheme has the opposite problem at BOTH ends. At the coarse end it is already asymptotic at 16 -- the pairwise orders below are flat to two decimals across every rung, which is the actual test of asymptoticity and is what licenses starting there. At the FINE end it runs out of room: by NLEV = 256 the unlimited sibling's spatial error is down to ~7e-10, which is the same size as the Tsit5 temporal/roundoff floor at reltol 1e-11, and the measured Linf rate on that last pair collapses to 3.49 purely as a solver artefact. Including such a rung would be measuring the ODE solver, not the operator. The governing principle is the same one that moved the donor-cell ladder OUT to 256 -- measure inside the asymptotic window -- and here that window is 16..128. Neither end was chosen by loosening order_tolerance to make a bad ladder pass.\n\nWHAT THIS GUARDS. The velocity is a declared THREE-DIMENSIONAL face-staggered field W[lon, lat, lev_nodes] that REVERSES SIGN at z = 1/2, so both branches of the donor selection are exercised in every column, and the horizontal modulation a(i) b(j) means a stencil that mis-indexed W as a column profile would be caught rather than silently agreeing. No pre-existing high-order vertical operator on this grid can represent either property -- they read a one-signed 1-D column profile from the free name w_edge, and under this reversing wind the pre-existing 'monotone' ppm_D_lev_mono_noflux_bc reconstructs from the DOWNWIND side above z = 1/2 and diverges to min = -1.6e3.",
+  "problem": "../../../../problems/latlon3d_advection_vertical_ppm_flux_mono.esm",
+  "model": "VerticalAdvectionPPMFluxMono3d",
+  "grid": "latlon3d",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lev_mono_noflux_bc.esm",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLEV": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLEV": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLEV": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLEV": 128
+      }
+    }
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.24,
+  "order_tolerance": 0.3,
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrator": {
+    "algorithm": "Tsit5",
+    "reltol": 1e-11,
+    "abstol": 1e-13
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "golden": "golden/errors.json",
+  "status": "active"
+}

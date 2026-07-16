@@ -1,0 +1,46 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_upwind1_D_lon_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/latlon3d/rules/upwind1_D_lon_periodic, bound to NLON=8, NLAT=5, NLEV=4 at the import edge. The match D(u,lon) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 two-region makearray — interior columns [2,8] x [1,5] x [1,4] holding the imported backward-difference stencil, and the i=1 wrap-face slab [1,1] x [1,5] x [1,4] holding the periodic gather (f[1]-f[8])/dlon_deg — with all metaparameters folded and the consumer-supplied spacing surviving as the free name dlon_deg (declared here as a parameter, 360/8 = 45). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:latlon3d", "rule:upwind1_D_lon_periodic"]
+  },
+  "models": {
+    "Latlon3dUpwindLonPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/upwind1_D_lon_periodic.esm",
+          "bindings": { "NLON": 8, "NLAT": 5, "NLEV": 4 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": ["lon", "lat", "lev"],
+          "description": "Field over the lon x lat x lev index sets."
+        },
+        "dlon_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 45,
+          "description": "The grid's dlon_deg free name (inherited consumer-supplied geometry contract): 360/NLON = 45 spelled as a literal because NLON is closed at the import edge."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "-",
+            "args": [ { "op": "D", "args": ["u"], "wrt": "lon" } ]
+          }
+        }
+      ]
+    }
+  }
+}

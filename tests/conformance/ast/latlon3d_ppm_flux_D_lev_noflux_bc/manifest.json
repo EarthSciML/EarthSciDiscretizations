@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_ppm_flux_D_lev_noflux_bc",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc -- the UNLIMITED (centred) fourth-order CW84 conservative flux-form vertical advection operator d/dz(w q), with the wind INSIDE the operator as a three-dimensional face-staggered matched operand and rigid no-flux walls. \n\nPins that the compound match D(W*q, wrt: lev) fires at priority 10 on the whole product, and that the FIVE regions -- interior k in [3, NLEV-2], surface slabs k = 1,2, model-top slabs k = NLEV-1, NLEV -- lower to the expected flux-difference structure, with each interior face flux written byte-identically in the two cells that share it. Pins that the velocity is indexed as W[i,j,.] over [lon, lat, lev_nodes] -- the property that separates this rule from the pre-existing ppm_D_lev_noflux_bc, which computes an IDENTICAL face value but reads its velocity from the 1-D free name w_edge and therefore cannot conserve mass under a spatially varying wind. \n\nAlso pins, by ABSENCE, that this operator is centred and not upwind-biased: the golden must contain NO `max`/`min` donor selection against 0 and no dependence of the face value on the sign of w. That is a theorem, not an omission -- for the unlimited reconstruction the parabolas of the two cells sharing a face agree exactly at that face, so the two one-sided donor values coincide and an 'unlimited upwind PPM' collapses term-for-term onto this centred flux. The wall fluxes are LITERALLY ABSENT from the k=1 and k=NLEV slabs rather than formed and multiplied by zero, so W[i,j,1] and W[i,j,NLEV+1] must not appear anywhere in the golden. NLEV = 6 is the smallest grid exercising all five regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dPpmFluxDLevNofluxAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 5,
+    "NLEV": 6
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

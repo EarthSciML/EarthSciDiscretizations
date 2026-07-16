@@ -1,0 +1,241 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_D_lev_interior",
+    "description": "Interior conservative finite-volume VARIABLE-COEFFICIENT vertical diffusion d/dz(kz du/dz) on the latlon3d non-uniform vertical: D u[i,j,k] = (G_{k+1/2} - G_{k-1/2}) / dz[k] over all i (lon), all j (lat), k in [2, NLEV-1], with G the face gradient-flux atom (./varcoeff_lev_face_flux.esm). This is the vertical-turbulent-mixing (Kzz / PBL) operator: the rank-3 non-uniform-mesh counterpart of grids/cartesian_uniform_1d/stencils/varcoeff_laplacian_interior, evaluated on every (lon,lat) column independently. CONSERVATIVE BY CONSTRUCTION: cell k and cell k+1 read the SHARED face flux G_{k+1/2} through the same atom with the same arguments, so it is written byte-identically in both and the mass sum telescopes exactly -- sum_k dz[k] D[i,j,k] = G_top - G_surface, the two domain-face fluxes only. SECOND ORDER: the two faces pe[k] and pe[k+1] are exactly symmetric about the cell centre zc[k] and separated by exactly dz[k], so the flux difference is a symmetric centred difference about zc[k]; combined with the second-order-at-the-face atom this gives a clean O(dz^2) interior truncation error on a smoothly stretched mesh (verified 2.00 in Linf on the quadratic-stretch mesh). Reads the free name `dz` (shape [lev], cell thicknesses -- the grid's lev_thickness applied to the consumer's pe). HYGIENE: the coefficient parameter is `kz`, NOT `k` -- `k` is this aggregate's own lev index, and a param named `k` would be captured on inlining (the non-hygienic-inlining footgun documented in grids/cartesian_nonuniform_1d and in the latlon3d grid's `gk` geometry index).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      },
+      {
+        "citation": "Patankar, S. V. (1980). Numerical Heat Transfer and Fluid Flow. Hemisphere. Chapter 4 (interface conductivity for the conservative control-volume discretisation of a variable-coefficient diffusion flux)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Section 8.4 (vertical turbulent diffusion of a tracer) and Section 20.1 (surface emission and dry-deposition flux boundary condition)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./varcoeff_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_D_lev_interior": {
+      "params": [
+        "u",
+        "kz"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "u",
+          "kz"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "varcoeff_lev_face_flux",
+                  "bindings": {
+                    "q0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "q1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "k0": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "k1": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dz0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    },
+                    "dz1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "varcoeff_lev_face_flux",
+                  "bindings": {
+                    "q0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "q1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "k0": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "k1": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "dz0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dz1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

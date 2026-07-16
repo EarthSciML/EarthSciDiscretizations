@@ -1,0 +1,196 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_lon_flux_wrap_iN",
+    "description": "LAST COLUMN (i = NLON) of the flux-form first-order-upwind ZONAL advection operator, with the PERIODIC WRAP taken on the east face: D[NLON,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( F_{NLON+1} - F_NLON ), F_NLON = donor(qL = q[NLON-1,j,k], qR = q[NLON,j,k], w = U[NLON,j,k]) and F_{NLON+1} = donor(qL = q[NLON,j,k], qR = q[1,j,k], w = U[1,j,k]). \n\nREAD THE WIND INDEX AGAIN: THE EAST FACE OF CELL NLON USES U[1], NOT U[NLON+1]. That is the whole point of the stencil. Cell NLON's east face and cell 1's west face are THE SAME FACE of the closed zonal circle, and the operator writes them with the same q values and the same wind element, so their donor fluxes are BIT-IDENTICAL: the two boundary terms of the row sum sum_i (F_{i+1} - F_i) = F_{NLON+1} - F_1 cancel BIT-FOR-BIT (F_{NLON+1} and F_1 are literally the same double), for ANY q and ANY U. What survives is only the O(eps) rounding of the per-cell divergences themselves -- measured max |sum_i D| = 3.6e-15, i.e. 6.8e-17 relative to sum_i |D_i|, at machine precision and independent of how badly non-periodic the supplied wind is. Conservation is therefore a property of the OPERATOR and cannot be broken by a consumer who supplies a non-periodic wind. \n\nCONSEQUENCE: ELEMENT U[NLON+1,j,k] IS NEVER READ by this rule family, and whatever a consumer stores there is ignored (measured: overwriting it with 1e6 changes not one bit of the output). This is the same discipline by which the vertical no-flux stencils never read W at the two wall faces and the polar stencils never read V at the pole faces -- the closure is written by literally omitting the term, not by forming it and hoping the data cancels it. The lon_nodes axis is sized NLON+1 anyway, so a future REGIONAL (non-periodic) zonal rule has a genuine east boundary face to close against. \n\nGEOMETRY (free names, the same contract by which the vertical flux stencils read dz). The weight is dphi_lat[j] / (dlam dS_lat[j]) with dlam = dlon_deg pi/180: dphi_lat (shape [lat]) is the cell's angular width in radians (the grid's latcell_dphi applied to the consumer's phie -- a HALF width at the two polar caps), dS_lat (shape [lat]) the EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]) (latcell_area applied to the same phie), and dlon_deg the inherited consumer-supplied zonal spacing. It is the discrete form of the spherical zonal flux divergence (1/(a cos(phi))) d/dlam (U q): integrating that over the spherical cell of area a^2 dlam dS_lat[j] and dividing by the area leaves exactly dphi_lat[j] / (dlam dS_lat[j]) times the difference of the two face fluxes -- an EXACT area weight, not a midpoint approximation, which is what makes the global mass budget telescope to machine precision. Note that cos(phi) never appears: the cos(phi) in the metric and the cos(phi) in the zonal face length cancel identically, so unlike the meridional operator this one reads no coslat_e at all and has no near-pole 1/cos(phi) amplification of its own beyond the O(dphi/dS) ~ 1/cos(phi) that the cell aspect ratio carries. \n\nFACE INDEXING (pinned by grids/latlon, and the same convention as face k = lower edge of cell k in the vertical and face j = southern edge of cell j on the meridional axis): FACE i IS THE LOWER (WESTERN) EDGE OF CELL i, so cell i is bounded by face i to the west and face i+1 to the east. The zonal wind U is declared over [lon_nodes, lat, lev]: fully three-dimensional and face-staggered, POSITIVE EASTWARD (in the direction of increasing lon index). It is the lon_nodes index-set NAME -- not its size -- that lets the esm-spec 9.6.1 `where` shape constraint tell the face wind U apart from the cell tracer q. Requires NLON >= 3.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:1",
+      "scheme:upwind",
+      "stencil_width:2",
+      "bc:periodic"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux and its branch-free algebraic form F = 1/2[u(qL+qR) - |u|(qR-qL)])."
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. (Spherical lat-lon metric factors for the zonal flux divergence.)",
+        "doi": "10.1016/S0021-9991(05)80016-6"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./upwind_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "upwind1_D_lon_flux_wrap_iN": {
+      "params": [
+        "q",
+        "U"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "U"
+        ],
+        "ranges": {
+          "i": [
+            "NLON",
+            "NLON"
+          ],
+          "j": {
+            "from": "lat"
+          },
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "dphi_lat",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        "dlon_deg",
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "dS_lat",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "upwind_lev_face_flux",
+                  "bindings": {
+                    "qL": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "NLON",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "qR": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        1,
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "U",
+                        1,
+                        "j",
+                        "k"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "upwind_lev_face_flux",
+                  "bindings": {
+                    "qL": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLON",
+                            1
+                          ]
+                        },
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "qR": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "NLON",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "U",
+                        "NLON",
+                        "j",
+                        "k"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lev_nf_kN",
+    "description": "No-flux model-top boundary face for the conservative vertical PPM flux-divergence on the latlon3d hybrid vertical: the single k=NLEV cell slab, D f[i,j,NLEV] = (0 - F_{NLEV-1/2})/dz[NLEV] over all i (lon), all j (lat). The model-top wall flux F_{NLEV+1/2} is identically 0 (the vertical velocity w_edge[NLEV+1] vanishes at the model top -> genuine no-flux, mass-conserving). F_{NLEV-1/2}=ppm_lev_flux(f[i,j,NLEV-2], f[i,j,NLEV-1], f[i,j,NLEV], f[i,j,NLEV]; dz[NLEV-2], dz[NLEV-1], dz[NLEV], dz[NLEV]; w_edge[NLEV]) uses the zero-gradient above-top ghost (cell NLEV+1 = cell NLEV) and is byte-identical to the k=NLEV-1 face's high flux, so the divergence telescopes and mass is conserved to the bit. One of four factored no-flux boundary faces consumed by rules/ppm_D_lev_noflux_bc; a full (NLON x NLAT x 1) slab AGGREGATE in its own single-purpose stencil so the rule body stays a thin makearray of apply calls. Reads free names dz (widths) and w_edge (interface velocity).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:4",
+      "stencil_width:4"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "./ppm_lev_flux.esm" }
+  ],
+  "expression_templates": {
+    "ppm_D_lev_nf_kN": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": { "from": "lat" },
+          "k": ["NLEV", "NLEV"]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                0,
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": { "op": "index", "args": ["f", "i", "j", { "op": "-", "args": ["NLEV", 2] }] },
+                    "a0": { "op": "index", "args": ["f", "i", "j", { "op": "-", "args": ["NLEV", 1] }] },
+                    "ap": { "op": "index", "args": ["f", "i", "j", "NLEV"] },
+                    "app": { "op": "index", "args": ["f", "i", "j", "NLEV"] },
+                    "dm": { "op": "index", "args": ["dz", { "op": "-", "args": ["NLEV", 2] }] },
+                    "d0": { "op": "index", "args": ["dz", { "op": "-", "args": ["NLEV", 1] }] },
+                    "dp": { "op": "index", "args": ["dz", "NLEV"] },
+                    "dpp": { "op": "index", "args": ["dz", "NLEV"] },
+                    "w": { "op": "index", "args": ["w_edge", "NLEV"] }
+                  }
+                }
+              ]
+            },
+            { "op": "index", "args": ["dz", "NLEV"] }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_lon_interior",
+    "description": "Interior-only first-order upwind (backward) first derivative along longitude on the latlon3d grid: (f[i,j,k] - f[i-1,j,k]) / dlon_deg over i in [2, NLON], all j (lat), all k (lev) — a PER-DEGREE derivative (see grids/latlon3d/grid.esm and grids/latlon for the physical-units metric recipe), for zonal advection with non-negative angular velocity (flow toward increasing longitude). The rank-3 extension of grids/latlon/stencils/upwind1_D_lon_interior: identical zonal difference, evaluated on every (lat, lev) column. Match-less named template consumed by the boundary-condition layer (rules/upwind1_D_lon_periodic adds the i=1 periodic wrap via a factored wrap-face stencil). It keeps the full interior span [2, NLON] because only the i=1 column lacks an upstream neighbor. `dlon_deg` is a free name resolving to the consuming model's zonal spacing variable (the inherited grids/latlon consumer-supplied geometry contract). O(dlon_deg) on this uniform axis. Sign convention: upwind for flow toward +lon; a westward variant belongs in a separate stencil.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:finite_difference", "grid:latlon3d", "op:D", "order:1", "stencil_width:2"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.8 (upwind methods)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "upwind1_D_lon_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": [2, "NLON"],
+          "j": { "from": "lat" },
+          "k": { "from": "lev" }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["f", "i", "j", "k"] },
+                { "op": "index", "args": ["f", { "op": "-", "args": ["i", 1] }, "j", "k"] }
+              ]
+            },
+            "dlon_deg"
+          ]
+        }
+      }
+    }
+  }
+}

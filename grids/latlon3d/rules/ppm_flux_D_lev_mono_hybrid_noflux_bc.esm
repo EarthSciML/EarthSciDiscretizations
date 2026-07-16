@@ -1,0 +1,298 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_flux_D_lev_mono_hybrid_noflux_bc",
+    "description": "UPWIND-BIASED, MONOTONE, conservative flux-form vertical advection for a TERRAIN-FOLLOWING (hybrid sigma-pressure) vertical coordinate whose level thicknesses breathe in time. The moving-grid counterpart of ppm_flux_D_lev_mono_noflux_bc: same seven-region CW84 monotone reconstruction, same matched-operand 3-D face wind, same rigid no-flux walls -- but with TWO changes that make it correct and high-order on a grid whose layers move.\n\n1. MASS FORM (conservative on a moving grid). The fixed-grid rule outputs (F_{k+1/2} - F_{k-1/2}) / dz[k]; dividing by a time-varying cell thickness omits the grid-motion (thickness-tendency) term, so the fixed-grid divergence is conservative ONLY when dz is constant in time and drifts under a breathing surface pressure. This rule instead outputs the RAW face-flux difference F_{k+1/2} - F_{k-1/2} (no division). The consumer writes dmq/dt = -D(W*q, wrt: lev) + ... where mq is the cell AIR/TRACER MASS per unit area (a pressure thickness), so the integrated quantity is the extensive cell mass and no moving-grid term is dropped. The horizontal divergence companions (face_flux_divergence_lon/lat, which carry the fixed spherical area measure) combine with this term directly, since on a lat-lon mesh only the vertical coordinate moves.\n\n2. TERRAIN-FOLLOWING RECONSTRUCTION (high-order on the real thicknesses). The CW84 eq (1.6)/(1.8)/(1.10) parabola is built on the PHYSICAL pressure thicknesses `dp` (free name, shape [lon,lat,lev]) -- gathered as dp[i,j,k+/-n] over the five-cell window of each endpoint -- rather than a 1-D, time-static column dz[k]. On a hybrid grid dp = dA[k] + dB[k]*Ps(i,j,t) varies in longitude, latitude and time, so the sub-grid reconstruction sees the true local layer widths, the Lin-Rood (1996) mass-coordinate reconstruction.\n\nCONSISTENCY WITH CONTINUITY (the property that makes it usable for tracer transport). At q == 1 every CW84 slope is a difference of equal values and is exactly 0.0 in IEEE, so the parabola is the constant 1 REGARDLESS of the breathing widths, each one-sided face value is 1, and the donor flux collapses to F = W bitwise. This operator then reduces to the mass-form vertical continuity difference W_{k+1/2} - W_{k-1/2}; combined with the horizontal continuity companions and a vertical air-mass flux W diagnosed from continuity, a tracer initialised to a uniform mixing ratio stays uniform to the last bit while the layers breathe. This is verified end to end by tests/conformance/simulation/latlon3d_transport_cwc_moving_lid.\n\nSCOPE. Monotone (eq 1.8 + eq 1.10 limiter): bounded, non-negative across sharp vertical gradients, at the documented cost of formal order at smooth extrema (the Colella-Sekora 2008 limiter is the follow-on). Seven-cell support (k-3..k+3): interior [4, NLEV-3], six near-wall slabs, NLEV >= 7 for a non-empty interior. The wind W (the vertical air-mass flux, shape [lon,lat,lev_nodes], positive upward) is a MATCHED OPERAND; W at faces 1 and NLEV+1 is never read (the wall fluxes are absent, not zeroed), so both no-flux walls are exact in floating point. A semi-discrete (method-of-lines) operator, not the fully-discrete TPCORE scheme (see grids/latlon3d/grid.esm SCHEME CAVEAT).\n\nFREE NAME (consumer-supplied): `dp`, the physical cell pressure thicknesses, shape [lon,lat,lev] (the grid's lev_thickness_3d contract). The velocity is the matched operand W, NOT a free name.\n\nCOMPOSITIONAL BODY: a makearray tiling [lon,lat,lev] with SEVEN regions, each a thin apply of a factored ppmflux_D_lev_hyb_* stencil -- interior [4, NLEV-3]; surface cells k = 1,2,3; model-top cells k = NLEV-2, NLEV-1, NLEV. Every region is a full-rank slab aggregate (output_idx [i, j, k]).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:7",
+      "scheme:upwind",
+      "bc:no-flux",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Colella, P., & Sekora, M. D. (2008). A limiter for PPM that preserves accuracy at smooth extrema. Journal of Computational Physics, 227(15), 7069-7076.",
+        "doi": "10.1016/j.jcp.2008.03.034"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the donor-cell upwind flux; the upwind selection is the same whatever sub-grid reconstruction supplies the two one-sided face values)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_interior.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_k1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_k2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_k3.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_kNm2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_kNm1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_hyb_nf_kN.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppm_flux_D_lev_mono_hybrid_noflux_bc": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "W",
+              "q"
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "q": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        },
+        "W": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  3
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              3,
+              3
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_interior",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_k1",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_k2",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_k3",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_kNm2",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_kNm1",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_hyb_nf_kN",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

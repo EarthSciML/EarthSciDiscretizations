@@ -1,0 +1,84 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lev_nf_k2",
+    "description": "No-flux near-surface boundary face for the conservative vertical PPM flux-divergence on the latlon3d hybrid vertical: the single k=2 cell slab, D f[i,j,2] = (F_{5/2} - F_{3/2})/dz[2] over all i (lon), all j (lat). F_{5/2}=ppm_lev_flux(f[i,j,1..4]; dz[1..4]; w_edge[3]) is fully interior; F_{3/2}=ppm_lev_flux(f[i,j,1], f[i,j,1], f[i,j,2], f[i,j,3]; dz[1], dz[1], dz[2], dz[3]; w_edge[2]) uses the zero-gradient sub-surface ghost (cell 0 = cell 1) and is byte-identical to the k=1 face's F_{3/2}, so the divergence telescopes and mass is conserved to the bit. One of four factored no-flux boundary faces consumed by rules/ppm_D_lev_noflux_bc; a full (NLON x NLAT x 1) slab AGGREGATE in its own single-purpose stencil so the rule body stays a thin makearray of apply calls. Reads free names dz (widths) and w_edge (interface velocity).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:4",
+      "stencil_width:4"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "./ppm_lev_flux.esm" }
+  ],
+  "expression_templates": {
+    "ppm_D_lev_nf_k2": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": { "from": "lat" },
+          "k": [2, 2]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": { "op": "index", "args": ["f", "i", "j", 1] },
+                    "a0": { "op": "index", "args": ["f", "i", "j", 2] },
+                    "ap": { "op": "index", "args": ["f", "i", "j", 3] },
+                    "app": { "op": "index", "args": ["f", "i", "j", 4] },
+                    "dm": { "op": "index", "args": ["dz", 1] },
+                    "d0": { "op": "index", "args": ["dz", 2] },
+                    "dp": { "op": "index", "args": ["dz", 3] },
+                    "dpp": { "op": "index", "args": ["dz", 4] },
+                    "w": { "op": "index", "args": ["w_edge", 3] }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": { "op": "index", "args": ["f", "i", "j", 1] },
+                    "a0": { "op": "index", "args": ["f", "i", "j", 1] },
+                    "ap": { "op": "index", "args": ["f", "i", "j", 2] },
+                    "app": { "op": "index", "args": ["f", "i", "j", 3] },
+                    "dm": { "op": "index", "args": ["dz", 1] },
+                    "d0": { "op": "index", "args": ["dz", 1] },
+                    "dp": { "op": "index", "args": ["dz", 2] },
+                    "dpp": { "op": "index", "args": ["dz", 3] },
+                    "w": { "op": "index", "args": ["w_edge", 2] }
+                  }
+                }
+              ]
+            },
+            { "op": "index", "args": ["dz", 2] }
+          ]
+        }
+      }
+    }
+  }
+}

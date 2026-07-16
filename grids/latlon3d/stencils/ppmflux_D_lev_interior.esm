@@ -1,0 +1,441 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppmflux_D_lev_interior",
+    "description": "INTERIOR slab (k = 4 .. NLEV-3) of the UPWIND-BIASED PPM flux-form vertical advection operator d/dz(w q) on the latlon3d stretched vertical: D[i,j,k] = (F_{k+1/2} - F_{k-1/2}) / dz[k], with each face flux supplied by ../stencils/ppmflux_lev_face_flux -- the CW84 eq (1.6)/(1.8)/(1.10) limited parabola endpoints of the two cells straddling the face, with the donor selected by the SIGN of the face velocity. \n\nWHY THE SUPPORT IS SEVEN CELLS (k-3 .. k+3), WIDER THAN ANY PRE-EXISTING VERTICAL OPERATOR ON THIS GRID. A cell's eq-(1.10)-limited endpoints need its own 5-cell window. The face at k+1/2 needs the limited RIGHT endpoint of cell k (cells k-2..k+2) AND the limited LEFT endpoint of cell k+1 (cells k-1..k+3), so a single face reaches over six cells; the divergence differences two faces and so reaches over seven. The pre-existing monotone ppm_D_lev_mono_interior needs only six because it hard-codes an upward wind and therefore never asks for the upper cell's lower endpoint. That extra cell of reach is precisely the price of being able to donate from EITHER side, which is what a reversing wind requires. The interior is consequently [4, NLEV-3] and there are SIX boundary slabs rather than the mono chain's five. \n\nCRITICAL: every interface flux shared with a neighbouring cell is built here from the SAME face template applied to the SAME six cells, the SAME six widths and the SAME face velocity as the neighbour uses, so the two cells evaluate a bit-identical float for it and the flux divergence telescopes exactly -- the column mass budget closes in floating point, not merely in exact arithmetic. Reads the free name `dz` (the grid's lev_thickness applied to the consumer's `pe`); the face velocity W is a MATCHED OPERAND, passed in, not a free name. FACE INDEXING (shared with every stencil in this family and with the pre-existing ppm_D_lev_* and upwind1_D_lev_flux_* families): face k is the LOWER edge of cell k, so cell k is bounded below by face k and above by face k+1; the face axis is the grid's lev_nodes index set (NLEV+1 members), face 1 is the GROUND and face NLEV+1 the MODEL TOP. W is declared over [lon, lat, lev_nodes]: a genuine three-dimensional, face-staggered wind.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "axes:lon,lat,lev",
+      "order:3",
+      "scheme:upwind",
+      "stencil_width:7"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./ppmflux_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppmflux_D_lev_interior": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            4,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                3
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppmflux_lev_face_flux",
+                  "bindings": {
+                    "aL2": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "aL1": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "aC": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "aRc": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "aR1": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "aR2": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            3
+                          ]
+                        }
+                      ]
+                    },
+                    "dL2": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "dL1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dC": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    },
+                    "dRc": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dR1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "dR2": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            3
+                          ]
+                        }
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppmflux_lev_face_flux",
+                  "bindings": {
+                    "aL2": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            3
+                          ]
+                        }
+                      ]
+                    },
+                    "aL1": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "aC": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "aRc": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "aR1": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "aR2": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "dL2": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            3
+                          ]
+                        }
+                      ]
+                    },
+                    "dL1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "dC": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dRc": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    },
+                    "dR1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dR2": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

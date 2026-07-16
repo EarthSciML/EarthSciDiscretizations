@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_ppm_flux_D_lon_periodic",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/ppm_flux_D_lon_periodic -- the UNLIMITED (centred) CW84 conservative flux-form ZONAL advection operator (1/(a cos phi)) d/dlambda (U q), with the velocity INSIDE the operator and the PERIODIC WRAP INSIDE THE RULE. \n\nPins that the compound match D(U*q, wrt: lon) fires at priority 10 on the whole product, and that the FIVE regions -- interior i in [3, NLON-2], west columns i = 1,2, east columns i = NLON-1, NLON -- lower to the expected flux-difference structure, with each face flux written byte-identically in the two columns that share it. FIVE regions, not the monotone sibling's seven, and a FOUR-cell face rather than a six-cell one, because a SHARED face value needs no per-cell endpoints. \n\nTHE ONE THING THIS GOLDEN EXISTS TO PIN: THE EAST FACE OF COLUMN NLON READS U[1], NOT U[NLON+1], AND ITS FOUR CELLS ARE THE SAME FOUR, IN THE SAME ORDER, THAT COLUMN 1 PASSES FOR ITS WEST FACE -- q[NLON-1], q[NLON], q[1], q[2], velocity U[1]. With NLON = 5 the face axis has 6 members and the index 6 MUST NOT APPEAR on U anywhere. On a periodic axis the boundary columns DROP NOTHING; they ROTATE indices. \n\nALSO PINNED, AND THIS IS THE CONTRAST WITH THE MONOTONE SIBLING: there are NO `max`/`min`-against-0 donor-selection nodes, NO `abs` nodes and NO `ifelse` limiter branches anywhere in the OPERATOR. (The golden does contain exactly one `max` and one `min`, and they are not the operator's: they are the grid's lat_edge clamped-midpoint rule, phie = max(lat0, min(latN, ...)), which every latlon3d fixture carries. The monotone sibling's golden, by contrast, carries hundreds of `abs`/`ifelse` limiter nodes and its max/min ARE against 0.) The face value is the SHARED eq-(1.6) interface interpolant and does not depend on the sign of w at all -- which is not an oversight but a theorem: under the unlimited reconstruction the two cells straddling a face agree exactly at it, so an 'unlimited upwind PPM' collapses term-for-term onto this centred flux. Also pinned: the metric weight carries no cos(phi) face-length factor, and all four cell-width slots are the SAME name dlon_deg (exact on the uniform lon axis, the CW84 chain being degree-0 homogeneous in the widths). \n\nNLON = 5 is the smallest grid exercising all five regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/ppm_flux_D_lon_periodic.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dPpmFluxDLonPeriodicAst",
+  "bindings": {
+    "NLON": 5,
+    "NLAT": 5,
+    "NLEV": 3
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_upwind1_flux_D_lev_noflux_bc",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc -- the conservative FLUX-FORM first-order-upwind vertical advection operator d/dz(w q), with the velocity INSIDE the operator and rigid no-flux walls at the surface and the model top. Pins that the compound match D(W*q, wrt: lev) fires at priority 10 on the whole product (rather than a plain-D rule lowering a bare derivative) and that the three regions -- interior k in [2, NLEV-1], surface slab k = 1, model-top slab k = NLEV -- lower to the expected flux-difference structure, with each interior face flux written byte-identically in the two cells that share it (which is what makes the column mass sum telescope in floating point). Also pins the two structural properties that distinguish this operator from every pre-existing advection rule on this grid: (a) the velocity W is indexed as W[i,j,.] over [lon, lat, lev_nodes], a genuine three-dimensional face-staggered field, not a 1-D column profile read from a free name; and (b) each face flux carries an `abs` node -- the branch-free donor-cell selection F = 1/2[w(qL+qR) - |w|(qR-qL)] -- so the scheme picks its donor by the SIGN of the local face velocity and therefore survives a wind that reverses. The wall fluxes are LITERALLY ABSENT from the k=1 and k=NLEV slabs rather than formed and multiplied by zero, so W[i,j,1] and W[i,j,NLEV+1] must not appear anywhere in the golden. NLEV = 6 is the smallest grid exercising all three regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dUpwind1FluxDLevNofluxAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 5,
+    "NLEV": 6
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

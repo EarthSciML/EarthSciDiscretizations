@@ -1,0 +1,502 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_advection_zonal_upwind",
+    "description": "MMS driver: solid-body zonal advection on the 3-D latlon3d grid, u_t = -omega_deg * D(u, lon) with constant angular velocity omega_deg (deg/s), discretized by grids/latlon3d/rules/upwind1_D_lon_periodic (first-order upwind backward difference, explicit periodic wrap, rank-3). The rank-3 analogue of problems/latlon_advection_zonal_upwind: the lat and lev axes are PASSIVE (no lat or lev operator appears), so the exact solution is carried rigidly on every (lat, lev) column. Exact solution u(lon, lat, lev, t) = sin((pi/180)(lon - omega_deg t)) * cos((pi/180) lat) — the m=1 zonal wave transported rigidly (constant ANGULAR velocity is latitude-independent), independent of lev. omega_deg > 0 is eastward flow; the backward-difference upwind stencil takes its neighbor from upstream. Periodic in lon with period 360 (global recipe closure dlon_deg = 360/NLON). GRID CONTRACT WIRING (grids/latlon3d/grid.esm): NLAT is closed to 5 and NLEV to 4 at the import edge (both passive; 5 pole-to-pole lat rows at dlat_deg = 45 and 4 arbitrary lev cells suffice), NLON stays open (default 144, rebound by the convergence sweep via the loader API); dlon_deg = 360/NLON is an observed dividing by the metaparameter NAME NLON (esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline the grid's coordinate conventions (lon_i = (i-1/2)*360/NLON via the NLON name; lat_j = -90 + (j-1)*45 as literals; independent of lev) rather than invoking lon_coord/lat_coord/lev_center — free-name geometry is not resolvable in the build-time ic/reference evaluator (AGENTS.md build-time scope caveat). ERROR MODEL: first-order upwind amplitude damping, relative L2 error ~O(dlon_deg); the coarsest sweep point bounds the 0.2 t=0.5 assertion. The upwind + wrap scheme telescopes so sum(u) is conserved exactly and the zonal mean of the m=1 wave is 0 at all times.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:latlon3d",
+      "equation:advection",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224. Test case 1 (solid-body advection), restricted to zonal flow."
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 8 (modified equations and numerical diffusion of the upwind method)."
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "ZonalAdvectionUpwind3d": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon3d/rules/upwind1_D_lon_periodic.esm",
+          "bindings": {
+            "NLAT": 5,
+            "NLEV": 4
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Advected tracer over lon x lat x lev."
+        },
+        "omega_deg": {
+          "type": "parameter",
+          "units": "deg/s",
+          "default": 90,
+          "description": "Constant angular velocity of the solid-body zonal flow (positive eastward; the upwind rule assumes this sign)."
+        },
+        "dlon_deg": {
+          "type": "observed",
+          "units": "deg",
+          "expression": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
+            ]
+          },
+          "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name. NLON is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlon_deg consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                360,
+                                "NLON"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                45
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "omega_deg"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lon"
+              }
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_solid_body_rotation_upwind_3d",
+          "description": "Exact u = sin((pi/180)(lon - omega_deg t)) cos((pi/180) lat), omega_deg=90, independent of lev. t=0 pins ic wiring; t=0.5 bounds first-order upwind damping (rel L2 ~O(dlon_deg), <=0.2 across the ladder); mean pins exact conservation (sum(u) telescopes; zero zonal mean of the m=1 wave). Per-resolution errors in the convergence golden.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.5
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    360,
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    45
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.2
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        360,
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                45
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i",
+                      "j",
+                      "k"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": {
+                        "from": "lat"
+                      },
+                      "k": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    45
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.5,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "mean"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

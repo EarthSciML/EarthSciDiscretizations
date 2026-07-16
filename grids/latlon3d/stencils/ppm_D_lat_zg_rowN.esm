@@ -1,0 +1,76 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lat_zg_rowN",
+    "description": "Zero-gradient north-pole boundary face for the PPM latitude derivative on the latlon3d grid: the single j=NLAT row slab, D f[i,NLAT,k] = (F_{NLAT+1/2} - F_{NLAT-1/2})/dlat_deg over all i (lon), all k (lev). The reconstruction's north ghosts (rows j>NLAT) are filled by zeroth-order extrapolation from the pole row (ghost = f[i,NLAT,k]): F_{NLAT+1/2}=ppm_flux(f[i,NLAT-2,k],f[i,NLAT-1,k],fN,fN,fN) and F_{NLAT-1/2}=ppm_flux(f[i,NLAT-3,k],f[i,NLAT-2,k],f[i,NLAT-1,k],fN,fN) with fN=f[i,NLAT,k]. F_{NLAT-1/2} is shared (identical float) with the j=NLAT-1 face so the meridional divergence telescopes. One of five factored boundary faces (north end j=NLAT-1, NLAT) consumed by rules/ppm_D_lat_zero_grad_bc; a full (NLON x 1 x NLEV) slab AGGREGATE in its own single-purpose stencil so the rule body stays a thin makearray of apply calls. `dlat_deg` is the inherited consumer-supplied meridional spacing free name. Sign convention: upwind for flow toward +lat.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:3",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "./ppm_flux.esm" }
+  ],
+  "expression_templates": {
+    "ppm_D_lat_zg_rowN": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": ["NLAT", "NLAT"],
+          "k": { "from": "lev" }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_flux",
+                  "bindings": {
+                    "um2": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 2] }, "k"] },
+                    "um1": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 1] }, "k"] },
+                    "u0": { "op": "index", "args": ["f", "i", "NLAT", "k"] },
+                    "up1": { "op": "index", "args": ["f", "i", "NLAT", "k"] },
+                    "up2": { "op": "index", "args": ["f", "i", "NLAT", "k"] }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_flux",
+                  "bindings": {
+                    "um2": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 3] }, "k"] },
+                    "um1": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 2] }, "k"] },
+                    "u0": { "op": "index", "args": ["f", "i", { "op": "-", "args": ["NLAT", 1] }, "k"] },
+                    "up1": { "op": "index", "args": ["f", "i", "NLAT", "k"] },
+                    "up2": { "op": "index", "args": ["f", "i", "NLAT", "k"] }
+                  }
+                }
+              ]
+            },
+            "dlat_deg"
+          ]
+        }
+      }
+    }
+  }
+}

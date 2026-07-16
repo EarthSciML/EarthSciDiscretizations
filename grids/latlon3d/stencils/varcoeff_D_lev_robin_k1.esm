@@ -1,0 +1,244 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_D_lev_robin_k1",
+    "description": "SURFACE slab (k = 1) of the variable-coefficient vertical diffusion operator with a ROBIN SURFACE-EXCHANGE boundary: dry deposition out plus prescribed emission in. D u[i,j,1] = (G_{3/2} - G_{1/2}) / dz[1] with the ground flux G_{1/2} closed by RESISTANCE IN SERIES. Reads two consumer-supplied free names besides `dz`: `vdep` (deposition velocity, shape [lon,lat], >= 0) and `emis` (surface emission flux, shape [lon,lat], the same units as kz*du/dz). DERIVATION. Let c_s be the concentration AT the ground (NOT u[i,j,1], which is the cell-1 mean, a distance dz[1]/2 above it). Two expressions for the same ground flux must agree: the DIFFUSIVE flux carried from the ground up to the cell-1 centre, G_{1/2} = (2 kz[1]/dz[1]) (u[1] - c_s), and the SURFACE EXCHANGE itself, G_{1/2} = vdep*c_s - emis. Eliminating the unknown c_s and writing a = 2 kz[1]/dz[1] gives G_{1/2} = (vdep*u[1] - emis) * a/(a + vdep), spelled here with the a's cancelled to a single division as (vdep*u[1] - emis) * 2 kz[1] / (2 kz[1] + vdep*dz[1]). The factor a/(a+vdep) is exactly the classical resistance-in-series conductance: 1/a is the aerodynamic/diffusive resistance of the bottom half-cell and 1/vdep is the surface resistance, and they add. WHY NOT THE NAIVE FORM. Applying the deposition velocity directly to the first-cell value -- G_{1/2} = vdep*u[1] - emis, the obvious spelling -- is INCONSISTENT: it commits an O(dz) error in the ground flux (because u[1] != c_s), which the divergence then divides by dz[1], leaving an O(1) truncation error that never vanishes under refinement. Measured on the manufactured solution of problems/latlon3d_diffusion_vertical_robin_surface, the naive closure looks healthy at coarse resolution and then visibly unravels (observed Linf solution order 1.98 -> 1.52 -> 1.16 as NLEV goes 32 -> 64 -> 128, heading for 1); the series closure here holds a clean 2.00. The series form's O(dz) errors cancel identically: with u[1] = c(0) + c'(0) dz[1]/2 + O(dz^2) the two half-cell terms telescope and G_{1/2} recovers the exact ground flux kz(0) c'(0) to O(dz^2). LIMITS. vdep -> 0 gives G_{1/2} -> -emis (pure emission); emis = 0 gives the pure resistance-in-series deposition flux u[1]*vdep*a/(a+vdep); vdep = emis = 0 reproduces ./varcoeff_D_lev_nf_k1.esm exactly. CONSERVATION: mass is NOT conserved here, by design -- the column mass budget closes to exactly (emis - vdep*c_s) per unit area per unit time, which is the physical surface exchange. REQUIRES 2 kz[i,j,1] + vdep[i,j]*dz[1] > 0 (i.e. not both kz = 0 and vdep = 0 in the same column).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:2",
+      "bc:robin"
+    ],
+    "references": [
+      {
+        "citation": "Wesely, M. L., & Hicks, B. B. (2000). A review of the current status of knowledge on dry deposition. Atmospheric Environment, 34(12-14), 2261-2282. The resistance-in-series surface-exchange formulation.",
+        "doi": "10.1016/S1352-2310(99)00467-7"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Section 8.4 (vertical turbulent diffusion of a tracer) and Section 20.1 (surface emission and dry-deposition flux boundary condition)."
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./varcoeff_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_D_lev_robin_k1": {
+      "params": [
+        "u",
+        "kz"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "u",
+          "kz"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            1,
+            1
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "varcoeff_lev_face_flux",
+                  "bindings": {
+                    "q0": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "q1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j",
+                        2
+                      ]
+                    },
+                    "k0": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        1
+                      ]
+                    },
+                    "k1": {
+                      "op": "index",
+                      "args": [
+                        "kz",
+                        "i",
+                        "j",
+                        2
+                      ]
+                    },
+                    "dz0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        1
+                      ]
+                    },
+                    "dz1": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        2
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "vdep",
+                                "i",
+                                "j"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "emis",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            2,
+                            {
+                              "op": "index",
+                              "args": [
+                                "kz",
+                                "i",
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "kz",
+                                    "i",
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "vdep",
+                                    "i",
+                                    "j"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "dz",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

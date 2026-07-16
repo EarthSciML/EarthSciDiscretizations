@@ -1,0 +1,329 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppmflux_D_lev_unlim_interior",
+    "description": "INTERIOR slab (k = 3 .. NLEV-2) of the UNLIMITED (centred) CW84 flux-form vertical advection operator d/dz(w q) on the latlon3d stretched vertical, with the wind as a MATCHED OPERAND: D[i,j,k] = (F_{k+1/2} - F_{k-1/2}) / dz[k], each face flux being the pre-existing ../stencils/ppm_lev_flux (CW84 eq (1.6) 4th-order interface interpolant on raw eq (1.7) slopes) scaled by the face velocity. \n\nWHAT IS NEW HERE relative to the pre-existing ppm_D_lev_interior, which computes the identical face value: the velocity. The pre-existing chain reads its velocity from the FREE NAME w_edge, a 1-D, k-only, time-static column profile of shape [lev_nodes]; here W is a matched operand of shape [lon, lat, lev_nodes] -- a genuine three-dimensional, face-staggered wind of the kind a meteorological field actually supplies -- and the operator matches the COMPOUND D(W*q, wrt: lev) so that the product is differenced at faces and mass telescopes for ANY wind, not only a constant one.\n\nTHIS OPERATOR IS NOT UPWIND-BIASED, AND CANNOT BE. Its face value is the SHARED CW84 eq-(1.6) interface interpolant (../stencils/ppm_lev_flux, F = w * a_{k+1/2}), which does not depend on the sign of w at all. That is not an oversight: for the UNLIMITED reconstruction the parabola of the cell below the face and the parabola of the cell above it agree EXACTLY at the face they share, so the two one-sided donor values are identical and there is literally nothing to choose between -- an 'unlimited upwind PPM' collapses, term for term, onto this centred flux. Upwind bias only acquires content once the eq (1.10) limiter has pulled the two cells' endpoints apart, which is what the sibling monotone chain (../stencils/ppmflux_D_lev_interior) does. This operator is therefore the high-order, non-dissipative ACCURACY CEILING against which the monotone sibling is measured -- and, being centred, it is the one that overshoots and can drive a tracer negative at a sharp gradient.\n\nCRITICAL: every interface flux shared with a neighbouring cell is built here from the SAME face template applied to the SAME six cells, the SAME six widths and the SAME face velocity as the neighbour uses, so the two cells evaluate a bit-identical float for it and the flux divergence telescopes exactly -- the column mass budget closes in floating point, not merely in exact arithmetic. Reads the free name `dz` (the grid's lev_thickness applied to the consumer's `pe`); the face velocity W is a MATCHED OPERAND, passed in, not a free name. Support is five cells (k-2..k+2), so the interior is [3, NLEV-2] and there are four boundary slabs -- two fewer cells and two fewer slabs than the monotone sibling, because a shared face value needs no per-cell endpoints.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "axes:lon,lat,lev",
+      "order:4",
+      "scheme:centered",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./ppm_lev_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppmflux_D_lev_unlim_interior": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            3,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                2
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "a0": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "ap": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "app": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "dm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "d0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    },
+                    "dp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dpp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "a0": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "ap": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    },
+                    "app": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "d0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "k"
+                      ]
+                    },
+                    "dpp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "i",
+                        "j",
+                        "k"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

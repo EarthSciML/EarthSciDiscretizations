@@ -1,0 +1,135 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "varcoeff_D_lev_nf_k1",
+    "description": "SURFACE slab (k = 1) of the variable-coefficient vertical diffusion operator with a ZERO-FLUX (homogeneous Neumann) ground: D u[i,j,1] = G_{3/2} / dz[1]. The domain-face flux G_{1/2} at the ground is LITERALLY ABSENT from the expression rather than being formed and cancelled, so the wall flux is identically zero in exact arithmetic AND in floating point -- the operator can neither create nor destroy mass at the surface, and the column mass sum telescopes to G_top - 0. k = 1 is the SURFACE because the grid's `pe` is monotone INCREASING with the lev index (pe[1] = ground, pe[NLEV+1] = model top); see grids/latlon3d/grid.esm. Use this slab for a chemically inert / non-depositing tracer, or wherever surface exchange is supplied as a separate volumetric source rather than through the diffusive boundary condition; for emission + dry deposition use ./varcoeff_D_lev_robin_k1.esm instead. Reads the free name `dz`. The closure is second-order in SOLUTION error (Gustafsson): its local truncation error is O(dz) at this one cell -- imposing the EXACT wall flux breaks the leading-order cancellation between the two neighbouring face-flux errors that the interior enjoys -- but the parabolic solve smooths that boundary-localised defect back to O(dz^2) globally, which is what the convergence conformance case measures (2.00).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:varcoeff_laplacian",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.15 (variable-coefficient conservative form) and Section 2.12 (Neumann boundary conditions by dropping the domain-face flux)."
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Section 8.4 (vertical turbulent diffusion of a tracer) and Section 20.1 (surface emission and dry-deposition flux boundary condition)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./varcoeff_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_D_lev_nf_k1": {
+      "params": [
+        "u",
+        "kz"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "u",
+          "kz"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            1,
+            1
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "varcoeff_lev_face_flux",
+              "bindings": {
+                "q0": {
+                  "op": "index",
+                  "args": [
+                    "u",
+                    "i",
+                    "j",
+                    1
+                  ]
+                },
+                "q1": {
+                  "op": "index",
+                  "args": [
+                    "u",
+                    "i",
+                    "j",
+                    2
+                  ]
+                },
+                "k0": {
+                  "op": "index",
+                  "args": [
+                    "kz",
+                    "i",
+                    "j",
+                    1
+                  ]
+                },
+                "k1": {
+                  "op": "index",
+                  "args": [
+                    "kz",
+                    "i",
+                    "j",
+                    2
+                  ]
+                },
+                "dz0": {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    1
+                  ]
+                },
+                "dz1": {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    2
+                  ]
+                }
+              }
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

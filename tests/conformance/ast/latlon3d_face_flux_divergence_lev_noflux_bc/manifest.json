@@ -1,0 +1,25 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "latlon3d_face_flux_divergence_lev_noflux_bc",
+  "description": "Post-lowering AST conformance for grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc -- the divergence of a FACE-STAGGERED flux, d/dz(M), which is the CONTINUITY half of the consistent-with-continuity (CWC) vertical transport pair (the tracer half being upwind1_flux_D_lev_noflux_bc). Pins that the three regions -- interior k in [2, NLEV-1], surface slab k = 1, model-top slab k = NLEV -- lower to the bare telescoping face difference (M[i,j,k+1] - M[i,j,k]) / dz[k], with each interior face value written byte-identically in the two cells that share it (which is what makes the column mass sum telescope in floating point) and with the WALL FLUXES LITERALLY ABSENT: M[i,j,1] and M[i,j,NLEV+1] must not appear anywhere in the golden. That absence is not cosmetic -- it is half of the reason a constant tracer is preserved BITWISE rather than merely to rounding, since the companion tracer slabs omit their wall fluxes in exactly the same positions. \n\nTHE FIXTURE ALSO PINS THE RULE-SEPARATION CLAIM, which is the one property of this rule that could plausibly have been wrong. Its match pattern D(M, wrt: lev) is structurally IDENTICAL to that of the pre-existing plain-D lev rules on this grid; only the esm-spec 9.6.1 `where` shape constraint distinguishes them ([lon, lat, lev_nodes] here versus [lon, lat, lev] there). So the fixture imports BOTH this rule AND central_D_lev_zero_grad_bc, declares BOTH a face-staggered flux M and a cell-centred state m, and writes BOTH derivatives into one right-hand side: dm/dt = -D(M, wrt: lev) - D(m, wrt: lev). The golden shows each derivative lowered by its own rule -- the face divergence to the flux-difference form, the cell derivative to the centred zero-gradient form -- with no ambiguity error and no priority race. The two rules coexist because no declared field can satisfy both shape constraints. \n\nNLEV = 6 is the smallest grid exercising all three regions with a non-empty interior.",
+  "rule": "../../../../grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc.esm",
+  "grid": "latlon3d",
+  "fixture": "fixture.esm",
+  "model": "Latlon3dFaceFluxDivergenceLevNofluxAst",
+  "bindings": {
+    "NLON": 8,
+    "NLAT": 5,
+    "NLEV": 6
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "active"
+}

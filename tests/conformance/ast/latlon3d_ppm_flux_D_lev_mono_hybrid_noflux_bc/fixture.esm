@@ -1,0 +1,297 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_ppm_flux_D_lev_mono_hybrid_noflux_bc",
+    "description": "AST fixture for the terrain-following (hybrid, mass-form + 3-D dp reconstruction) upwind-biased monotone PPM flux-form vertical advection rule. Supplies a genuinely 3-D pressure-at-edges pe[i,j,kn] and derives the rank-3 thickness dp via lev_thickness_3d; the wind W is a matched operand.",
+    "license": "MIT"
+  },
+  "models": {
+    "Latlon3dPpmFluxDLevMonoHybridNofluxAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/ppm_flux_D_lev_mono_hybrid_noflux_bc.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 7
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Advected tracer (cell means)."
+        },
+        "pe": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Three-dimensional pressure-at-edges: a stretched vertical profile modulated in lon and lat so the derived thickness dp is genuinely rank-3 (terrain-following).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "iw": {
+                "from": "lon"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.6,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kw",
+                                1
+                              ]
+                            },
+                            "NLEV"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        0.4,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kw",
+                                1
+                              ]
+                            },
+                            "NLEV"
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kw",
+                                1
+                              ]
+                            },
+                            "NLEV"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.1,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "iw",
+                                1
+                              ]
+                            },
+                            "NLON"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        0.05,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "jw",
+                                1
+                              ]
+                            },
+                            "NLAT"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "dp": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Rank-3 physical layer thicknesses from the grid's lev_thickness_3d template.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness_3d",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        "W": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Three-dimensional face-staggered vertical air-mass flux; sign-reversing, vanishing at both walls.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [
+              "pe"
+            ],
+            "ranges": {
+              "iw": {
+                "from": "lon"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "sin",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    6.283185307179586,
+                    {
+                      "op": "index",
+                      "args": [
+                        "pe",
+                        "iw",
+                        "jw",
+                        "kw"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "W",
+                      "u"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

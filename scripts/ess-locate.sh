@@ -4,8 +4,12 @@
 # Every runner and validation script sources this file (or invokes it) instead of
 # hard-coding a path. Resolution order:
 #   1. $ESS_ROOT, if set.
-#   2. ../EarthSciAST relative to this repo's root (the sibling-checkout
-#      convention used locally and in CI).
+#   2. The nearest ../EarthSciAST found by walking up from this repo's root. The
+#      first candidate is the ordinary sibling checkout used locally and in CI.
+#      The walk matters inside a git worktree, where the repo root is
+#      <main>/.claude/worktrees/<name> and the sibling checkout is several levels
+#      up rather than one -- resolving only one level up yields a path that does
+#      not exist, and the resulting failure is easy to misread as a test failure.
 #
 # Usage:
 #   ESS_ROOT="$(scripts/ess-locate.sh)"          # print the resolved path
@@ -16,7 +20,19 @@ set -euo pipefail
 _esd_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
 if [[ -z "${ESS_ROOT:-}" ]]; then
-  ESS_ROOT="$(cd "${_esd_root}/.." && pwd)/EarthSciAST"
+  _dir="${_esd_root}"
+  while true; do
+    _cand="$(cd "${_dir}/.." && pwd)/EarthSciAST"
+    if [[ -f "${_cand}/esm-schema.json" ]]; then
+      ESS_ROOT="${_cand}"
+      break
+    fi
+    _parent="$(dirname "${_dir}")"
+    [[ "${_parent}" == "${_dir}" ]] && break
+    _dir="${_parent}"
+  done
+  # Fall back to the plain sibling guess so the error below names the expected path.
+  ESS_ROOT="${ESS_ROOT:-$(cd "${_esd_root}/.." && pwd)/EarthSciAST}"
 fi
 
 if [[ ! -f "${ESS_ROOT}/esm-schema.json" ]]; then

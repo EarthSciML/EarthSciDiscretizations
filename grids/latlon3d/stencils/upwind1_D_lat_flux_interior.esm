@@ -1,0 +1,209 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "upwind1_D_lat_flux_interior",
+    "description": "INTERIOR rows (j = 2 .. NLAT-1) of the flux-form first-order-upwind MERIDIONAL advection operator (1/a cos(phi)) d/dphi(cos(phi) v q) in index form: D[i,j,k] = ( F_{j+1} coslat_e[j+1] - F_j coslat_e[j] ) / dS_lat[j], with the donor-cell face flux F supplied by the axis-neutral atom upwind_lev_face_flux (whose name says lev but whose body is pure scalar algebra F = 1/2[w(qL+qR) - |w|(qR-qL)] with no axis knowledge -- it is REUSED here, not copied). \n\nGEOMETRY. Latitude on this grid is POINT-based and has no native edges, so the grid manufactures them by the clamped-midpoint rule of the lat_edge template. The free names this stencil reads are coslat_e (shape [lat_nodes], the FACE-LENGTH weight cos(phi_e), = the grid's coslat_edge applied to the consumer's phie) and dS_lat (shape [lat], the EXACT spherical cell-area weight sin(phi_e[j+1]) - sin(phi_e[j]), = the grid's latcell_area applied to the same phie) -- the same free-name contract by which the vertical flux stencils read dz. Because the divergence is a DIFFERENCE OF FACE FLUXES and adjacent rows reuse the identical face expression, the fluxes TELESCOPE: sum_j dS_lat[j] D[i,j,k] leaves only the two domain-end (pole) fluxes, which are ABSENT (see the cap stencils), so meridional transport conserves tracer mass exactly in floating point for ANY wind field. \n\nFACE INDEXING (pinned by grids/latlon, and the same convention as face k = lower edge of cell k in the vertical): FACE j IS THE LOWER (SOUTHERN) EDGE OF CELL j, so cell j is bounded by face j to the south and face j+1 to the north. The meridional wind V is declared over [lon, lat_nodes, lev]: fully three-dimensional and face-staggered, POSITIVE NORTHWARD (in the direction of increasing lat index). It is the lat_nodes index-set NAME -- not its size -- that lets the esm-spec 9.6.1 `where` shape constraint tell the face wind V apart from the cell tracer q. Requires NLAT >= 3.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:1",
+      "scheme:upwind",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux and its branch-free algebraic form F = 1/2[u(qL+qR) - |u|(qR-qL)])."
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./upwind_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "upwind1_D_lat_flux_interior": {
+      "params": [
+        "q",
+        "V"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "V"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLAT",
+                1
+              ]
+            }
+          ],
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "upwind_lev_face_flux",
+                      "bindings": {
+                        "qL": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "qR": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "w": {
+                          "op": "index",
+                          "args": [
+                            "V",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "coslat_e",
+                        {
+                          "op": "+",
+                          "args": [
+                            "j",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "upwind_lev_face_flux",
+                      "bindings": {
+                        "qL": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "qR": {
+                          "op": "index",
+                          "args": [
+                            "q",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "w": {
+                          "op": "index",
+                          "args": [
+                            "V",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "coslat_e",
+                        "j"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dS_lat",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

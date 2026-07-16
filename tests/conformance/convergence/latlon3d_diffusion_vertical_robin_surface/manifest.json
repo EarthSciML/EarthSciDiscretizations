@@ -1,0 +1,76 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_diffusion_vertical_robin_surface",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/varcoeff_laplacian_lev_robin_surface_bc (variable-coefficient vertical diffusion with a resistance-in-series ROBIN SURFACE-EXCHANGE ground -- dry deposition out, prescribed emission in -- and a zero-flux model top) driven by problems/latlon3d_diffusion_vertical_robin_surface.esm. Refines NLEV alone (16 -> 128), lon and lat passive. Manufactured solution u(z,t) = phi(z) + exp(-pi^2 t) psi(z), a transient decaying onto the emission/deposition steady state, with vdep = 0.3 and emis = vdep + pi/8 (the value that makes phi satisfy the continuous Robin condition). SECOND ORDER in both L2 and Linf (observed 2.00 / 1.99) -- the SAME order as the no-flux sibling latlon3d_diffusion_vertical_noflux, which is the point of this case: the surface exchange costs nothing in accuracy PROVIDED it is closed by resistance in series. THIS CASE IS THE REGRESSION GUARD FOR THAT: the obvious alternative closure -- applying the deposition velocity directly to the first-cell value -- is inconsistent (an O(1) truncation error), and it is invisible at coarse resolution, holding an apparent order 1.98 at NLEV = 32 before unravelling to 1.52 at 64 and 1.16 at 128. A four-point ladder reaching NLEV = 128 is what makes the difference detectable; do not shorten it.",
+  "problem": "../../../../problems/latlon3d_diffusion_vertical_robin_surface.esm",
+  "model": "VerticalDiffusionRobin3d",
+  "rule": "../../../../grids/latlon3d/rules/varcoeff_laplacian_lev_robin_surface_bc.esm",
+  "grid": "latlon3d",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLEV": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLEV": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLEV": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLEV": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

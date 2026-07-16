@@ -1,0 +1,37 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_advection_zonal_upwind",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/upwind1_D_lon_periodic driven by problems/latlon3d_advection_zonal_upwind.esm — the rank-3 analogue of latlon_advection_zonal_upwind with passive lat (NLAT=5) and lev (NLEV=4) axes. The problem is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4): NLON is the open metaparameter; the problem's dlon_deg observed divides by the NLON name, so the geometry follows each rebinding automatically. Exact solution sin((pi/180)(lon - omega t)) cos((pi/180) lat), independent of lev; the recorded t=0.5 errors are dominated by first-order upwind amplitude damping, a relative L2 error ~O(dlon). expected_order is 1.0; order_tolerance 0.15 because a first-order upwind scheme approaches order 1 from below in the pre-asymptotic regime (same rationale as the 2-D sibling latlon_advection_zonal_upwind and the cartesian advection_1d_periodic).",
+  "problem": "../../../../problems/latlon3d_advection_zonal_upwind.esm",
+  "model": "ZonalAdvectionUpwind3d",
+  "rule": "../../../../grids/latlon3d/rules/upwind1_D_lon_periodic.esm",
+  "grid": "latlon3d",
+  "resolutions": [
+    { "n": 16, "bindings": { "NLON": 16 } },
+    { "n": 32, "bindings": { "NLON": 32 } },
+    { "n": 64, "bindings": { "NLON": 64 } },
+    { "n": 128, "bindings": { "NLON": 128 } }
+  ],
+  "norms": ["L2_error", "Linf_error"],
+  "assert_time": 0.5,
+  "expected_order": 1.0,
+  "order_tolerance": 0.15,
+  "reference_binding": "julia",
+  "bindings_required": ["julia", "python", "rust"],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
+    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
+    "rust": { "solver": "Erk", "reltol": 1e-07, "abstol": 1e-09 }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

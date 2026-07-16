@@ -1,0 +1,87 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "facediv_lev_nf_k1",
+    "description": "SURFACE slab (k = 1) of the vertical divergence of a face-staggered field, closed with a NO-FLUX (rigid, impermeable) lower wall: the ground face flux M_1 is identically zero, so D[i,j,1] = M[i,j,2] / dz[1]. This is not a boundary approximation -- it is the exact physical statement that NO AIR FLOWS THROUGH THE GROUND, so the mass flux at the ground face is zero, full stop. \n\nTHE WALL FLUX IS LITERALLY ABSENT, not formed and cancelled. M[i,j,1] does not appear anywhere in the lowered expression. That matters for two reasons. (1) Floating point: an expression written (M[i,j,2] - M[i,j,1])/dz[1] is only bit-identical to M[i,j,2]/dz[1] when M[i,j,1] is exactly +0.0, which a consumer's analytic wind formula need not deliver (sin(2*pi*z) at z = 1, for instance, is -2.4e-16, not 0). Omitting the term makes the closure exact regardless of what the consumer stores in the wall face. (2) CONSISTENCY WITH CONTINUITY: the companion tracer operator upwind1_D_lev_flux_nf_k1 omits its ground flux in exactly the same way, so with a constant tracer q == 1 -- for which the donor-cell flux collapses BITWISE to the mass flux -- this stencil and that one emit the identical floating-point number, and the tracer mass mq tracks the air mass m to the last bit. Had one of the two slabs formed its wall flux and multiplied it by zero while the other omitted it, the two would agree only to rounding, and a constant tracer would slowly acquire structure at the surface. \n\nNOTE that M[i,j,1] is not read: whatever the consumer stores in the ground face is ignored, so a nonzero value there is silently harmless rather than a silent mass leak. \n\nFACE INDEXING (shared with the upwind1_D_lev_flux_* and ppm_D_lev_* families on this grid): face k is the LOWER edge of cell k; face 1 is the GROUND and face NLEV+1 the MODEL TOP. M is positive UPWARD. Reads the free name dz.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      },
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052.",
+        "doi": "10.1002/qj.49712757318"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "facediv_lev_nf_k1": {
+      "params": [
+        "M"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "M"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            1,
+            1
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "M",
+                "i",
+                "j",
+                2
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

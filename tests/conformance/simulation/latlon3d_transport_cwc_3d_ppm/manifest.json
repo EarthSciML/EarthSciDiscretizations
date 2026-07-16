@@ -1,0 +1,28 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "latlon3d_transport_cwc_3d_ppm",
+  "description": "Consistency with continuity for the MONOTONE PPM scheme on the latlon3d grid at 12x7x9 -- the free-stream-preservation gate for the PRODUCTION reconstruction, as opposed to its donor-cell sibling latlon3d_transport_cwc_3d. Six rules fire at once: three bare-D face-flux-divergence rules closing continuity (lon periodic, lat polar, lev no-flux) and three compound monotone PPM flux-form advection rules carrying the tracer. At q == 1 the CW84 reconstruction collapses to the constant 1 (every slope is exactly 0.0), the face flux becomes F = M bitwise, and q stays exactly 1. MEASURED: dev = 0.0 exactly at t=0 and t=0.1. The assertion reference is the constant zero, so non-vacuity is established separately by problems/_falsifier_ppm3d.esm (ic(mq) x 1.000001), which drives dev to 1.08e-6 and correctly fails -- re-run it if this problem changes. Only the t=0.1 assertion discriminates: dev is a state with dev(0)=0 by construction. Costs ~370 s / ~3.5 GB, dominated by the monotone PPM build (esm-spec 9.7.3 inlining), not the solve. See README.md.",
+  "problem": "../../../../problems/latlon3d_transport_cwc_3d_ppm.esm",
+  "model": "TransportCWC3dPPM",
+  "tests": [
+    "freestream_q_stays_one_3d"
+  ],
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia"
+  ],
+  "scope_excluded": {
+    "python": "rank-3 makearray flux-form transport; not exercised by the python binding's simulator",
+    "rust": "rank-3 makearray flux-form transport; not exercised by the rust binding's simulator",
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  }
+}

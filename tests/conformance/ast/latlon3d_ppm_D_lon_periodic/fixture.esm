@@ -1,0 +1,46 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_ppm_D_lon_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/latlon3d/rules/ppm_D_lon_periodic, bound to NLON=8, NLAT=5, NLEV=4 at the import edge. The match D(u,lon) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 six-region makearray — interior conservative PPM flux-difference aggregate (F_{i+1/2}-F_{i-1/2})/dlon_deg over [4,6] x [1,5] x [1,4] with the CW84-limited semi-discrete upwind edge flux (ppm_face_value/ppm_limit_right/ppm_flux inlined), plus the five explicit periodic-wrap slab faces i=1,2,3,7,8 — with zero apply_expression_template nodes, all metaparameters folded, and the consumer-supplied spacing surviving as the free name dlon_deg (declared here as a parameter, 360/8 = 45). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": ["conformance", "ast", "grid:latlon3d", "rule:ppm_D_lon_periodic"]
+  },
+  "models": {
+    "Latlon3dPpmDLonPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/ppm_D_lon_periodic.esm",
+          "bindings": { "NLON": 8, "NLAT": 5, "NLEV": 4 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": ["lon", "lat", "lev"],
+          "description": "Field over the lon x lat x lev index sets."
+        },
+        "dlon_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 45,
+          "description": "The grid's dlon_deg free name (inherited consumer-supplied geometry contract): 360/NLON = 45 spelled as a literal because NLON is closed at the import edge."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "-",
+            "args": [ { "op": "D", "args": ["u"], "wrt": "lon" } ]
+          }
+        }
+      ]
+    }
+  }
+}

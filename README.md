@@ -141,13 +141,24 @@ gates and the in-model LCC round-trip, and the ragged-MPAS divergence
 simulation (Julia; div∘curl exact to ~3e-14). This wave adds the full
 **first-derivative (gradient) family across all five grids** with second-derivative /
 Laplacian companions, plus a **variable-coefficient / nonlinear Laplacian** `∇·(k∇u)` and
-a **mixed `∂²/∂x∂y`** cross-derivative on cartesian, the **metric spherical
+a **mixed `∂²/∂x∂y`** cross-derivative on cartesian — lifted to rank 3 on a non-uniform
+vertical as the **`K_zz` boundary-layer mixing** operator with a **Robin surface-exchange**
+(dry-deposition + emission) ground — the first **advection rules that match the wind as an
+operand**, `D(W·q, lev)`, taking a genuinely 3-D face-staggered velocity and picking their
+donor from the *sign* of the local face velocity (donor-cell and upwind-biased PPM), together
+with the **air-mass continuity** rule that makes them *free-stream preserving to the bit* —
+the **metric spherical
 (Laplace–Beltrami)** Laplacian on lat-lon, the **MPAS TRiSK edge-gradient and cell
 Laplacian**, and a family of nonlinear high-order schemes: the **Godunov gradient-norm
 Hamiltonian** (1-D and 2-D, exact on linear fields, entropy-fixed eikonal), fifth-order
 **WENO-Z advection** and the **Jiang–Peng HJ-WENO** `|∇u|` (both observed order 5.00),
-Colella–Woodward **PPM** conservative transport, and TVD **Lax–Friedrichs / minmod /
-superbee** limiters. Sub-nominal observed orders (PPM's smooth-extremum clip, limiter
+Colella–Woodward **PPM** conservative transport — reconstructed with the *full* CW84
+limiter pair (eq. (1.8) monotonized slopes **and** the eq. (1.10) parabola limiter), so a
+non-negative tracer with sharp jumps stays exactly within its initial range; using eq.
+(1.10) alone, as this library formerly did, leaves the scheme unbounded and it manufactures
+negative concentrations — and TVD **Lax–Friedrichs / minmod / superbee** limiters.
+Sub-nominal observed orders (PPM's smooth-extremum clip — most visibly on the meridional
+`cos⁴` case, whose smooth equatorial maximum the limiter flattens to first order — limiter
 clipping, Lax–Friedrichs reducing to first-order upwind for a linear flux) are pinned as
 *observed*, never forced to a design order. Regridding is now **end-to-end
 declarative** — grid-spec → cell rings → geometry-derived broad-phase bin keys →
@@ -176,7 +187,126 @@ the grid deriving cell centers and widths through its own `nonuniform_cell_cente
 finite-volume Laplacian with exact zero-flux walls, second-order in L2 by
 supraconvergence), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
-rules; global and regional recipes), and the MPAS unstructured grid;
+rules; global and regional recipes), its 3-D `latlon3d` extension for
+GEOS-Chem-Classic-style tracer transport (importing the lat-lon horizontal
+geometry and adding a hybrid non-uniform vertical through the Design-B
+consumer-supplied edge-array pattern, with first-order-upwind, centered, and a
+full rank-3 Colella–Woodward **PPM** family per direction — periodic-wrap zonal,
+zero-gradient meridional, and a conservative **flux-form** vertical PPM whose
+velocity vanishes at the model top/surface for exact machine-precision mass
+conservation, offered in two variants: an *unlimited* reconstruction with verified
+4th-order accuracy on the non-uniform mesh, and a **monotone** one (full CW84: eq
+(1.6) edge on eq (1.8) monotonized slopes plus the eq (1.10) parabola limiter) that
+is the production choice for chemistry-transport tracers — it holds a positive
+tracer non-negative across sharp vertical gradients, where the unlimited scheme
+measurably goes negative, at the cost of dropping to ~2.4 (L2) / ~1.9 (Linf) order;
+both conserve mass to the bit — each verified by its own MMS convergence case, with
+the upwind trio composing on one `[lon,lat,lev]` field into a full 3-D advection
+driver; and, alongside transport, **vertical turbulent diffusion** `∂/∂z(K_zz ∂c/∂z)`
+— the boundary-layer mixing operator — as a conservative non-uniform flux-difference
+whose interior face fluxes telescope to machine-zero mass drift, offered with a
+zero-flux lid plus either a zero-flux ground or a **Robin surface-exchange** ground
+carrying dry deposition out and emission in. Because the diffusion rule matches the
+*compound* `D(kz·D(c,lev),lev)` at priority 10 while advection matches a plain
+`D(c,lev)`, the two fire on distinct terms and compose in one model — transport +
+mixing + surface exchange is the minimum viable chemical-transport column. The
+surface flux is closed by **resistance in series**, `(v_d·c₁ − E)·a/(a+v_d)` with
+`a = 2K₁/dz₁`, and that is not a refinement but a correctness requirement: applying
+the deposition velocity directly to the first-cell value — the obvious spelling — is
+*inconsistent*, committing an O(dz) flux error that the divergence then divides by
+`dz`, and it hides at coarse resolution (apparent order 1.98 at NLEV=32) before
+unravelling (1.52 at 64, 1.16 at 128). The series form holds a clean 2.00, so the
+surface exchange costs nothing in accuracy. Advection then takes the step the rest of the
+transport stack is blocked on: **the wind becomes an operand of the rule**. The vertical PPM
+above is already flux-form, but it reads its velocity as a *free name* — `w_edge`, a 1-D,
+`lev`-only, time-static column profile — while every other advection rule (`upwind1_D_lon`,
+the `central_D_*` family, zonal/meridional PPM) matches a *bare* `D(q,axis)` and has a
+**scalar** velocity multiplied in from outside. That outside-multiplication is only correct
+for a *constant* wind — `w·∂q/∂z` and `∂(w·q)/∂z` coincide only then — and silently stops
+conserving tracer mass the moment the wind varies in space, as every real wind does. Worse,
+a bare-`D` stencil has no velocity argument at all (`upwind1_D_lon_interior` is literally
+`(f[i]−f[i−1])/dlon_deg`, a hard-coded backward difference), so it cannot switch donor when
+the wind reverses. Matching the *compound* `D(W·q,lev)` instead binds the wind as a rule
+parameter, which lets the operator take a real `[lon,lat,lev_nodes]` face-staggered field,
+difference the flux `w·q` at faces so mass telescopes for *any* wind, and see `sign(w)` at
+each face. The donor selection is written branch-free as `F = ½[w(q_L+q_R) − |w|(q_R−q_L)]`
+— identical to `ifelse(w>0, w·q_L, w·q_R)` but with no boolean subexpression and no
+removable singularity at `w=0`. Crucially, this compound match does **not** collide with the
+diffusion rule even though `D(kz·D(u,lev),lev)` is *also* a `D` of a two-factor product: by
+§9.6.1 a `where` shape constraint is satisfied only when the bound sub-AST is a **bare
+variable reference**, and "a compound sub-AST fails it", so binding `q := D(u,lev)` fails the
+constraint and the advection rule is filtered out at that node *before* priority selection
+ever runs. The separation is a structural guarantee of the shape-constraint semantics, not a
+priority race — verified by carrying both terms in one equation, where diffusion contributes
+exactly zero on a constant field and advection exactly `−∂w/∂z` (agreement 2.2e-16), with the
+column mass budget closing to 1.9e-16 relative, under one ulp. On that operator the wave then
+closes the two properties a transport core actually needs. **Consistency with continuity**:
+carrying the air mass alongside the tracer — states `m` (pressure thickness) and `m·q`, with
+`q = mq/m` observed and the *same* face mass-flux `M` driving both the continuity equation
+`∂m/∂t = −D(M,lev)` and the tracer `∂(mq)/∂t = −D(M·q,lev)` — makes a constant tracer stay
+constant under a divergent wind **exactly**, not approximately: measured `max|q−1| = 0.0` with
+`mq` *bit-identical* to `m` in every cell at every step, while a quarter of the air mass
+relocates. (The donor flux collapses to `F = ½[M·2 − |M|·0] = M` with every step exact in
+IEEE, so the two divergences cancel to the last bit.) The mixing-ratio form, driven by the
+same wind, drifts by ~44 %. The continuity operator is a second rule, `D(M,lev)` with `M`
+declared over `lev_nodes`; the disjoint index set is what keeps it from colliding with
+`D(q,lev)`, the same §9.6.1 mechanism again. And **accuracy**: an upwind-biased PPM
+reconstruction drops into the same face-flux and divergence structure, buying 29–249× lower
+error than donor-cell at matched resolution (observed order 2.49 L2 / 1.98 Linf limited,
+3.99/3.94 unlimited) while staying bounded at exactly zero and conserving mass to the bit.
+Two findings there are worth stating plainly. An *unlimited* upwind-biased PPM is a null
+concept — unlimited CW84 parabolas are continuous across a face, so the two one-sided values
+coincide and the donor branch is vacuous; upwind bias only acquires content *after* per-cell
+limiting. And the donor flux is best written `F = max(w,0)·a_R^L + min(w,0)·a_L^R`, which
+mentions each reconstruction *once* (the `abs` form mentions each twice — doubling a 35 MB
+AST) and returns the donor flux *bit-exactly*, where the `abs` form carries ~1e-13. The
+pre-existing vertical PPM rules, by contrast, hard-wire the donor to the lower cell and
+document the restriction (`upwind for w >= 0`); pointed at a downward wind they do not merely
+overshoot but **diverge** (measured min −6.2e+07 on a top-hat under subsidence), so
+`ppm_flux_D_lev_mono_noflux_bc` is the first vertical PPM here that survives real met, where
+descent is the normal state over much of the globe.
+
+The **horizontal** half of that transport core follows, and it required a grid-contract change
+rather than just new rules: latitude was *point*-based with no cell edges at all, so conservative
+flux-form meridional transport could not be expressed. Putting edges halfway between the latitude
+points and clamping at ±90° turns the points into finite volumes and produces GEOS-Chem's
+**half-polar caps** for free — and gives each pole a **zero-length face**, so the polar no-flux
+condition becomes *geometry* rather than the zero-gradient hack it replaces. The pole terms are
+structurally *omitted* rather than multiplied by a zero weight, because `cos(π/2)` is `6.1e-17` in
+IEEE, not zero, and relying on the weight would leak. Zonally, the periodic wrap is enforced
+**inside the rule** — cell `NLON`'s east face reuses `U[1]`, so the flux difference telescopes to
+exactly zero and a consumer *cannot* break conservation by supplying a non-periodic wind; element
+`U[NLON+1]` is simply never read. The payoff is **3-D consistency with continuity**: six rules in
+one model — three bare-`D` face-flux divergences closing continuity, three compound flux-form
+rules carrying the tracer — hold `q ≡ 1` **to the last bit** (`max|q−1| = 0.0` exactly, `mq`
+bit-identical to `m`, zero differing ulps across 51 saved states) while up to **76 % of the air
+mass relocates**; the mixing-ratio form of the same transport, under the same wind, tears a
+constant tracer apart at `max|div M| ≈ 20`. That single assertion exercises the zonal wrap, the
+polar omission, the area weights and the vertical wall closure *simultaneously* — the cancellation
+is bitwise only if every pair of operators agrees exactly about which faces it reads and which
+weights it applies — and it is now gated in CI, which the CWC property had never been.
+
+One result there is worth stating plainly, because it bounds what a lat-lon grid can do. The
+truncation error scales as **O(Δφ / cos φ)**. So the scheme is cleanly first order at any *fixed*
+latitude (Linf for |lat|<60: orders 1.01/1.00/1.00) and first order in **mass-weighted** norms
+(1.02/1.01/1.01) — the area weight is `O(cos φ)` and cancels the `1/cos φ` *exactly* — but Linf
+over the **whole sphere can never converge**, because the row nearest the pole always sits at
+`cos φ ≈ Δφ` and so holds `O(1)` error at *every* resolution. This is the coordinate singularity,
+not a defect of the scheme, and two plausible fixes were measured and **do not work**: raising the
+reconstruction order does not help (2nd-order centred on both axes still decays, 0.72/0.53/0.34),
+and neither does a **true polar cap** — it fixes the cap *row* cleanly (order 0 → 1.00, because at
+the pole both `V` and `∂q/∂φ` are pure first harmonics in λ whose product has zero zonal mean) but
+rows 2, 3, … still carry `O(Δφ/cos φ)`. Nothing local to a method-of-lines operator fixes it; the
+operational remedy is a runtime polar filter, and the real fix is a quasi-uniform grid. Beware the
+seductive argument that fields smooth on the sphere are safe because a smooth vector field has
+`V → 0` at the poles and a smooth scalar has `∂q/∂φ → 0` there: **both premises hold only for
+latitude-only fields.** `q = cos φ cos λ` is merely the Cartesian *x*-coordinate — perfectly
+smooth — yet its pole derivative is `−cos λ ≠ 0`; and rotated solid-body rotation, the canonical
+smooth flow on a sphere, has `v = −u₀ sin λ sin α`, which does not vanish at the poles either. The
+spherical-component basis is singular where the vector field is not, and a latitude-only spike
+cannot see any of this.
+
+The library also ships the MPAS unstructured grid;
 finite-difference/finite-volume rules; the conservative overlap regridder with
 in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs

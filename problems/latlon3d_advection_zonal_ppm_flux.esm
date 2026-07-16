@@ -1,0 +1,907 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_advection_zonal_ppm_flux",
+    "description": "Method-of-manufactured-solutions driver for the UNLIMITED (centred) CW84 conservative flux-form ZONAL advection operator grids/latlon3d/rules/ppm_flux_D_lon_periodic, i.e. (1/(a cos phi)) d/dlambda (U q) with the velocity INSIDE the operator, the SHARED eq-(1.6) 4th-order interface interpolant as the face value, and the periodic wrap INSIDE the rule. The transport equation is written du/dt = -D(U*u, wrt: lon) + src, and the rule's compound match D(U*q, wrt: lon) lowers the whole product. \n\nWHAT THIS PINS. It is the ACCURACY CEILING of the zonal flux family: the unlimited reconstruction on this smooth MMS attains clean fourth order, which is what makes it the reference against which the monotone sibling latlon3d_advection_zonal_ppm_flux_mono is measured. Because the two drivers differ ONLY in the rule they import, the gap between the two measured orders is attributable to the eq (1.10) limiter and to nothing else. Note that this operator is NOT upwind-biased and cannot be: under the unlimited reconstruction the two cells straddling a face agree exactly at it, so there is no donor to choose. It is therefore the one that overshoots at a sharp gradient -- fine on this smooth manufactured solution, which is precisely why the order it measures here is a CEILING and not a recommendation. \n\nTHE WIND REVERSES, AND THE SOLUTION IS STRICTLY POSITIVE. U = U0 (0.5 + cos lambda) a(j) b(k) is eastward over most of the circle and westward on the 120-deg arc around lambda = 180, so BOTH branches of the upwind donor selection fire in every row; a(j) and b(k) are mild strictly-positive modulations that make the rank-3 indexing real without touching the sign (a stencil that read U as a column profile where it should read U[.,j,k] would be caught rather than silently agreeing). The exact solution q*(lambda) = 2 + sin(lambda) is periodic -- no boundary anywhere, the zonal circle closes -- and stays in [1, 3]. \n\nFORCED-STEADY (TRUNCATION) IDIOM, AND THE MMS IS BIT-FOR-BIT THE DONOR-CELL DRIVER'S. src is the EXACT flux divergence of q*, which for a finite-volume cell is just the difference of the exact face fluxes times the exact spherical weight dphi_lat[j]/(dlam dS_lat[j]) -- no quadrature needed. The state is initialised to the exact CELL AVERAGE 2 + (cos(lame_i) - cos(lame_{i+1}))/dlam, not the point value at the cell centre, because a finite-volume state variable is a cell mean and seeding point values would inject an O(dlam^2) initial error of its own. In exact arithmetic du/dt vanishes identically, so the drift at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. Because this driver, problems/latlon3d_advection_zonal_ppm_flux(_mono) and problems/latlon3d_advection_zonal_upwind_flux differ ONLY in the rule they import, the measured orders are directly comparable and any difference between them is a property of the OPERATOR alone. \n\nWHY THE SWEEP REFINES NLON ONLY. NLAT = 5 and NLEV = 4 are pinned at the rule's import edge; NLON is left LIVE for the loader API. That is deliberate: the polar metric weights ARE exercised (at NLAT = 5 the half-polar caps carry dphi_lat/dS_lat ~ 5.2 against ~1.0 in the tropics, so the cap rows dominate Linf) but they are NOT REFINED, which keeps the lat-lon coordinate singularity -- the thing that stalls the MERIDIONAL operator's pointwise Linf under refinement -- out of the zonal order measurement. It also means this file's build-time ic/reference expressions, which cannot read observeds, fold lambda from literals plus the NLON name alone, while NLAT-1 = 4 and NLEV = 4 are spelled as LITERALS (a metaparameter closed at an import edge is consumed there and is not live in the importing document's runtime scope).",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:latlon3d",
+      "op:advection",
+      "form:flux",
+      "scheme:centered",
+      "axes:lon",
+      "bc:periodic",
+      "mms:forced-steady"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. Journal of Fluids Engineering, 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "ZonalAdvectionPPMFlux3d": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/latlon3d/rules/ppm_flux_D_lon_periodic.esm",
+          "bindings": {
+            "NLAT": 5,
+            "NLEV": 4
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Advected tracer; CELL MEANS. Exact steady solution is the exact cell average of q*(lambda) = 2 + sin(lambda), which is 2 + (cos(lame_i) - cos(lame_{i+1}))/dlam -- not the point value at the cell centre, because a finite-volume state variable is a cell mean and seeding point values would inject an O(dlam^2) initial error of its own."
+        },
+        "U0": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1.0,
+          "description": "Zonal wind amplitude. The wind is U = U0 (0.5 + cos(lambda)) a(j) b(k), which CHANGES SIGN at lambda = +/-120 deg, so both branches of the donor-cell selection fire in every row."
+        },
+        "lat0_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": -90.0,
+          "description": "Southern domain edge (-90): the grid's lat0_deg free name. Global pole-to-pole recipe, so the lat_edge clamp produces GEOS-Chem's half-polar caps."
+        },
+        "dlat_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 45.0,
+          "description": "Meridional spacing 180/(NLAT-1) = 45 with NLAT = 5. Spelled as a LITERAL, not as 180/(NLAT-1): NLAT is CLOSED at the rule's import edge, so it is consumed there and is not a live name in this document's runtime scope (esm-spec 9.7.6 binding sites)."
+        },
+        "dlon_deg": {
+          "type": "observed",
+          "units": "deg",
+          "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name, read by the flux rule to form dlam = dlon_deg pi/180. NLON is LIVE (the loader API rebinds it per resolution), so dividing by the metaparameter NAME keeps the geometry consistent across the sweep automatically.",
+          "expression": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
+            ]
+          }
+        },
+        "phie": {
+          "type": "observed",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell EDGES in degrees, from the grid's lat_edge template (the clamped-midpoint rule). The single producer of the derived latitude geometry: dS_lat and dphi_lat are both built from THIS array, which is the grid's keyed-factor contract.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        "dS_lat": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template. Read by the zonal flux rule as a free name (the same contract by which the vertical rules read dz).",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "dphi_lat": {
+          "type": "observed",
+          "units": "rad",
+          "shape": [
+            "lat"
+          ],
+          "description": "Cell angular width in radians (a HALF width at the two polar caps), from the grid's latcell_dphi template. Read by the zonal flux rule as a free name. The cap rows carry the largest dphi_lat/dS_lat ratio in the mesh (~5.2 at NLAT = 5 versus ~1.0 in the tropics), so the polar metric weights ARE exercised by this sweep -- they are simply not REFINED, since only NLON moves.",
+          "expression": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_dphi",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        "U": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ],
+          "description": "THREE-DIMENSIONAL face-staggered zonal wind on the NLON+1 face axis, positive eastward, evaluated at the cell WEST edges lame_i = 2 pi (i-1)/NLON: U[i,j,k] = U0 (0.5 + cos(lame_i)) a(j) b(k) with a(j) = 1 + 0.25 sin(pi (j-1)/4) and b(k) = 1 + 0.2 (k-1)/4, both strictly positive, so the SIGN of U is set by (0.5 + cos lambda) alone and reverses at lambda = +/-120 deg. The horizontal/vertical modulation makes the rank-3 indexing real: a stencil that read a column profile where it should read U[.,j,k] would be caught rather than silently agreeing. ELEMENT U[NLON+1,j,k] IS NEVER READ BY THE RULE (the east face of cell NLON reuses U[1] -- that is how the wrap is enforced by the operator); it is defined here only because the lon_nodes axis has NLON+1 members.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "iw",
+              "jw",
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "iw": {
+                "from": "lon_nodes"
+              },
+              "jw": {
+                "from": "lat"
+              },
+              "kw": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                "U0",
+                {
+                  "op": "+",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "iw",
+                                    1
+                                  ]
+                                },
+                                "NLON"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "jw",
+                                        1
+                                      ]
+                                    },
+                                    4
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.2,
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "kw",
+                                1
+                              ]
+                            },
+                            4
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "src": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "MMS forcing: the EXACT flux divergence of the exact solution, src[i,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( Phi(lame_{i+1}) - Phi(lame_i) ) with Phi(lambda) = U0 (0.5 + cos lambda)(2 + sin lambda) a(j) b(k). No quadrature is needed: for a finite-volume cell the exact cell-mean divergence IS the difference of the exact POINT-VALUED fluxes at its two faces, times the exact spherical weight -- the same weight the operator uses. In exact arithmetic du/dt therefore vanishes identically at t = 0, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order (1 for donor-cell upwind). The only difference between src and the discrete divergence is that the operator's face fluxes use the DONOR CELL MEAN where src uses the exact face point value.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "ia",
+              "ja",
+              "ka"
+            ],
+            "args": [
+              "dphi_lat",
+              "dS_lat"
+            ],
+            "ranges": {
+              "ia": {
+                "from": "lon"
+              },
+              "ja": {
+                "from": "lat"
+              },
+              "ka": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "dphi_lat",
+                        "ja"
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            6.283185307179586,
+                            "NLON"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "dS_lat",
+                            "ja"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "U0",
+                    {
+                      "op": "+",
+                      "args": [
+                        1,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.25,
+                            {
+                              "op": "sin",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    3.141592653589793,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "ja",
+                                            1
+                                          ]
+                                        },
+                                        4
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        1,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.2,
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "ka",
+                                    1
+                                  ]
+                                },
+                                4
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        6.283185307179586,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "ia",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLON"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                2,
+                                {
+                                  "op": "sin",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        6.283185307179586,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "+",
+                                                  "args": [
+                                                    "ia",
+                                                    1
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            },
+                                            "NLON"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "cos",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        6.283185307179586,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "ia",
+                                                1
+                                              ]
+                                            },
+                                            "NLON"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                2,
+                                {
+                                  "op": "sin",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        6.283185307179586,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "ia",
+                                                1
+                                              ]
+                                            },
+                                            "NLON"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                2,
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    },
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        6.283185307179586,
+                        "NLON"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "U",
+                          "u"
+                        ]
+                      }
+                    ],
+                    "wrt": "lon"
+                  }
+                ]
+              },
+              "src"
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "steady_zonal_wave",
+          "description": "q*(lambda) = 2 + sin(lambda) (periodic, strictly positive) is an exact steady state of the forced equation; the state is seeded with its exact CELL MEAN, so the L2 drift at t = 0.1 is the accumulated truncation error of the flux-form zonal PPM operator. The t = 0 assertion pins the ic wiring (it must reproduce the cell mean to 1e-9); the t = 0.1 assertion bounds the drift at the default NLON = 144. Per-resolution errors live in the convergence golden.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    2,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        },
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            6.283185307179586,
+                            "NLON"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.05
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "lon"
+                  },
+                  "j": {
+                    "from": "lat"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "expr": {
+                  "op": "+",
+                  "args": [
+                    2,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "cos",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    6.283185307179586,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        },
+                                        "NLON"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            6.283185307179586,
+                            "NLON"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "latlon3d_diffusion_vertical_noflux",
+  "description": "Observed-order-of-accuracy sweep for grids/latlon3d/rules/varcoeff_laplacian_lev_noflux_bc (conservative finite-volume variable-coefficient vertical diffusion d/dz(kz du/dz) on the non-uniform vertical, zero-flux at the surface and the model top) driven by problems/latlon3d_diffusion_vertical_noflux.esm. Refines NLEV alone (16 -> 128) with lon and lat passive at NLON = 8, NLAT = 5, since the operator is purely vertical. Manufactured solution u(z,t) = exp(-pi^2 t) cos(pi z) on a quadratic-stretch mesh with a parabolic boundary-layer diffusivity kz = 0.5(1 + 4z(1-z)); the gradient vanishes at both walls, so the physical flux matches the zero-flux closure exactly. SECOND ORDER in both L2 and Linf (observed 2.00 / 2.00). The measured quantity is the SOLUTION error at t = 0.1, not the raw truncation error: this operator's interior truncation is O(dz^2) but its two boundary cells are O(dz), because imposing the EXACT wall flux breaks the leading-order cancellation between neighbouring face-flux errors that the interior enjoys. The parabolic solve smooths that boundary-localised defect back to O(dz^2) globally (Gustafsson), which is the physically meaningful order and the one gated here. The alternative -- a formally higher-order boundary closure -- would cost exact mass conservation, which for a tracer-transport operator is the wrong trade.",
+  "problem": "../../../../problems/latlon3d_diffusion_vertical_noflux.esm",
+  "model": "VerticalDiffusion3d",
+  "rule": "../../../../grids/latlon3d/rules/varcoeff_laplacian_lev_noflux_bc.esm",
+  "grid": "latlon3d",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLEV": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLEV": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLEV": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLEV": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error",
+    "Linf_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.2,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

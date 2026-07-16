@@ -1,0 +1,99 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "facediv_lat_cap_s",
+    "description": "SOUTH POLAR CAP row (j = 1) of the meridional divergence of a face-staggered flux, closed with a ZERO-LENGTH POLE FACE (no flux through the pole): D[i,1,k] = My[i,2,k] coslat_e[2] / dS_lat[1]. The south pole-wall term My[i,1,k] coslat_e[1] is LITERALLY ABSENT from the lowered expression rather than formed and multiplied by the pole face length. \n\nTHAT OMISSION IS THE WHOLE POINT, AND IT IS NOT COSMETIC. On the global recipe the pole face length is coslat_edge(-90 deg) = cos(-pi/2), which in IEEE double is 6.1e-17 -- NOT zero. An operator that formed the wall term and multiplied it by that factor would (a) leak a tiny nonzero air mass across the pole, spoiling the exact telescoping of the meridional mass budget, and (b) break the BITWISE agreement with the companion tracer slab upwind1_D_lat_flux_cap_s, which omits its own pole flux outright. Omitting the term makes the polar wall EXACT in floating point and makes the no-flux condition GEOMETRY (a zero-length face) rather than a boundary hack. Consequently My[i,1,k] is NEVER READ: whatever a consumer stores in the pole face of the mass flux is ignored, so a nonzero value there is harmless rather than a silent mass leak. \n\nCONSISTENCY WITH CONTINUITY. With a constant tracer q == 1 the donor-cell flux of upwind1_D_lat_flux_cap_s collapses BITWISE to the mass flux (F = 1/2[My(1+1) - |My|(1-1)] = My, every IEEE step exact), and that slab then multiplies it by coslat_e[2] and divides by dS_lat[1] -- the identical two operations, in the identical order, that this slab applies. The two therefore emit the identical double-precision number and the tracer mass mq tracks the air mass m to the last bit at the cap. \n\nTHE CAP IS A HALF CELL. Its area weight dS_lat[1] = sin(phi_e[2]) - sin(-pi/2) is O(dphi^2/8) while the single face bounding it to the north has length coslat_e[2] = O(dphi/2). For the CONTINUITY operator that ratio is not an accuracy problem at all -- this stencil has no truncation error on cell means, since the exact integral of the flux divergence over the cap IS the single face flux divided by the cap area -- but it is exactly the O(1/dphi) amplification that makes the companion ADVECTION operator's polar accuracy delicate (see the ACCURACY AT THE POLES section of grids/latlon3d/rules/upwind1_flux_D_lat_polar). \n\nGEOMETRY, FACE INDEXING AND FREE NAMES are exactly as in facediv_lat_interior: face j is the southern edge of cell j, faces 1 and NLAT+1 are the poles, My is positive northward, coslat_e and dS_lat are the consumer's observeds built from the grid's coslat_edge and latcell_area templates.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2",
+      "bc:no-flux"
+    ],
+    "references": [
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052.",
+        "doi": "10.1002/qj.49712757318"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "facediv_lat_cap_s": {
+      "params": [
+        "My"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "My"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": [
+            1,
+            1
+          ],
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "My",
+                    "i",
+                    2,
+                    "k"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "coslat_e",
+                    2
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dS_lat",
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

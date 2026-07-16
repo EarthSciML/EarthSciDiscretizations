@@ -1,0 +1,190 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppmflux_D_lev_unlim_nf_kN",
+    "description": "No-flux model-top boundary slab (k = NLEV) of the UNLIMITED (centred) CW84 flux-form vertical advection operator on latlon3d, with the wind as a matched operand. D q[i,j,NLEV] = (0 - F_{NLEV-1/2}) / dz[NLEV]: the model-top wall flux F_{NLEV+1/2} is identically zero. Over all i, all j. The five-cell divergence support (k-2..k+2) does not fit against the lid here, so the above-top cells it reaches for are supplied by ghosts. Ghost cells outside [1, NLEV] use the zero-gradient closure (cell m -> cell clamp(m, 1, NLEV), and the width likewise), the same closure the pre-existing ppm_D_lev_* boundary faces use.  The wall flux is LITERALLY ABSENT from this slab -- not formed and multiplied by zero -- so the no-flux boundary holds as an identity of the discretisation rather than as a consequence of the consumer happening to supply a vanishing wall velocity. Mass is therefore conserved to the bit even if W[.,.,1] or W[.,.,NLEV+1] is nonzero (which would be a modelling error, but not a conservation error).\n\nCRITICAL: every interface flux shared with a neighbouring cell is built here from the SAME face template applied to the SAME six cells, the SAME six widths and the SAME face velocity as the neighbour uses, so the two cells evaluate a bit-identical float for it and the flux divergence telescopes exactly -- the column mass budget closes in floating point, not merely in exact arithmetic. Reads the free name `dz` (the grid's lev_thickness applied to the consumer's `pe`); the face velocity W is a MATCHED OPERAND, passed in, not a free name. One of four factored no-flux boundary slabs consumed by rules/ppm_flux_D_lev_noflux_bc. A full (NLON x NLAT x 1) slab AGGREGATE in its own single-purpose stencil, so the rule body stays a thin makearray of apply calls.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "axes:lon,lat,lev",
+      "order:4",
+      "scheme:centered",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./ppm_lev_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppmflux_D_lev_unlim_nf_kN": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            "NLEV",
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                0,
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "a0": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "ap": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "NLEV"
+                      ]
+                    },
+                    "app": {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "i",
+                        "j",
+                        "NLEV"
+                      ]
+                    },
+                    "dm": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "d0": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NLEV",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "NLEV"
+                      ]
+                    },
+                    "dpp": {
+                      "op": "index",
+                      "args": [
+                        "dz",
+                        "NLEV"
+                      ]
+                    },
+                    "w": {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "i",
+                        "j",
+                        "NLEV"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "NLEV"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

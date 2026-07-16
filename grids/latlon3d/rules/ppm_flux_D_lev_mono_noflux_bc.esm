@@ -1,0 +1,298 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_flux_D_lev_mono_noflux_bc",
+    "description": "UPWIND-BIASED, MONOTONE, conservative flux-form vertical advection d/dz(w q) on the latlon3d stretched vertical, with the wind as a MATCHED OPERAND and rigid no-flux walls at the surface and the model top. THE PRODUCTION VERTICAL TRANSPORT OPERATOR ON THIS GRID: it is the only one that is simultaneously high-order, mass-conserving, bounded, and correct for a wind that reverses sign. A consuming model writes du/dt = -D(W*u, wrt: lev) + ... and this rule lowers the whole compound.\n\nWHAT IT COMBINES, AND THE GAP IT CLOSES. The library previously offered two half-answers. rules/upwind1_flux_D_lev_noflux_bc takes a genuine 3-D face-staggered wind and can SEE the sign of the face velocity, so it upwinds correctly through a reversal -- but its face value is the first-order DONOR CELL value, O(dz) and far too diffusive to carry a plume. rules/ppm_D_lev_mono_noflux_bc reconstructs a third/fourth-order CW84 parabola -- but it matches a BARE D(f, wrt: lev), reads its velocity from a free name `w_edge` of shape [lev_nodes] (a 1-D, k-only, time-static column profile), and its face value is the CENTRED eq-(1.6) interpolant with NO branch on the sign of w, so it is not upwind-biased at all and is correct only for a one-signed wind. This rule is their join: the compound match and 3-D matched-operand wind of the former, the high-order limited reconstruction of the latter, and a genuine sign-of-w donor selection between them.\n\nTHE SCHEME. At each face PPM supplies TWO one-sided values: aR_L, the LEFT (lower) cell's limited parabola at its own upper endpoint, and aL_R, the RIGHT (upper) cell's limited parabola at its own lower endpoint. The flux donates from the cell the flow comes FROM: F = w*aR_L for w > 0 and w*aL_R for w < 0, spelled branch-free as F = max(w,0)*aR_L + min(w,0)*aL_R (../stencils/ppmflux_lev_face_flux, which explains why that form is preferred over the textbook 1/2[w(aR_L+aL_R) - |w|(aL_R-aR_L)]: it mentions each multi-megabyte reconstruction once rather than twice, and it returns the donor flux EXACTLY in floating point). Both endpoints carry the full CW84 chain -- eq (1.6) edge interpolation on eq (1.8) monotonized slopes, then the eq (1.10) parabola limiter (../stencils/ppmflux_lev_cell_aR and ppmflux_lev_cell_aL, over ppm_lev_edge_mono, ppm_limit_right and the new mirror ppmflux_limit_left).\n\nWHY UPWIND BIAS AND LIMITING ARE INSEPARABLE -- the non-obvious fact this rule is built on. For the UNLIMITED reconstruction the two one-sided face values are IDENTICAL: cell j's parabola and cell j+1's parabola both pass exactly through the shared eq-(1.6) interpolant at the face between them, so there is nothing for an upwind scheme to choose and 'unlimited upwind PPM' degenerates term-for-term onto the centred flux of the sibling rules/ppm_flux_D_lev_noflux_bc. It is the eq (1.10) limiter, applied PER CELL, that pulls cell j's upper endpoint and cell j+1's lower endpoint apart -- each is clipped against its own average and its own far edge -- and only then does the donor choice carry information. Upwind-biased PPM is therefore a property of the LIMITED reconstruction, not an independent axis.\n\nCOST OF THE BIAS: SEVEN CELLS, SIX BOUNDARY SLABS. Asking a face for BOTH neighbours' endpoints (rather than only the upwind one, as the pre-existing mono chain does under its hard-coded upward wind) widens the divergence support from six cells to seven (k-3..k+3), so the interior is [4, NLEV-3] and there are six near-wall slabs instead of five. Requires NLEV >= 6 to tile and NLEV >= 7 for a non-empty interior.\n\nBOUNDEDNESS AND ORDER. The eq (1.8) + eq (1.10) limiter pair keeps the reconstruction within the range of the neighbouring cell averages, so the scheme introduces no new extrema and keeps a chemical tracer NON-NEGATIVE across a sharp vertical gradient -- a capping inversion, a stack plume, the tropopause ozone jump. That is not a theoretical nicety: the unlimited chain measurably drives such a profile negative, and negative concentrations propagate into the chemistry and aerosol-thermodynamics solvers, while the usual field fix (clipping to zero) silently destroys the exact mass conservation the flux form exists to provide. The price is formal order: a limiter cannot distinguish a smooth extremum from an oscillation and clips it. MEASURED on the manufactured solution of problems/latlon3d_advection_vertical_ppm_flux_mono: L2 2.49, Linf 1.98 -- against the 3.99 / 3.94 the unlimited sibling measures on the IDENTICAL MMS, which localises the entire shortfall to the limiter (u*(z) = cos(pi z) has a smooth extremum sitting exactly on the surface wall, so the limiter fires there on every mesh however fine). VERIFIED BOUNDEDNESS, not assumed: on a sharp top-hat plume driven by a reversing, convergent wind the tracer minimum over the whole trajectory is exactly +0.0 under this rule, while the unlimited sibling reaches -7.16 and the pre-existing one-signed ppm_D_lev_mono_noflux_bc -- which reconstructs from the DOWNWIND side wherever w < 0, outside its documented w >= 0 contract -- diverges to -1.6e3. Mass is conserved to machine zero (relative drift 2.3e-15) in every case. That is the deliberate trade -- order you cannot realize on a real vertical profile, exchanged for boundedness you always need. The extremum-preserving Colella-Sekora (2008) limiter is the documented follow-on that would recover it.\n\nTHE MATCH IS SHARED WITH ITS ACCURACY SIBLINGS, DELIBERATELY. This rule matches the same compound D(W*q, wrt: lev) as rules/upwind1_flux_D_lev_noflux_bc (first-order donor cell) and as the other member of this pair. They are accuracy siblings over one contract, exactly as the pre-existing ppm_D_lev_noflux_bc and ppm_D_lev_mono_noflux_bc both match a bare D(f, wrt: lev) and coexist. A consuming PROBLEM imports exactly ONE of them; there is no priority game to arbitrate between them and none is wanted.\n\nWHY THE COMPOUND MATCH CANNOT COLLIDE WITH THE DIFFUSION RULE (as for upwind1_flux_D_lev_noflux_bc): a model carrying vertical diffusion contains D(kz*D(u, wrt: lev), wrt: lev), whose outer node is also a D of a two-factor product, so this pattern structurally matches it too, binding W := kz and q := D(u, wrt: lev). It is the `where` SHAPE CONSTRAINT, not priority, that separates them: by esm-spec 9.6.1 a shape constraint is satisfied only when the bound sub-AST is a bare variable-reference string, and the compound D(u, wrt: lev) fails it, so this rule is filtered out at that node before any priority selection runs. Advection and diffusion therefore compose in one equation, each firing on its own term. Matching is STRUCTURAL and NON-COMMUTATIVE: the velocity must be written on the LEFT of the product.\n\nFREE NAMES (consumer-supplied): `dz`, the cell thicknesses (the grid's lev_thickness contract, shape [lev]). The velocity is NOT a free name -- it is the matched operand W, of shape [lon, lat, lev_nodes], face-staggered and positive UPWARD. Face k is the lower edge of cell k; W[.,.,1] (ground) and W[.,.,NLEV+1] (model top) are never read, because the wall fluxes are literally absent from the k=1 and k=NLEV slabs rather than formed and multiplied by zero. Mass is therefore conserved to the bit regardless of what the consumer stores in those two faces.\n\nA semi-discrete (method-of-lines) flux-form scheme is NOT the fully-discrete flux-form semi-Lagrangian TPCORE scheme of Lin & Rood (1996) that GEOS-Chem runs operationally: TPCORE carries the Courant number inside the operator and cannot be expressed method-of-lines (see the SCHEME CAVEAT in grids/latlon3d/grid.esm).\n\nCOMPOSITIONAL BODY: a makearray tiling [lon, lat, lev] with SEVEN regions, each a thin apply of a factored stencil -- the interior [4, NLEV-3] uses ../stencils/ppmflux_D_lev_interior; the surface cells k = 1,2,3 use ../stencils/ppmflux_D_lev_nf_k{1,2,3}; the model-top cells k = NLEV-2, NLEV-1, NLEV use ../stencils/ppmflux_D_lev_nf_k{Nm2,Nm1,N}. Every region is a full-rank slab aggregate (output_idx [i, j, k]).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev",
+      "order:2",
+      "stencil_width:7",
+      "scheme:upwind",
+      "bc:no-flux",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Colella, P., & Sekora, M. D. (2008). A limiter for PPM that preserves accuracy at smooth extrema. Journal of Computational Physics, 227(15), 7069-7076.",
+        "doi": "10.1016/j.jcp.2008.03.034"
+      },
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the donor-cell upwind flux; the upwind selection is the same whatever sub-grid reconstruction supplies the two one-sided face values)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/ppmflux_D_lev_interior.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_k1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_k2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_k3.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_kNm2.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_kNm1.esm"
+    },
+    {
+      "ref": "../stencils/ppmflux_D_lev_nf_kN.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppm_flux_D_lev_mono_noflux_bc": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "W",
+              "q"
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "q": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ]
+        },
+        "W": {
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  3
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              3,
+              3
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NLON"
+            ],
+            [
+              1,
+              "NLAT"
+            ],
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_interior",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_k1",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_k2",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_k3",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_kNm2",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_kNm1",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppmflux_D_lev_nf_kN",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

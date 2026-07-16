@@ -1,0 +1,84 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_D_lev_interior",
+    "description": "Interior conservative finite-volume vertical flux-divergence (w u)_lev on the latlon3d hybrid vertical: D f[i,j,k] = (F_{k+1/2} - F_{k-1/2})/dz[k] over all i (lon), all j (lat), k in [3, NLEV-2], with F the CW84 non-uniform 4th-order upwind vertical face flux (../stencils/ppm_lev_flux). F_{k+1/2}=ppm_lev_flux(f[i,j,k-1..k+2]; dz[k-1..k+2]; w_edge[k+1]) reconstructs the tracer edge value at interface k+1 from the four surrounding cell averages and their widths and scales it by the interface velocity w_edge[k+1]; F_{k-1/2} shares the interface-k reconstruction with cell k-1, so the same float face flux is added in cell k and subtracted in cell k+1 -> the divergence telescopes and total mass is conserved to the bit. The interior touches f[i,j,k-2..k+2] (5 vertical cells); the two bottom cells k=1,2 and two top cells k=NLEV-1,NLEV (whose support reaches outside [1,NLEV]) are supplied by the no-flux boundary faces in rules/ppm_D_lev_noflux_bc.esm. Reads three consumer-supplied free names: the tracer f (rank-3 state), `dz` the cell widths (grids/latlon3d lev_thickness contract, shape [lev]), and `w_edge` the vertical velocity sampled at cell interfaces (shape [lev_nodes]); w_edge must vanish at the model top and surface so the wall fluxes are zero. Verified 4th-order (unlimited reconstruction) with exact mass conservation on the quadratic-stretch mesh. Match-less; wrapped into the complete rule by rules/ppm_D_lev_noflux_bc.esm.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:D",
+      "order:4",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "./ppm_lev_flux.esm" }
+  ],
+  "expression_templates": {
+    "ppm_D_lev_interior": {
+      "params": ["f"],
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["i", "j", "k"],
+        "args": ["f"],
+        "ranges": {
+          "i": { "from": "lon" },
+          "j": { "from": "lat" },
+          "k": [3, { "op": "-", "args": ["NLEV", 2] }]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": { "op": "index", "args": ["f", "i", "j", { "op": "-", "args": ["k", 1] }] },
+                    "a0": { "op": "index", "args": ["f", "i", "j", "k"] },
+                    "ap": { "op": "index", "args": ["f", "i", "j", { "op": "+", "args": ["k", 1] }] },
+                    "app": { "op": "index", "args": ["f", "i", "j", { "op": "+", "args": ["k", 2] }] },
+                    "dm": { "op": "index", "args": ["dz", { "op": "-", "args": ["k", 1] }] },
+                    "d0": { "op": "index", "args": ["dz", "k"] },
+                    "dp": { "op": "index", "args": ["dz", { "op": "+", "args": ["k", 1] }] },
+                    "dpp": { "op": "index", "args": ["dz", { "op": "+", "args": ["k", 2] }] },
+                    "w": { "op": "index", "args": ["w_edge", { "op": "+", "args": ["k", 1] }] }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "ppm_lev_flux",
+                  "bindings": {
+                    "am": { "op": "index", "args": ["f", "i", "j", { "op": "-", "args": ["k", 2] }] },
+                    "a0": { "op": "index", "args": ["f", "i", "j", { "op": "-", "args": ["k", 1] }] },
+                    "ap": { "op": "index", "args": ["f", "i", "j", "k"] },
+                    "app": { "op": "index", "args": ["f", "i", "j", { "op": "+", "args": ["k", 1] }] },
+                    "dm": { "op": "index", "args": ["dz", { "op": "-", "args": ["k", 2] }] },
+                    "d0": { "op": "index", "args": ["dz", { "op": "-", "args": ["k", 1] }] },
+                    "dp": { "op": "index", "args": ["dz", "k"] },
+                    "dpp": { "op": "index", "args": ["dz", { "op": "+", "args": ["k", 1] }] },
+                    "w": { "op": "index", "args": ["w_edge", "k"] }
+                  }
+                }
+              ]
+            },
+            { "op": "index", "args": ["dz", "k"] }
+          ]
+        }
+      }
+    }
+  }
+}

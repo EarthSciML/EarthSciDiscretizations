@@ -1,0 +1,96 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "ppm_lev_flux_mono",
+    "description": "MONOTONE conservative upwind vertical face flux F_{j+1/2} = w_{j+1/2} * a_{j+1/2}^lim for non-negative vertical velocity, on the latlon3d hybrid vertical: the FULL Colella-Woodward (1984) piecewise-parabolic reconstruction of the upwind cell -- eq (1.6) edge interpolation built on eq (1.8) MONOTONIZED eq (1.7) slopes (../stencils/ppm_lev_edge_mono), then the eq (1.10) parabola monotonicity limiter (../stencils/ppm_limit_right) -- scaled by the interface velocity w. The bounded counterpart of ../stencils/ppm_lev_flux (which uses the unlimited edge and applies no parabola limiter). TWO LIMITERS, TWO JOBS: eq (1.8) (inside ppm_lev_edge_mono) keeps the interpolated EDGE between the two cell averages it separates; eq (1.10) (ppm_limit_right, reused verbatim from the zonal PPM chain -- it is pure scalar algebra in the cell's normalized coordinate and therefore MESH-INDEPENDENT, so it drops onto the stretched vertical unchanged) keeps the sub-grid PARABOLA monotone within the cell and flattens it to the constant a0 at a local extremum. Together they guarantee the upwind flux introduces no new extrema, which is what keeps a chemistry-transport tracer NON-NEGATIVE across a sharp vertical gradient (a stack plume, the boundary-layer capping inversion, the tropopause ozone jump) -- the unlimited chain measurably drives such a profile negative. 5-cell support (amm,am,a0,ap,app) = cells j-2..j+2 with widths (dmm,dm,d0,dp,dpp): the limiter needs BOTH edges of the upwind cell j (ql = a_{j-1/2} over cells j-2..j+1, qr = a_{j+1/2} over cells j-1..j+2) plus its average a0, one cell wider than the unlimited flux's 4. CONSERVATION IS UNAFFECTED: limiting only changes the reconstructed edge VALUE, and the same single value is used as the flux by both cells sharing the interface, so the divergence still telescopes and total mass is conserved to the bit (verified machine-zero on random data). Semi-discrete (method-of-lines) flux: the ODE integrator owns dt. Grid-agnostic scalar algebra; match-less named template; composed by ppm_D_lev_mono_interior and the no-flux boundary faces.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:flux",
+      "order:3",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070. Flux-form finite-volume vertical transport (the GEOS-Chem/TPCORE lineage).",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "./ppm_lev_edge_mono.esm"
+    },
+    {
+      "ref": "./ppm_limit_right.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppm_lev_flux_mono": {
+      "params": [
+        "amm",
+        "am",
+        "a0",
+        "ap",
+        "app",
+        "dmm",
+        "dm",
+        "d0",
+        "dp",
+        "dpp",
+        "w"
+      ],
+      "description": "F_{j+1/2} = w * (CW84 monotone-limited right edge of the upwind cell a0)",
+      "body": {
+        "op": "*",
+        "args": [
+          "w",
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ppm_limit_right",
+            "bindings": {
+              "ql": {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "ppm_lev_edge_mono",
+                "bindings": {
+                  "am": "amm",
+                  "a0": "am",
+                  "ap": "a0",
+                  "app": "ap",
+                  "dm": "dmm",
+                  "d0": "dm",
+                  "dp": "d0",
+                  "dpp": "dp"
+                }
+              },
+              "qr": {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "ppm_lev_edge_mono",
+                "bindings": {
+                  "am": "am",
+                  "a0": "a0",
+                  "ap": "ap",
+                  "app": "app",
+                  "dm": "dm",
+                  "d0": "d0",
+                  "dp": "dp",
+                  "dpp": "dpp"
+                }
+              },
+              "qi": "a0"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -41,7 +41,25 @@ import Pkg
 # Locate repos + bootstrap the official solver-bearing environment.
 # ---------------------------------------------------------------------------
 const ESD_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-const ESS_ROOT = get(ENV, "ESS_ROOT", normpath(joinpath(ESD_ROOT, "..", "EarthSciAST")))
+
+# Walk up from the repo root looking for a sibling EarthSciAST checkout. The first
+# candidate is ESD_ROOT/../EarthSciAST, the ordinary sibling layout. The walk matters
+# inside a git worktree, where ESD_ROOT is <main>/.claude/worktrees/<name> and the
+# sibling checkout is several levels up rather than one.
+function _locate_ess(start::AbstractString)
+    haskey(ENV, "ESS_ROOT") && return normpath(ENV["ESS_ROOT"])
+    dir = start
+    while true
+        cand = normpath(joinpath(dir, "..", "EarthSciAST"))
+        isfile(joinpath(cand, "esm-schema.json")) && return cand
+        parent = dirname(dir)
+        parent == dir && break
+        dir = parent
+    end
+    return normpath(joinpath(start, "..", "EarthSciAST"))
+end
+
+const ESS_ROOT = _locate_ess(ESD_ROOT)
 isfile(joinpath(ESS_ROOT, "esm-schema.json")) ||
     error("EarthSciAST not found at '$ESS_ROOT'; set ESS_ROOT " *
           "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
