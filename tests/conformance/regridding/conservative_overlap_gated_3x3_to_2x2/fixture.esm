@@ -2,13 +2,13 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "conservative_overlap_gated_3x3_to_2x2",
-    "description": "Conformance fixture: the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm on EXACTLY the geometry of the dense exemplar conservative_overlap_3x3_to_2x2 (nine 1x1-degree source cells and four 1.5x1.5-degree target cells tiling [0,3]x[0,3], planar manifold), asserting the gated result is VALUE-IDENTICAL to the dense path computed side by side in the same document. The full in-library broad phase runs first: src_lon/src_lat and tgt_lon/tgt_lat are the bbox-min ring corners DERIVED from the polygon stacks by the conservative_overlap_{src,tgt}_rep_{lon,lat} reduce-min templates (no hand-supplied coordinates); src_bin/tgt_bin mint the integer bin keys via skolem('bin', floor(coord/4)); the gated narrow phase and assembly (A_ij/A_j/W_ij through the _gated templates, join.on [[src_bin, tgt_bin]]) contract only over candidate pairs. BINNING CHOICE, deliberate: bin_dx = bin_dy = 4.0 spans the whole [0,3] domain, the DEGENERATE-SAFE admissible binning for single-representative-point keys on a compact tiling -- every cell lands in bin (0,0), the candidate set is the full 9x4 cross product, and the join gate is exercised end-to-end (keys minted, equi-join evaluated, byte-identical integer candidate set per CONFORMANCE_SPEC 5.8.5) while provably admitting every genuine overlap. A finer width CANNOT prune anything on this geometry without dropping real overlaps (any floor boundary inside [0,3] separates some touching source/target representatives -- e.g. width 2.0 splits source column 3, corner lon 2.0, from target column 2, corner lon 1.5, whose cells genuinely overlap on [2,3]x...), which is exactly the single-representative-point admissibility limit the library documents; the sibling case conservative_overlap_gated_clusters_4_to_2 shows genuine pruning on cluster geometry where a separating width exists. VALUE-IDENTITY GATE: the dense-path A_ij_dense/A_j_dense/W_ij_dense (the ungated templates on the same rings) are computed alongside, and ident_state integrates the L1 residuals sum|A_ij - A_ij_dense| + sum|A_j - A_j_dense| + sum|W_ij - W_ij_dense|, asserted EXACTLY ZERO (tolerance abs 0.0): the gated and dense contractions visit identical surviving sets and sum identical nonnegative terms, so the values agree bit-for-bit, not just approximately. The two 5.8.3 EXACT invariants (partition-of-unity via the regridded constant-1 field, conservation via the mass residual) gate the gated pipeline itself; the golden per-pair weights (produced by the official Julia runner via scripts/regenerate-goldens.sh) must equal the dense exemplar's committed golden numbers, the cross-case face of the same identity. Single-model spelling (no coupling): the dense exemplar already exercises the 8.6/10.5 transform-expression coupling; here F_tgt/F_unit_tgt are ordinary observeds through conservative_overlap_apply_gated, keeping every gated template invocable by bare name in one component scope.",
+    "description": "Conformance fixture: the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm on EXACTLY the geometry of the dense exemplar conservative_overlap_3x3_to_2x2 (nine 1x1-degree source cells and four 1.5x1.5-degree target cells tiling [0,3]x[0,3], planar manifold), asserting the gated result is VALUE-IDENTICAL to the dense path computed side by side in the same document. The broad phase is now the SPATIAL-OVERLAP join gate (projection-pushdown Phase 2a): the _gated narrow phase and assembly (A_ij/A_j/W_ij through the _gated templates) carry join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]}, so the engine builds the candidate (i,j) set ONCE at build time from the cell-ring ENVELOPES (each ring's axis-aligned bounding box, derived from the SAME polygon stacks the narrow phase clips; no hand-authored binning coordinate, no bin key, no bin-width parameter) and the contraction runs only over candidate pairs. On this compact tiling every source and target cell's bounding box lies in [0,3]x[0,3], so the candidate set is the full 9x4 cross product and the join gate is exercised end-to-end (envelopes computed, STRtree/brute-force candidacy evaluated) while provably admitting every genuine overlap; the sibling case conservative_overlap_gated_clusters_4_to_2 shows automatic pruning on disjoint-cluster geometry where the bounding boxes do not intersect. VALUE-IDENTITY GATE: the dense-path A_ij_dense/A_j_dense/W_ij_dense (the ungated templates on the same rings) are computed alongside, and ident_state integrates the L1 residuals sum|A_ij - A_ij_dense| + sum|A_j - A_j_dense| + sum|W_ij - W_ij_dense|, asserted EXACTLY ZERO (tolerance abs 0.0): the gated and dense contractions visit identical surviving sets and sum identical nonnegative terms, so the values agree bit-for-bit. The two 5.8.3 EXACT invariants (partition-of-unity via the regridded constant-1 field, conservation via the mass residual) gate the gated pipeline itself; the golden per-pair weights (produced by the official Julia runner via scripts/regenerate-goldens.sh) equal the dense exemplar's committed golden numbers, the cross-case face of the same identity. Single-model spelling (no coupling): F_tgt/F_unit_tgt are ordinary observeds through conservative_overlap_apply_gated, keeping every gated template invocable by bare name in one component scope.",
     "tags": [
       "conformance",
       "regridding",
       "conservative_overlap",
       "broad-phase",
-      "bin-skolem",
+      "spatial-overlap-gate",
       "candidate-gated",
       "join",
       "value-identity",
@@ -36,18 +36,6 @@
           "default": 1e-12,
           "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2), identical to the dense exemplar: shared by the gated and dense assembly templates so the surviving sets coincide by construction."
         },
-        "bin_dx": {
-          "type": "parameter",
-          "units": "1",
-          "default": 4.0,
-          "description": "Broad-phase bin width (degrees lon): 4.0 spans the [0,3] domain, the degenerate-safe admissible binning for this compact tiling (see the fixture description for why nothing finer can prune here without dropping genuine overlaps)."
-        },
-        "bin_dy": {
-          "type": "parameter",
-          "units": "1",
-          "default": 4.0,
-          "description": "Broad-phase bin height (degrees lat)."
-        },
         "src_poly": {
           "type": "observed",
           "shape": [
@@ -59,168 +47,15 @@
           "expression": {
             "op": "const",
             "value": [
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  1.0,
-                  0.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  0.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  0.0
-                ],
-                [
-                  2.0,
-                  0.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  0.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  3.0,
-                  1.0
-                ],
-                [
-                  3.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  3.0
-                ],
-                [
-                  0.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  3.0
-                ],
-                [
-                  1.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  3.0,
-                  2.0
-                ],
-                [
-                  3.0,
-                  3.0
-                ],
-                [
-                  2.0,
-                  3.0
-                ]
-              ]
+              [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+              [[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0]],
+              [[2.0, 0.0], [3.0, 0.0], [3.0, 1.0], [2.0, 1.0]],
+              [[0.0, 1.0], [1.0, 1.0], [1.0, 2.0], [0.0, 2.0]],
+              [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]],
+              [[2.0, 1.0], [3.0, 1.0], [3.0, 2.0], [2.0, 2.0]],
+              [[0.0, 2.0], [1.0, 2.0], [1.0, 3.0], [0.0, 3.0]],
+              [[1.0, 2.0], [2.0, 2.0], [2.0, 3.0], [1.0, 3.0]],
+              [[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0]]
             ],
             "args": []
           }
@@ -236,78 +71,10 @@
           "expression": {
             "op": "const",
             "value": [
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  1.5,
-                  0.0
-                ],
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  0.0,
-                  1.5
-                ]
-              ],
-              [
-                [
-                  1.5,
-                  0.0
-                ],
-                [
-                  3.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  1.5
-                ],
-                [
-                  1.5,
-                  1.5
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  1.5
-                ],
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  1.5,
-                  3.0
-                ],
-                [
-                  0.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  3.0,
-                  1.5
-                ],
-                [
-                  3.0,
-                  3.0
-                ],
-                [
-                  1.5,
-                  3.0
-                ]
-              ]
+              [[0.0, 0.0], [1.5, 0.0], [1.5, 1.5], [0.0, 1.5]],
+              [[1.5, 0.0], [3.0, 0.0], [3.0, 1.5], [1.5, 1.5]],
+              [[0.0, 1.5], [1.5, 1.5], [1.5, 3.0], [0.0, 3.0]],
+              [[1.5, 1.5], [3.0, 1.5], [3.0, 3.0], [1.5, 3.0]]
             ],
             "args": []
           }
@@ -321,17 +88,7 @@
           "description": "True source-cell areas A_i (1 deg^2 each) for the conservation invariant.",
           "expression": {
             "op": "const",
-            "value": [
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0
-            ],
+            "value": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             "args": []
           }
         },
@@ -344,17 +101,7 @@
           "description": "The source field being remapped, F[i] = i (the dense exemplar's field, so the golden F_tgt is the same [7/3, 11/3, 19/3, 23/3]).",
           "expression": {
             "op": "const",
-            "value": [
-              1.0,
-              2.0,
-              3.0,
-              4.0,
-              5.0,
-              6.0,
-              7.0,
-              8.0,
-              9.0
-            ],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             "args": []
           }
         },
@@ -367,97 +114,9 @@
           "description": "The constant-1 source field whose gated regrid surfaces partition-of-unity as an ordinary field.",
           "expression": {
             "op": "const",
-            "value": [
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0
-            ],
+            "value": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             "args": []
           }
-        },
-        "src_lon": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "src_cells"
-          ],
-          "description": "BROAD PHASE stage 1: source binning longitude = the bbox-min ring corner, DERIVED from src_poly by the library's reduce-min template (esm-spec 8.6.1 binning-coordinate derivation; nothing hand-supplied).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_rep_lon",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly"
-            }
-          }
-        },
-        "src_lat": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "src_cells"
-          ],
-          "description": "BROAD PHASE stage 1: source binning latitude (bbox-min corner).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_rep_lat",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly"
-            }
-          }
-        },
-        "tgt_lon": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "tgt_cells"
-          ],
-          "description": "BROAD PHASE stage 1: target binning longitude (bbox-min corner).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_tgt_rep_lon",
-            "args": [],
-            "bindings": {
-              "tgt_poly": "tgt_poly"
-            }
-          }
-        },
-        "tgt_lat": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "tgt_cells"
-          ],
-          "description": "BROAD PHASE stage 1: target binning latitude (bbox-min corner).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_tgt_rep_lat",
-            "args": [],
-            "bindings": {
-              "tgt_poly": "tgt_poly"
-            }
-          }
-        },
-        "src_bin": {
-          "type": "state",
-          "shape": [
-            "src_cells"
-          ],
-          "description": "BROAD PHASE stage 2: integer bin key of each source cell, skolem('bin', floor(lon/4), floor(lat/4)) via the library template -- all nine cells land in bin (0, 0), so the candidate set is the full cross product (the degenerate-safe admissible binning; CONFORMANCE_SPEC 5.8.5 byte-identity still gates the key construction). Spelled per the upstream-supported value-invention pathway (ESS tests/coupling/cross_domain_coupling.esm rg_src_bin): a STATE variable assigned by a per-element skolem-aggregate equation -- the bindings' relational front-doors detect skolem maps on state equations, materialize the buffer once at build time, and drop the equation from the ODE."
-        },
-        "tgt_bin": {
-          "type": "state",
-          "shape": [
-            "tgt_cells"
-          ],
-          "description": "BROAD PHASE stage 2: integer bin key of each target cell, identically quantized. STATE + skolem-aggregate equation, as src_bin."
         },
         "A_ij": {
           "type": "observed",
@@ -466,7 +125,7 @@
             "src_cells",
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED narrow phase: the overlap-area matrix through conservative_overlap_A_ij_gated (join.on [[src_bin, tgt_bin]]), manifold 'planar' bound at the invocation. Must equal A_ij_dense bit-for-bit (the ident_state gate) and the dense exemplar's golden numbers.",
+          "description": "CANDIDATE-GATED narrow phase: the overlap-area matrix through conservative_overlap_A_ij_gated (join.overlap on the src_poly/tgt_poly envelopes), manifold 'planar' bound at the invocation. Must equal A_ij_dense bit-for-bit (the ident_state gate) and the dense exemplar's golden numbers.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_A_ij_gated",
@@ -474,9 +133,7 @@
             "bindings": {
               "src_poly": "src_poly",
               "tgt_poly": "tgt_poly",
-              "manifold": "planar",
-              "src_bin": "src_bin",
-              "tgt_bin": "tgt_bin"
+              "manifold": "planar"
             }
           }
         },
@@ -486,15 +143,15 @@
           "shape": [
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j.",
+          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join.overlap gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_A_j_gated",
             "args": [],
             "bindings": {
               "A_ij": "A_ij",
-              "src_bin": "src_bin",
-              "tgt_bin": "tgt_bin",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
               "atol": "atol"
             }
           }
@@ -506,7 +163,7 @@
             "src_cells",
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED normalized weights (same join gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9.",
+          "description": "CANDIDATE-GATED normalized weights (same join.overlap gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_W_ij_gated",
@@ -514,8 +171,8 @@
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
-              "src_bin": "src_bin",
-              "tgt_bin": "tgt_bin",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
               "atol": "atol"
             }
           }
@@ -581,7 +238,7 @@
           "shape": [
             "tgt_cells"
           ],
-          "description": "The regridded field through the CANDIDATE-GATED apply (same join gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3], the dense exemplar's values.",
+          "description": "The regridded field through the CANDIDATE-GATED apply (same join.overlap gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3], the dense exemplar's values.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_apply_gated",
@@ -590,8 +247,8 @@
               "A_ij": "A_ij",
               "A_j": "A_j",
               "F_src": "F_src",
-              "src_bin": "src_bin",
-              "tgt_bin": "tgt_bin",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
               "atol": "atol"
             }
           }
@@ -611,8 +268,8 @@
               "A_ij": "A_ij",
               "A_j": "A_j",
               "F_src": "unit_src",
-              "src_bin": "src_bin",
-              "tgt_bin": "tgt_bin",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
               "atol": "atol"
             }
           }
@@ -655,48 +312,6 @@
         }
       },
       "equations": [
-        {
-          "_comment": "BROAD PHASE bin buffers (value-invention, build-time): src_bin[i] = skolem('bin', floor(src_lon[i]/bin_dx), floor(src_lat[i]/bin_dy)) via the library template. A per-element skolem map on a state LHS is the relational front-door's :map classification; the buffer is materialized once at setup and this equation never enters the ODE.",
-          "lhs": {
-            "op": "index",
-            "args": [
-              "src_bin",
-              "i"
-            ]
-          },
-          "rhs": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_bin",
-            "args": [],
-            "bindings": {
-              "src_lon": "src_lon",
-              "src_lat": "src_lat",
-              "bin_dx": "bin_dx",
-              "bin_dy": "bin_dy"
-            }
-          }
-        },
-        {
-          "_comment": "BROAD PHASE bin buffers: tgt_bin[j], identically quantized.",
-          "lhs": {
-            "op": "index",
-            "args": [
-              "tgt_bin",
-              "j"
-            ]
-          },
-          "rhs": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_tgt_bin",
-            "args": [],
-            "bindings": {
-              "tgt_lon": "tgt_lon",
-              "tgt_lat": "tgt_lat",
-              "bin_dx": "bin_dx",
-              "bin_dy": "bin_dy"
-            }
-          }
-        },
         {
           "lhs": {
             "op": "ic",

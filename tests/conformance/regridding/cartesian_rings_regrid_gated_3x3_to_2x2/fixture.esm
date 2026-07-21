@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "cartesian_rings_regrid_gated_3x3_to_2x2",
-    "description": "HEADLINE cross-binding conformance: conservative regridding END-TO-END DECLARATIVE THROUGH THE CANDIDATE-GATED BROAD PHASE -- grid spec -> constructed cell rings AND constructed binning centers -> bin-Skolem broad phase -> gated narrow phase / assembly / apply -> regrid, with NO out-of-document precomputation anywhere in the chain. This is the gated sibling of cartesian_rings_regrid_3x3_to_2x2 (which runs the DENSE narrow phase): the value-invention front-door now admits a TEMPLATE-CONSTRUCTED (aggregate-valued) coordinate buffer as a bin-Skolem index target (the EarthSciAST.jl tree-walk E_TREEWALK_VI_INDEX restriction that forced the sibling onto the dense path has been lifted), so the constructed target centers tgt_lon/tgt_lat (cartesian_cell_rings_lon/_lat from the grid spec) flow DIRECTLY into conservative_overlap_tgt_bin's skolem('bin', floor(coord/bin_dx), ...) key, off the same grid spec that produces tgt_poly. The case builds through the load -> flatten -> build_evaluator(FlattenedSystem) path (what run_pde_tests / simulate use), which runs BOTH template expansion and the value-invention front-door. GEOMETRY: consumer supplies only the target GRID SPEC (origin tgt_x0/tgt_y0 = 0, spacing tgt_dx/tgt_dy = 1.5, sizes GX = GY = 2 bound at the cartesian_cell_rings import edge) and the source data (nine 1x1-degree cells tiling [0,3]^2); the constructed 2x2 target over [0,3]^2 is ring-for-ring the dense exemplar conservative_overlap_3x3_to_2x2's hand-authored geometry. BINNING, deliberate: bin_dx = bin_dy = 4.0 spans the whole [0,3] domain -- the degenerate-safe admissible binning for single-representative-point keys on this compact tiling (matching conservative_overlap_gated_3x3_to_2x2's rationale): every cell lands in bin (0,0), the candidate set is the full 9x4 cross product, and the join gate is exercised end-to-end (keys minted from the CONSTRUCTED tgt centers, equi-join evaluated) while provably admitting every genuine overlap; nothing finer can prune here without dropping real overlaps (the single-representative-point admissibility limit; genuine pruning is shown by conservative_overlap_gated_clusters_4_to_2). THREE GATES: (1) affine_formula -- the constructed rings and centers match the inline hand oracle EXACTLY (abs 0.0; every coordinate 0/0.75/1.5/2.25/3.0 is exactly representable); (2) exact_invariants -- partition-of-unity and conservation (CONFORMANCE_SPEC 5.8.3) on the gated pipeline; (3) gated_equals_dense -- the gated A_ij/A_j/W_ij are VALUE-IDENTICAL (abs 0.0) to the dense-path templates computed side by side on the same constructed rings, and the golden per-pair weights (official Julia runner, scripts/regenerate-goldens.sh; here the GATED matrices) reproduce the dense exemplar's exact rationals (A_ij corner 1.0 / edge 0.5 / center 0.25 deg^2, A_j = 2.25, W = 4/9 / 2/9 / 1/9, F_tgt = [7/3, 11/3, 19/3, 23/3], mass 45). src rings stay consumer data (a 3x3 unit-cell tiling) because one document supports ONE cartesian_cell_rings import (the ring_* index sets are metaparameter-sized, esm-spec 9.7.5/9.7.6).",
+    "description": "HEADLINE cross-binding conformance: conservative regridding END-TO-END DECLARATIVE THROUGH THE CANDIDATE-GATED BROAD PHASE -- grid spec -> constructed cell rings -> spatial-overlap broad phase -> gated narrow phase / assembly / apply -> regrid, with NO out-of-document precomputation anywhere in the chain. This is the gated sibling of cartesian_rings_regrid_3x3_to_2x2 (which runs the DENSE narrow phase): the _gated templates carry join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]}, so the engine builds the candidate (i,j) set ONCE at build time from the cell-ring ENVELOPES (each ring's axis-aligned bounding box, off the SAME constructed tgt_poly and consumer src_poly the narrow phase clips; no hand-authored binning coordinate, no bin key, no bin-width parameter). The case builds through the load -> flatten -> build_evaluator(FlattenedSystem) path (what run_pde_tests / simulate use), which runs template expansion and the geometry-setup broad+narrow phase. GEOMETRY: consumer supplies only the target GRID SPEC (origin tgt_x0/tgt_y0 = 0, spacing tgt_dx/tgt_dy = 1.5, sizes GX = GY = 2 bound at the cartesian_cell_rings import edge) and the source data (nine 1x1-degree cells tiling [0,3]^2); the constructed 2x2 target over [0,3]^2 is ring-for-ring the dense exemplar conservative_overlap_3x3_to_2x2's hand-authored geometry. On this compact tiling every cell's bounding box lies in [0,3]x[0,3], so the candidate set is the full 9x4 cross product and the join gate is exercised end-to-end (envelopes computed from the constructed rings, STRtree/brute-force candidacy evaluated) while provably admitting every genuine overlap; automatic pruning on disjoint geometry is shown by conservative_overlap_gated_clusters_4_to_2. THREE GATES: (1) affine_formula -- the constructed rings AND the constructed centers (cartesian_cell_rings_lon/_lat, kept as an independent construction check) match the inline hand oracle EXACTLY (abs 0.0; every coordinate 0/0.75/1.5/2.25/3.0 is exactly representable); (2) exact_invariants -- partition-of-unity and conservation (CONFORMANCE_SPEC 5.8.3) on the gated pipeline; (3) gated_equals_dense -- the gated A_ij/A_j/W_ij are VALUE-IDENTICAL (abs 0.0) to the dense-path templates computed side by side on the same constructed rings, and the golden per-pair weights (official Julia runner, scripts/regenerate-goldens.sh; here the GATED matrices) reproduce the dense exemplar's exact rationals (A_ij corner 1.0 / edge 0.5 / center 0.25 deg^2, A_j = 2.25, W = 4/9 / 2/9 / 1/9, F_tgt = [7/3, 11/3, 19/3, 23/3], mass 45). src rings stay consumer data (a 3x3 unit-cell tiling) because one document supports ONE cartesian_cell_rings import (the ring_* index sets are metaparameter-sized, esm-spec 9.7.5/9.7.6).",
     "tags": [
       "conformance",
       "regridding",
@@ -11,9 +11,8 @@
       "end-to-end",
       "declarative-geometry",
       "broad-phase",
-      "bin-skolem",
+      "spatial-overlap-gate",
       "candidate-gated",
-      "value-invention",
       "join",
       "value-identity",
       "affine",
@@ -65,18 +64,6 @@
           "default": 1.5,
           "description": "TARGET GRID SPEC: uniform y spacing."
         },
-        "bin_dx": {
-          "type": "parameter",
-          "units": "1",
-          "default": 4.0,
-          "description": "Broad-phase bin width (degrees lon): 4.0 spans the [0,3] domain, the degenerate-safe admissible binning for this compact tiling (see the fixture description)."
-        },
-        "bin_dy": {
-          "type": "parameter",
-          "units": "1",
-          "default": 4.0,
-          "description": "Broad-phase bin height (degrees lat)."
-        },
         "src_poly": {
           "type": "observed",
           "shape": ["src_cells", "overlap_cell_verts", "overlap_coord"],
@@ -100,7 +87,7 @@
         "tgt_poly": {
           "type": "observed",
           "shape": ["tgt_cells", "overlap_cell_verts", "overlap_coord"],
-          "description": "CONSTRUCTED target-cell geometry: the four-corner CCW rings emitted by cartesian_cell_rings_poly from the grid spec alone (flattened row-major over ring_cells = GX*GY = 4 = NTGT). Expected bit-equal to the dense exemplar's hand-authored rings (the affine_formula gate).",
+          "description": "CONSTRUCTED target-cell geometry: the four-corner CCW rings emitted by cartesian_cell_rings_poly from the grid spec alone (flattened row-major over ring_cells = GX*GY = 4 = NTGT). Expected bit-equal to the dense exemplar's hand-authored rings (the affine_formula gate), and the src_env/tgt_env envelopes the overlap broad phase reads come off exactly these rings.",
           "expression": {
             "op": "apply_expression_template",
             "name": "cartesian_cell_rings_poly",
@@ -158,35 +145,11 @@
           "description": "The constant-1 source field whose gated regrid surfaces partition-of-unity as an ordinary field.",
           "expression": { "op": "const", "value": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "args": [] }
         },
-        "src_lon": {
-          "type": "observed",
-          "units": "deg",
-          "shape": ["src_cells"],
-          "description": "BROAD PHASE stage 1 (source): binning longitude = the bbox-min ring corner, DERIVED from src_poly by the library's reduce-min template (esm-spec 8.6.1 binning-coordinate derivation; nothing hand-supplied).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_rep_lon",
-            "args": [],
-            "bindings": { "src_poly": "src_poly" }
-          }
-        },
-        "src_lat": {
-          "type": "observed",
-          "units": "deg",
-          "shape": ["src_cells"],
-          "description": "BROAD PHASE stage 1 (source): binning latitude (bbox-min corner).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_rep_lat",
-            "args": [],
-            "bindings": { "src_poly": "src_poly" }
-          }
-        },
         "tgt_lon": {
           "type": "observed",
           "units": "deg",
           "shape": ["tgt_cells"],
-          "description": "BROAD PHASE stage 1 (target): binning longitude = the CONSTRUCTED cell center from cartesian_cell_rings_lon over the grid spec -- a TEMPLATE-CONSTRUCTED (aggregate-valued) coordinate buffer fed DIRECTLY as the bin-Skolem index target (the value-invention front-door capability this case exists to gate). Expected [0.75, 2.25, 0.75, 2.25].",
+          "description": "CONSTRUCTED target cell center x from cartesian_cell_rings_lon over the grid spec -- kept as an independent construction check (the affine_formula gate); expected [0.75, 2.25, 0.75, 2.25].",
           "expression": {
             "op": "apply_expression_template",
             "name": "cartesian_cell_rings_lon",
@@ -198,7 +161,7 @@
           "type": "observed",
           "units": "deg",
           "shape": ["tgt_cells"],
-          "description": "BROAD PHASE stage 1 (target): binning latitude = the CONSTRUCTED cell center from cartesian_cell_rings_lat. Expected [0.75, 0.75, 2.25, 2.25].",
+          "description": "CONSTRUCTED target cell center y from cartesian_cell_rings_lat; expected [0.75, 0.75, 2.25, 2.25].",
           "expression": {
             "op": "apply_expression_template",
             "name": "cartesian_cell_rings_lat",
@@ -252,50 +215,40 @@
             }
           }
         },
-        "src_bin": {
-          "type": "state",
-          "shape": ["src_cells"],
-          "description": "BROAD PHASE stage 2: integer bin key of each source cell, skolem('bin', floor(src_lon/bin_dx), floor(src_lat/bin_dy)) via the library template -- all nine cells land in bin (0, 0). STATE + skolem-aggregate equation (the upstream value-invention front-door: the buffer is materialized once at build time and the equation drops from the ODE)."
-        },
-        "tgt_bin": {
-          "type": "state",
-          "shape": ["tgt_cells"],
-          "description": "BROAD PHASE stage 2: integer bin key of each target cell, identically quantized from the CONSTRUCTED tgt_lon/tgt_lat. STATE + skolem-aggregate equation, as src_bin -- the template-constructed binning coordinate as skolem index target."
-        },
         "A_ij": {
           "type": "observed",
           "units": "1",
           "shape": ["src_cells", "tgt_cells"],
-          "description": "CANDIDATE-GATED narrow phase on the CONSTRUCTED target rings: the overlap-area matrix through conservative_overlap_A_ij_gated (join.on [[src_bin, tgt_bin]]), manifold 'planar'. Must equal A_ij_dense bit-for-bit (the gated_equals_dense gate) and the dense exemplar's golden numbers.",
+          "description": "CANDIDATE-GATED narrow phase on the CONSTRUCTED target rings: the overlap-area matrix through conservative_overlap_A_ij_gated (join.overlap on the src_poly/tgt_poly envelopes), manifold 'planar'. Must equal A_ij_dense bit-for-bit (the gated_equals_dense gate) and the dense exemplar's golden numbers.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_A_ij_gated",
             "args": [],
-            "bindings": { "src_poly": "src_poly", "tgt_poly": "tgt_poly", "manifold": "planar", "src_bin": "src_bin", "tgt_bin": "tgt_bin" }
+            "bindings": { "src_poly": "src_poly", "tgt_poly": "tgt_poly", "manifold": "planar" }
           }
         },
         "A_j": {
           "type": "observed",
           "units": "1",
           "shape": ["tgt_cells"],
-          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j.",
+          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join.overlap gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_A_j_gated",
             "args": [],
-            "bindings": { "A_ij": "A_ij", "src_bin": "src_bin", "tgt_bin": "tgt_bin", "atol": "atol" }
+            "bindings": { "A_ij": "A_ij", "src_poly": "src_poly", "tgt_poly": "tgt_poly", "atol": "atol" }
           }
         },
         "W_ij": {
           "type": "observed",
           "units": "1",
           "shape": ["src_cells", "tgt_cells"],
-          "description": "CANDIDATE-GATED normalized weights (same join gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9.",
+          "description": "CANDIDATE-GATED normalized weights (same join.overlap gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9.",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_W_ij_gated",
             "args": [],
-            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "src_bin": "src_bin", "tgt_bin": "tgt_bin", "atol": "atol" }
+            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "src_poly": "src_poly", "tgt_poly": "tgt_poly", "atol": "atol" }
           }
         },
         "A_ij_dense": {
@@ -338,12 +291,12 @@
           "type": "observed",
           "units": "1",
           "shape": ["tgt_cells"],
-          "description": "The regridded field through the CANDIDATE-GATED apply (same join gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3].",
+          "description": "The regridded field through the CANDIDATE-GATED apply (same join.overlap gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3].",
           "expression": {
             "op": "apply_expression_template",
             "name": "conservative_overlap_apply_gated",
             "args": [],
-            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "F_src": "F_src", "src_bin": "src_bin", "tgt_bin": "tgt_bin", "atol": "atol" }
+            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "F_src": "F_src", "src_poly": "src_poly", "tgt_poly": "tgt_poly", "atol": "atol" }
           }
         },
         "F_unit_tgt": {
@@ -355,7 +308,7 @@
             "op": "apply_expression_template",
             "name": "conservative_overlap_apply_gated",
             "args": [],
-            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "F_src": "unit_src", "src_bin": "src_bin", "tgt_bin": "tgt_bin", "atol": "atol" }
+            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "F_src": "unit_src", "src_poly": "src_poly", "tgt_poly": "tgt_poly", "atol": "atol" }
           }
         },
         "pou_state": {
@@ -395,26 +348,6 @@
         }
       },
       "equations": [
-        {
-          "_comment": "BROAD PHASE bin buffers (value-invention, build-time): src_bin[i] = skolem('bin', floor(src_lon[i]/bin_dx), floor(src_lat[i]/bin_dy)) via the library template.",
-          "lhs": { "op": "index", "args": ["src_bin", "i"] },
-          "rhs": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_src_bin",
-            "args": [],
-            "bindings": { "src_lon": "src_lon", "src_lat": "src_lat", "bin_dx": "bin_dx", "bin_dy": "bin_dy" }
-          }
-        },
-        {
-          "_comment": "BROAD PHASE bin buffers: tgt_bin[j] from the CONSTRUCTED tgt centers, identically quantized (the template-constructed coordinate as skolem index target).",
-          "lhs": { "op": "index", "args": ["tgt_bin", "j"] },
-          "rhs": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_tgt_bin",
-            "args": [],
-            "bindings": { "tgt_lon": "tgt_lon", "tgt_lat": "tgt_lat", "bin_dx": "bin_dx", "bin_dy": "bin_dy" }
-          }
-        },
         { "lhs": { "op": "ic", "args": ["pou_state"] }, "rhs": 0.0 },
         { "lhs": { "op": "ic", "args": ["cons_state"] }, "rhs": 0.0 },
         { "lhs": { "op": "ic", "args": ["regrid_state"] }, "rhs": 0.0 },
