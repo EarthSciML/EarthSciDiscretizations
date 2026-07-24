@@ -1,0 +1,154 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "duo_arc_length",
+    "description": "Great-circle (geodesic) distance between two points a=(ax,ay,az) and b=(bx,by,bz) on a sphere of radius `radius`: duo_arc_length = radius * acos( (a.b) / (|a| |b|) ). Scalar stencil atom (Chen 2021, great-circle length used throughout Appendix B, Eqs B6-B7). The duo spatial-operator rules bind it inline on the halo-extended cartesian node array (grid.esm duo_node_cart) to obtain physical cell-face lengths: the x-normal face on the WEST side of cell (t,i,j) is the arc from node(t,i,j) to node(t,i,j+1); the y-normal face on the SOUTH side is the arc from node(t,i,j) to node(t,i+1,j). East face of cell i equals West face of cell i+1 (single-valued), so the flux-divergence is discretely conservative. This face length is the 'Delta y'/'Delta x' multiplying the LMARS normal velocity in the continuity flux (Eqs 4-5), the coordinate-line edge weight in the relative vorticity (Eq 9 / C38), and the pressure-force lever in the momentum update (Eqs 7-8). AXIS-NEUTRAL: swap the node pair to measure any face on either grid direction.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:duo",
+      "op:arc_length"
+    ],
+    "references": [
+      {
+        "citation": "Chen, X. (2021). The LMARS based shallow-water dynamical core on generic gnomonic cubed sphere geometry. Journal of Advances in Modeling Earth Systems, 13(1), e2020MS002280.",
+        "doi": "10.1029/2020MS002280"
+      }
+    ]
+  },
+  "expression_templates": {
+    "duo_arc_length": {
+      "params": [
+        "ax",
+        "ay",
+        "az",
+        "bx",
+        "by",
+        "bz",
+        "radius"
+      ],
+      "body": {
+        "op": "*",
+        "args": [
+          "radius",
+          {
+            "op": "acos",
+            "args": [
+              {
+                "op": "min",
+                "args": [
+                  1.0,
+                  {
+                    "op": "max",
+                    "args": [
+                      -1.0,
+                      {
+                        "op": "/",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  "ax",
+                                  "bx"
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  "ay",
+                                  "by"
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  "az",
+                                  "bz"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              {
+                                "op": "sqrt",
+                                "args": [
+                                  {
+                                    "op": "+",
+                                    "args": [
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "ax",
+                                          "ax"
+                                        ]
+                                      },
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "ay",
+                                          "ay"
+                                        ]
+                                      },
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "az",
+                                          "az"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "sqrt",
+                                "args": [
+                                  {
+                                    "op": "+",
+                                    "args": [
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "bx",
+                                          "bx"
+                                        ]
+                                      },
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "by",
+                                          "by"
+                                        ]
+                                      },
+                                      {
+                                        "op": "*",
+                                        "args": [
+                                          "bz",
+                                          "bz"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
