@@ -2,7 +2,7 @@
   "category": "convergence",
   "version": "1.0",
   "case": "latlon3d_advection_vertical_upwind_flux",
-  "description": "Spatial convergence of the FLUX-FORM first-order-upwind vertical advection operator grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc, driven by problems/latlon3d_advection_vertical_upwind_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, matching the sibling latlon3d_advection_vertical_ppm: u*(z) = cos(pi z) is an exact steady state of the forced equation, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. Donor-cell upwinding is first order, hence expected_order 1.0. (Contrast the diffusion cases on this grid, which use the solution-error idiom at t = 0.1 because their boundary cells carry O(dz) truncation while Gustafsson's theorem keeps the solution error at O(dz^2). The idiom is chosen by operator type: parabolic -> solution error, hyperbolic flux-form -> truncation.)\n\nTHE LADDER STARTS AT 32, NOT 16, AND THIS IS DELIBERATE. The face velocity sin(2 pi z) carries a full wavelength across the domain, so a 16-cell mesh barely resolves the WIND, let alone the tracer, and the coarse rungs sit well outside the asymptotic regime: on a 16/32/64/128 ladder the Linf pairwise orders run 0.34, 0.78, 0.91, whose median (0.78) misses first order by 0.22 and would need an implausibly loose gate to pass. On 32/64/128/256 the same operator marches cleanly: L2 pairwise 0.94, 0.96, 0.97 (median 0.96) and Linf 0.78, 0.91, 0.99 (median 0.91). The fix is to measure in the asymptotic regime, NOT to slacken order_tolerance -- a loose tolerance on a pre-asymptotic ladder is exactly how a genuinely inconsistent scheme slips through. The sweep is cheap (~30 s for all four rungs) because advection is CFL-limited rather than dz^2-stiffness-limited, so the extra rung costs little. \n\nWHAT THIS GUARDS. The velocity is a declared THREE-DIMENSIONAL face-staggered field W[lon, lat, lev_nodes] that REVERSES SIGN at z = 1/2, so both branches of the donor-cell selection are exercised in every column, and the horizontal modulation a(i) b(j) means a stencil that mis-indexed W as a column profile would be caught rather than silently agreeing. No pre-existing advection operator on this grid can represent either property: they match a bare D(q, wrt: axis) with the velocity supplied from outside, and they hard-code a single flow direction.",
+  "description": "Spatial convergence of the FLUX-FORM first-order-upwind vertical advection operator grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc, driven by problems/latlon3d_advection_vertical_upwind_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, matching the sibling latlon3d_advection_vertical_ppm: u*(z) = cos(pi z) is an exact steady state of the forced equation, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. Donor-cell upwinding is first order, hence expected_order 1.0. (Contrast the diffusion cases on this grid, which use the solution-error idiom at t = 0.1 because their boundary cells carry O(dz) truncation while Gustafsson's theorem keeps the solution error at O(dz^2). The idiom is chosen by operator type: parabolic -> solution error, hyperbolic flux-form -> truncation.)\n\nTHE LADDER STARTS AT 32, NOT 16, AND THIS IS DELIBERATE. The face velocity sin(2 pi z) carries a full wavelength across the domain, so a 16-cell mesh barely resolves the WIND, let alone the tracer, and the coarse rungs sit well outside the asymptotic regime: on a 16/32/64/128 ladder the Linf pairwise orders run 0.34, 0.78, 0.91, whose median (0.78) misses first order by 0.22 and would need an implausibly loose gate to pass. On 32/64/128/256 the same operator marches cleanly: L2 pairwise 0.94, 0.96, 0.97 (median 0.96) and Linf 0.78, 0.91, 0.99 (median 0.91). The fix is to measure in the asymptotic regime, NOT to slacken order_tolerance -- a loose tolerance on a pre-asymptotic ladder is exactly how a genuinely inconsistent scheme slips through. The sweep is cheap (~30 s for all four rungs) because advection is CFL-limited rather than dz^2-stiffness-limited, so the extra rung costs little. \n\nWHAT THIS GUARDS. The velocity is a declared THREE-DIMENSIONAL face-staggered field W[lon, lat, lev_nodes] that REVERSES SIGN at z = 1/2, so both branches of the donor-cell selection are exercised in every column, and the horizontal modulation a(i) b(j) means a stencil that mis-indexed W as a column profile would be caught rather than silently agreeing. No pre-existing advection operator on this grid can represent either property: they match a bare D(q, wrt: axis) with the velocity supplied from outside, and they hard-code a single flow direction. \n\nINTEGRATOR CONFIG REPAIR (2026-07-23) -- GOLDEN RESET, NOT A REFRESH. This manifest used to pin its solver under a SINGULAR top-level \"integrator\" key. NO runner reads that key: run-julia.jl reads integrators.julia, run-python.py integrators.python and run-rust.sh integrators.rust, each falling back to its OWN default when its per-binding block is absent. The pinned reltol 1e-11 / abstol 1e-13 therefore never took effect and every committed golden here was in fact produced at the Julia runner's default Tsit5 reltol 1e-10 / abstol 1e-12. That was verified rather than assumed: re-running the sweep with the block deliberately set back to 1e-10 / 1e-12 reproduces the pre-repair golden to the last bit. The key is now spelled integrators.julia, so the documented tolerances bind, and the goldens are regenerated at them through scripts/regenerate-goldens.sh. The golden values consequently MOVE -- that is the tolerance change becoming real, a behavioural correction and not a refresh-to-green. The observed orders are unaffected (the pairwise rates quoted above are the post-repair ones and are unchanged to the precision quoted, except where this manifest says otherwise), because a tolerance that was already far below the spatial truncation error at every retained rung moves only the digits it reaches. The same commit adds the integrators.python block and puts python in bindings_required: the Python binding was never scope-excluded here, and compare-outputs.py gates any binding that produces a record regardless of bindings_required, so python was eligible all along and is now declared and measured rather than left implicit.",
   "problem": "../../../../problems/latlon3d_advection_vertical_upwind_flux.esm",
   "model": "VerticalAdvectionUpwindFlux3d",
   "grid": "latlon3d",
@@ -44,10 +44,17 @@
     "error_vs_golden_rtol": 0.0001,
     "error_vs_golden_atol": 1e-09
   },
-  "integrator": {
-    "algorithm": "Tsit5",
-    "reltol": 1e-11,
-    "abstol": 1e-13
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    }
   },
   "tolerances": {
     "error_vs_golden_rtol": 0.0001,
@@ -55,8 +62,13 @@
   },
   "reference_binding": "julia",
   "bindings_required": [
-    "julia"
+    "julia",
+    "python"
   ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
   "golden": "golden/errors.json",
   "status": "active"
 }

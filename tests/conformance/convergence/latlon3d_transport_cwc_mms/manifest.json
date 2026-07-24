@@ -2,7 +2,7 @@
   "category": "convergence",
   "version": "1.0",
   "case": "latlon3d_transport_cwc_mms",
-  "description": "Spatial convergence of the CONSISTENT-WITH-CONTINUITY (CWC) vertical transport pair on latlon3d -- the continuity rule grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc coupled to the flux-form upwind rule grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc through the observed mixing ratio q = mq/m -- driven by problems/latlon3d_transport_cwc_mms. \n\nWHAT IT IS FOR. The companion problem latlon3d_transport_cwc_freestream pins the CWC property itself: a CONSTANT tracer is preserved BITWISE (measured max|q - 1| = 0.0, exactly, under a wind that moves the air mass by more than half). This case pins the other half of the claim -- that the fix cost nothing in accuracy. A NON-CONSTANT tracer, transported by the same pair, still converges at the donor-cell rate. Expected order 1.0: the face value is a first-order upwind reconstruction of q, and that reconstruction is the only source of error in the pair (the continuity operator is exact on cell means, and the MMS forcing cancels it bitwise, so the air mass does not drift at all). \n\nFORCED-STEADY (TRUNCATION) IDIOM, matching the sibling latlon3d_advection_vertical_upwind_flux: m*(z) = 2 - z and q*(z) = 1 + z^2 make mq* = (2 - z)(1 + z^2) an exact steady state of the forced system, the states are seeded with the exact CELL MEANS (both profiles are polynomials, so the means are closed-form), and the drift measured in mq at t = 0.1 IS the operator's truncation error. \n\nTHE LADDER STARTS AT 32, following the sibling and for the same reason: measure in the asymptotic regime rather than slacken the tolerance. On 16/32/64/128 the Linf pairwise orders run 0.78, 0.90, 0.95 (median 0.90 -- passing, but only just, and for the wrong reason: the coarse rung is pre-asymptotic). On 32/64/128/256 the same operator marches cleanly: L2 pairwise 0.99, 0.99, 1.00 (median 0.995) and Linf 0.90, 0.95, 0.97 (median 0.949). The sweep is cheap because advection is CFL-limited rather than dz^2-stiffness-limited. \n\nWHAT THIS GUARDS BEYOND THE SIBLING. The transported field is not a declared state that the operator reads directly -- it is the RATIO of the two states being integrated, recomputed at every Runge-Kutta stage, and the velocity the operator sees is an air-MASS flux rather than a wind. A tracer scheme that quietly reverted to advecting a prescribed mixing ratio, or that paired the tracer flux with a different thickness or a different face than the continuity flux, would still pass a single-state advection convergence test and would fail here (or, more insidiously, would pass here and fail the free-stream problem -- which is why both cases exist).",
+  "description": "Spatial convergence of the CONSISTENT-WITH-CONTINUITY (CWC) vertical transport pair on latlon3d -- the continuity rule grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc coupled to the flux-form upwind rule grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc through the observed mixing ratio q = mq/m -- driven by problems/latlon3d_transport_cwc_mms. \n\nWHAT IT IS FOR. The companion problem latlon3d_transport_cwc_freestream pins the CWC property itself: a CONSTANT tracer is preserved BITWISE (measured max|q - 1| = 0.0, exactly, under a wind that moves the air mass by more than half). This case pins the other half of the claim -- that the fix cost nothing in accuracy. A NON-CONSTANT tracer, transported by the same pair, still converges at the donor-cell rate. Expected order 1.0: the face value is a first-order upwind reconstruction of q, and that reconstruction is the only source of error in the pair (the continuity operator is exact on cell means, and the MMS forcing cancels it bitwise, so the air mass does not drift at all). \n\nFORCED-STEADY (TRUNCATION) IDIOM, matching the sibling latlon3d_advection_vertical_upwind_flux: m*(z) = 2 - z and q*(z) = 1 + z^2 make mq* = (2 - z)(1 + z^2) an exact steady state of the forced system, the states are seeded with the exact CELL MEANS (both profiles are polynomials, so the means are closed-form), and the drift measured in mq at t = 0.1 IS the operator's truncation error. \n\nTHE LADDER STARTS AT 32, following the sibling and for the same reason: measure in the asymptotic regime rather than slacken the tolerance. On 16/32/64/128 the Linf pairwise orders run 0.78, 0.90, 0.95 (median 0.90 -- passing, but only just, and for the wrong reason: the coarse rung is pre-asymptotic). On 32/64/128/256 the same operator marches cleanly: L2 pairwise 0.99, 0.99, 1.00 (median 0.995) and Linf 0.90, 0.95, 0.97 (median 0.949). The sweep is cheap because advection is CFL-limited rather than dz^2-stiffness-limited. \n\nWHAT THIS GUARDS BEYOND THE SIBLING. The transported field is not a declared state that the operator reads directly -- it is the RATIO of the two states being integrated, recomputed at every Runge-Kutta stage, and the velocity the operator sees is an air-MASS flux rather than a wind. A tracer scheme that quietly reverted to advecting a prescribed mixing ratio, or that paired the tracer flux with a different thickness or a different face than the continuity flux, would still pass a single-state advection convergence test and would fail here (or, more insidiously, would pass here and fail the free-stream problem -- which is why both cases exist). \n\nINTEGRATOR CONFIG REPAIR (2026-07-23) -- GOLDEN RESET, NOT A REFRESH. This manifest used to pin its solver under a SINGULAR top-level \"integrator\" key. NO runner reads that key: run-julia.jl reads integrators.julia, run-python.py integrators.python and run-rust.sh integrators.rust, each falling back to its OWN default when its per-binding block is absent. The pinned reltol 1e-11 / abstol 1e-13 therefore never took effect and every committed golden here was in fact produced at the Julia runner's default Tsit5 reltol 1e-10 / abstol 1e-12. That was verified rather than assumed: re-running the sweep with the block deliberately set back to 1e-10 / 1e-12 reproduces the pre-repair golden to the last bit. The key is now spelled integrators.julia, so the documented tolerances bind, and the goldens are regenerated at them through scripts/regenerate-goldens.sh. The golden values consequently MOVE -- that is the tolerance change becoming real, a behavioural correction and not a refresh-to-green. The observed orders are unaffected (the pairwise rates quoted above are the post-repair ones and are unchanged to the precision quoted, except where this manifest says otherwise), because a tolerance that was already far below the spatial truncation error at every retained rung moves only the digits it reaches. The same commit adds the integrators.python block and puts python in bindings_required: the Python binding was never scope-excluded here, and compare-outputs.py gates any binding that produces a record regardless of bindings_required, so python was eligible all along and is now declared and measured rather than left implicit.",
   "problem": "../../../../problems/latlon3d_transport_cwc_mms.esm",
   "model": "TransportCWCMMS",
   "grid": "latlon3d",
@@ -44,10 +44,17 @@
     "error_vs_golden_rtol": 0.0001,
     "error_vs_golden_atol": 1e-09
   },
-  "integrator": {
-    "algorithm": "Tsit5",
-    "reltol": 1e-11,
-    "abstol": 1e-13
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    }
   },
   "tolerances": {
     "error_vs_golden_rtol": 0.0001,
@@ -55,8 +62,13 @@
   },
   "reference_binding": "julia",
   "bindings_required": [
-    "julia"
+    "julia",
+    "python"
   ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
   "golden": "golden/errors.json",
   "status": "active"
 }

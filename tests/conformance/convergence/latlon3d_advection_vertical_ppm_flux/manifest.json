@@ -2,7 +2,7 @@
   "category": "convergence",
   "version": "1.0",
   "case": "latlon3d_advection_vertical_ppm_flux",
-  "description": "Spatial convergence of the UNLIMITED (centred) fourth-order CW84 flux-form vertical advection operator grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc, driven by problems/latlon3d_advection_vertical_ppm_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, identical to its siblings: u*(z) = cos(pi z) is an exact steady state of the forced equation, so the drift at t = 0.1 IS the truncation error and the observed rate is the truncation order. Measured medians: L2 3.99 (pairwise 3.96, 3.99, 4.00) and Linf 3.94 (pairwise 3.86, 3.94, 3.97) -- a clean fourth order, which is the formal order of the CW84 eq (1.6) interpolant, so expected_order 4.0 asserts what was measured AND what the theory predicts. \n\nTHIS CASE IS THE ACCURACY CEILING OF THE ppm_flux FAMILY. The gap between the 3.99/3.94 measured here and the 2.49/1.98 measured by the monotone sibling latlon3d_advection_vertical_ppm_flux_mono on the IDENTICAL manufactured solution is the quantified cost of boundedness -- and the gap in the other direction, against the 0.96 of the first-order donor-cell case latlon3d_advection_vertical_upwind_flux, is the accuracy win of reconstructing at all. At NLEV = 64 the three schemes sit at L2 = 1.39e-2 (donor), 1.61e-4 (monotone, 86x better) and 1.82e-7 (this one, 76000x better). The three drivers share one MMS by construction so that these numbers are directly comparable.\n\nTHE LADDER IS 16/32/64/128, AND BOTH ENDS ARE CHOSEN, NOT INHERITED. The donor-cell sibling case latlon3d_advection_vertical_upwind_flux runs 32/64/128/256 because a FIRST-order scheme is still pre-asymptotic at 16 (its Linf pairwise orders there run 0.34, 0.78, 0.91). A high-order scheme has the opposite problem at BOTH ends. At the coarse end it is already asymptotic at 16 -- the pairwise orders below are flat to two decimals across every rung, which is the actual test of asymptoticity and is what licenses starting there. At the FINE end it runs out of room: by NLEV = 256 the unlimited sibling's spatial error is down to ~7e-10, which is the same size as the Tsit5 temporal/roundoff floor at reltol 1e-11, and the measured Linf rate on that last pair collapses to 3.49 purely as a solver artefact. Including such a rung would be measuring the ODE solver, not the operator. The governing principle is the same one that moved the donor-cell ladder OUT to 256 -- measure inside the asymptotic window -- and here that window is 16..128. Neither end was chosen by loosening order_tolerance to make a bad ladder pass.",
+  "description": "Spatial convergence of the UNLIMITED (centred) fourth-order CW84 flux-form vertical advection operator grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc, driven by problems/latlon3d_advection_vertical_ppm_flux. \n\nFORCED-STEADY (TRUNCATION) IDIOM, identical to its siblings: u*(z) = cos(pi z) is an exact steady state of the forced equation, so the drift at t = 0.1 IS the truncation error and the observed rate is the truncation order. Measured medians: L2 3.99 (pairwise 3.96, 3.99, 4.00) and Linf 3.94 (pairwise 3.86, 3.94, 3.97) -- a clean fourth order, which is the formal order of the CW84 eq (1.6) interpolant, so expected_order 4.0 asserts what was measured AND what the theory predicts. \n\nTHIS CASE IS THE ACCURACY CEILING OF THE ppm_flux FAMILY. The gap between the 3.99/3.94 measured here and the 2.49/1.98 measured by the monotone sibling latlon3d_advection_vertical_ppm_flux_mono on the IDENTICAL manufactured solution is the quantified cost of boundedness -- and the gap in the other direction, against the 0.96 of the first-order donor-cell case latlon3d_advection_vertical_upwind_flux, is the accuracy win of reconstructing at all. At NLEV = 64 the three schemes sit at L2 = 1.39e-2 (donor), 1.61e-4 (monotone, 86x better) and 1.82e-7 (this one, 76000x better). The three drivers share one MMS by construction so that these numbers are directly comparable.\n\nTHE LADDER IS 16/32/64/128, AND BOTH ENDS ARE CHOSEN, NOT INHERITED. The donor-cell sibling case latlon3d_advection_vertical_upwind_flux runs 32/64/128/256 because a FIRST-order scheme is still pre-asymptotic at 16 (its Linf pairwise orders there run 0.34, 0.78, 0.91). A high-order scheme has the opposite problem at BOTH ends. At the coarse end it is already asymptotic at 16 -- the pairwise orders below are flat to two decimals across every rung, which is the actual test of asymptoticity and is what licenses starting there. At the FINE end it runs out of room: by NLEV = 256 the unlimited sibling's spatial error is down to ~7e-10, which is the same size as the Tsit5 temporal/roundoff floor at reltol 1e-11, and the measured Linf rate on that last pair collapses to 3.49 purely as a solver artefact. Including such a rung would be measuring the ODE solver, not the operator. The governing principle is the same one that moved the donor-cell ladder OUT to 256 -- measure inside the asymptotic window -- and here that window is 16..128. Neither end was chosen by loosening order_tolerance to make a bad ladder pass. \n\nINTEGRATOR CONFIG REPAIR (2026-07-23) -- GOLDEN RESET, NOT A REFRESH. This manifest used to pin its solver under a SINGULAR top-level \"integrator\" key. NO runner reads that key: run-julia.jl reads integrators.julia, run-python.py integrators.python and run-rust.sh integrators.rust, each falling back to its OWN default when its per-binding block is absent. The pinned reltol 1e-11 / abstol 1e-13 therefore never took effect and every committed golden here was in fact produced at the Julia runner's default Tsit5 reltol 1e-10 / abstol 1e-12. That was verified rather than assumed: re-running the sweep with the block deliberately set back to 1e-10 / 1e-12 reproduces the pre-repair golden to the last bit. The key is now spelled integrators.julia, so the documented tolerances bind, and the goldens are regenerated at them through scripts/regenerate-goldens.sh. The golden values consequently MOVE -- that is the tolerance change becoming real, a behavioural correction and not a refresh-to-green. The observed orders are unaffected (the pairwise rates quoted above are the post-repair ones and are unchanged to the precision quoted, except where this manifest says otherwise), because a tolerance that was already far below the spatial truncation error at every retained rung moves only the digits it reaches. The same commit adds the integrators.python block and puts python in bindings_required: the Python binding was never scope-excluded here, and compare-outputs.py gates any binding that produces a record regardless of bindings_required, so python was eligible all along and is now declared and measured rather than left implicit.",
   "problem": "../../../../problems/latlon3d_advection_vertical_ppm_flux.esm",
   "model": "VerticalAdvectionPPMFlux3d",
   "grid": "latlon3d",
@@ -44,10 +44,17 @@
     "error_vs_golden_rtol": 0.0001,
     "error_vs_golden_atol": 1e-09
   },
-  "integrator": {
-    "algorithm": "Tsit5",
-    "reltol": 1e-11,
-    "abstol": 1e-13
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-11,
+      "abstol": 1e-13
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    }
   },
   "tolerances": {
     "error_vs_golden_rtol": 0.0001,
@@ -55,8 +62,13 @@
   },
   "reference_binding": "julia",
   "bindings_required": [
-    "julia"
+    "julia",
+    "python"
   ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
   "golden": "golden/errors.json",
   "status": "active"
 }

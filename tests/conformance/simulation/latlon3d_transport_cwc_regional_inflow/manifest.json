@@ -13,10 +13,12 @@
     "julia"
   ],
   "scope_excluded": {
-    "python": "rank-3 makearray flux-form transport; not exercised by the python binding's simulator",
     "rust": "rank-3 makearray flux-form transport; not exercised by the rust binding's simulator",
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "blocked_upstream_bindings": {
+    "python": "With the esm-0.9.0 D-trailing-operand fix (EarthSciAST feat/d-trailing-operands: rewrite-target D may carry trailing boundary/halo operands), earthsci_ast now LOADS both problems -- the former arity rejection (`operator 'D' accepts at most 1 args, got 3`) is gone. The case remains julia-only for a DIFFERENT, downstream reason: the python vectorized simulator raises `index 4 is out of bounds for axis 0 with size 4` during simulate on the inflow-halo (trailing boundary-operand) indexing. This is NOT the general rank-3 flux-form gap -- python runs rank-3 makearray flux-form transport (latlon3d_transport_cwc_3d / _cwc_3d_ppm / _cwc_moving_lid all pass on python); it is specific to the Dirichlet inflow-halo path and needs root-causing before python can be armed here. MEASURED 2026-07-23/24 (LSODA 1e-10/1e-12): loads OK (~104-156 s), then errors in simulate; 0 assertions run. Julia (reference) runs it. Re-classify once the OOB is fixed."
   },
   "integrators": {
     "julia": {
