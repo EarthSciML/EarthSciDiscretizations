@@ -2,68 +2,202 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "duo",
-    "description": "DUO icosahedral triangular primal grid (Heikes et al. 2023) on the sphere: NCELLS triangular cells (faces), NVERTICES vertices, NEDGES edges. On a closed icosahedral mesh the Euler identity gives NEDGES = 3*(NCELLS/2 ... ) and the sphere relation V - E + F = 2 (level r: 20*4^r cells, 10*4^r + 2 vertices, 30*4^r edges), but -- exactly as grids/mpas keeps NCELLS/NEDGES/NVERTICES independent -- the three counts stay independent integer metaparameters, bound per resolution at the import edge (the level-0 defaults are 20/12/30). Like grids/mpas there is no coordinate axis: the iteration domains are the entity interval sets (cells, vertices, edges) plus the fixed triangle-corner (corners=3) and cartesian (space=3) axes. Geometry is DERIVED from mesh DATA, not baked in: a level mesh file under grids/duo/mesh/ (a section-4.7 subsystem file with literal `const` arrays; see grids/duo/mesh/level0.esm) supplies vert_raw (the pre-normalization golden-ratio vertex coordinates), face_vert (cell->corner-vertex connectivity), and edges_vert (edge->vertex connectivity); the grid DERIVES every metric from those through closed-form expression templates, so the mesh-generation math lives in the grid (like grids/mpas derives cell rings, grids/cartesian_nonuniform_1d derives centers) rather than in a runtime loader. `duo_vertex_cart` is the generation step proper: it normalizes the raw golden-ratio vertices onto the R-sphere, vert_cart[v,d] = R * vert_raw[v,d] / sqrt(sum_e vert_raw[v,e]^2) -- pure AST math, bit-for-bit the archive's _icosahedron_vertices, and identical in shape at every subdivision level. `duo_cell_corner_stack` gathers each face's three corner vertex coordinates into the [cells, corners, space] stack the centroid / spherical-area derivations consume, the same aggregate-gather pattern as grids/mpas mpas_cell_rings_deg. `duo_cell_area_mean` = 4*pi/NCELLS is the resolution measure (nominal spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d. The real-valued sphere radius R is NOT baked in: it is a consumer-supplied free name (keyed-factor / template-parameter convention, AGENTS.md extent rule), so one grid file serves any sphere. IMPORTANT SCOPE NOTE: this file encodes the LEVEL-0 base icosahedron and any FIXED level whose mesh data ships as a companion const file; ARBITRARY-level (resolution-parameterized) subdivision is NOT expressible in the ESM AST (no build-time repeat/iterate/fold construct; metaparameter expressions are closed to + - * / so a 4^level index-set size is inexpressible) and is deferred to the upstream primitive tracked as EarthSciAST bead ess-vnk -- see grids/duo/README/feasibility notes.",
+    "description": "Generic gnomonic cubed-sphere grid with the duo-grid halo system of Chen (2021): six N-by-N tiles interlocked in the 'staircase' arrangement, 6 N^2 cells, unstaggered (A-grid) so every prognostic variable is collocated at cell centres. The name is the paper's: 'duo' denotes the TWO coexisting halo point sets at each tile edge -- the KINKED grid (the neighbour tile's own cell centres, copied verbatim, which is what FV3 does) and the EXTENDED grid (the analytic continuation of the RECEIVING tile's coordinate lines into its ghost region). Field values are remapped kinked -> extended by 1-D interpolation along the shared great circle, so halo operations are a literal continuation of the interior stencils and no one-sided boundary stencil appears anywhere in the solver; that is what removes cubed-sphere grid imprinting at the seams. KEY CONSEQUENCE FOR THIS FILE: the extended grid is just the reference-line formula evaluated at out-of-range indices, so all halo GEOMETRY is closed-form and local -- only halo FIELD VALUES need the cross-tile remap. Every geometry array here therefore spans the interior plus 3 ghost layers with no boundary region and no seam gather. UNIFIED PROJECTIONS: the orthogonality and symmetry of a gnomonic tile mean one reference COLUMN determines the whole grid, so equidistance, equiangular (FV3 grid_type 2) and equi-edge (FV3 grid_type 0) differ ONLY in duo_ref_x/duo_ref_y; everything downstream reads duo_node_cart and is projection-agnostic. RESOLUTION-GENERIC: unlike an icosahedral mesh, whose 20*4^level sizing would need a `^` metaparameter op and a build-time subdivision fold, every size here is N plus a literal, inside the esm-spec 9.7.6 closure of + - * / -- so NO companion mesh-data file is needed at any resolution and duo_tile_map is a fixed 6x3x3 topology constant. Real-valued quantities are consumer-supplied free names per the AGENTS.md extent convention: R_sphere, and alpha_ref/R_ref (the projection pair; unused by the equidistant templates). AXES. `tile` is a literal-6 interval, NOT a metaparameter: scripts/validate-library.py binds every metaparameter to its sample size when it checks that a rule's makearray regions tile the axes (L006), so a metaparameter NTILE would fold to 16 and every rule would fail the tiling check. Prognostic fields are shaped [tile, x, y] and face fluxes [tile, x_nodes, y] or [tile, x, y_nodes]. Geometry uses three EXTENDED axes per direction, all sharing the convention 'extended index k <-> tile-local index k - 3', so k = 4 is the first interior entry: x_nodes_ext (N+7) for corner nodes, x_cell_ext (N+6) for cell centres and areas, and x_metric (N+5) for cos(alpha), which is one shorter because C13's forward difference consumes a +1 neighbour. SEAM TOPOLOGY (needed by every rule's boundary regions; derived and verified pointwise on node coordinates, not read off the figure): odd tiles n in {1,3,5} have E=n+1, N=n+2, W=n+4, S=n+5; even tiles n in {2,4,6} have N=n+1, E=n+2, W=n+5, S=n+4; wrap n+l-6 when n+l>6. The neighbour edge is traversed in FORWARD index order across the unrotated seams (odd E and S, even N and W) and in REVERSED order across the +-90-degree ones (odd N and W, even E and S) -- the discrete statement of the Fig. 2c/2d rotation table, derived independently of it and in agreement with it.",
     "license": "MIT",
-    "tags": ["esd:grid", "family:duo", "ndim:2", "topology:unstructured_triangular", "staggering:primal", "sphere:generic"],
+    "tags": [
+      "esd:grid",
+      "family:duo",
+      "ndim:2",
+      "topology:cubed_sphere",
+      "staggering:unstaggered",
+      "sphere:generic"
+    ],
     "references": [
       {
-        "citation": "Heikes, R. P., Randall, D. A., & Konor, C. S. (2023). Icosahedral triangular/hexagonal spherical meshes for atmospheric modeling."
+        "citation": "Chen, X. (2021). The LMARS based shallow-water dynamical core on generic gnomonic cubed-sphere geometry. Journal of Advances in Modeling Earth Systems, 13, e2020MS002280. https://doi.org/10.1029/2020MS002280"
+      },
+      {
+        "citation": "Mouallem, J., Harris, L., & Chen, X. (2023). Implementation of the novel duo-grid in GFDL's FV3 dynamical core. Journal of Advances in Modeling Earth Systems, 15, e2023MS003712. https://doi.org/10.1029/2023MS003712"
+      },
+      {
+        "citation": "Putman, W. M., & Lin, S.-J. (2007). Finite-volume transport on various cubed-sphere grids. Journal of Computational Physics, 227(1), 55-78."
       }
     ]
   },
+  "expression_template_imports": [
+    {
+      "ref": "./stencils/duo_spherical_angle.esm"
+    },
+    {
+      "ref": "./stencils/duo_tangent_cos.esm"
+    }
+  ],
   "metaparameters": {
-    "NCELLS": { "type": "integer", "default": 20, "description": "Number of triangular cells (faces). Default: the icosahedral level-0 mesh (grids/duo/mesh/level0.esm). Level r has 20*4^r." },
-    "NVERTICES": { "type": "integer", "default": 12, "description": "Number of mesh vertices. Level r has 10*4^r + 2 (12 at level 0)." },
-    "NEDGES": { "type": "integer", "default": 30, "description": "Number of unique undirected edges. Level r has 30*4^r (30 at level 0)." }
+    "N": {
+      "type": "integer",
+      "default": 48,
+      "description": "Cells along each edge of each cube tile; the sphere carries 6 N^2 cells (the C[N] convention, so N=48 is C48)."
+    }
   },
   "index_sets": {
-    "cells": { "kind": "interval", "size": "NCELLS" },
-    "vertices": { "kind": "interval", "size": "NVERTICES" },
-    "edges": { "kind": "interval", "size": "NEDGES" },
-    "corners": { "kind": "interval", "size": 3 },
-    "space": { "kind": "interval", "size": 3 },
-    "edge_ends": { "kind": "interval", "size": 2 }
+    "tile": {
+      "kind": "interval",
+      "size": 6
+    },
+    "x": {
+      "kind": "interval",
+      "size": "N"
+    },
+    "y": {
+      "kind": "interval",
+      "size": "N"
+    },
+    "x_nodes": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          1
+        ]
+      }
+    },
+    "y_nodes": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          1
+        ]
+      }
+    },
+    "x_nodes_ext": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          7
+        ]
+      }
+    },
+    "y_nodes_ext": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          7
+        ]
+      }
+    },
+    "x_cell_ext": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          6
+        ]
+      }
+    },
+    "y_cell_ext": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          6
+        ]
+      }
+    },
+    "x_metric": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          5
+        ]
+      }
+    },
+    "y_metric": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "N",
+          5
+        ]
+      }
+    },
+    "space": {
+      "kind": "interval",
+      "size": 3
+    }
   },
   "expression_templates": {
-    "duo_cell_area_mean": {
+    "duo_ref_x": {
       "params": [],
-      "description": "Mean triangular-cell area on the unit sphere, 4*pi/NCELLS: the grid's resolution measure (nominal mesh spacing h ~ sqrt(cell_area_mean)), used by convergence sweeps exactly as dx = 1/N is on cartesian_uniform_1d. Scale by R^2 for a physical sphere.",
-      "body": { "op": "/", "args": [12.566370614359172, "NCELLS"] }
-    },
-    "duo_vertex_cart": {
-      "params": ["vert_raw", "R"],
-      "description": "The icosahedron GENERATION step: normalize the raw golden-ratio vertices onto the R-sphere, vert_cart[v,d] = R * vert_raw[v,d] / sqrt(sum_e vert_raw[v,e]^2). vert_raw is the [vertices, space] pre-normalization coordinate array supplied by the level mesh file (grids/duo/mesh/level0.esm), R the consumer-supplied sphere radius (free name). The squared norm is an INNER sum_product aggregate over the space index e (squares as products, matching the archive's bit-exact _icosahedron_vertices); the outer aggregate emits one [vertices, space] entry per (v,d). A consuming model applies this template to its mounted mesh's vert_raw and its R to define its vert_cart observed. The derivation is closed-form AST and identical in shape at every subdivision level.",
+      "description": "Gnomonic reference-line node positions along x for the ANGULAR projections (Chen 2021 B16-B17, B23), on the EXTENDED node axis x_nodes_ext: x_ref(jn) = R_ref tan(-alpha_ref + (jn-1) 2 alpha_ref / N), evaluated at jn = k - 3 so that k = 4 is the tile's first interior node. alpha_ref and R_ref are consumer-supplied FREE NAMES (real-valued, hence not metaparameters -- the reprojection/lambert_conformal.esm convention): (pi/4, 1) gives the EQUIANGULAR grid (FV3 grid_type 2), (asin(1/sqrt(3)), sqrt(2)) the EQUI-EDGE grid (FV3 grid_type 0); both send jn=1 to -1 and jn=N+1 to +1 exactly. Evaluating outside jn in [1, N+1] gives the DIRECT analytic continuation of the tile's own coordinate lines into the ghost region. Two things follow. (1) Halo GEOMETRY is closed-form and LOCAL -- no cross-tile gather is needed to build it; only halo FIELD VALUES need the duo-grid remap. On the overlap jn in [1, N+1] the extended nodes equal the un-extended construction bitwise. (2) SCOPE LIMIT, read this before using the halo for a non-equiangular grid: Chen (2021) section 2.3 states that direct extension of this kind 'does not produce the duo-grid 1D alignment' for the equidistance or equi-edge projections -- only the equiangular grid has its halo points automatically co-circular with the donor tile's, which is what makes the remap 1-D. For the other two the paper builds the halo instead by its section 2.3 steps 2-4: identify the points on the SPHERE TILE CENTRE lines, mirror the outermost three into the ghost region, and populate the halo from those mirrored points. That construction is NOT yet implemented here. So the halo nodes this template produces are exact for equiangular and PROVISIONAL for equidistance and equi-edge; interior nodes (jn in [1, N+1]) are exact for all three, and every interior-cell quantity downstream is unaffected.",
       "body": {
         "op": "aggregate",
-        "output_idx": ["v", "d"],
-        "args": ["vert_raw"],
+        "output_idx": [
+          "gi"
+        ],
+        "args": [],
         "ranges": {
-          "v": { "from": "vertices" },
-          "d": { "from": "space" }
+          "gi": {
+            "from": "x_nodes_ext"
+          }
         },
         "expr": {
           "op": "*",
           "args": [
-            "R",
+            "R_ref",
             {
-              "op": "/",
+              "op": "tan",
               "args": [
-                { "op": "index", "args": ["vert_raw", "v", "d"] },
                 {
-                  "op": "sqrt",
+                  "op": "+",
                   "args": [
                     {
-                      "op": "aggregate",
-                      "output_idx": [],
-                      "args": ["vert_raw"],
-                      "ranges": { "e": { "from": "space" } },
-                      "expr": {
-                        "op": "*",
-                        "args": [
-                          { "op": "index", "args": ["vert_raw", "v", "e"] },
-                          { "op": "index", "args": ["vert_raw", "v", "e"] }
-                        ]
-                      }
+                      "op": "-",
+                      "args": [
+                        "alpha_ref"
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "gi",
+                                3
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "alpha_ref"
+                              ]
+                            },
+                            "N"
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
@@ -73,26 +207,1841 @@
         }
       }
     },
-    "duo_cell_corner_stack": {
-      "params": ["vert_cart", "face_vert"],
-      "description": "Gather each triangular cell's three corner vertex coordinates into the [cells, corners, space] stack that the centroid and spherical-triangle-area derivations consume: stack[i,k,d] = vert_cart[face_vert[i,k], d]. vert_cart is the [vertices, space] R-sphere coordinate array (from duo_vertex_cart), face_vert the [cells, corners] cell->vertex connectivity (from the level mesh file). Single aggregate gather -- the same connectivity-gather pattern as grids/mpas mpas_cell_rings_deg (which gathers cell vertex rings). A consuming model applies this to its vert_cart and mesh face_vert. Build-time CONST.",
+    "duo_ref_y": {
+      "params": [],
+      "description": "Gnomonic reference-line node positions along y for the ANGULAR projections (Chen 2021 B16-B17, B23), on the EXTENDED node axis y_nodes_ext: y_ref(jn) = R_ref tan(-alpha_ref + (jn-1) 2 alpha_ref / N), evaluated at jn = k - 3 so that k = 4 is the tile's first interior node. alpha_ref and R_ref are consumer-supplied FREE NAMES (real-valued, hence not metaparameters -- the reprojection/lambert_conformal.esm convention): (pi/4, 1) gives the EQUIANGULAR grid (FV3 grid_type 2), (asin(1/sqrt(3)), sqrt(2)) the EQUI-EDGE grid (FV3 grid_type 0); both send jn=1 to -1 and jn=N+1 to +1 exactly. Evaluating outside jn in [1, N+1] gives the DIRECT analytic continuation of the tile's own coordinate lines into the ghost region. Two things follow. (1) Halo GEOMETRY is closed-form and LOCAL -- no cross-tile gather is needed to build it; only halo FIELD VALUES need the duo-grid remap. On the overlap jn in [1, N+1] the extended nodes equal the un-extended construction bitwise. (2) SCOPE LIMIT, read this before using the halo for a non-equiangular grid: Chen (2021) section 2.3 states that direct extension of this kind 'does not produce the duo-grid 1D alignment' for the equidistance or equi-edge projections -- only the equiangular grid has its halo points automatically co-circular with the donor tile's, which is what makes the remap 1-D. For the other two the paper builds the halo instead by its section 2.3 steps 2-4: identify the points on the SPHERE TILE CENTRE lines, mirror the outermost three into the ghost region, and populate the halo from those mirrored points. That construction is NOT yet implemented here. So the halo nodes this template produces are exact for equiangular and PROVISIONAL for equidistance and equi-edge; interior nodes (jn in [1, N+1]) are exact for all three, and every interior-cell quantity downstream is unaffected.",
       "body": {
         "op": "aggregate",
-        "output_idx": ["i", "k", "d"],
-        "args": ["vert_cart", "face_vert"],
+        "output_idx": [
+          "gj"
+        ],
+        "args": [],
         "ranges": {
-          "i": { "from": "cells" },
-          "k": { "from": "corners" },
-          "d": { "from": "space" }
+          "gj": {
+            "from": "y_nodes_ext"
+          }
         },
         "expr": {
-          "op": "index",
+          "op": "*",
           "args": [
-            "vert_cart",
-            { "op": "index", "args": ["face_vert", "i", "k"] },
-            "d"
+            "R_ref",
+            {
+              "op": "tan",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "alpha_ref"
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "gj",
+                                3
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "alpha_ref"
+                              ]
+                            },
+                            "N"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
+      }
+    },
+    "duo_ref_x_equidistant": {
+      "params": [],
+      "description": "Gnomonic reference-line node positions along x for the EQUIDISTANCE projection (Chen 2021 B12), on the EXTENDED node axis x_nodes_ext: x_ref(jn) = -1 + (jn-1) 2/N at jn = k - 3. Uniform in the cube-face coordinate, which is why it gives the LEAST uniform cell areas on the sphere (measured C48 max/min area ratio 4.97, against 1.39 equiangular and 2.27 equi-edge). Linear rather than a tangent, so it is a separate template rather than an (alpha_ref, R_ref) choice, and it carries no free names at all: the cube face is [-1,1] by construction (B11). Outside jn in [1, N+1] this is the DIRECT extension, which per Chen (2021) section 2.3 does NOT give the duo-grid 1D alignment for equidistance -- see the scope limit in duo_ref_x; the section 2.3 mirrored construction is not yet implemented.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gi"
+        ],
+        "args": [],
+        "ranges": {
+          "gi": {
+            "from": "x_nodes_ext"
+          }
+        },
+        "expr": {
+          "op": "+",
+          "args": [
+            -1,
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "gi",
+                        3
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "/",
+                  "args": [
+                    2,
+                    "N"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_ref_y_equidistant": {
+      "params": [],
+      "description": "Gnomonic reference-line node positions along y for the EQUIDISTANCE projection (Chen 2021 B12), on the EXTENDED node axis y_nodes_ext: y_ref(jn) = -1 + (jn-1) 2/N at jn = k - 3. Uniform in the cube-face coordinate, which is why it gives the LEAST uniform cell areas on the sphere (measured C48 max/min area ratio 4.97, against 1.39 equiangular and 2.27 equi-edge). Linear rather than a tangent, so it is a separate template rather than an (alpha_ref, R_ref) choice, and it carries no free names at all: the cube face is [-1,1] by construction (B11). Outside jn in [1, N+1] this is the DIRECT extension, which per Chen (2021) section 2.3 does NOT give the duo-grid 1D alignment for equidistance -- see the scope limit in duo_ref_x; the section 2.3 mirrored construction is not yet implemented.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gj"
+        ],
+        "args": [],
+        "ranges": {
+          "gj": {
+            "from": "y_nodes_ext"
+          }
+        },
+        "expr": {
+          "op": "+",
+          "args": [
+            -1,
+            {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "gj",
+                        3
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "/",
+                  "args": [
+                    2,
+                    "N"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_tile_map": {
+      "params": [],
+      "description": "The six-tile 'staircase' placement table (Chen 2021 Fig. 2b, Eqs. B29-B34), shaped [tile, space, 3]: tile t's cube-face point is p[t,d] = M[t,d,1] + M[t,d,2] X + M[t,d,3] Y, each row a signed selection of {1, X, Y}. The six maps are (1,X,Y), (-X,1,Y), (-X,-Y,1), (-1,-Y,-X), (Y,-1,-X), (Y,X,-1), placing the tiles on the +x, +y, +z, -x, -y, -z faces. DERIVATION: obtained by exhaustive search over the 24 proper rotations of the cube for the assignment under which (a) the six tiles cover the six faces once each and (b) the Fig. 2c/2d staircase neighbour table holds POINTWISE on node coordinates. Exactly ONE assignment satisfies both, and all 24 seam relations verify to 1e-12. The result reproduces B29-B34 EXACTLY as published, all six maps, which is the independent confirmation that this table is right (the search never consulted them). Further check: total sphere area from this table reproduces 4 pi R^2 to 2e-14 at every resolution and projection tested. A fixed 6x3x3 topology constant that does NOT vary with resolution, which is why this grid needs no mesh-data file.",
+      "body": {
+        "op": "const",
+        "args": [],
+        "value": [
+          [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          [
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          [
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              0,
+              -1
+            ],
+            [
+              1,
+              0,
+              0
+            ]
+          ],
+          [
+            [
+              -1,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              -1
+            ],
+            [
+              0,
+              -1,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              1
+            ],
+            [
+              -1,
+              0,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              -1,
+              0,
+              0
+            ]
+          ]
+        ]
+      }
+    },
+    "duo_node_cart": {
+      "params": [
+        "refx",
+        "refy"
+      ],
+      "description": "Cell-CORNER (node) positions on the sphere, shaped [tile, x_nodes_ext, y_nodes_ext, space] -- the gnomonic projection proper, over the interior AND the 3-layer halo. The cube-face point p = M[t,:,1] + M[t,:,2] refx[i] + M[t,:,3] refy[j] (duo_tile_map) is carried to the sphere of radius R_sphere by normalisation, which IS the gnomonic map: the ray from the sphere centre through the cube point (Chen 2021 B11 and Fig. 3). Bind refx/refy to duo_ref_x/duo_ref_y for an angular projection or to the _equidistant pair for equidistance -- every template downstream reads only this array and is projection-agnostic, which is the paper's unified reference-line formulation. R_sphere is a consumer-supplied free name, so one grid file serves any sphere (AGENTS.md extent convention). Because each row and column of nodes shares one cube-face coordinate, the projected grid lines are great circles -- the property the duo-grid halo remap relies on.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gt",
+          "gi",
+          "gj",
+          "gd"
+        ],
+        "args": [
+          "refx",
+          "refy"
+        ],
+        "ranges": {
+          "gt": {
+            "from": "tile"
+          },
+          "gi": {
+            "from": "x_nodes_ext"
+          },
+          "gj": {
+            "from": "y_nodes_ext"
+          },
+          "gd": {
+            "from": "space"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                "R_sphere",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "duo_tile_map",
+                          "bindings": {}
+                        },
+                        "gt",
+                        "gd",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            {
+                              "op": "apply_expression_template",
+                              "args": [],
+                              "name": "duo_tile_map",
+                              "bindings": {}
+                            },
+                            "gt",
+                            "gd",
+                            2
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "refx",
+                            "gi"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            {
+                              "op": "apply_expression_template",
+                              "args": [],
+                              "name": "duo_tile_map",
+                              "bindings": {}
+                            },
+                            "gt",
+                            "gd",
+                            3
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "refy",
+                            "gj"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sqrt",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                {
+                                  "op": "apply_expression_template",
+                                  "args": [],
+                                  "name": "duo_tile_map",
+                                  "bindings": {}
+                                },
+                                "gt",
+                                1,
+                                1
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    1,
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refx",
+                                    "gi"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    1,
+                                    3
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refy",
+                                    "gj"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                {
+                                  "op": "apply_expression_template",
+                                  "args": [],
+                                  "name": "duo_tile_map",
+                                  "bindings": {}
+                                },
+                                "gt",
+                                2,
+                                1
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    2,
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refx",
+                                    "gi"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    2,
+                                    3
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refy",
+                                    "gj"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                {
+                                  "op": "apply_expression_template",
+                                  "args": [],
+                                  "name": "duo_tile_map",
+                                  "bindings": {}
+                                },
+                                "gt",
+                                3,
+                                1
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    3,
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refx",
+                                    "gi"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    {
+                                      "op": "apply_expression_template",
+                                      "args": [],
+                                      "name": "duo_tile_map",
+                                      "bindings": {}
+                                    },
+                                    "gt",
+                                    3,
+                                    3
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "refy",
+                                    "gj"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_cell_center": {
+      "params": [
+        "node"
+      ],
+      "description": "Cell-CENTRE positions on the sphere, shaped [tile, x_cell_ext, y_cell_ext, space]: the mean of the cell's four corner nodes, renormalised back onto the R_sphere sphere. This is the unstaggered (A-grid) collocation point at which EVERY prognostic variable lives in Chen (2021) -- the depth h and both covariant wind components share it, which is what makes the solver unstaggered. Renormalising after averaging matters: the chord midpoint of four points on a sphere lies strictly inside it, and skipping the projection would put the collocation point off the manifold by O(h^2). Index convention: cell index k on x_cell_ext takes its corners from node indices k and k+1 on x_nodes_ext, so the halo offset cancels and no index arithmetic beyond +1 appears. Bind `node` to duo_node_cart.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gt",
+          "gi",
+          "gj",
+          "gd"
+        ],
+        "args": [
+          "node"
+        ],
+        "ranges": {
+          "gt": {
+            "from": "tile"
+          },
+          "gi": {
+            "from": "x_cell_ext"
+          },
+          "gj": {
+            "from": "y_cell_ext"
+          },
+          "gd": {
+            "from": "space"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                "R_sphere",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        "gd"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        "gd"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        "gd"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        "gd"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sqrt",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                "gj",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                "gj",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                "gj",
+                                2
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                "gj",
+                                2
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                2
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                2
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                "gj",
+                                3
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                "gj",
+                                3
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gi",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                3
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "node",
+                                "gt",
+                                "gi",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "gj",
+                                    1
+                                  ]
+                                },
+                                3
+                              ]
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_cell_area": {
+      "params": [
+        "node"
+      ],
+      "description": "Cell areas on the sphere, shaped [tile, x_cell_ext, y_cell_ext], by the SPHERICAL EXCESS of the geodesic quadrilateral through the cell's four corner nodes (Chen 2021 B8): area = R^2 (a412 + a123 + a234 + a341 - 2 pi), each interior angle supplied by the imported scalar atom ../stencils/duo_spherical_angle.esm. ORIENTATION NOTE: B9 as printed sets a_ijk = acos( (p_i x p_j).(p_j x p_k) / ... ), whose first factor is the arc normal p_i x p_j; combined with B8 that returns the NEGATIVE of the area, under either corner traversal (measured -4 pi R^2 exactly). The angle B8 needs is the polygon's INTERIOR angle at p_j, which is what B9's own prose asks for -- 'the angle between three points with right-hand rule FROM p_j', i.e. both arc normals taken outward from p_j, (p_j x p_i) and (p_j x p_k). The atom implements that reading and the areas come out positive and sum to 4 pi R^2. Traversal order of the four corners is then immaterial (verified: clockwise and counter-clockwise agree bitwise), since reversing it maps each interior angle to itself. This is exact, not an approximation, and it is the natural conformance gate for the whole geometry chain: summed over all 6 N^2 interior cells it reproduces 4 pi R_sphere^2 to 2e-14 at every resolution and projection tested. Bind `node` to duo_node_cart.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gt",
+          "gi",
+          "gj"
+        ],
+        "args": [
+          "node"
+        ],
+        "ranges": {
+          "gt": {
+            "from": "tile"
+          },
+          "gi": {
+            "from": "x_cell_ext"
+          },
+          "gj": {
+            "from": "y_cell_ext"
+          }
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "^",
+              "args": [
+                "R_sphere",
+                2
+              ]
+            },
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "duo_spherical_angle",
+                  "bindings": {
+                    "pix": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "piy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "piz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "pjx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        1
+                      ]
+                    },
+                    "pjy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        2
+                      ]
+                    },
+                    "pjz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        3
+                      ]
+                    },
+                    "pkx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        1
+                      ]
+                    },
+                    "pky": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        2
+                      ]
+                    },
+                    "pkz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        3
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "duo_spherical_angle",
+                  "bindings": {
+                    "pix": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        1
+                      ]
+                    },
+                    "piy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        2
+                      ]
+                    },
+                    "piz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        3
+                      ]
+                    },
+                    "pjx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        1
+                      ]
+                    },
+                    "pjy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        2
+                      ]
+                    },
+                    "pjz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        3
+                      ]
+                    },
+                    "pkx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "pky": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "pkz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "duo_spherical_angle",
+                  "bindings": {
+                    "pix": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        1
+                      ]
+                    },
+                    "piy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        2
+                      ]
+                    },
+                    "piz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        "gj",
+                        3
+                      ]
+                    },
+                    "pjx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "pjy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "pjz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "pkx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "pky": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "pkz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "duo_spherical_angle",
+                  "bindings": {
+                    "pix": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "piy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "piz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gi",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "pjx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "pjy": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    "pjz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        {
+                          "op": "+",
+                          "args": [
+                            "gj",
+                            1
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "pkx": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        1
+                      ]
+                    },
+                    "pky": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        2
+                      ]
+                    },
+                    "pkz": {
+                      "op": "index",
+                      "args": [
+                        "node",
+                        "gt",
+                        "gi",
+                        "gj",
+                        3
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        3.141592653589793
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "duo_cos_alpha": {
+      "params": [
+        "center"
+      ],
+      "description": "cos(alpha) per cell, shaped [tile, x_metric, y_metric], where alpha is the angle between the two local curvilinear coordinate directions (Chen 2021 C17). This single scalar IS the entire metric on this grid: with the unit-length covariant basis of C13-C14 the tensors collapse to g_ij = [[1, cos a],[cos a, 1]], g^ij = (1/sin^2 a) [[1, -cos a],[-cos a, 1]] and sqrt(g) = sin(alpha) (C18-C20), so no transformation matrices are stored anywhere -- the optimisation the paper highlights in its conclusions. Built exactly as C13-C14 prescribe, as the TANGENT directions: e1 ~ (k(i,j) x k(i+1,j)) x k(i,j) and e2 ~ (k(i,j) x k(i,j+1)) x k(i,j), each then normalised. That double cross product is the neighbour projected into the tangent plane at k(i,j), which is NOT the chord k(i+1,j) - k(i,j): the two differ by O(h^2) (measured 2.9e-3 at N=16, 7.6e-4 at N=32, 1.9e-4 at N=64, i.e. second order), so the chord is a different discretisation and this template deliberately uses the paper's. The cell-centre array may carry any consistent radius: with all inputs of equal magnitude the R_sphere scaling factors out of the double cross product and again out of the normalised quotient. The forward neighbour is what sets this axis one shorter than x_cell_ext -- a metric cell consumes its +1 neighbour, so N+2*3+1 centres yield N+2*3 metric cells, covering the interior and all 3 ghost layers with NO boundary special case and NO cross-tile gather, because the halo centres are the analytic extension of the tile's own coordinate lines (see duo_ref_x). Measured: cos(alpha) is 0 to machine precision at a tile centre and reaches about -+0.45 at the cube corners. Bind `center` to duo_cell_center.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "gt",
+          "gi",
+          "gj"
+        ],
+        "args": [
+          "center"
+        ],
+        "ranges": {
+          "gt": {
+            "from": "tile"
+          },
+          "gi": {
+            "from": "x_metric"
+          },
+          "gj": {
+            "from": "y_metric"
+          }
+        },
+        "expr": {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "duo_tangent_cos",
+          "bindings": {
+            "kax": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                "gj",
+                1
+              ]
+            },
+            "kay": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                "gj",
+                2
+              ]
+            },
+            "kaz": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                "gj",
+                3
+              ]
+            },
+            "kbx": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                {
+                  "op": "+",
+                  "args": [
+                    "gi",
+                    1
+                  ]
+                },
+                "gj",
+                1
+              ]
+            },
+            "kby": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                {
+                  "op": "+",
+                  "args": [
+                    "gi",
+                    1
+                  ]
+                },
+                "gj",
+                2
+              ]
+            },
+            "kbz": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                {
+                  "op": "+",
+                  "args": [
+                    "gi",
+                    1
+                  ]
+                },
+                "gj",
+                3
+              ]
+            },
+            "kcx": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                {
+                  "op": "+",
+                  "args": [
+                    "gj",
+                    1
+                  ]
+                },
+                1
+              ]
+            },
+            "kcy": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                {
+                  "op": "+",
+                  "args": [
+                    "gj",
+                    1
+                  ]
+                },
+                2
+              ]
+            },
+            "kcz": {
+              "op": "index",
+              "args": [
+                "center",
+                "gt",
+                "gi",
+                {
+                  "op": "+",
+                  "args": [
+                    "gj",
+                    1
+                  ]
+                },
+                3
+              ]
+            }
+          }
+        }
+      }
+    },
+    "duo_cell_area_mean": {
+      "params": [],
+      "description": "The nominal resolution measure: 4 pi R_sphere^2 / (6 N^2), the mean cell area over the sphere, with nominal spacing h ~ sqrt(duo_cell_area_mean). Convergence sweeps use it exactly as cartesian_uniform_1d uses dx = 1/N. The ACTUAL areas vary about this mean by the projection's area ratio -- about 1.39 equiangular, 2.27 equi-edge, 4.97 equidistance at C48 -- so it is a resolution label, not a bound on any one cell.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              4,
+              3.141592653589793,
+              {
+                "op": "^",
+                "args": [
+                  "R_sphere",
+                  2
+                ]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              6,
+              {
+                "op": "^",
+                "args": [
+                  "N",
+                  2
+                ]
+              }
+            ]
+          }
+        ]
       }
     }
   }

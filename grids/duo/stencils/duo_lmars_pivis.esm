@@ -1,0 +1,68 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "duo_lmars_pivis",
+    "description": "Chen (2021) LMARS interface solve, Eq 22: the LMARS viscous part of the interface pressure, Pi_vis = -(a/2)(uW-uE) = (a/2)(uE-uW): the implicit 2nd-order diffusion the Riemann solver supplies. It is what the L97 geometric form lacks, and adding it back yields the stable scheme. AXIS- AND DIRECTION-NEUTRAL scalar algebra taking the four reconstructed states at one cell interface -- the EAST value of the left cell (uE, piE, from duo_recon_*) and the WEST value of the right cell (uW, piW) -- so a y-interface reuses it verbatim with the North/South reconstructions bound in. Pi = G h is the pressure forcing (kept distinct from the transported depth h, which is chosen by upwinding). Semi-discrete: the ODE integrator owns dt.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:duo",
+      "op:riemann",
+      "order:2",
+      "scheme:lmars"
+    ],
+    "references": [
+      {
+        "citation": "Chen, X. (2021). The LMARS based shallow-water dynamical core on generic gnomonic cubed sphere geometry. Journal of Advances in Modeling Earth Systems, 13(1), e2020MS002280. (Section 3.2 Eqs 11-13 LMARS interface solve; Section 3.3 Eqs 20-22 the L97-compatible averaging/viscous split.)",
+        "doi": "10.1029/2020MS002280"
+      },
+      {
+        "citation": "Chen, X., Andronova, N., Van Leer, B., Penner, J. E., Boyd, J. P., Jablonowski, C., & Lin, S.-J. (2013). A control-volume model of the compressible Euler equations with a vertical Lagrangian coordinate. Monthly Weather Review, 141(7), 2526-2544. (Origin of the Low Mach number Approximate Riemann Solver.)",
+        "doi": "10.1175/MWR-D-12-00129.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "./duo_lmars_a.esm"
+    }
+  ],
+  "expression_templates": {
+    "duo_lmars_pivis": {
+      "params": [
+        "uE",
+        "uW",
+        "piE",
+        "piW"
+      ],
+      "body": {
+        "op": "*",
+        "args": [
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "duo_lmars_a",
+                "bindings": {
+                  "piE": "piE",
+                  "piW": "piW"
+                }
+              },
+              2
+            ]
+          },
+          {
+            "op": "-",
+            "args": [
+              "uE",
+              "uW"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

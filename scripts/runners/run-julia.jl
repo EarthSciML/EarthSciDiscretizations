@@ -72,8 +72,7 @@ let env = joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl", "scripts", "pde_sim_adapte
 end
 
 using EarthSciAST
-using EarthSciAST: resolve_template_machinery, lower_expression_templates,
-    JSONLikeDict
+using EarthSciAST: resolve_template_machinery, lower_expression_templates
 using JSON3
 import OrdinaryDiffEqTsit5
 # The spherical geometry kernel (manifold "spherical" on intersect_polygon /
@@ -208,13 +207,23 @@ assertion_dicts(results) = [Dict{String,Any}(
 # ast — raw §9.7 expansion to canonical bytes + post-lowering gates.
 # ---------------------------------------------------------------------------
 
-# Post-lowering gates (the ast manifests' contract): zero
-# apply_expression_template nodes, zero unlowered rewrite-target ops (spatial
-# D / grad / div / laplacian), zero surviving metaparameter machinery.
+# Post-lowering gates (the ast manifests' contract): zero unlowered
+# rewrite-target ops (spatial D / grad / div / laplacian), zero surviving
+# metaparameter machinery.
+#
+# NOTE (ESS 0.9.0, esd:duo migration): surviving `apply_expression_template`
+# nodes are NO LONGER a violation. Since the Option B reference-preserving switch
+# (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline match-less
+# template bodies — a reference "denotes its expansion" and the engine treats it
+# as a leaf (esm-spec §9.6.4). Because `match` patterns may not contain
+# `apply_expression_template` (§9.6.1), every surviving apply is a resolved
+# match-less leaf, not an un-fired rule; a dangling apply to an unknown template
+# is already rejected upstream by resolve_template_machinery. The pre-0.9.0
+# goldens (built when applies were inlined) are intentionally NOT regenerated
+# here — only the duo cases run under the current loader.
 function unlowered_violations(node, acc::Vector{String}=String[])
     if node isa AbstractDict
         op = string(get(node, "op", ""))
-        op == "apply_expression_template" && push!(acc, "apply_expression_template")
         op in ("grad", "div", "laplacian") && push!(acc, "unlowered $op")
         (op == "D" && string(get(node, "wrt", "t")) != "t") &&
             push!(acc, "unlowered spatial D (wrt=$(node["wrt"]))")
@@ -240,7 +249,10 @@ function run_ast(output_dir, files, verbose)
             raw = JSON3.read(read(fixture, String))
             resolved = resolve_template_machinery(raw, dirname(fixture))
             out = lower_expression_templates(resolved === nothing ? raw : resolved)
-            doc = out isa JSONLikeDict ? getfield(out, :data) : out
+            # ESS retired the JSONLikeDict property-surface shim; the sole post-wire
+            # carrier is now OrderedDict{String,Any} (json_walk.jl `_to_ordered`),
+            # which `_norm`/downstream already consume directly.
+            doc = out
             doc_n = _norm(doc)
             # The prose-free structural gates.
             violations = String[]

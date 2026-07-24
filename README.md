@@ -312,10 +312,14 @@ in-library cell-ring constructors; and Lambert conformal reprojection —
 establishing the layering, testing, and docs patterns. The parameterized BCs
 follow the reals-are-consumer-supplied contract: wall values/fluxes are free
 names defaulting to 0, so the homogeneous case is the default and the Neumann
-rule generalizes the zero-gradient one. A prototype **`duo`** icosahedral grid ships its
-level-0 construction as pure closed-form AST (golden-ratio vertices normalized onto the
-sphere via a nested aggregate) — a scoping result establishing that *resolution-parameterized*
-subdivision needs two upstream ESM features (a `^`/pow metaparameter-expression op for the
-`20·4^level` sizing and a build-time repeat/fold to iterate the refine pass, tracked as ESS
-`ess-vnk`), with fixed levels otherwise shippable as MPAS-style const mesh data. The pre-0.8.0
+rule generalizes the zero-gradient one. The **`duo`** grid is the generic gnomonic
+cubed sphere with the duo-grid halo system of Chen (2021): six tiles interlocked in the
+"staircase" arrangement, all three reference-line projections (equidistance, equiangular,
+equi-edge) from one construction, and tile-edge halos remapped from the *kinked* grid (the
+neighbor tile's own centers) onto the *extended* grid (the analytic continuation of the
+receiving tile's coordinate lines) — so halo operations are a literal continuation of the
+interior stencils and no one-sided boundary stencil appears anywhere. Unlike the
+lat-lon grid it has no polar singularity, and unlike an icosahedral mesh it is fully
+resolution-generic within the `+ - * /` metaparameter closure: its sizes are `N`, `N+1`, and
+a literal `6`, with no mesh data and no subdivision fold. The pre-0.8.0
 catalog in `archive/` migrates rule-by-rule on top of these patterns.

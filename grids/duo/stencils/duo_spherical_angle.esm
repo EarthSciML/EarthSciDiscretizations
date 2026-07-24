@@ -1,0 +1,474 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "duo_spherical_angle",
+    "description": "The interior angle of a spherical polygon at corner pj, subtended by its two neighbouring corners pi and pk (Chen 2021 B9): acos( (pj x pi).(pj x pk) / (|pj x pi| |pj x pk|) ), i.e. the dihedral angle between the planes of the two great-circle arcs meeting at pj. Nine scalar components in, one scalar out -- it carries no axis, index-set or grid knowledge whatsoever, exactly like the axis-neutral scalar atoms under grids/latlon3d/stencils, so grids/duo/grid.esm applies it four times per cell to build the spherical-excess area. The acos argument is CLAMPED to [-1,1] with min/max: for a nearly-degenerate corner the quotient can round to 1+eps, and acos(1+eps) is NaN, which one bad cell would then propagate into every flux divergence downstream. The clamp is inactive wherever the quotient is already in range, i.e. everywhere but round-off -- it is a domain guard, not a limiter.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:duo",
+      "op:spherical_angle"
+    ],
+    "references": [
+      {
+        "citation": "Chen, X. (2021). The LMARS based shallow-water dynamical core on generic gnomonic cubed-sphere geometry. JAMES, 13, e2020MS002280. https://doi.org/10.1029/2020MS002280"
+      }
+    ]
+  },
+  "expression_templates": {
+    "duo_spherical_angle": {
+      "params": [
+        "pix",
+        "piy",
+        "piz",
+        "pjx",
+        "pjy",
+        "pjz",
+        "pkx",
+        "pky",
+        "pkz"
+      ],
+      "description": "Spherical interior angle at pj between the arcs to pi and pk. Inputs are Cartesian components of three points on a common sphere; the radius cancels in the normalised quotient, so any consistent radius may be used.",
+      "body": {
+        "op": "acos",
+        "args": [
+          {
+            "op": "min",
+            "args": [
+              1.0,
+              {
+                "op": "max",
+                "args": [
+                  -1.0,
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjy",
+                                      "piz"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjz",
+                                      "piy"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjy",
+                                      "pkz"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjz",
+                                      "pky"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjz",
+                                      "pix"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjx",
+                                      "piz"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjz",
+                                      "pkx"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjx",
+                                      "pkz"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjx",
+                                      "piy"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjy",
+                                      "pix"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjx",
+                                      "pky"
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      "pjy",
+                                      "pkx"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "sqrt",
+                            "args": [
+                              {
+                                "op": "+",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "piz"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "piy"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "piz"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "piy"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pix"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "piz"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pix"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "piz"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "piy"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pix"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "piy"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pix"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "sqrt",
+                            "args": [
+                              {
+                                "op": "+",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pkz"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pky"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pkz"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pky"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pkx"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "pkz"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjz",
+                                              "pkx"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "pkz"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "pky"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pkx"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjx",
+                                              "pky"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              "pjy",
+                                              "pkx"
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
