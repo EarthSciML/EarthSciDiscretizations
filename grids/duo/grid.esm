@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "duo",
-    "description": "Generic gnomonic cubed-sphere grid with the duo-grid halo system of Chen (2021): six N-by-N tiles interlocked in the 'staircase' arrangement, 6 N^2 cells, unstaggered (A-grid) so every prognostic variable is collocated at cell centres. The name is the paper's: 'duo' denotes the TWO coexisting halo point sets at each tile edge -- the KINKED grid (the neighbour tile's own cell centres, copied verbatim, which is what FV3 does) and the EXTENDED grid (the analytic continuation of the RECEIVING tile's coordinate lines into its ghost region). Field values are remapped kinked -> extended by 1-D interpolation along the shared great circle, so halo operations are a literal continuation of the interior stencils and no one-sided boundary stencil appears anywhere in the solver; that is what removes cubed-sphere grid imprinting at the seams. KEY CONSEQUENCE FOR THIS FILE: the extended grid is just the reference-line formula evaluated at out-of-range indices, so all halo GEOMETRY is closed-form and local -- only halo FIELD VALUES need the cross-tile remap. Every geometry array here therefore spans the interior plus 3 ghost layers with no boundary region and no seam gather. UNIFIED PROJECTIONS: the orthogonality and symmetry of a gnomonic tile mean one reference COLUMN determines the whole grid, so equidistance, equiangular (FV3 grid_type 2) and equi-edge (FV3 grid_type 0) differ ONLY in duo_ref_x/duo_ref_y; everything downstream reads duo_node_cart and is projection-agnostic. RESOLUTION-GENERIC: unlike an icosahedral mesh, whose 20*4^level sizing would need a `^` metaparameter op and a build-time subdivision fold, every size here is N plus a literal, inside the esm-spec 9.7.6 closure of + - * / -- so NO companion mesh-data file is needed at any resolution and duo_tile_map is a fixed 6x3x3 topology constant. Real-valued quantities are consumer-supplied free names per the AGENTS.md extent convention: R_sphere, and alpha_ref/R_ref (the projection pair; unused by the equidistant templates). AXES. `tile` is a literal-6 interval, NOT a metaparameter: scripts/validate-library.py binds every metaparameter to its sample size when it checks that a rule's makearray regions tile the axes (L006), so a metaparameter NTILE would fold to 16 and every rule would fail the tiling check. Prognostic fields are shaped [tile, x, y] and face fluxes [tile, x_nodes, y] or [tile, x, y_nodes]. Geometry uses three EXTENDED axes per direction, all sharing the convention 'extended index k <-> tile-local index k - 3', so k = 4 is the first interior entry: x_nodes_ext (N+7) for corner nodes, x_cell_ext (N+6) for cell centres and areas, and x_metric (N+5) for cos(alpha), which is one shorter because C13's forward difference consumes a +1 neighbour. SEAM TOPOLOGY (needed by every rule's boundary regions; derived and verified pointwise on node coordinates, not read off the figure): odd tiles n in {1,3,5} have E=n+1, N=n+2, W=n+4, S=n+5; even tiles n in {2,4,6} have N=n+1, E=n+2, W=n+5, S=n+4; wrap n+l-6 when n+l>6. The neighbour edge is traversed in FORWARD index order across the unrotated seams (odd E and S, even N and W) and in REVERSED order across the +-90-degree ones (odd N and W, even E and S) -- the discrete statement of the Fig. 2c/2d rotation table, derived independently of it and in agreement with it.",
+    "description": "Generic gnomonic cubed-sphere grid with the duo-grid halo system of Chen (2021): six N-by-N tiles interlocked in the 'staircase' arrangement, 6 N^2 cells, unstaggered (A-grid) so every prognostic variable is collocated at cell centres. The name is the paper's: 'duo' denotes the TWO coexisting halo point sets at each tile edge -- the KINKED grid (the neighbour tile's own cell centres, copied verbatim, which is what FV3 does) and the EXTENDED grid (the analytic continuation of the RECEIVING tile's coordinate lines into its ghost region). Field values are remapped kinked -> extended by 1-D interpolation along the shared great circle, so halo operations are a literal continuation of the interior stencils and no one-sided boundary stencil appears anywhere in the solver; that is what removes cubed-sphere grid imprinting at the seams. KEY CONSEQUENCE FOR THIS FILE: the extended grid is just the reference-line formula evaluated at out-of-range indices, so all halo GEOMETRY is closed-form and local -- only halo FIELD VALUES need the cross-tile remap. Every geometry array here therefore spans the interior plus 3 ghost layers with no boundary region and no seam gather. UNIFIED PROJECTIONS: the orthogonality and symmetry of a gnomonic tile mean one reference COLUMN determines the whole grid, so equidistance, equiangular (FV3 grid_type 2) and equi-edge (FV3 grid_type 0) differ ONLY in duo_ref_x/duo_ref_y; everything downstream reads duo_node_cart and is projection-agnostic. RESOLUTION-GENERIC: unlike an icosahedral mesh, whose 20*4^level sizing would need a `^` metaparameter op and a build-time subdivision fold, every size here is N plus a literal, inside the esm-spec 9.7.6 closure of + - * / -- so NO companion mesh-data file is needed at any resolution and duo_tile_map is a fixed 6x3x3 topology constant. Real-valued quantities are consumer-supplied free names per the AGENTS.md extent convention: R_sphere, and alpha_ref/R_ref (the projection pair; unused by the equidistant templates). AXES. `tile` is a literal-6 interval, NOT a metaparameter: scripts/validate-library.py binds every metaparameter to its sample size when it checks that a rule's makearray regions tile the axes (L006), so a metaparameter NTILE would fold to 16 and every rule would fail the tiling check. Prognostic fields are shaped [tile, x, y] and face fluxes [tile, x_nodes, y] or [tile, x, y_nodes]. Geometry uses three EXTENDED axes per direction, all sharing the convention 'extended index k <-> tile-local index k - 3', so k = 4 is the first interior entry: x_nodes_ext (N+8) for corner nodes, x_cell_ext (N+6) for cell centres and areas, and x_metric (N+6) for cos(alpha). cos(alpha) is built by a forward difference that consumes a +1 neighbour, so the node halo is kept one layer WIDER than the cell-centre array and duo_cos_alpha is SOURCED FROM NODES (raw corner sums, scale-invariant) rather than from the collocated cell-centre array -- that is what lets the metric span the full N+6 cell halo including the outermost ghost cell that the 5-point (Ng=3) flux reconstruction reaches. x_cell_ext stays N+6 (the prognostic axis duo_extend fills, capped at 3 remappable ghost layers). SEAM TOPOLOGY (needed by every rule's boundary regions; derived and verified pointwise on node coordinates, not read off the figure): odd tiles n in {1,3,5} have E=n+1, N=n+2, W=n+4, S=n+5; even tiles n in {2,4,6} have N=n+1, E=n+2, W=n+5, S=n+4; wrap n+l-6 when n+l>6. The neighbour edge is traversed in FORWARD index order across the unrotated seams (odd E and S, even N and W) and in REVERSED order across the +-90-degree ones (odd N and W, even E and S) -- the discrete statement of the Fig. 2c/2d rotation table, derived independently of it and in agreement with it.",
     "license": "MIT",
     "tags": [
       "esd:grid",
@@ -78,7 +78,7 @@
         "op": "+",
         "args": [
           "N",
-          7
+          8
         ]
       }
     },
@@ -88,7 +88,7 @@
         "op": "+",
         "args": [
           "N",
-          7
+          8
         ]
       }
     },
@@ -118,7 +118,7 @@
         "op": "+",
         "args": [
           "N",
-          5
+          6
         ]
       }
     },
@@ -128,7 +128,7 @@
         "op": "+",
         "args": [
           "N",
-          5
+          6
         ]
       }
     },
@@ -1849,9 +1849,9 @@
     },
     "duo_cos_alpha": {
       "params": [
-        "center"
+        "node"
       ],
-      "description": "cos(alpha) per cell, shaped [tile, x_metric, y_metric], where alpha is the angle between the two local curvilinear coordinate directions (Chen 2021 C17). This single scalar IS the entire metric on this grid: with the unit-length covariant basis of C13-C14 the tensors collapse to g_ij = [[1, cos a],[cos a, 1]], g^ij = (1/sin^2 a) [[1, -cos a],[-cos a, 1]] and sqrt(g) = sin(alpha) (C18-C20), so no transformation matrices are stored anywhere -- the optimisation the paper highlights in its conclusions. Built exactly as C13-C14 prescribe, as the TANGENT directions: e1 ~ (k(i,j) x k(i+1,j)) x k(i,j) and e2 ~ (k(i,j) x k(i,j+1)) x k(i,j), each then normalised. That double cross product is the neighbour projected into the tangent plane at k(i,j), which is NOT the chord k(i+1,j) - k(i,j): the two differ by O(h^2) (measured 2.9e-3 at N=16, 7.6e-4 at N=32, 1.9e-4 at N=64, i.e. second order), so the chord is a different discretisation and this template deliberately uses the paper's. The cell-centre array may carry any consistent radius: with all inputs of equal magnitude the R_sphere scaling factors out of the double cross product and again out of the normalised quotient. The forward neighbour is what sets this axis one shorter than x_cell_ext -- a metric cell consumes its +1 neighbour, so N+2*3+1 centres yield N+2*3 metric cells, covering the interior and all 3 ghost layers with NO boundary special case and NO cross-tile gather, because the halo centres are the analytic extension of the tile's own coordinate lines (see duo_ref_x). Measured: cos(alpha) is 0 to machine precision at a tile centre and reaches about -+0.45 at the cube corners. Bind `center` to duo_cell_center.",
+      "description": "cos(alpha) per cell, shaped [tile, x_metric, y_metric], where alpha is the angle between the two local curvilinear coordinate directions (Chen 2021 C17). This single scalar IS the entire metric on this grid: g_ij = [[1, cos a],[cos a, 1]], g^ij = (1/sin^2 a)[[1,-cos a],[-cos a,1]], sqrt(g)=sin(alpha) (C18-C20). Built as the C13-C14 TANGENT directions e1 ~ (k x k_i+1) x k, e2 ~ (k x k_j+1) x k via duo_tangent_cos. SOURCED FROM NODES: k(i,j) is taken as the RAW SUM of the four corner nodes of cell (i,j) (an unnormalised cell-centre direction); duo_tangent_cos is scale-invariant in each of its three point arguments, so the omitted 1/4 and the omitted renormalisation onto the sphere both cancel and the cos(alpha) is identical (to machine precision) to the duo_cell_center-based form. Sourcing from `node` rather than `center` lets the metric span x_metric = N+6 (interior + 3 ghost layers) using the node halo x_nodes_ext = N+8, one layer wider than the collocated cell-centre array x_cell_ext = N+6 -- which the 5-point (Ng=3) flux reconstruction requires at the outermost ghost cell, where a centre-based metric would need a non-existent forward centre. cos(alpha) is 0 at a tile centre and about -+0.45 at the cube corners. Bind `node` to duo_node_cart.",
       "body": {
         "op": "aggregate",
         "output_idx": [
@@ -1860,7 +1860,7 @@
           "gj"
         ],
         "args": [
-          "center"
+          "node"
         ],
         "ranges": {
           "gt": {
@@ -1879,129 +1879,696 @@
           "name": "duo_tangent_cos",
           "bindings": {
             "kax": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
-                "gj",
-                1
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    "gj",
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    1
+                  ]
+                }
               ]
             },
             "kay": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
-                "gj",
-                2
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    "gj",
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
+                  ]
+                }
               ]
             },
             "kaz": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
-                "gj",
-                3
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    "gj",
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
+                  ]
+                }
               ]
             },
             "kbx": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gi",
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
                     1
                   ]
                 },
-                "gj",
-                1
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    "gj",
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    1
+                  ]
+                }
               ]
             },
             "kby": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gi",
-                    1
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
+                    2
                   ]
                 },
-                "gj",
-                2
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    "gj",
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
+                  ]
+                }
               ]
             },
             "kbz": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gi",
-                    1
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    "gj",
+                    3
                   ]
                 },
-                "gj",
-                3
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    "gj",
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
+                  ]
+                }
               ]
             },
             "kcx": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gj",
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
                     1
                   ]
                 },
-                1
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    1
+                  ]
+                }
               ]
             },
             "kcy": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gj",
-                    1
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
                   ]
                 },
-                2
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    2
+                  ]
+                }
               ]
             },
             "kcz": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "center",
-                "gt",
-                "gi",
                 {
-                  "op": "+",
+                  "op": "index",
                   "args": [
-                    "gj",
-                    1
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
                   ]
                 },
-                3
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        1
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gi",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "node",
+                    "gt",
+                    "gi",
+                    {
+                      "op": "+",
+                      "args": [
+                        "gj",
+                        2
+                      ]
+                    },
+                    3
+                  ]
+                }
               ]
             }
           }
