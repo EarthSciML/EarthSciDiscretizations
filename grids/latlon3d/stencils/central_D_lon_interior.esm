@@ -1,0 +1,110 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "central_D_lon_interior",
+    "description": "Interior-only centered first derivative along longitude on the latlon3d grid: (f[i+1,j,k] - f[i-1,j,k]) / (2 dlon_deg) over i in [2, NLON-1], all j (lat), all k (lev) \u2014 a PER-DEGREE derivative (see grids/latlon3d/grid.esm for the physical-units metric recipe). The rank-3 extension of grids/latlon/stencils/central_D_lon_interior, evaluated on every lev level, and the zonal sibling of ./central_D_lat_interior. Match-less named template consumed by the boundary-condition layer (rules/central_D_lon_periodic adds the i=1 and i=NLON wrap columns). `dlon_deg` is a free name resolving to the consuming model's zonal spacing variable (the inherited grids/latlon consumer-supplied geometry contract). O(dlon_deg^2) on this uniform axis.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:latlon3d",
+      "op:D",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Fornberg, B. (1988). Generation of finite difference formulas on arbitrarily spaced grids. Mathematics of Computation 51(184), 699-706.",
+        "doi": "10.1090/S0025-5718-1988-0935077-0"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "central_D_lon_interior": {
+      "params": [
+        "f"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "f"
+        ],
+        "ranges": {
+          "i": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLON",
+                1
+              ]
+            }
+          ],
+          "j": {
+            "from": "lat"
+          },
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "+",
+                      "args": [
+                        "i",
+                        1
+                      ]
+                    },
+                    "j",
+                    "k"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    {
+                      "op": "-",
+                      "args": [
+                        "i",
+                        1
+                      ]
+                    },
+                    "j",
+                    "k"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "*",
+              "args": [
+                2,
+                "dlon_deg"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

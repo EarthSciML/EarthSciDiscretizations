@@ -1,0 +1,78 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "latlon3d_central_D_lon_periodic_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/latlon3d/rules/central_D_lon_periodic, bound to NLON=8, NLAT=5, NLEV=4 at the import edge. The match D(u,lon) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 three-region makearray \u2014 interior columns [2,7] x [1,5] x [1,4] holding the imported centered stencil, plus the i=1 and i=NLON=8 full-rank periodic-wrap slabs \u2014 with all metaparameters folded and dlon_deg (declared here as a parameter, 360/8 = 45) surviving as the consumer free name. The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:latlon3d",
+      "rule:central_D_lon_periodic"
+    ]
+  },
+  "models": {
+    "Latlon3dCentralDLonPeriodicAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/latlon3d/rules/central_D_lon_periodic.esm",
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 4
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "state",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Field over the lon x lat x lev index sets."
+        },
+        "dlon_deg": {
+          "type": "parameter",
+          "units": "deg",
+          "default": 45,
+          "description": "The grid's dlon_deg free name: 360/NLON = 45 spelled as a literal because NLON is closed at the import edge."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lon"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
