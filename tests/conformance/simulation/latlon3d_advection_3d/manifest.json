@@ -12,9 +12,6 @@
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
   },
-  "blocked_upstream_bindings": {
-    "rust": "Rust does not terminate on this case at any tolerance tried (Erk at the manifest's reltol 1e-10 down to a loosest reltol 1e-6 all wedge; observed >200s at 100% CPU with no output and no MaxStepsExceeded). The RHS is SMOOTH here (upwind1_D_lon_periodic + central_D_lat_zero_grad_bc + central_D_lev_zero_grad_bc — no min/max/limiter), so the trigger is problem SIZE, not non-smoothness: this is the largest simulation RHS in the suite (NLON=36 x NLAT=19 x NLEV=10 = 6840 cells with all three directional operators composed into one field). earthsci-ast-rs's diffsol integrator has no dtmin/max-step fail-fast guard, and its rejected substeps inside a single solver.step() are not counted against the outer max_steps cap (src/simulate.rs), so the adaptive controller drives dt->0 inside step() without ever returning to hit the guard. Julia (Tsit5) and Python (LSODA) both solve it (Python verified here, ok). The per-direction order claims are still fully covered on Rust by the three separate latlon3d convergence cases; only this combined 3-D integration driver is blocked. Remove once the Rust solver gains a dtmin/max-step fail-fast guard."
-  },
   "integrators": {
     "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
     "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },

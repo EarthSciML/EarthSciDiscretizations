@@ -37,6 +37,6 @@
   },
   "status": "active",
   "blocked_upstream_bindings": {
-    "rust": "Rust hangs at every tolerance tried (loosest reltol 1e-6; all three solvers Erk/Bdf/Sdirk wedge). earthsci-ast-rs's diffsol integrator has no dtmin/max-step fail-fast guard, so on this stiff / non-smooth-min-max / large-AST RHS it drives dt->0 without terminating instead of erroring. Julia (Tsit5) and Python (LSODA) solve it. Remove once the Rust solver gains a step guard."
+    "rust": "Rust TERMINATES at this manifest's own tolerance (Erk 1e-10/1e-12, ~22 s) as of EarthSciAST dc76c5bf and passes its inline assertions: the whole-array overlay retired the hang, so 'hangs at every tolerance tried' is no longer true. It stays out of Rust scope for a DIFFERENT, measured reason: the actual is outside the 1e-9 cross-binding-actuals floor vs the Julia (Tsit5) reference -- tvd_monotone[3] 0.9277577578671593 vs 0.9277577947155905, 4.0e-8 relative. Reproduced bit-identically across two independent runs, so this is a deterministic Erk-vs-Tsit5 method-disagreement floor, not flakiness and not a discretization error. MEASURED 2026-07-28 against EarthSciAST dc76c5bf via scripts/runners/run-rust.sh. Re-arm when both bindings run the same integrator, or when SIM_CROSS_RTOL in scripts/compare-outputs.py admits solver-method disagreement -- the sibling cases advection_2d_x_zero_grad_central and advection_2d_y_zero_grad_central are excluded for exactly this reason and nothing else."
   }
 }
