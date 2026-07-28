@@ -17,5 +17,8 @@
     "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
     "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
   },
-  "status": "active"
+  "status": "active",
+  "blocked_upstream_bindings": {
+    "rust": "Rust TERMINATES on this case as of EarthSciAST dc76c5bf and passes its own inline MMS assertions (Erk, reltol 1e-10 / abstol 1e-12, ~3 s): the whole-array overlay retired the per-cell-interpreter hang the previous note described, so the 'drives dt->0 without terminating' half of that note is obsolete. What remains, and is NOT stale, is its second half -- the Rust actual misses the 1e-9 cross-binding-actuals floor against the Julia (Tsit5) reference: mms_steady_inflow_weno5[2] L2_error 1.5728295233743465e-4 (rust) vs 1.5728295600758084e-4 (julia), 2.3e-8 relative. Reproduced bit-identically across two independent runs, so this is a deterministic Erk-vs-Tsit5 method-disagreement floor, not flakiness and not a discretization error. MEASURED 2026-07-28 against EarthSciAST dc76c5bf via scripts/runners/run-rust.sh. Re-arm when both bindings run the same integrator, or when SIM_CROSS_RTOL in scripts/compare-outputs.py admits solver-method disagreement -- the sibling cases advection_2d_x_zero_grad_central and advection_2d_y_zero_grad_central are excluded for exactly this reason and nothing else."
+  }
 }
