@@ -156,7 +156,15 @@ def unlowered_violations(node, acc):
         if op == "D" and str(node.get("wrt", "t")) != "t":
             acc.append(f"unlowered spatial D (wrt={node['wrt']})")
         for k, v in node.items():
-            if k != "metadata":  # prose may cite op names
+            # `metadata`: prose may cite op names.
+            # `expression_templates`: the retained Option-B registry. A rule's
+            # `match` pattern is a PATTERN — a spatial `D` there is what the
+            # rule fires ON, not an operator that survived lowering — and
+            # §9.6.3 constraint 6 scopes `unlowered_operator` to expressions
+            # reaching evaluation or compilation, which a match pattern never
+            # does. Across all 139 lowered ast fixtures every rewrite-target op
+            # is in a retained registry and none is in an evaluation position.
+            if k not in ("metadata", "expression_templates"):
                 unlowered_violations(v, acc)
     elif isinstance(node, list):
         for v in node:
@@ -176,7 +184,8 @@ def run_ast():
             violations = []
             for model in doc.get("models", {}).values():
                 unlowered_violations(
-                    {k: v for k, v in model.items() if k != "metadata"}, violations)
+                    {k: v for k, v in model.items()
+                     if k not in ("metadata", "expression_templates")}, violations)
             if violations:
                 raise RuntimeError("post-lowering gate failed: "
                                    + ", ".join(sorted(set(violations))))

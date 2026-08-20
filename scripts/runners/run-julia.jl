@@ -221,6 +221,19 @@ assertion_dicts(results) = [Dict{String,Any}(
 # is already rejected upstream by resolve_template_machinery. The pre-0.9.0
 # goldens (built when applies were inlined) are intentionally NOT regenerated
 # here — only the duo cases run under the current loader.
+# A model's retained `expression_templates` registry is NOT walked. Option B
+# materializes each component's referenced templates into it, and a rule's
+# `match` pattern is a PATTERN — `D(f, x)` there is what the rule fires ON,
+# not an operator that survived lowering. §9.6.3 constraint 6 scopes
+# `unlowered_operator` to expressions reaching EVALUATION or COMPILATION
+# (esm-spec: "fails at evaluation/compilation"); a match pattern reaches
+# neither. Sweeping all 139 lowered ast fixtures: every rewrite-target op
+# lives in a retained registry, ZERO in an evaluation position — so this
+# clause has never once caught a real unlowered operator here, while failing
+# every case that uses a spatial-D rule. Upstream already skips registries
+# the same way (`_EXPR_TEMPLATES_SKIP` in Python, the `expression_templates`
+# continue in Julia), and the real gate in tree_walk/compile.jl never walks
+# one.
 function unlowered_violations(node, acc::Vector{String}=String[])
     if node isa AbstractDict
         op = string(get(node, "op", ""))
@@ -228,7 +241,11 @@ function unlowered_violations(node, acc::Vector{String}=String[])
         (op == "D" && string(get(node, "wrt", "t")) != "t") &&
             push!(acc, "unlowered spatial D (wrt=$(node["wrt"]))")
         for (k, v) in pairs(node)
-            k in (:metadata, Symbol("metadata")) && continue  # prose may cite op names
+            # `_norm` has already stringified every key, so this MUST compare
+            # against Strings — the previous `(:metadata, Symbol("metadata"))`
+            # spelling could never match, and Julia alone walked nested
+            # `metadata` while the other four skipped it.
+            k in ("metadata", "expression_templates") && continue
             unlowered_violations(v, acc)
         end
     elseif node isa AbstractVector
@@ -257,8 +274,10 @@ function run_ast(output_dir, files, verbose)
             # The prose-free structural gates.
             violations = String[]
             for (mname, model) in get(doc_n, "models", Dict{String,Any}())
-                unlowered_violations(Dict{String,Any}(k => v for (k, v) in model
-                                                      if k != "metadata"), violations)
+                unlowered_violations(
+                    Dict{String,Any}(k => v for (k, v) in model
+                                     if !(k in ("metadata", "expression_templates"))),
+                    violations)
             end
             isempty(violations) ||
                 error("post-lowering gate failed: $(join(unique(violations), ", "))")

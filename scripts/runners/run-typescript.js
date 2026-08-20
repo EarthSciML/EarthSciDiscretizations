@@ -173,6 +173,19 @@ function discoverManifests (category, files) {
 // not contain `apply_expression_template` (§9.6.1), every surviving apply is a
 // resolved match-less leaf, not an un-fired rule; a dangling apply to an
 // unknown template is already rejected upstream by resolveTemplateMachinery.
+// A model's retained `expression_templates` registry is NOT walked. Option
+// B materializes each component's referenced templates into it, and a
+// rule's `match` pattern is a PATTERN — `D(f, x)` there is what the rule
+// fires ON, not an operator that survived lowering. §9.6.3 constraint 6
+// scopes `unlowered_operator` to expressions reaching EVALUATION or
+// COMPILATION (esm-spec: "fails at evaluation/compilation"); a match
+// pattern reaches neither. Sweeping all 139 lowered ast fixtures: every
+// rewrite-target op lives in a retained registry, ZERO in an evaluation
+// position — so this clause has never once caught a real unlowered operator
+// here, while failing every case that uses a spatial-D rule. Upstream
+// already skips registries the same way (`_EXPR_TEMPLATES_SKIP` in Python,
+// the `expression_templates` continue in Julia), and the real gate in
+// tree_walk/compile.jl never walks one.
 function unloweredViolations (node, acc) {
   if (Array.isArray(node)) {
     node.forEach(v => unloweredViolations(v, acc))
@@ -183,7 +196,9 @@ function unloweredViolations (node, acc) {
       acc.push(`unlowered spatial D (wrt=${node.wrt})`)
     }
     for (const [k, v] of Object.entries(node)) {
-      if (k === 'metadata') continue // prose may cite op names
+      // `metadata`: prose may cite op names.
+      // `expression_templates`: see the note above this function.
+      if (k === 'metadata' || k === 'expression_templates') continue
       unloweredViolations(v, acc)
     }
   }
@@ -203,7 +218,8 @@ function runAst (outputDir, files, verbose) {
       const violations = []
       for (const model of Object.values(doc.models || {})) {
         const stripped = Object.fromEntries(
-          Object.entries(model).filter(([k]) => k !== 'metadata'))
+          Object.entries(model).filter(
+            ([k]) => k !== 'metadata' && k !== 'expression_templates'))
         unloweredViolations(stripped, violations)
       }
       if (violations.length > 0) {
