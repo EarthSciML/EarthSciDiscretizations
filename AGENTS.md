@@ -35,6 +35,16 @@ fixpoint → official runner`.
   rules: imported stencil + boundary-condition face regions in one `makearray`). The same
   scheme takes a different form on different grids; there is no grid-generic rule file.
 - Boundary conditions live inside the rule body and nowhere else (esm-spec §9.6.8).
+- **Two declared variable types, everything else derived (esm-spec §6.3.1).** From esm
+  1.0.0 a variable declares `unknown` or `parameter` and nothing more; `state`,
+  `observed`, `brownian` and `discrete` are gone, and a variable has no `expression`
+  field. "Observed" survives in this document as the *derived* class it now is: an
+  unknown a bare-variable-LHS equation defines (`{"lhs": "dx", "rhs": …}` in the owning
+  model's `equations`), which is how every "spell it as an observed" instruction below
+  must be written. Nothing here may re-derive that classification for itself — ask the
+  binding's classification API (`observed_definitions` / `ode_states` /
+  `observed_unknowns`, one spelling per language, esm-spec §6.3.1); a local
+  re-derivation is shadow logic and §2 forbids it.
 - Cross-grid entries (`regridding/`, `reprojection/`) and drivers (`problems/`) are
   top-level; problems import their grid + rules and carry inline tests (esm-spec §6.6.5).
 - Everything is resolution-generic via metaparameters (esm-spec §9.7.6). Never bake a
@@ -93,7 +103,10 @@ fixpoint → official runner`.
   metaparameter bounds at sampled sizes (L006). `axes:` lists the output dimensions in
   order, comma-separated (e.g. `axes:lon,lat`).
 - Library entries are pure template-library files; problems carry models (L007). All
-  files declare `esm: 0.8.0` (L008).
+  files declare the `esm` version the ESS schema's `$id` names — currently `1.0.0`
+  (L008). The expected version is *derived* from `$ESS_ROOT/esm-schema.json`, never
+  hardcoded in the lint: an ESS version bump must land as a finding on the files, which
+  is exactly what a stale `0.8.0` constant hid across four spec revisions.
 - Provenance goes in `metadata.references` (Fornberg, Snyder, Roache, …);
   human-readable derivations (incl. MMS solutions and BC-compatibility arguments) go in
   `metadata.description` / test descriptions.
