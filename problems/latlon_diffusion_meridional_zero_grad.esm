@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon_diffusion_meridional_zero_grad",
     "description": "MMS driver: meridional diffusion on the global latlon grid, u_t = kappa * (D(D(u, lat), lat) - d2P), discretized by grids/latlon/rules/central_D2_lat_zero_grad_bc (2nd-order centered interior, ghost-elimination zero-gradient pole rows). This is the PER-DEGREE diffusion companion to latlon_advection_meridional_zero_grad; the full metric spherical Laplacian with cos(lat) weighting is a documented FOLLOW-UP, not this problem. Manufactured STEADY solution u*(lat) = cos^4((pi/180) lat) — a P2-like polar-cap profile — held steady by the exactly matching diffusion source d2P = the analytic per-degree second derivative of u*, d2P(lat) = (pi/180)^2 (12 cos^2 Phi sin^2 Phi - 4 cos^4 Phi), Phi = (pi/180) lat, so u_t = kappa (u*_latlat - d2P) = 0 and u(t) = u* for all t in the continuous problem; the discrete field drifts only by the spatial truncation error, which is what the assertions and the convergence sweep measure. WHY STEADY-FORCED cos^4 AND NOT A PLAIN DECAYING EIGENMODE (de-risk finding, important): the lat axis is POINT-BASED with lat_1 = -90 and lat_NLAT = +90 exactly AT the poles, so the rule's ghost-elimination pole face (u[i,2]-u[i,1])/dlat_deg^2 is the finite-volume Neumann Laplacian evaluated half a cell off the node — its truncation is O(1) unless the field's first THREE lat-derivatives vanish at the poles. A plain decaying cosine eigenmode exp(-kappa k^2 (pi/180)^2 t) cos(k (pi/180) lat) has zero first derivative at the poles for even k but a NONZERO second derivative there, so the pole face is inconsistent and the observed order collapses to 1 (numerically de-risked: order ~0.95-0.99 for k=2). cos^4 is pole-supercompatible — dP/dPhi = -4 cos^3 sin, d2P/dPhi2 = 12 cos^2 sin^2 - 4 cos^4, d3P/dPhi3 = 24 cos sin (cos^2 - sin^2) + 16 cos^3 sin all carry a cos factor and vanish at Phi = +-pi/2 — so the pole face residual is O(dlat_deg^2) and the global scheme is cleanly 2nd order (numerically de-risked: order 1.98/1.99/2.00 on the NLAT = 17/33/65/129 ladder). Because cos^4 is not a diffusion eigenfunction it is held by a steady source rather than allowed to decay; this mirrors the boundary-compatible steady construction of latlon_advection_meridional_zero_grad (the analogous first-derivative pole problem), which is the established latlon-pole verification pattern. A time-decaying boundary-compatible variant would need a time-dependent source (referencing the model time in the RHS), which no library problem does and no binding runner is verified for, so the steady source is used. GRID CONTRACT WIRING (grids/latlon/grid.esm): NLON is closed to 8 at the import edge (the lon axis is passive — the solution is zonally symmetric and no lon operator appears), NLAT stays open (default 91, rebound by the convergence sweep via the loader API); dlat_deg = 180/(NLAT-1) is an observed whose expression uses the metaparameter NAME NLAT (substituted at load per esm-spec 9.7.6), so the sweep keeps the spacing consistent; lat0_deg = -90. The ic, source, and test references inline the grid's lat_coord convention (lat_j = -90 + (j-1) * 180/(NLAT-1) via the NLAT name) instead of invoking the lat_coord template: free-name geometry is not resolvable in the bindings' build-time ic/reference evaluator (parameters and observeds are out of scope there — upstream limitation, EarthSciAST tree-walk _eval_cellwise), so geometry in ic/reference positions must fold to constants at load. ERROR MODEL: with kappa = 200 and t = 0.2 the truncation-driven drift gives relative L2 errors falling as O(dlat_deg^2) over the NLAT = 17/33/65/129 ladder (1.55e-3 / 3.93e-4 / 9.90e-5 / 2.48e-5) and 5.01e-5 at the default NLAT=91; exact per-resolution values are pinned in tests/conformance/convergence/latlon_diffusion_meridional_zero_grad/golden/errors.json.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:latlon", "equation:heat", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:latlon",
+      "equation:heat",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -20,14 +25,19 @@
       "expression_template_imports": [
         {
           "ref": "../grids/latlon/rules/central_D2_lat_zero_grad_bc.esm",
-          "bindings": { "NLON": 8 }
+          "bindings": {
+            "NLON": 8
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["lon", "lat"],
+          "shape": [
+            "lon",
+            "lat"
+          ],
           "description": "Diffused tracer field over the lon x lat index sets (zonally symmetric in this problem)."
         },
         "kappa": {
@@ -37,25 +47,182 @@
           "description": "Constant per-degree meridional diffusivity (degrees^2 of latitude per second). Multiplies both the discretized second derivative and the manufactured source, so the steady MMS balance u_t = kappa (u*_latlat - d2P) = 0 holds for any value."
         },
         "dlat_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] },
           "description": "Meridional spacing 180/(NLAT-1) (pole-to-pole point grid): the grid's dlat_deg free name (consumer-supplied geometry contract, grids/latlon/grid.esm). NLAT is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlat_deg consistent."
         },
         "d2P": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/deg^2",
-          "shape": ["lon", "lat"],
-          "description": "Analytic per-degree second derivative of the manufactured solution u* = cos^4: d2P(lat) = (pi/180)^2 (12 cos^2 Phi sin^2 Phi - 4 cos^4 Phi), Phi = (pi/180) lat. Constant in time and longitude; kappa * (D(D(u,lat),lat) - d2P) is the diffusion residual that holds u* = cos^4 steady.",
-          "expression": {
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Analytic per-degree second derivative of the manufactured solution u* = cos^4: d2P(lat) = (pi/180)^2 (12 cos^2 Phi sin^2 Phi - 4 cos^4 Phi), Phi = (pi/180) lat. Constant in time and longitude; kappa * (D(D(u,lat),lat) - d2P) is the diffusion residual that holds u* = cos^4 steady."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "^",
+            "args": [
+              {
+                "op": "cos",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          3.141592653589793,
+                          180
+                        ]
+                      },
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i",
+                          "j"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "lon"
+                          },
+                          "j": {
+                            "from": "lat"
+                          }
+                        },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    180,
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "NLAT",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              4
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "kappa",
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "lat"
+                      }
+                    ],
+                    "wrt": "lat"
+                  },
+                  "d2P"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dlat_deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              180,
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "d2P",
+          "rhs": {
             "op": "aggregate",
-            "output_idx": ["i", "j"],
+            "output_idx": [
+              "i",
+              "j"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              }
+            },
             "expr": {
               "op": "*",
               "args": [
-                { "op": "^", "args": [ { "op": "/", "args": [3.141592653589793, 180] }, 2 ] },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        3.141592653589793,
+                        180
+                      ]
+                    },
+                    2
+                  ]
+                },
                 {
                   "op": "+",
                   "args": [
@@ -72,12 +239,42 @@
                                 {
                                   "op": "*",
                                   "args": [
-                                    { "op": "/", "args": [3.141592653589793, 180] },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
                                     {
                                       "op": "+",
                                       "args": [
                                         -90,
-                                        { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                180,
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "NLAT",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -96,12 +293,42 @@
                                 {
                                   "op": "*",
                                   "args": [
-                                    { "op": "/", "args": [3.141592653589793, 180] },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
                                     {
                                       "op": "+",
                                       "args": [
                                         -90,
-                                        { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                180,
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "NLAT",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -126,12 +353,42 @@
                                 {
                                   "op": "*",
                                   "args": [
-                                    { "op": "/", "args": [3.141592653589793, 180] },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        3.141592653589793,
+                                        180
+                                      ]
+                                    },
                                     {
                                       "op": "+",
                                       "args": [
                                         -90,
-                                        { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                1
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                180,
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "NLAT",
+                                                    1
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -149,69 +406,23 @@
             }
           }
         }
-      },
-      "equations": [
-        {
-          "lhs": { "op": "ic", "args": ["u"] },
-          "rhs": {
-            "op": "^",
-            "args": [
-              {
-                "op": "cos",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      { "op": "/", "args": [3.141592653589793, 180] },
-                      {
-                        "op": "aggregate",
-                        "output_idx": ["i", "j"],
-                        "args": [],
-                        "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
-                        "expr": {
-                          "op": "+",
-                          "args": [
-                            -90,
-                            { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                ]
-              },
-              4
-            ]
-          }
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": {
-            "op": "*",
-            "args": [
-              "kappa",
-              {
-                "op": "-",
-                "args": [
-                  { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "lat" } ], "wrt": "lat" },
-                  "d2P"
-                ]
-              }
-            ]
-          }
-        }
       ],
       "tests": [
         {
           "id": "mms_steady_polar_cap_diffusion",
           "description": "Manufactured steady solution u*(lat) = cos^4((pi/180) lat) with kappa = 200. Derivation: the continuous balance is u_t = kappa (u*_latlat - d2P) = 0 with d2P = u*_latlat = (pi/180)^2 (12 cos^2 sin^2 - 4 cos^4) (per-degree); the first three Phi-derivatives of u* vanish at both poles, so u* is pole-supercompatible with the rule's ghost-elimination zero-gradient pole rows to O(dlat_deg^2) (a plain cosine eigenmode would degrade the pole face to O(1) and collapse the order to 1 — see metadata.description), and the discrete drift is pure interior + compatible-pole O(dlat_deg^2) truncation. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.2 assertion bounds the truncation-driven drift against the SAME steady reference: 1.55e-3 relative L2 at the sweep's coarsest NLAT=17 and 5.01e-5 at the default NLAT=91, so the 5e-3 bound holds across the whole convergence ladder (exact per-resolution errors pinned in tests/conformance/convergence/latlon_diffusion_meridional_zero_grad/golden/errors.json). The max assertion (u* attains 1 at the equator row, present for every odd NLAT) guards against a uniform-shift/source-sign defect that the relative L2 could disguise.",
-          "time_span": { "start": 0.0, "end": 0.2 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.2
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "^",
@@ -222,17 +433,57 @@
                       {
                         "op": "*",
                         "args": [
-                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "/",
+                            "args": [
+                              3.141592653589793,
+                              180
+                            ]
+                          },
                           {
                             "op": "aggregate",
-                            "output_idx": ["i", "j"],
+                            "output_idx": [
+                              "i",
+                              "j"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "ranges": {
+                              "i": {
+                                "from": "lon"
+                              },
+                              "j": {
+                                "from": "lat"
+                              }
+                            },
                             "expr": {
                               "op": "+",
                               "args": [
                                 -90,
-                                { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        180,
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "NLAT",
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
                               ]
                             }
                           }
@@ -248,7 +499,9 @@
               "variable": "u",
               "time": 0.2,
               "expected": 0.0,
-              "tolerance": { "abs": 5e-3 },
+              "tolerance": {
+                "abs": 0.005
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "^",
@@ -259,17 +512,57 @@
                       {
                         "op": "*",
                         "args": [
-                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "/",
+                            "args": [
+                              3.141592653589793,
+                              180
+                            ]
+                          },
                           {
                             "op": "aggregate",
-                            "output_idx": ["i", "j"],
+                            "output_idx": [
+                              "i",
+                              "j"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "ranges": {
+                              "i": {
+                                "from": "lon"
+                              },
+                              "j": {
+                                "from": "lat"
+                              }
+                            },
                             "expr": {
                               "op": "+",
                               "args": [
                                 -90,
-                                { "op": "*", "args": [ { "op": "-", "args": ["j", 1] }, { "op": "/", "args": [180, { "op": "-", "args": ["NLAT", 1] }] } ] }
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        180,
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "NLAT",
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
                               ]
                             }
                           }
@@ -285,7 +578,9 @@
               "variable": "u",
               "time": 0.2,
               "expected": 1.0,
-              "tolerance": { "abs": 0.05 },
+              "tolerance": {
+                "abs": 0.05
+              },
               "reduce": "max"
             }
           ]

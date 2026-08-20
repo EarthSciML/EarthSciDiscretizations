@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "heat_2d_x_dirichlet_o6",
     "description": "MMS driver: 2-D heat equation reduced to x-diffusion u_t = alpha u_xx on the unit box [0,1]x[0,1] with inhomogeneous DIRICHLET (fixed-value) conditions on the two x-walls, discretized by grids/cartesian_uniform_2d/rules/central_D2x_6_dirichlet_bc (sixth-order interior 7-point x-stencil with sixth-order one-sided x-face closures) over the full 2-D field u[x,y]. Manufactured solution u(x,y,t) = exp(-alpha pi^2 t) sin(pi x) + gL + (gR - gL) x with gL = 0.5, gR = 1.5: the decaying sine satisfies the heat equation and vanishes at both x-walls, while the steady linear-in-x profile gL + (gR - gL) x satisfies u_t = alpha u_xx = 0 and carries the constant x-wall values u(0,y) = gL, u(1,y) = gR. The exact solution is constant in y (the y axis is PASSIVE; no y-operator appears, NY closed to 8 at the import edge; NX stays open, rebound by the convergence sweep via the loader API). The linear-in-x profile is represented exactly by the discrete sixth-order operator (its interior 7-point stencil and all four boundary closures return identically zero on any linear field — every closure weight-sum is zero), so the discretization error comes solely from the sine mode; because both interior and boundary closures are O(dx^6), the error falls at (observed, honestly pinned) order ~6. Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX (an observed dividing by the metaparameter name NX, substituted as an integer literal at load per esm-spec 9.7.6 so the sweep keeps dx consistent), dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): gL/gR live only in the runtime rule body; the ic and test references spell the manufactured solution from literals and the metaparameter NX alone (the build-time cellwise evaluator is scope-free), with the wall value 0.5 and slope 1.0 matching the gL and (gR - gL) parameter values, never invoking the grid's x_coord free-name template.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:heat", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:heat",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -21,44 +26,193 @@
       "expression_template_imports": [
         {
           "ref": "../grids/cartesian_uniform_2d/rules/central_D2x_6_dirichlet_bc.esm",
-          "bindings": { "NY": 8 }
+          "bindings": {
+            "NY": 8
+          }
         }
       ],
       "variables": {
-        "u": { "type": "state", "units": "K", "shape": ["x", "y"], "description": "Temperature field over the 2-D [x, y] index sets (constant in y in this problem)." },
-        "alpha": { "type": "parameter", "units": "m^2/s", "default": 0.01, "description": "Thermal diffusivity." },
-        "gL": { "type": "parameter", "units": "K", "default": 0.5, "description": "Prescribed field value on the left x-wall x=x0 (the rule's Dirichlet free name), equal to the manufactured wall value u(0,y) = 0.5." },
-        "gR": { "type": "parameter", "units": "K", "default": 1.5, "description": "Prescribed field value on the right x-wall x=x0+NX*dx (the rule's Dirichlet free name), equal to the manufactured wall value u(1,y) = 1.5." },
-        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
-        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge (unit box): the grid's y0 free name (unused here; the solution is constant in y)." },
-        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dx consistent." },
-        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name; NY closed to 8 at the import edge (unused here; the x-second-derivative rule references only dx)." }
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Temperature field over the 2-D [x, y] index sets (constant in y in this problem)."
+        },
+        "alpha": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Thermal diffusivity."
+        },
+        "gL": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.5,
+          "description": "Prescribed field value on the left x-wall x=x0 (the rule's Dirichlet free name), equal to the manufactured wall value u(0,y) = 0.5."
+        },
+        "gR": {
+          "type": "parameter",
+          "units": "K",
+          "default": 1.5,
+          "description": "Prescribed field value on the right x-wall x=x0+NX*dx (the rule's Dirichlet free name), equal to the manufactured wall value u(1,y) = 1.5."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0 (unit box): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (unit box): the grid's y0 free name (unused here; the solution is constant in y)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. NX is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dx consistent."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY: the grid's dy free name; NY closed to 8 at the import edge (unused here; the x-second-derivative rule references only dx)."
+        }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "aggregate",
-            "output_idx": ["i", "j"],
+            "output_idx": [
+              "i",
+              "j"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
             "expr": {
               "op": "+",
               "args": [
-                { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
                 0.5,
-                { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }
+                {
+                  "op": "*",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            1,
+                            "NX"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
               ]
             }
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "alpha",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
             ]
           }
         }
@@ -67,25 +221,93 @@
         {
           "id": "mms_heat_x_dirichlet_o6_decay",
           "description": "Manufactured solution u(x,y,t) = exp(-alpha pi^2 t) sin(pi x) + gL + (gR - gL) x with alpha = 0.01, gL = 0.5, gR = 1.5. The sine mode gives u_t = -alpha pi^2 u_sin and u_xx = -pi^2 u_sin (so u_t = alpha u_xx) with zero x-wall values, constant in y; the linear-in-x profile is steady with wall values gL, gR prescribed to the rule. The linear profile is discretely exact for the sixth-order operator, so the error is the sine mode's, which falls at observed order ~6. References evaluate at cell centers x_i = (i - 1/2)/NX, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only; the constant 0.5 and slope 1.0 match the gL and (gR - gL) parameter values). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error, which at sixth order falls well under 1e-4 for every resolution. Exact per-resolution errors pinned in tests/conformance/convergence/heat_2d_x_dirichlet_o6/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "+",
                   "args": [
-                    { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
                     0.5,
-                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }
+                    {
+                      "op": "*",
+                      "args": [
+                        1.0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               }
@@ -94,25 +316,102 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-4 },
+              "tolerance": {
+                "abs": 0.0001
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "+",
                   "args": [
                     {
                       "op": "*",
                       "args": [
-                        { "op": "exp", "args": [{ "op": "*", "args": [-0.01, 9.869604401089358, 0.1] }] },
-                        { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }] }
+                        {
+                          "op": "exp",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                -0.01,
+                                9.869604401089358,
+                                0.1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     },
                     0.5,
-                    { "op": "*", "args": [1.0, { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] }] }] }
+                    {
+                      "op": "*",
+                      "args": [
+                        1.0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NX"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               }

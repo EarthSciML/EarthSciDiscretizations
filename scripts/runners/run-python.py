@@ -47,7 +47,13 @@ ESS_ROOT = Path(os.environ.get("ESS_ROOT", ESD_ROOT.parent / "EarthSciAST"))
 if not (ESS_ROOT / "esm-schema.json").is_file():
     sys.exit(f"error: EarthSciAST not found at '{ESS_ROOT}'; set ESS_ROOT "
              "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
-sys.path.insert(0, str(ESS_ROOT / "packages" / "earthsci_ast" / "src"))
+# The ESS checkout's src tree comes FIRST so the runner is pinned to the
+# EarthSciAST at $ESS_ROOT and cannot silently pick up an unrelated
+# `earthsci_ast` that happens to be installed in the interpreter — a stale
+# version is exactly what the esm 1.0.0 migration existed to surface. (The
+# directory moved from `packages/earthsci_ast` to `pkg/earthsci-ast-py`
+# upstream; the old spelling had gone dead, so this insert did nothing.)
+sys.path.insert(0, str(ESS_ROOT / "pkg" / "earthsci-ast-py" / "src"))
 
 from earthsci_ast.lower_expression_templates import lower_expression_templates
 from earthsci_ast.template_imports import resolve_template_machinery
@@ -221,18 +227,48 @@ def assertion_dicts(results):
 # ast — raw §9.7 expansion to canonical bytes + post-lowering gates.
 # ---------------------------------------------------------------------------
 
+# Post-lowering gates (the ast manifests' contract): zero unlowered
+# rewrite-target ops (spatial D / grad / div / laplacian), zero surviving
+# metaparameter machinery. ONE definition across the five bindings — the
+# reference spelling lives in scripts/runners/run-julia.jl; keep this in step
+# with it.
+#
+# NOTE (ESS 0.9.0, esd:duo migration): surviving ``apply_expression_template``
+# nodes are NO LONGER a violation. Since the Option B reference-preserving
+# switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+# match-less template bodies — a reference "denotes its expansion" and the
+# engine treats it as a leaf (esm-spec §9.6.4). Because ``match`` patterns may
+# not contain ``apply_expression_template`` (§9.6.1), every surviving apply is a
+# resolved match-less leaf, not an un-fired rule; a dangling apply to an unknown
+# template is already rejected upstream by resolve_template_machinery. The
+# pre-0.9.0 goldens (built when applies were inlined) are intentionally NOT
+# regenerated here — only the duo cases run under the current loader.
 
+
+# A model's retained `expression_templates` registry is NOT walked. Option B
+# materializes each component's referenced templates into it, and a rule's
+# `match` pattern is a PATTERN — `D(f, x)` there is what the rule fires ON,
+# not an operator that survived lowering. §9.6.3 constraint 6 scopes
+# `unlowered_operator` to expressions reaching EVALUATION or COMPILATION
+# (esm-spec: "fails at evaluation/compilation"); a match pattern reaches
+# neither. Sweeping all 139 lowered ast fixtures: every rewrite-target op
+# lives in a retained registry, ZERO in an evaluation position — so this
+# clause has never once caught a real unlowered operator here, while failing
+# every case that uses a spatial-D rule. Upstream already skips registries
+# the same way (`_EXPR_TEMPLATES_SKIP` in Python, the `expression_templates`
+# continue in Julia), and the real gate in tree_walk/compile.jl never walks
+# one.
 def unlowered_violations(node, acc):
     if isinstance(node, dict):
         op = str(node.get("op", ""))
-        if op == "apply_expression_template":
-            acc.append("apply_expression_template")
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
         if op == "D" and str(node.get("wrt", "t")) != "t":
             acc.append(f"unlowered spatial D (wrt={node['wrt']})")
         for k, v in node.items():
-            if k == "metadata":  # prose may cite op names
+            # `metadata`: prose may cite op names.
+            # `expression_templates`: see the note above the function.
+            if k in ("metadata", "expression_templates"):
                 continue
             unlowered_violations(v, acc)
     elif isinstance(node, list):
@@ -263,7 +299,8 @@ def run_ast(output_dir: Path, files, verbose):
             violations = []
             for model in doc_n.get("models", {}).values():
                 unlowered_violations(
-                    {k: v for k, v in model.items() if k != "metadata"}, violations)
+                    {k: v for k, v in model.items()
+                     if k not in ("metadata", "expression_templates")}, violations)
             if violations:
                 raise RuntimeError("post-lowering gate failed: "
                                    + ", ".join(sorted(set(violations))))
@@ -500,30 +537,38 @@ def _reproj_wrapper_doc(params):
         return {"op": "apply_expression_template", "args": [], "name": tpl,
                 "bindings": {**{a: a for a in args}, **crs}}
 
+    # esm 1.0.0 declares exactly two variable types. The four projection
+    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
+    # the template invocations; there is no `expression` field on a variable and
+    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
+    # run_reprojection reads them back — the binding's classification API, not a
+    # local re-derivation.
+    observed = (
+        ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
+        ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
+        ("inv_lon", "deg", mkapply("lambert_conformal_inverse_lon", "x", "y")),
+        ("inv_lat", "deg", mkapply("lambert_conformal_inverse_lat", "x", "y")),
+    )
     variables = {
         "lon": {"type": "parameter", "units": "deg", "default": 0.0},
         "lat": {"type": "parameter", "units": "deg", "default": 0.0},
         "x": {"type": "parameter", "units": "m", "default": 0.0},
         "y": {"type": "parameter", "units": "m", "default": 0.0},
-        "fwd_x": {"type": "observed", "units": "m",
-                  "expression": mkapply("lambert_conformal_forward_x", "lon", "lat")},
-        "fwd_y": {"type": "observed", "units": "m",
-                  "expression": mkapply("lambert_conformal_forward_y", "lon", "lat")},
-        "inv_lon": {"type": "observed", "units": "deg",
-                    "expression": mkapply("lambert_conformal_inverse_lon", "x", "y")},
-        "inv_lat": {"type": "observed", "units": "deg",
-                    "expression": mkapply("lambert_conformal_inverse_lat", "x", "y")},
     }
-    return {"esm": "0.8.0",
+    for name, units, _expr in observed:
+        variables[name] = {"type": "unknown", "units": units}
+    equations = [{"lhs": name, "rhs": expr} for name, _units, expr in observed]
+    return {"esm": "1.0.0",
             "metadata": {"name": "lambert_conformal_eval",
                          "description": "Runner-built template invocation "
                                         "(manifest fixture: null)."},
             "models": {"Reproject": {
                 "expression_template_imports": [{"ref": "lambert_conformal.esm"}],
-                "variables": variables, "equations": []}}}
+                "variables": variables, "equations": equations}}}
 
 
 def run_reprojection(output_dir: Path, files, verbose):
+    from earthsci_ast.classification import observed_definitions
     from earthsci_ast.numpy_interpreter import evaluate
     from earthsci_ast.parse import load
 
@@ -547,7 +592,8 @@ def run_reprojection(output_dir: Path, files, verbose):
                 doc = _reproj_wrapper_doc(params)
                 file = load(json.dumps(doc), base_path=str(lib.parent))
                 m = file.models["Reproject"]
-                exprs[setname] = {k: m.variables[k].expression
+                defs = observed_definitions(m)
+                exprs[setname] = {k: defs[k]
                                   for k in ("fwd_x", "fwd_y", "inv_lon", "inv_lat")}
             fwd = []
             for pt in gold["forward"]:

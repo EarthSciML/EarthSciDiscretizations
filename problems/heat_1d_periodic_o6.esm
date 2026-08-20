@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "heat_1d_periodic_o6",
     "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the periodic unit interval [0, 1], discretized by grids/cartesian_uniform_1d/rules/central_D2_6_periodic (sixth-order centered, periodic wrap). Manufactured solution u(x,t) = exp(-alpha (2 pi)^2 t) cos(2 pi x): the fundamental periodic mode on [0,1], compatible with the periodic rule, needing no forcing term. u_xx = -(2 pi)^2 u and u_t = -alpha (2 pi)^2 u, so u_t = alpha u_xx exactly. The operator is the exact circulant 6th-order Laplacian, so the mode decays with the discrete eigenvalue's O(dx^6) error and the relative L2 error falls at order 6 (verified 5.90, 5.97 across N = 8,16,32). The 7-point periodic stencil requires N >= 7, so the sweep starts at N = 8. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). Initial condition and test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (AGENTS.md build-time scope caveat).",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:heat",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -15,13 +20,17 @@
   "models": {
     "Heat": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/central_D2_6_periodic.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/central_D2_6_periodic.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Temperature field over the x index set."
         },
         "alpha": {
@@ -37,15 +46,19 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, "N"] },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "cos",
             "args": [
@@ -55,14 +68,38 @@
                   6.283185307179586,
                   {
                     "op": "aggregate",
-                    "output_idx": ["i"],
+                    "output_idx": [
+                      "i"
+                    ],
                     "args": [],
-                    "ranges": { "i": { "from": "x" } },
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
                     "expr": {
                       "op": "+",
                       "args": [
                         0,
-                        { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
                   }
@@ -72,12 +109,40 @@
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "alpha",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }
@@ -86,13 +151,18 @@
         {
           "id": "mms_periodic_o6_decay",
           "description": "Manufactured solution u(x,t) = exp(-alpha (2 pi)^2 t) cos(2 pi x) with alpha = 0.01. Derivation: u_t = -alpha (2 pi)^2 u and u_xx = -(2 pi)^2 u, so u_t = alpha u_xx exactly; periodic on [0,1]; no forcing term. References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the relative L2 error, which at the sixth order falls well under 1e-4 for every resolution in the sweep. Exact per-resolution errors are pinned in tests/conformance/convergence/heat_1d_periodic_o6/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -103,14 +173,38 @@
                       6.283185307179586,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       }
@@ -123,7 +217,9 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-4 },
+              "tolerance": {
+                "abs": 0.0001
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "*",
@@ -131,7 +227,14 @@
                   {
                     "op": "exp",
                     "args": [
-                      { "op": "*", "args": [-0.01, 39.47841760435743, 0.1] }
+                      {
+                        "op": "*",
+                        "args": [
+                          -0.01,
+                          39.47841760435743,
+                          0.1
+                        ]
+                      }
                     ]
                   },
                   {
@@ -143,14 +246,38 @@
                           6.283185307179586,
                           {
                             "op": "aggregate",
-                            "output_idx": ["i"],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "+",
                               "args": [
                                 0,
-                                { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
                               ]
                             }
                           }

@@ -1,5 +1,5 @@
 {
- "esm": "0.8.0",
+ "esm": "1.0.0",
  "metadata": {
   "name": "latlon3d_transport_cwc_moving_lid",
   "description": "MOVING-LID consistency with continuity (CWC): free-stream preservation for the TERRAIN-FOLLOWING vertical transport stack while the level thicknesses BREATHE. The production counterpart of latlon3d_transport_cwc_3d_ppm, but on a hybrid sigma-pressure vertical coordinate whose layers move in time. Carries the AIR MASS m (the breathing pressure thickness) and the TRACER MASS mq, derives q = mq/m, and runs four rules: the zonal continuity + monotone-PPM pair (unchanged) and the NEW terrain-following vertical pair -- face_flux_divergence_lev_massform_noflux_bc (mass form, no /dz) for the air mass and ppm_flux_D_lev_mono_hybrid_noflux_bc (mass-form divergence + rank-3 breathing dp reconstruction widths) for the tracer.\n\nWHY IT MATTERS (the finding behind it). The fixed-grid vertical divergence divides by dz, so it is conservative ONLY when dz is constant in time; on a breathing grid it omits the grid-motion term and a uniform tracer drifts. This gate uses the mass-form divergence (the raw flux difference) so the air mass m is integrated as an extensive quantity, and DIAGNOSES the vertical air-mass flux Mz from continuity (Mz = -horiz*phi, phi vanishing at both walls) so that m stays equal to the hybrid dA[k]+dB[k]*Ps(i,j,t) as the surface pressure redistributes zonally. The layers genuinely move -- the reconstruction widths dp = m are three-dimensional and time-varying.\n\nTHE PROPERTY UNDER TEST. At q == 1 every CW84 slope is exactly 0.0, so the parabola is the constant 1 regardless of the breathing widths, the flux collapses to F = Mz bitwise, and the terrain-following PPM collapses onto the mass-form continuity -- so dmq/dt equals dm/dt to the last bit and dev = mq - m stays EXACTLY 0 while the grid moves. The reference is the CONSTANT ZERO, so non-vacuity is established by the companion falsifier (problems/_falsifier_moving_lid.esm, ic(mq) x 1.000001): with q != 1 the reconstruction is no longer flat, the tracer no longer tracks the breathing air mass, and dev drifts far above the 1e-12 tolerance. Only the t>0 assertion discriminates: dev is a state with dev(0)=0 by construction.\n\nMESH 12x7x9 (NLEV=9 >= 7 for the monotone lev rule; NLON=12 for the zonal wrap). The wind is a steady, cos(lat)-tapered zonal flux that drives a zonal surface-pressure redistribution; the air mass breathes over the span while staying positive.",
@@ -64,93 +64,49 @@
      "description": "Grid lat0_deg; -90 pole-to-pole."
     },
     "dlon_deg": {
-     "type": "observed",
+     "type": "unknown",
      "units": "deg",
-     "expression": {
-      "op": "/",
-      "args": [
-       360.0,
-       12
-      ]
-     },
      "description": "360/NLON=30 deg (literal; NLON consumed at the import edge, esm-spec 9.7.6)."
     },
     "dlat_deg": {
-     "type": "observed",
+     "type": "unknown",
      "units": "deg",
-     "expression": {
-      "op": "/",
-      "args": [
-       180.0,
-       6
-      ]
-     },
      "description": "180/(NLAT-1)=30 deg; NLAT=7 floor for the monotone lat rule."
     },
     "phie": {
-     "type": "observed",
+     "type": "unknown",
      "units": "deg",
      "shape": [
       "lat_nodes"
      ],
-     "description": "Latitude cell edges (grid lat_edge template); half-polar caps from the clamp.",
-     "expression": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "lat_edge",
-      "bindings": {}
-     }
+     "description": "Latitude cell edges (grid lat_edge template); half-polar caps from the clamp."
     },
     "coslat_e": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lat_nodes"
      ],
-     "description": "cos of latitude edges; zero-length pole faces.",
-     "expression": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "coslat_edge",
-      "bindings": {
-       "phie": "phie"
-      }
-     }
+     "description": "cos of latitude edges; zero-length pole faces."
     },
     "dS_lat": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lat"
      ],
-     "description": "Spherical cell-area weight sin(phie[j+1])-sin(phie[j]).",
-     "expression": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "latcell_area",
-      "bindings": {
-       "phie": "phie"
-      }
-     }
+     "description": "Spherical cell-area weight sin(phie[j+1])-sin(phie[j])."
     },
     "dphi_lat": {
-     "type": "observed",
+     "type": "unknown",
      "units": "rad",
      "shape": [
       "lat"
      ],
-     "description": "Meridional cell extent (half-width at the caps).",
-     "expression": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "latcell_dphi",
-      "bindings": {
-       "phie": "phie"
-      }
-     }
+     "description": "Meridional cell extent (half-width at the caps)."
     },
     "m": {
-     "type": "state",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
@@ -160,7 +116,7 @@
      "description": "AIR MASS per unit area in the cell (the breathing pressure thickness dp). Evolved by the mass-form continuity; stays equal to the hybrid dA[k]+dB[k]*Ps(i,j,t) because the vertical air-mass flux Mz is diagnosed from continuity."
     },
     "mq": {
-     "type": "state",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
@@ -170,7 +126,7 @@
      "description": "TRACER MASS per unit area. Initialised bitwise equal to m so q=mq/m==1."
     },
     "dev": {
-     "type": "state",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
@@ -180,296 +136,54 @@
      "description": "Diagnostic deviation dev=mq-m, integrated from dev(0)=0 as (mq rhs)-(m rhs). At q==1 the terrain-following PPM collapses onto the mass-form continuity bitwise, so dev never leaves 0."
     },
     "dp": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
       "lat",
       "lev"
      ],
-     "description": "Reconstruction width for the terrain-following vertical PPM: an alias of the air-mass state m (the physical layer thickness). The rule's free name `dp` binds here.",
-     "expression": {
-      "op": "aggregate",
-      "output_idx": [
-       "i",
-       "j",
-       "k"
-      ],
-      "args": [
-       "m"
-      ],
-      "ranges": {
-       "i": {
-        "from": "lon"
-       },
-       "j": {
-        "from": "lat"
-       },
-       "k": {
-        "from": "lev"
-       }
-      },
-      "expr": {
-       "op": "index",
-       "args": [
-        "m",
-        "i",
-        "j",
-        "k"
-       ]
-      }
-     }
+     "description": "Reconstruction width for the terrain-following vertical PPM: an alias of the air-mass state m (the physical layer thickness). The rule's free name `dp` binds here."
     },
     "q": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
       "lat",
       "lev"
      ],
-     "description": "Mixing ratio mq/m; the quantity under test, must stay 1.",
-     "expression": {
-      "op": "aggregate",
-      "output_idx": [
-       "i",
-       "j",
-       "k"
-      ],
-      "args": [
-       "mq",
-       "m"
-      ],
-      "ranges": {
-       "i": {
-        "from": "lon"
-       },
-       "j": {
-        "from": "lat"
-       },
-       "k": {
-        "from": "lev"
-       }
-      },
-      "expr": {
-       "op": "/",
-       "args": [
-        {
-         "op": "index",
-         "args": [
-          "mq",
-          "i",
-          "j",
-          "k"
-         ]
-        },
-        {
-         "op": "index",
-         "args": [
-          "m",
-          "i",
-          "j",
-          "k"
-         ]
-        }
-       ]
-      }
-     }
+     "description": "Mixing ratio mq/m; the quantity under test, must stay 1."
     },
     "Mx": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon_nodes",
       "lat",
       "lev"
      ],
-     "description": "Zonal face air-mass flux (west edge), vertically uniform, tapered by cos(lat) so the polar metric stays bounded. Steady in time; drives a zonal surface-pressure redistribution.",
-     "expression": {
-      "op": "aggregate",
-      "output_idx": [
-       "ci",
-       "cj",
-       "ck"
-      ],
-      "args": [],
-      "ranges": {
-       "ci": {
-        "from": "lon_nodes"
-       },
-       "cj": {
-        "from": "lat"
-       },
-       "ck": {
-        "from": "lev"
-       }
-      },
-      "expr": {
-       "op": "*",
-       "args": [
-        0.15,
-        {
-         "op": "sin",
-         "args": [
-          {
-           "op": "*",
-           "args": [
-            {
-             "op": "*",
-             "args": [
-              {
-               "op": "-",
-               "args": [
-                "ci",
-                1
-               ]
-              },
-              30.0
-             ]
-            },
-            0.017453292519943295
-           ]
-          }
-         ]
-        },
-        {
-         "op": "cos",
-         "args": [
-          {
-           "op": "*",
-           "args": [
-            {
-             "op": "+",
-             "args": [
-              -90.0,
-              {
-               "op": "*",
-               "args": [
-                {
-                 "op": "-",
-                 "args": [
-                  "cj",
-                  1
-                 ]
-                },
-                30.0
-               ]
-              }
-             ]
-            },
-            0.017453292519943295
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     }
+     "description": "Zonal face air-mass flux (west edge), vertically uniform, tapered by cos(lat) so the polar metric stays bounded. Steady in time; drives a zonal surface-pressure redistribution."
     },
     "horiz": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
       "lat",
       "lev"
      ],
-     "description": "Zonal air-mass convergence D(Mx, wrt: lon); the same discrete operator the tracer PPM collapses to at q==1. Vertically uniform because Mx is.",
-     "expression": {
-      "op": "D",
-      "args": [
-       "Mx"
-      ],
-      "wrt": "lon"
-     }
+     "description": "Zonal air-mass convergence D(Mx, wrt: lon); the same discrete operator the tracer PPM collapses to at q==1. Vertically uniform because Mx is."
     },
     "Mz": {
-     "type": "observed",
+     "type": "unknown",
      "units": "1",
      "shape": [
       "lon",
       "lat",
       "lev_nodes"
      ],
-     "description": "Vertical air-mass flux DIAGNOSED from continuity: Mz[i,j,kn] = -horiz[i,j,1]*phi(kn), phi(kn)=(kn-1)-(kn-1)^2/NLEV vanishing at kn=1 (ground) and kn=NLEV+1 (top). This makes the mass-form continuity reproduce the hybrid tendency dB[k]*dPs/dt exactly, so m stays terrain-following-consistent.",
-     "expression": {
-      "op": "aggregate",
-      "output_idx": [
-       "ci",
-       "cj",
-       "ckn"
-      ],
-      "args": [
-       "horiz"
-      ],
-      "ranges": {
-       "ci": {
-        "from": "lon"
-       },
-       "cj": {
-        "from": "lat"
-       },
-       "ckn": {
-        "from": "lev_nodes"
-       }
-      },
-      "expr": {
-       "op": "*",
-       "args": [
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "index",
-           "args": [
-            "horiz",
-            "ci",
-            "cj",
-            1
-           ]
-          }
-         ]
-        },
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "-",
-           "args": [
-            "ckn",
-            1
-           ]
-          },
-          {
-           "op": "/",
-           "args": [
-            {
-             "op": "*",
-             "args": [
-              {
-               "op": "-",
-               "args": [
-                "ckn",
-                1
-               ]
-              },
-              {
-               "op": "-",
-               "args": [
-                "ckn",
-                1
-               ]
-              }
-             ]
-            },
-            9.0
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     }
+     "description": "Vertical air-mass flux DIAGNOSED from continuity: Mz[i,j,kn] = -horiz[i,j,1]*phi(kn), phi(kn)=(kn-1)-(kn-1)^2/NLEV vanishing at kn=1 (ground) and kn=NLEV+1 (top). This makes the mass-form continuity reproduce the hybrid tendency dB[k]*dPs/dt exactly, so m stays terrain-following-consistent."
     }
    },
    "tests": [
@@ -967,6 +681,325 @@
         ]
        }
       ]
+     }
+    },
+    {
+     "lhs": "dlon_deg",
+     "rhs": {
+      "op": "/",
+      "args": [
+       360.0,
+       12
+      ]
+     }
+    },
+    {
+     "lhs": "dlat_deg",
+     "rhs": {
+      "op": "/",
+      "args": [
+       180.0,
+       6
+      ]
+     }
+    },
+    {
+     "lhs": "phie",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "lat_edge",
+      "bindings": {}
+     }
+    },
+    {
+     "lhs": "coslat_e",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "coslat_edge",
+      "bindings": {
+       "phie": "phie"
+      }
+     }
+    },
+    {
+     "lhs": "dS_lat",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "latcell_area",
+      "bindings": {
+       "phie": "phie"
+      }
+     }
+    },
+    {
+     "lhs": "dphi_lat",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "latcell_dphi",
+      "bindings": {
+       "phie": "phie"
+      }
+     }
+    },
+    {
+     "lhs": "dp",
+     "rhs": {
+      "op": "aggregate",
+      "output_idx": [
+       "i",
+       "j",
+       "k"
+      ],
+      "args": [
+       "m"
+      ],
+      "ranges": {
+       "i": {
+        "from": "lon"
+       },
+       "j": {
+        "from": "lat"
+       },
+       "k": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "m",
+        "i",
+        "j",
+        "k"
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "q",
+     "rhs": {
+      "op": "aggregate",
+      "output_idx": [
+       "i",
+       "j",
+       "k"
+      ],
+      "args": [
+       "mq",
+       "m"
+      ],
+      "ranges": {
+       "i": {
+        "from": "lon"
+       },
+       "j": {
+        "from": "lat"
+       },
+       "k": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "mq",
+          "i",
+          "j",
+          "k"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "m",
+          "i",
+          "j",
+          "k"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "Mx",
+     "rhs": {
+      "op": "aggregate",
+      "output_idx": [
+       "ci",
+       "cj",
+       "ck"
+      ],
+      "args": [],
+      "ranges": {
+       "ci": {
+        "from": "lon_nodes"
+       },
+       "cj": {
+        "from": "lat"
+       },
+       "ck": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        0.15,
+        {
+         "op": "sin",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                "ci",
+                1
+               ]
+              },
+              30.0
+             ]
+            },
+            0.017453292519943295
+           ]
+          }
+         ]
+        },
+        {
+         "op": "cos",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "+",
+             "args": [
+              -90.0,
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "-",
+                 "args": [
+                  "cj",
+                  1
+                 ]
+                },
+                30.0
+               ]
+              }
+             ]
+            },
+            0.017453292519943295
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "horiz",
+     "rhs": {
+      "op": "D",
+      "args": [
+       "Mx"
+      ],
+      "wrt": "lon"
+     }
+    },
+    {
+     "lhs": "Mz",
+     "rhs": {
+      "op": "aggregate",
+      "output_idx": [
+       "ci",
+       "cj",
+       "ckn"
+      ],
+      "args": [
+       "horiz"
+      ],
+      "ranges": {
+       "ci": {
+        "from": "lon"
+       },
+       "cj": {
+        "from": "lat"
+       },
+       "ckn": {
+        "from": "lev_nodes"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "horiz",
+            "ci",
+            "cj",
+            1
+           ]
+          }
+         ]
+        },
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            "ckn",
+            1
+           ]
+          },
+          {
+           "op": "/",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                "ckn",
+                1
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                "ckn",
+                1
+               ]
+              }
+             ]
+            },
+            9.0
+           ]
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]

@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_inflow_right_upwind",
     "description": "MMS driver: forced-steady 1-D linear advection u_t = -c D(u,x) + c dGdx on the unit interval [0, 1] with a prescribed inflow at the RIGHT wall, discretized by grids/cartesian_uniform_1d/rules/upwind1_D_inflow_right_bc (1st-order FORWARD upwind interior, (gR-f[N])/dx inflow face). This is the sign-mirror of problems/advection_1d_inflow_upwind.esm (left inflow, backward upwind). SIGN CONVENTION: the forward-difference operator is upwind for flow in -x, so the transport speed is negative, c = -1; then the semi-discrete tendency -c D = +D = (f[i+1]-f[i])/dx is dissipative (Fourier growth rate Re[(exp(ik dx)-1)/dx] <= 0), the characteristics travel toward -x, and the domain INFLOW is the right wall x = 1 (outflow at the left wall x = 0). Manufactured STEADY solution u*(x) = cos(pi x) with the exactly matching steady forcing c dGdx, dGdx = g'(x) = -pi sin(pi x) (the analytic derivative of u*), so the continuous balance is u_t = -c u*_x + c u*_x = 0 and u(t) = u* for all t; the discrete field drifts only by the operator truncation error (forced-steady MMS: observed L2/Linf order = operator order = 1). INFLOW COMPATIBILITY (why cos(pi x) with gR = -1): the inflow value carried into the domain must equal the exact wall value, gR = u*(x=1) = cos(pi) = -1, and the manufactured profile must have g'(1) = 0 at the inflow wall. On this cell-centered grid the i=N face (gR-f[N])/dx approximates u*_x at x_N = 1 - dx/2; expanding, (u*(1) - u*(1-dx/2))/dx = (1/2) u*_x(1) + O(dx), so a nonzero wall gradient u*_x(1) would leave an O(1) boundary-cell residual that pollutes the observed order down toward 1/2 (a single O(1) cell contributes O(sqrt(dx)) to the normalized L2). cos(pi x) has u*_x = -pi sin(pi x) with u*_x(1) = 0 (and u*_x(0) = 0 at the outflow wall, which the forward stencil needs no closure for), so the inflow-cell residual is O(dx), consistent with the interior, and the global error is a clean O(dx). GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). gR is the rule's inflow free name, declared here as a parameter equal to the wall value; it lives only in the runtime rule body, never in a build-time ic/reference. The ic, the dGdx forcing, and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic/observed cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_inflow_right_upwind/golden/errors.json.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -18,13 +23,17 @@
   "models": {
     "Advection": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/upwind1_D_inflow_right_bc.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/upwind1_D_inflow_right_bc.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "kg/m^3",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Advected tracer field over the x index set."
         },
         "c": {
@@ -46,21 +55,138 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, "N"] },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         },
         "dGdx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "kg/m^4",
-          "shape": ["x"],
-          "description": "Analytic derivative of the manufactured solution: dGdx(x) = g'(x) = -pi sin(pi x). Constant in time; c dGdx is the manufactured forcing that holds u* = cos(pi x) steady. Cell centers x_i = 0 + (i - 1/2)/N are spelled inline from literals and the metaparameter name N (build-time-foldable; never the free-name x_coord template).",
-          "expression": {
+          "shape": [
+            "x"
+          ],
+          "description": "Analytic derivative of the manufactured solution: dGdx(x) = g'(x) = -pi sin(pi x). Constant in time; c dGdx is the manufactured forcing that holds u* = cos(pi x) steady. Cell centers x_i = 0 + (i - 1/2)/N are spelled inline from literals and the metaparameter name N (build-time-foldable; never the free-name x_coord template)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  "dGdx"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          }
+        },
+        {
+          "lhs": "dGdx",
+          "rhs": {
             "op": "aggregate",
-            "output_idx": ["i"],
+            "output_idx": [
+              "i"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
             "expr": {
               "op": "*",
               "args": [
@@ -76,7 +202,25 @@
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       ]
@@ -87,63 +231,23 @@
             }
           }
         }
-      },
-      "equations": [
-        {
-          "lhs": { "op": "ic", "args": ["u"] },
-          "rhs": {
-            "op": "cos",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  3.141592653589793,
-                  {
-                    "op": "aggregate",
-                    "output_idx": ["i"],
-                    "args": [],
-                    "ranges": { "i": { "from": "x" } },
-                    "expr": {
-                      "op": "+",
-                      "args": [
-                        0,
-                        { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  { "op": "-", "args": ["c"] },
-                  { "op": "D", "args": ["u"], "wrt": "x" }
-                ]
-              },
-              { "op": "*", "args": ["c", "dGdx"] }
-            ]
-          }
-        }
       ],
       "tests": [
         {
           "id": "mms_steady_inflow_right_upwind",
           "description": "Manufactured steady solution u*(x) = cos(pi x) with c = -1 and right inflow gR = u*(1) = cos(pi) = -1. Derivation: the continuous balance is u_t = -c u*_x + c u*_x = 0 with u*_x = dGdx = -pi sin(pi x), so u(t) = u* exactly; the discrete drift is the pure 1st-order truncation of upwind1_D_inflow_right_bc, and -c D = +D is dissipative so the drift stays bounded. u*_x(1) = 0 makes the inflow-cell residual O(dx) (metadata.description), so the observed order is a clean 1. References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.1 assertion bounds the truncation-driven drift against the SAME steady reference (well under the 0.05 bound at the default N=64, falling at order 1). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_inflow_right_upwind/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -154,14 +258,38 @@
                       3.141592653589793,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       }
@@ -174,7 +302,9 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 0.05 },
+              "tolerance": {
+                "abs": 0.05
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -185,14 +315,38 @@
                       3.141592653589793,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       }

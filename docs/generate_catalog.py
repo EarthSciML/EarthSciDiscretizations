@@ -170,7 +170,12 @@ class OfficialDisplay:
 
     def _try_bridge(self) -> None:
         ess_root = Path(os.environ.get("ESS_ROOT") or (REPO.parent / "EarthSciAST"))
-        toolkit = ess_root / "packages" / "earthsci_ast"
+        # Upstream renamed `packages/earthsci_ast` to `pkg/earthsci-ast-py`; the
+        # old spelling had gone dead, so the bridge never started and the docs
+        # build silently fell back to the structural renderer whenever
+        # earthsci_ast was not importable in-process. _render_bridge.py's own
+        # docstring already names the current layout.
+        toolkit = ess_root / "pkg" / "earthsci-ast-py"
         venv_py = toolkit / ".venv" / "bin" / "python"
         if not venv_py.exists():
             return

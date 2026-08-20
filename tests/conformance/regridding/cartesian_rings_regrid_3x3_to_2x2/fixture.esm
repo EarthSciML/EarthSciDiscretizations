@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "cartesian_rings_regrid_3x3_to_2x2",
     "description": "HEADLINE conformance fixture: the conservative-regridding story END-TO-END DECLARATIVE -- grid spec -> cell rings -> narrow phase -> assembly -> apply, with NO out-of-document precomputation. The consumer supplies only the target GRID SPEC (origin tgt_x0/tgt_y0 = 0, spacing tgt_dx/tgt_dy = 1.5, sizes GX = GY = 2 bound at the regridding/cartesian_cell_rings.esm import edge) and the source data; the geometry is derived in-library: tgt_poly and the centers tgt_lon/tgt_lat come from the cartesian_cell_rings_{poly,lon,lat} affine templates over the flattened row-major cell enumeration (cell c = (y-1)*GX + x, southwest origin -- exactly the dense exemplar's target enumeration), and the constructed rings flow straight into the conservative_overlap narrow phase / assembly / apply at manifold 'planar'. The DENSE narrow phase here is the ungated companion to the CANDIDATE-GATED sibling cartesian_rings_regrid_gated_3x3_to_2x2, which feeds the SAME constructed rings and the SAME constructed centers (tgt_lon/tgt_lat) through the bin-Skolem broad phase end-to-end: the EarthSciAST.jl tree-walk restriction that once barred a template-CONSTRUCTED (aggregate-valued) coordinate buffer from being a value-invention skolem index target (E_TREEWALK_VI_INDEX) has been lifted, so the constructed centers now flow straight into the bin keys. The two cases are value-identical (the gated sibling asserts gated == dense at abs 0.0) and share this golden, so the dense spelling stays the readable narrow-phase reference while the sibling exercises the gated path. AFFINE-FORMULA GATE (the archived verify script's check, promoted to a conformance assertion): affine_state integrates sum|tgt_poly - tgt_poly_expected| + sum|tgt_lon - tgt_lon_expected| + sum|tgt_lat - tgt_lat_expected| against inline expected constants and is asserted EXACTLY ZERO (abs 0.0) -- x0 + (x-1)*dx and its corner offsets are sums/products of exactly-representable doubles here (0, 1.5, 3.0, 0.75, 2.25), so the template output is bit-exact against the hand geometry. The GEOMETRY IS THE DENSE EXEMPLAR'S: the constructed 2x2 target over [0,3]^2 equals conservative_overlap_3x3_to_2x2's hand-authored tgt_poly ring for ring, so the golden per-pair weights (official Julia runner, scripts/regenerate-goldens.sh) must reproduce the same exact rationals (A_ij corner 1.0 / edge 0.5 / center 0.25, A_j = 2.25, W = 4/9 / 2/9 / 1/9, F_tgt = [7/3, 11/3, 19/3, 23/3]) -- constructed and hand-authored geometry are interchangeable inputs to the same regridder. The 5.8.3 EXACT invariants (partition-of-unity by construction, conservation because the constructed target tiles the source domain) gate the pipeline; src rings stay consumer data here (a 3x3 unit-cell tiling) because one document supports ONE cartesian_cell_rings import (the ring_* index sets are metaparameter-sized, esm-spec 9.7.5/9.7.6).",
@@ -67,726 +67,152 @@
           "description": "TARGET GRID SPEC: uniform y spacing."
         },
         "src_poly": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "src_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "Source-cell geometry (consumer data): nine closed CCW rings, 1x1-degree cells tiling [0,3]^2, row-major from the southwest -- the dense exemplar's source grid.",
-          "expression": {
-            "op": "const",
-            "value": [
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  1.0,
-                  0.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  0.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  0.0
-                ],
-                [
-                  2.0,
-                  0.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  0.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  1.0
-                ],
-                [
-                  3.0,
-                  1.0
-                ],
-                [
-                  3.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  1.0,
-                  3.0
-                ],
-                [
-                  0.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  1.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  2.0,
-                  3.0
-                ],
-                [
-                  1.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  2.0,
-                  2.0
-                ],
-                [
-                  3.0,
-                  2.0
-                ],
-                [
-                  3.0,
-                  3.0
-                ],
-                [
-                  2.0,
-                  3.0
-                ]
-              ]
-            ],
-            "args": []
-          }
+          "description": "Source-cell geometry (consumer data): nine closed CCW rings, 1x1-degree cells tiling [0,3]^2, row-major from the southwest -- the dense exemplar's source grid."
         },
         "tgt_poly": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "tgt_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "CONSTRUCTED target-cell geometry: the four-corner CCW rings emitted by cartesian_cell_rings_poly from the grid spec alone (flattened row-major over ring_cells = GX*GY = 4 = NTGT). Expected bit-equal to the dense exemplar's hand-authored rings (tgt_poly_expected; the affine_formula gate).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "cartesian_cell_rings_poly",
-            "args": [],
-            "bindings": {
-              "x0": "tgt_x0",
-              "y0": "tgt_y0",
-              "dx": "tgt_dx",
-              "dy": "tgt_dy"
-            }
-          }
+          "description": "CONSTRUCTED target-cell geometry: the four-corner CCW rings emitted by cartesian_cell_rings_poly from the grid spec alone (flattened row-major over ring_cells = GX*GY = 4 = NTGT). Expected bit-equal to the dense exemplar's hand-authored rings (tgt_poly_expected; the affine_formula gate)."
         },
         "tgt_lon": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "tgt_cells"
           ],
-          "description": "CONSTRUCTED target centers (x): cartesian_cell_rings_lon from the grid spec. Expected [0.75, 2.25, 0.75, 2.25] (the affine_formula gate pins them exactly); these are the coordinates a broad-phase consumer would bin on.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "cartesian_cell_rings_lon",
-            "args": [],
-            "bindings": {
-              "x0": "tgt_x0",
-              "dx": "tgt_dx"
-            }
-          }
+          "description": "CONSTRUCTED target centers (x): cartesian_cell_rings_lon from the grid spec. Expected [0.75, 2.25, 0.75, 2.25] (the affine_formula gate pins them exactly); these are the coordinates a broad-phase consumer would bin on."
         },
         "tgt_lat": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "tgt_cells"
           ],
-          "description": "CONSTRUCTED target centers (y). Expected [0.75, 0.75, 2.25, 2.25].",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "cartesian_cell_rings_lat",
-            "args": [],
-            "bindings": {
-              "y0": "tgt_y0",
-              "dy": "tgt_dy"
-            }
-          }
+          "description": "CONSTRUCTED target centers (y). Expected [0.75, 0.75, 2.25, 2.25]."
         },
         "tgt_poly_expected": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "tgt_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "AFFINE-FORMULA ORACLE: the hand-authored rings of the dense exemplar (row-major from the southwest, CCW (W,S)->(E,S)->(E,N)->(W,N)). Every coordinate (0, 1.5, 3.0) is exactly representable, so the constructor must match bit-for-bit.",
-          "expression": {
-            "op": "const",
-            "value": [
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  1.5,
-                  0.0
-                ],
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  0.0,
-                  1.5
-                ]
-              ],
-              [
-                [
-                  1.5,
-                  0.0
-                ],
-                [
-                  3.0,
-                  0.0
-                ],
-                [
-                  3.0,
-                  1.5
-                ],
-                [
-                  1.5,
-                  1.5
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  1.5
-                ],
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  1.5,
-                  3.0
-                ],
-                [
-                  0.0,
-                  3.0
-                ]
-              ],
-              [
-                [
-                  1.5,
-                  1.5
-                ],
-                [
-                  3.0,
-                  1.5
-                ],
-                [
-                  3.0,
-                  3.0
-                ],
-                [
-                  1.5,
-                  3.0
-                ]
-              ]
-            ],
-            "args": []
-          }
+          "description": "AFFINE-FORMULA ORACLE: the hand-authored rings of the dense exemplar (row-major from the southwest, CCW (W,S)->(E,S)->(E,N)->(W,N)). Every coordinate (0, 1.5, 3.0) is exactly representable, so the constructor must match bit-for-bit."
         },
         "tgt_lon_expected": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "tgt_cells"
           ],
-          "description": "AFFINE-FORMULA ORACLE: hand centers x (0.75 and 2.25 exactly representable).",
-          "expression": {
-            "op": "const",
-            "value": [
-              0.75,
-              2.25,
-              0.75,
-              2.25
-            ],
-            "args": []
-          }
+          "description": "AFFINE-FORMULA ORACLE: hand centers x (0.75 and 2.25 exactly representable)."
         },
         "tgt_lat_expected": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "tgt_cells"
           ],
-          "description": "AFFINE-FORMULA ORACLE: hand centers y.",
-          "expression": {
-            "op": "const",
-            "value": [
-              0.75,
-              0.75,
-              2.25,
-              2.25
-            ],
-            "args": []
-          }
+          "description": "AFFINE-FORMULA ORACLE: hand centers y."
         },
         "ring_err": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "L1 residual of the constructed rings against the affine oracle: sum_{c,v,k} |tgt_poly - tgt_poly_expected|. Exactly 0.0.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "c": {
-                "from": "tgt_cells"
-              },
-              "v": {
-                "from": "overlap_cell_verts"
-              },
-              "k": {
-                "from": "overlap_coord"
-              }
-            },
-            "args": [
-              "tgt_poly",
-              "tgt_poly_expected"
-            ],
-            "expr": {
-              "op": "abs",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    {
-                      "op": "index",
-                      "args": [
-                        "tgt_poly",
-                        "c",
-                        "v",
-                        "k"
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "tgt_poly_expected",
-                        "c",
-                        "v",
-                        "k"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "L1 residual of the constructed rings against the affine oracle: sum_{c,v,k} |tgt_poly - tgt_poly_expected|. Exactly 0.0."
         },
         "center_err": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "L1 residual of the constructed centers against the affine oracle: sum_c |tgt_lon - tgt_lon_expected| + |tgt_lat - tgt_lat_expected|. Exactly 0.0.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "c": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "tgt_lon",
-              "tgt_lon_expected",
-              "tgt_lat",
-              "tgt_lat_expected"
-            ],
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "abs",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "tgt_lon",
-                            "c"
-                          ]
-                        },
-                        {
-                          "op": "index",
-                          "args": [
-                            "tgt_lon_expected",
-                            "c"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "abs",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "tgt_lat",
-                            "c"
-                          ]
-                        },
-                        {
-                          "op": "index",
-                          "args": [
-                            "tgt_lat_expected",
-                            "c"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "L1 residual of the constructed centers against the affine oracle: sum_c |tgt_lon - tgt_lon_expected| + |tgt_lat - tgt_lat_expected|. Exactly 0.0."
         },
         "src_area": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "True source-cell areas (1 deg^2 each) for the conservation invariant.",
-          "expression": {
-            "op": "const",
-            "value": [
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0
-            ],
-            "args": []
-          }
+          "description": "True source-cell areas (1 deg^2 each) for the conservation invariant."
         },
         "F_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "The source field, F[i] = i (the exemplar field; F_tgt = [7/3, 11/3, 19/3, 23/3], mass 45).",
-          "expression": {
-            "op": "const",
-            "value": [
-              1.0,
-              2.0,
-              3.0,
-              4.0,
-              5.0,
-              6.0,
-              7.0,
-              8.0,
-              9.0
-            ],
-            "args": []
-          }
+          "description": "The source field, F[i] = i (the exemplar field; F_tgt = [7/3, 11/3, 19/3, 23/3], mass 45)."
         },
         "unit_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "The constant-1 source field for the partition-of-unity surface.",
-          "expression": {
-            "op": "const",
-            "value": [
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0
-            ],
-            "args": []
-          }
+          "description": "The constant-1 source field for the partition-of-unity surface."
         },
         "A_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "DENSE narrow phase on the CONSTRUCTED target rings, manifold 'planar' (esm-spec 8.6.1's blessed dense spelling; the candidate-gated variant on this same constructed geometry is the sibling case cartesian_rings_regrid_gated_3x3_to_2x2, gated == dense at abs 0.0). Expected the exemplar's exact areas: corner 1.0, edge 0.5, center 0.25 deg^2.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "planar"
-            }
-          }
+          "description": "DENSE narrow phase on the CONSTRUCTED target rings, manifold 'planar' (esm-spec 8.6.1's blessed dense spelling; the candidate-gated variant on this same constructed geometry is the sibling case cartesian_rings_regrid_gated_3x3_to_2x2, gated == dense at abs 0.0). Expected the exemplar's exact areas: corner 1.0, edge 0.5, center 0.25 deg^2."
         },
         "A_j": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "Row normalization (the denominator is the row-sum of the SAME computed areas under the SAME sliver filter, so partition-of-unity is exact by construction). Expected 2.25 for every j.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "atol": "atol"
-            }
-          }
+          "description": "Row normalization (the denominator is the row-sum of the SAME computed areas under the SAME sliver filter, so partition-of-unity is exact by construction). Expected 2.25 for every j."
         },
         "W_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "Normalized weights (same filter as A_j/apply). Expected the exemplar's exact rationals 4/9, 2/9, 1/9.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_W_ij",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "atol": "atol"
-            }
-          }
+          "description": "Normalized weights (same filter as A_j/apply). Expected the exemplar's exact rationals 4/9, 2/9, 1/9."
         },
         "F_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The regridded field through the library apply. Expected [7/3, 11/3, 19/3, 23/3].",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "F_src",
-              "atol": "atol"
-            }
-          }
+          "description": "The regridded field through the library apply. Expected [7/3, 11/3, 19/3, 23/3]."
         },
         "F_unit_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The constant-1 field through the same apply: partition-of-unity as an ordinary field, exactly 1 by construction.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "unit_src",
-              "atol": "atol"
-            }
-          }
+          "description": "The constant-1 field through the same apply: partition-of-unity as an ordinary field, exactly 1 by construction."
         },
         "mass_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "Source-side mass sum_i A_i*F_src[i] = 45.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "i": {
-                "from": "src_cells"
-              }
-            },
-            "args": [
-              "src_area",
-              "F_src"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "src_area",
-                    "i"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_src",
-                    "i"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Source-side mass sum_i A_i*F_src[i] = 45."
         },
         "mass_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "Target-side mass sum_j A_j*F_tgt[j] with the computed denominators as target areas. Equals mass_src exactly (the CONSTRUCTED target tiles the source domain).",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "A_j",
-              "F_tgt"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "A_j",
-                    "j"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_tgt",
-                    "j"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Target-side mass sum_j A_j*F_tgt[j] with the computed denominators as target areas. Equals mass_src exactly (the CONSTRUCTED target tiles the source domain)."
         },
         "pou_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -795,7 +221,7 @@
           "description": "Surfacing state for partition-of-unity: pou_state(1) = sum_i W_ij."
         },
         "cons_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -804,7 +230,7 @@
           "description": "Surfacing state for the conservation residual: cons_state(1) = mass_tgt - mass_src = 0."
         },
         "regrid_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -813,7 +239,7 @@
           "description": "Surfacing state for the regridded field: regrid_state(1) = F_tgt."
         },
         "affine_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -913,6 +339,637 @@
               "ring_err",
               "center_err"
             ]
+          }
+        },
+        {
+          "lhs": "src_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  0.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  0.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  3.0,
+                  1.0
+                ],
+                [
+                  3.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  3.0
+                ],
+                [
+                  0.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  3.0
+                ],
+                [
+                  1.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  3.0,
+                  2.0
+                ],
+                [
+                  3.0,
+                  3.0
+                ],
+                [
+                  2.0,
+                  3.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "tgt_poly",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "cartesian_cell_rings_poly",
+            "args": [],
+            "bindings": {
+              "x0": "tgt_x0",
+              "y0": "tgt_y0",
+              "dx": "tgt_dx",
+              "dy": "tgt_dy"
+            }
+          }
+        },
+        {
+          "lhs": "tgt_lon",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "cartesian_cell_rings_lon",
+            "args": [],
+            "bindings": {
+              "x0": "tgt_x0",
+              "dx": "tgt_dx"
+            }
+          }
+        },
+        {
+          "lhs": "tgt_lat",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "cartesian_cell_rings_lat",
+            "args": [],
+            "bindings": {
+              "y0": "tgt_y0",
+              "dy": "tgt_dy"
+            }
+          }
+        },
+        {
+          "lhs": "tgt_poly_expected",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  1.5,
+                  0.0
+                ],
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  0.0,
+                  1.5
+                ]
+              ],
+              [
+                [
+                  1.5,
+                  0.0
+                ],
+                [
+                  3.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  1.5
+                ],
+                [
+                  1.5,
+                  1.5
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  1.5
+                ],
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  1.5,
+                  3.0
+                ],
+                [
+                  0.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  3.0,
+                  1.5
+                ],
+                [
+                  3.0,
+                  3.0
+                ],
+                [
+                  1.5,
+                  3.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "tgt_lon_expected",
+          "rhs": {
+            "op": "const",
+            "value": [
+              0.75,
+              2.25,
+              0.75,
+              2.25
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "tgt_lat_expected",
+          "rhs": {
+            "op": "const",
+            "value": [
+              0.75,
+              0.75,
+              2.25,
+              2.25
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "ring_err",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "c": {
+                "from": "tgt_cells"
+              },
+              "v": {
+                "from": "overlap_cell_verts"
+              },
+              "k": {
+                "from": "overlap_coord"
+              }
+            },
+            "args": [
+              "tgt_poly",
+              "tgt_poly_expected"
+            ],
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "tgt_poly",
+                        "c",
+                        "v",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "tgt_poly_expected",
+                        "c",
+                        "v",
+                        "k"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "center_err",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "c": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "tgt_lon",
+              "tgt_lon_expected",
+              "tgt_lat",
+              "tgt_lat_expected"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "tgt_lon",
+                            "c"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "tgt_lon_expected",
+                            "c"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "tgt_lat",
+                            "c"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "tgt_lat_expected",
+                            "c"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "src_area",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "F_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              6.0,
+              7.0,
+              8.0,
+              9.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "unit_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "A_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        {
+          "lhs": "A_j",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "W_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_src",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_unit_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "unit_src",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "mass_src",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "src_cells"
+              }
+            },
+            "args": [
+              "src_area",
+              "F_src"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "src_area",
+                    "i"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "mass_tgt",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "F_tgt"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_j",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

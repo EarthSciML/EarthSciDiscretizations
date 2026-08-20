@@ -221,6 +221,19 @@ assertion_dicts(results) = [Dict{String,Any}(
 # is already rejected upstream by resolve_template_machinery. The pre-0.9.0
 # goldens (built when applies were inlined) are intentionally NOT regenerated
 # here — only the duo cases run under the current loader.
+# A model's retained `expression_templates` registry is NOT walked. Option B
+# materializes each component's referenced templates into it, and a rule's
+# `match` pattern is a PATTERN — `D(f, x)` there is what the rule fires ON,
+# not an operator that survived lowering. §9.6.3 constraint 6 scopes
+# `unlowered_operator` to expressions reaching EVALUATION or COMPILATION
+# (esm-spec: "fails at evaluation/compilation"); a match pattern reaches
+# neither. Sweeping all 139 lowered ast fixtures: every rewrite-target op
+# lives in a retained registry, ZERO in an evaluation position — so this
+# clause has never once caught a real unlowered operator here, while failing
+# every case that uses a spatial-D rule. Upstream already skips registries
+# the same way (`_EXPR_TEMPLATES_SKIP` in Python, the `expression_templates`
+# continue in Julia), and the real gate in tree_walk/compile.jl never walks
+# one.
 function unlowered_violations(node, acc::Vector{String}=String[])
     if node isa AbstractDict
         op = string(get(node, "op", ""))
@@ -228,7 +241,11 @@ function unlowered_violations(node, acc::Vector{String}=String[])
         (op == "D" && string(get(node, "wrt", "t")) != "t") &&
             push!(acc, "unlowered spatial D (wrt=$(node["wrt"]))")
         for (k, v) in pairs(node)
-            k in (:metadata, Symbol("metadata")) && continue  # prose may cite op names
+            # `_norm` has already stringified every key, so this MUST compare
+            # against Strings — the previous `(:metadata, Symbol("metadata"))`
+            # spelling could never match, and Julia alone walked nested
+            # `metadata` while the other four skipped it.
+            k in ("metadata", "expression_templates") && continue
             unlowered_violations(v, acc)
         end
     elseif node isa AbstractVector
@@ -257,8 +274,10 @@ function run_ast(output_dir, files, verbose)
             # The prose-free structural gates.
             violations = String[]
             for (mname, model) in get(doc_n, "models", Dict{String,Any}())
-                unlowered_violations(Dict{String,Any}(k => v for (k, v) in model
-                                                      if k != "metadata"), violations)
+                unlowered_violations(
+                    Dict{String,Any}(k => v for (k, v) in model
+                                     if !(k in ("metadata", "expression_templates"))),
+                    violations)
             end
             isempty(violations) ||
                 error("post-lowering gate failed: $(join(unique(violations), ", "))")
@@ -450,25 +469,33 @@ function _reproj_wrapper_doc(params)
     mkapply(tpl, args...) = Dict{String,Any}(
         "op" => "apply_expression_template", "args" => Any[], "name" => tpl,
         "bindings" => Base.merge(Dict{String,Any}(a => a for a in args), crs))
+    # esm 1.0.0 declares exactly two variable types. The four projection
+    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
+    # the template invocations; there is no `expression` field on a variable and
+    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
+    # run_reprojection reads them back — the binding's classification API, not a
+    # local re-derivation.
+    observed = [
+        ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
+        ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
+        ("inv_lon", "deg", mkapply("lambert_conformal_inverse_lon", "x", "y")),
+        ("inv_lat", "deg", mkapply("lambert_conformal_inverse_lat", "x", "y"))]
     vars = Dict{String,Any}(
         "lon" => Dict("type" => "parameter", "units" => "deg", "default" => 0.0),
         "lat" => Dict("type" => "parameter", "units" => "deg", "default" => 0.0),
         "x" => Dict("type" => "parameter", "units" => "m", "default" => 0.0),
-        "y" => Dict("type" => "parameter", "units" => "m", "default" => 0.0),
-        "fwd_x" => Dict("type" => "observed", "units" => "m",
-            "expression" => mkapply("lambert_conformal_forward_x", "lon", "lat")),
-        "fwd_y" => Dict("type" => "observed", "units" => "m",
-            "expression" => mkapply("lambert_conformal_forward_y", "lon", "lat")),
-        "inv_lon" => Dict("type" => "observed", "units" => "deg",
-            "expression" => mkapply("lambert_conformal_inverse_lon", "x", "y")),
-        "inv_lat" => Dict("type" => "observed", "units" => "deg",
-            "expression" => mkapply("lambert_conformal_inverse_lat", "x", "y")))
-    return Dict{String,Any}("esm" => "0.8.0",
+        "y" => Dict("type" => "parameter", "units" => "m", "default" => 0.0))
+    for (name, units, _expr) in observed
+        vars[name] = Dict{String,Any}("type" => "unknown", "units" => units)
+    end
+    eqs = Any[Dict{String,Any}("lhs" => name, "rhs" => expr)
+              for (name, _units, expr) in observed]
+    return Dict{String,Any}("esm" => "1.0.0",
         "metadata" => Dict{String,Any}("name" => "lambert_conformal_eval",
             "description" => "Runner-built template invocation (manifest fixture: null)."),
         "models" => Dict{String,Any}("Reproject" => Dict{String,Any}(
             "expression_template_imports" => Any[Dict{String,Any}("ref" => "lambert_conformal.esm")],
-            "variables" => vars, "equations" => Any[])))
+            "variables" => vars, "equations" => eqs)))
 end
 
 function run_reprojection(output_dir, files, verbose)
@@ -484,8 +511,9 @@ function run_reprojection(output_dir, files, verbose)
                 doc = _reproj_wrapper_doc(params)
                 file = ESS.load(IOBuffer(JSON3.write(doc)); base_path=dirname(lib))
                 m = file.models["Reproject"]
+                defs = ESS.observed_definitions(m)
                 exprs[String(setname)] = Dict{String,Any}(
-                    k => m.variables[k].expression
+                    k => defs[k]
                     for k in ("fwd_x", "fwd_y", "inv_lon", "inv_lat"))
             end
             fwd = Any[]

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_face_flux_divergence_lev_noflux_bc",
     "description": "AST fixture for the face-staggered flux divergence rule (the continuity half of the CWC transport pair). Carries BOTH a cell-centred state and a face-staggered flux, and BOTH the plain-D lev rule and the face-divergence rule, so the golden pins that the esm-spec 9.6.1 shape constraint -- not priority -- is what routes each derivative to its own rule.",
@@ -27,7 +27,7 @@
       ],
       "variables": {
         "m": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -37,13 +37,106 @@
           "description": "Air mass per unit area (cell means)."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Level-edge coordinate; pe[1] = 0 (ground), pe[NLEV+1] = 1 (model top). Stretched (0.6 s + 0.4 s^2, s = (kn-1)/NLEV) so the vertical mesh is genuinely non-uniform and cells are thin at the ground. Aggregate index `kn`, distinct from an operator's `k` (observeds are inlined non-hygienically).",
-          "expression": {
+          "description": "Level-edge coordinate; pe[1] = 0 (ground), pe[NLEV+1] = 1 (model top). Stretched (0.6 s + 0.4 s^2, s = (kn-1)/NLEV) so the vertical mesh is genuinely non-uniform and cells are thin at the ground. Aggregate index `kn`, distinct from an operator's `k` (observeds are inlined non-hygienically)."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses dz[k] = pe[k+1] - pe[k], from the grid's lev_thickness template (aggregate index `gk`). Both the continuity divergence and the tracer flux divergence divide by THIS array, which is one of the three things the free-stream bit-exactness argument depends on (same faces, same thicknesses, same wall omissions)."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Cell (level) centres from the grid's lev_center template. Read by central_D_lev_zero_grad_bc, the cell-centred lev rule the fixture carries alongside the face-divergence rule so the golden pins that the two coexist; the face-divergence rule itself never reads zc (a flux divergence needs thicknesses, not centres)."
+        },
+        "M": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Face air-mass flux on the NLEV+1 face axis; vanishes at both walls and reverses sign at mid-column."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "m"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "m"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "M"
+                    ],
+                    "wrt": "lev"
+                  }
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "m"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "kn"
@@ -112,14 +205,9 @@
             }
           }
         },
-        "dz": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lev"
-          ],
-          "description": "Layer thicknesses dz[k] = pe[k+1] - pe[k], from the grid's lev_thickness template (aggregate index `gk`). Both the continuity divergence and the tracer flux divergence divide by THIS array, which is one of the three things the free-stream bit-exactness argument depends on (same faces, same thicknesses, same wall omissions).",
-          "expression": {
+        {
+          "lhs": "dz",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_thickness",
@@ -128,14 +216,9 @@
             }
           }
         },
-        "zc": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lev"
-          ],
-          "description": "Cell (level) centres from the grid's lev_center template. Read by central_D_lev_zero_grad_bc, the cell-centred lev rule the fixture carries alongside the face-divergence rule so the golden pins that the two coexist; the face-divergence rule itself never reads zc (a flux divergence needs thicknesses, not centres).",
-          "expression": {
+        {
+          "lhs": "zc",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_center",
@@ -144,16 +227,9 @@
             }
           }
         },
-        "M": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev_nodes"
-          ],
-          "description": "Face air-mass flux on the NLEV+1 face axis; vanishes at both walls and reverses sign at mid-column.",
-          "expression": {
+        {
+          "lhs": "M",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iw",
@@ -296,70 +372,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "m"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": 1.0
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "m"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "D",
-                    "args": [
-                      "M"
-                    ],
-                    "wrt": "lev"
-                  }
-                ]
-              },
-              {
-                "op": "D",
-                "args": [
-                  "m"
-                ],
-                "wrt": "lev"
-              }
-            ]
           }
         }
       ]

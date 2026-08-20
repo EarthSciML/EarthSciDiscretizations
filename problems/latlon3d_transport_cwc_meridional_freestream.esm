@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_transport_cwc_meridional_freestream",
     "description": "CONSISTENCY WITH CONTINUITY (CWC) / FREE-STREAM PRESERVATION on the MERIDIONAL axis of latlon3d: the acid test that a CONSTANT tracer stays constant under a strongly DIVERGENT meridional air-mass flux -- and stays constant BIT-FOR-BIT, not merely to within rounding. The meridional twin of problems/latlon3d_transport_cwc_freestream. \n\nWHAT IS BROKEN WITHOUT IT. The flux-form advection rule grids/latlon3d/rules/upwind1_flux_D_lat_polar transports a MIXING RATIO with a prescribed wind: du/dt = -D(V*u, wrt: lat). Put u == 1 into that and the right-hand side becomes the discrete divergence of the wind itself, which is nonzero wherever the flow diverges: a uniform tracer immediately develops structure out of nothing, growing linearly in time. That is not a discretization error -- refining the mesh does not remove it -- it is a MODELLING error. A mixing ratio is a ratio to an air mass, and the model was never carrying the air mass, so nothing in the equation knew that the air itself was being compressed and rarefied. MEASURED, on the very mass flux this driver uses, as a NEGATIVE CONTROL: fed to the mixing-ratio form alone (du/dt = -D(My*u), no air mass carried), a CONSTANT tracer has max|du/dt| = 7.22 at t = 0 and is torn apart to max|u - 1| = 1.02 -- u ranges over 0.49 .. 2.02 -- by t = 0.1. Fed to the CWC pair below, the same flux leaves it at exactly 1.0. Without that control the free-stream result would be evidence of nothing. \n\nTHE FIX: CARRY THE MASS. This driver evolves TWO states -- the air mass per unit area m and the tracer mass mq -- and defines the mixing ratio as the OBSERVED q = mq / m: \n    d(m)/dt  = -D(My,   wrt: lat)     [continuity;  face_flux_divergence_lat_polar] \n    d(mq)/dt = -D(My*q, wrt: lat)     [tracer;      upwind1_flux_D_lat_polar, UNCHANGED] \nwith My the face air-mass flux on [lon, lat_nodes, lev]. Two rules, two terms, one model. The tracer rule is reused VERBATIM -- what changed is not the operator but what it is applied to. The two rules coexist because the esm-spec 9.6.1 `where` shape constraint separates them: the continuity rule binds a BARE D whose operand is [lon, lat_nodes, lev], the tracer rule a two-factor PRODUCT, and no declared field satisfies both. \n\nWHY q == 1 IS PRESERVED, AND WHY BITWISE. With q == 1 the donor-cell face flux collapses: F = 1/2[My(qL + qR) - |My|(qR - qL)] = 1/2[My*2 - |My|*0] = My. Every step of that collapse is EXACT in IEEE binary floating point (1 + 1 = 2 exactly, My*2 exactly, 1 - 1 = 0 exactly, |My|*0 = 0 exactly, 0.5*(2My) = My exactly), so F is the mass flux to the LAST BIT. The two rules then apply the identical remaining operations in the identical order -- the same face pairing, the same coslat_e face-length factors, the same dS_lat area divisor, the same unary negation at the north cap, and the same STRUCTURAL OMISSION of the two pole-wall terms -- so the tracer divergence emits, cell by cell, exactly the doubles the continuity divergence emits; mq stays bit-for-bit equal to m through every Runge-Kutta stage, and q = mq/m evaluates to exactly 1.0 (IEEE division of a value by itself). MEASURED over the trajectory: max|q - 1| = 0.0 exactly, and mq differs from m by 0 ulp in every one of the cells, at every saved time. \n\nTHE MASS FLUX IS A POLYNOMIAL IN sin(phi), NOT A TRIG EXPRESSION THAT MERELY VANISHES ANALYTICALLY. My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) is 5 cos^2(phi) sin(phi) written so that it is EXACTLY 0.0 at both poles in IEEE: sin(+/-pi/2) rounds to exactly +/-1.0, so 1 - s^2 is exactly 0.0. Written the obvious way it would not be -- cos(+/-pi/2) is 6.1e-17, not zero, and sin(2 pi z) at z = 1 is -2.45e-16, not zero. The rules never read the pole faces, so nothing leaks either way; what the exact zero buys is that the CLOSED-FORM REFERENCE this problem asserts against, which differences the pole terms explicitly, is bit-identical to the rules' structural omission. \n\nTHE FLUX IS STRONGLY DIVERGENT, and it REVERSES SIGN at the equator: air is pumped out of the tropics and piled onto both polar caps, so real air mass actually relocates -- MEASURED, at NLAT = 91 over t = 0.1: max|m(t) - m(0)| / m(0) = 46%, with m starting in 1.500 .. 2.500 and ranging over 1.259 .. 3.159 during the run (still strictly positive, so q = mq/m never divides by anything small) -- and both donor branches are exercised. The whole trajectory is exactly LINEAR IN TIME, since neither right-hand side depends on the states. MASS IS CONSERVED: the operator's own meridional budget sum_j dS_lat[j] D[i,j,k] is 4e-17 of its L1 scale (the fluxes telescope and the two pole terms are never formed), and the integrated ring mass sum_ijk m dS_lat drifts by 1.4e-14 relative over 50 fixed Tsit5 steps -- time-stepping roundoff, not operator leakage.",
@@ -47,7 +47,7 @@
       ],
       "variables": {
         "m": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -57,7 +57,7 @@
           "description": "AIR MASS per unit area in the cell (the pressure thickness dp); cell means. Seeded with the exact cos-weighted cell mean of 2 + sin(phi)/2, so it is strictly positive (1.5 .. 2.5) and stays positive under the divergent flux."
         },
         "mq": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -73,317 +73,53 @@
           "description": "Southern domain edge; the grid's lat0_deg free name. -90 makes the recipe the GLOBAL pole-to-pole one, whose two end cells are the half-polar caps."
         },
         "dlat_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "description": "Meridional point spacing 180/(NLAT-1) (pole-to-pole, endpoint-inclusive): the grid's dlat_deg free name. NLAT is the document's live metaparameter, so this follows every rebinding.",
-          "expression": {
-            "op": "/",
-            "args": [
-              180,
-              {
-                "op": "-",
-                "args": [
-                  "NLAT",
-                  1
-                ]
-              }
-            ]
-          }
+          "description": "Meridional point spacing 180/(NLAT-1) (pole-to-pole, endpoint-inclusive): the grid's dlat_deg free name. NLAT is the document's live metaparameter, so this follows every rebinding."
         },
         "phie": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "lat_nodes"
           ],
-          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (clamped-midpoint rule; aggregate index `gje`). phie[1] = -90 and phie[NLAT+1] = +90 EXACTLY, and the two end cells are half width -- the GEOS-Chem half-polar caps.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lat_edge",
-            "bindings": {}
-          }
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (clamped-midpoint rule; aggregate index `gje`). phie[1] = -90 and phie[NLAT+1] = +90 EXACTLY, and the two end cells are half width -- the GEOS-Chem half-polar caps."
         },
         "coslat_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat_nodes"
           ],
-          "description": "FACE-LENGTH weight cos(phi_e) over the face axis, from the grid's coslat_edge template (aggregate index `gjc`). One of the two free names the flux-form lat rules read. At the two POLE faces this is cos(-/+pi/2) = 6.1e-17 in IEEE, NOT zero -- which is exactly why those rules OMIT the pole-wall flux terms rather than multiplying them by it.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "coslat_edge",
-            "bindings": {
-              "phie": "phie"
-            }
-          }
+          "description": "FACE-LENGTH weight cos(phi_e) over the face axis, from the grid's coslat_edge template (aggregate index `gjc`). One of the two free names the flux-form lat rules read. At the two POLE faces this is cos(-/+pi/2) = 6.1e-17 in IEEE, NOT zero -- which is exactly why those rules OMIT the pole-wall flux terms rather than multiplying them by it."
         },
         "dS_lat": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat"
           ],
-          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]) over the cell axis, from the grid's latcell_area template (aggregate index `gja`). The other free name the flux-form lat rules read. Exact, not a midpoint approximation, which is what makes the flux divergence telescope to an exact global mass budget.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "latcell_area",
-            "bindings": {
-              "phie": "phie"
-            }
-          }
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]) over the cell axis, from the grid's latcell_area template (aggregate index `gja`). The other free name the flux-form lat rules read. Exact, not a midpoint approximation, which is what makes the flux divergence telescope to an exact global mass budget."
         },
         "My": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat_nodes",
             "lev"
           ],
-          "description": "Face AIR-MASS FLUX, positive northward, on the NLAT+1 face axis: My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) -- i.e. 5 cos^2(phi) sin(phi), written as a POLYNOMIAL IN sin so that it is EXACTLY 0.0 at both poles in IEEE. It reverses sign at the equator, so it is strongly divergent (air is pumped out of the tropics and onto both caps) and both donor branches are exercised. a(i) = 1 + 0.25 cos(2 pi (i-1/2)/8) and b(k) = 1 + 0.2 sin(pi (k-1)/3) are strictly positive modulations that make the rank-3 shape real.",
-          "expression": {
-            "op": "aggregate",
-            "args": [
-              "phie"
-            ],
-            "output_idx": [
-              "im",
-              "jm",
-              "km"
-            ],
-            "ranges": {
-              "im": {
-                "from": "lon"
-              },
-              "jm": {
-                "from": "lat_nodes"
-              },
-              "km": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                5.0,
-                {
-                  "op": "-",
-                  "args": [
-                    1,
-                    {
-                      "op": "*",
-                      "args": [
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    180
-                                  ]
-                                },
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "phie",
-                                    "jm"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    180
-                                  ]
-                                },
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "phie",
-                                    "jm"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "sin",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            3.141592653589793,
-                            180
-                          ]
-                        },
-                        {
-                          "op": "index",
-                          "args": [
-                            "phie",
-                            "jm"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    1,
-                    {
-                      "op": "*",
-                      "args": [
-                        0.25,
-                        {
-                          "op": "cos",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "im",
-                                        0.5
-                                      ]
-                                    },
-                                    8
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    1,
-                    {
-                      "op": "*",
-                      "args": [
-                        0.2,
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                3.141592653589793,
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "km",
-                                        1
-                                      ]
-                                    },
-                                    3
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Face AIR-MASS FLUX, positive northward, on the NLAT+1 face axis: My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) -- i.e. 5 cos^2(phi) sin(phi), written as a POLYNOMIAL IN sin so that it is EXACTLY 0.0 at both poles in IEEE. It reverses sign at the equator, so it is strongly divergent (air is pumped out of the tropics and onto both caps) and both donor branches are exercised. a(i) = 1 + 0.25 cos(2 pi (i-1/2)/8) and b(k) = 1 + 0.2 sin(pi (k-1)/3) are strictly positive modulations that make the rank-3 shape real."
         },
         "q": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "The MIXING RATIO q = mq / m: tracer mass divided by air mass, cell by cell, recomputed at every Runge-Kutta stage. It is a BARE declared observed of shape [lon, lat, lev], which is exactly what the advection rule's esm-spec 9.6.1 `where` constraint demands -- a shape constraint is satisfied only by a bare variable reference, never by a compound sub-AST, so the equation MUST be written D(My*q) over a declared q rather than D(My*mq/m) inline. This single indirection is the whole of consistency with continuity: the tracer flux is built from the ratio to a mass the model actually carries. Aggregate indices `iq,jq,kq`, distinct from the operator's `i,j,k`.",
-          "expression": {
-            "op": "aggregate",
-            "args": [
-              "mq",
-              "m"
-            ],
-            "output_idx": [
-              "iq",
-              "jq",
-              "kq"
-            ],
-            "ranges": {
-              "iq": {
-                "from": "lon"
-              },
-              "jq": {
-                "from": "lat"
-              },
-              "kq": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "mq",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "m",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "The MIXING RATIO q = mq / m: tracer mass divided by air mass, cell by cell, recomputed at every Runge-Kutta stage. It is a BARE declared observed of shape [lon, lat, lev], which is exactly what the advection rule's esm-spec 9.6.1 `where` constraint demands -- a shape constraint is satisfied only by a bare variable reference, never by a compound sub-AST, so the equation MUST be written D(My*q) over a declared q rather than D(My*mq/m) inline. This single indirection is the whole of consistency with continuity: the tracer flux is built from the ratio to a mass the model actually carries. Aggregate indices `iq,jq,kq`, distinct from the operator's `i,j,k`."
         }
       },
       "equations": [
@@ -775,6 +511,288 @@
                 "wrt": "lat"
               }
             ]
+          }
+        },
+        {
+          "lhs": "dlat_deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              180,
+              {
+                "op": "-",
+                "args": [
+                  "NLAT",
+                  1
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "phie",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "coslat_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "coslat_edge",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        {
+          "lhs": "dS_lat",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        {
+          "lhs": "My",
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "phie"
+            ],
+            "output_idx": [
+              "im",
+              "jm",
+              "km"
+            ],
+            "ranges": {
+              "im": {
+                "from": "lon"
+              },
+              "jm": {
+                "from": "lat_nodes"
+              },
+              "km": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                5.0,
+                {
+                  "op": "-",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "phie",
+                                    "jm"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "phie",
+                                    "jm"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "phie",
+                            "jm"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.25,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "im",
+                                        0.5
+                                      ]
+                                    },
+                                    8
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.2,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "km",
+                                        1
+                                      ]
+                                    },
+                                    3
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "q",
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "mq",
+              "m"
+            ],
+            "output_idx": [
+              "iq",
+              "jq",
+              "kq"
+            ],
+            "ranges": {
+              "iq": {
+                "from": "lon"
+              },
+              "jq": {
+                "from": "lat"
+              },
+              "kq": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mq",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "m",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_ppm_flux_D_lev_mono_hybrid_noflux_bc",
     "description": "AST fixture for the terrain-following (hybrid, mass-form + 3-D dp reconstruction) upwind-biased monotone PPM flux-form vertical advection rule. Supplies a genuinely 3-D pressure-at-edges pe[i,j,kn] and derives the rank-3 thickness dp via lev_thickness_3d; the wind W is a matched operand.",
@@ -19,7 +19,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -29,15 +29,96 @@
           "description": "Advected tracer (cell means)."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat",
             "lev_nodes"
           ],
-          "description": "Three-dimensional pressure-at-edges: a stretched vertical profile modulated in lon and lat so the derived thickness dp is genuinely rank-3 (terrain-following).",
-          "expression": {
+          "description": "Three-dimensional pressure-at-edges: a stretched vertical profile modulated in lon and lat so the derived thickness dp is genuinely rank-3 (terrain-following)."
+        },
+        "dp": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Rank-3 physical layer thicknesses from the grid's lev_thickness_3d template."
+        },
+        "W": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev_nodes"
+          ],
+          "description": "Three-dimensional face-staggered vertical air-mass flux; sign-reversing, vanishing at both walls."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "W",
+                      "u"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iw",
@@ -163,16 +244,9 @@
             }
           }
         },
-        "dp": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Rank-3 physical layer thicknesses from the grid's lev_thickness_3d template.",
-          "expression": {
+        {
+          "lhs": "dp",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_thickness_3d",
@@ -181,16 +255,9 @@
             }
           }
         },
-        "W": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev_nodes"
-          ],
-          "description": "Three-dimensional face-staggered vertical air-mass flux; sign-reversing, vanishing at both walls.",
-          "expression": {
+        {
+          "lhs": "W",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iw",
@@ -231,64 +298,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": 1.0
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "D",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      "W",
-                      "u"
-                    ]
-                  }
-                ],
-                "wrt": "lev"
-              }
-            ]
           }
         }
       ]

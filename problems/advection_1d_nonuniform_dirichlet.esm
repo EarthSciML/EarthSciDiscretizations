@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_nonuniform_dirichlet",
     "description": "MMS driver: 1-D linear advection-diffusion u_t = -c D(u,x) + nu D(D(u,x),x) on the unit interval [0, 1] with fixed-value (DIRICHLET) walls, on a SMOOTHLY STRETCHED non-uniform mesh. The advective gradient term D(u,x) is discretized by grids/cartesian_nonuniform_1d/rules/central_D1_nonuniform_dirichlet_bc (2nd-order centered nonuniform interior, second-order fixed-value wall closures) -- the RULE UNDER TEST -- and the diffusive term D(D(u,x),x) by grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_dirichlet_bc (conservative finite-volume Dirichlet Laplacian); both closures share the same wall values gL, gR. WHY ADVECTION-DIFFUSION, NOT PURE ADVECTION: a fixed-value wall closure PINS the field at a wall, which is well posed and dissipative only where a genuine second-derivative (diffusion) operator makes Dirichlet its natural condition. A pure first-order advection with fixed values at BOTH walls is ill posed -- at an outflow wall the pinned value reflects (a Kreiss/GKS-unstable mode whose L2 error GROWS as the grid refines), so no pure-advection driver converges (unlike the zero-gradient sibling advection_1d_nonuniform_zero_grad, whose extrapolation-like one-sided faces are non-reflecting). Adding a physical diffusion nu D(D(u,x),x) supplies the dissipation that renders the two-sided fixed-value problem well posed and the semi-discrete operator stable, while the advective gradient term is still genuinely exercised: a broken/first-order central_D1_nonuniform_dirichlet_bc would degrade the observed order below 2, so the sweep is a real order test of the rule. EXACT UNFORCED SOLUTION (no manufactured forcing; mirrors the parabolic-decay structure of problems/advection_1d_dirichlet_central on the uniform grid): u*(x,t) = e^{2x} + e^{-lambda t} e^{x} sin(pi x) with c = 1, nu = 1/2 and lambda = nu pi^2 + c^2/(4 nu) = 5.434802200544679. Both parts solve u_t = -c u_x + nu u_xx exactly: (i) the steady mode u_s(x) = e^{2x} = e^{(c/nu) x} satisfies -c u_s' + nu u_s'' = e^{2x}(-2 + 2) = 0 and carries the NONZERO wall values gL = u_s(0) = 1 and gR = u_s(1) = e^2 = 7.38905609893065, exercising the inhomogeneous wall term at BOTH walls; (ii) the decay part e^{-lambda t} e^{x} sin(pi x) is the first Dirichlet eigenfunction of the advection-diffusion operator (it vanishes at x=0 and x=1, leaving the wall values unchanged), driving the time evolution through which the operators are exercised. The discrete field differs from u* only by the spatial truncation of the two operators, dominated by the advective central_D1_nonuniform_dirichlet_bc term, and falls at the supraconvergent order 2 in L2. OBSERVATION WINDOW t=0.05: the diffusion is dissipative so no short-window trick is needed; t is kept modest so the decay part (e^{-lambda t} = 0.76 at t=0.05) is still O(1), keeping the dynamics active. The mesh follows the grid's EDGE-ARRAY contract (grids/cartesian_nonuniform_1d/grid.esm): the consumer supplies ONE node array xe (shape [x_nodes], N+1 values) for the quadratic stretch x(xi) = 0.6 xi + 0.4 xi^2 on uniform computational nodes xi_k = (k-1)/N, i.e. xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 (xe[1]=0, xe[N+1]=1), and the GRID derives the cell centers xc via nonuniform_cell_center and the control widths dxw via nonuniform_cell_width (both rules read xc for the centered spacings and dxw for the control widths / center-to-wall half-widths). A loader-API rebinding of N re-sizes x_nodes and re-derives the whole mesh consistently. The initial condition and test references spell the stretched cell center xc[i] = (xe(i-1)+xe(i))/2 inline from literals and the metaparameter name N alone (the build-time 6.6.5/ic cellwise evaluation is scope-free; AGENTS.md build-time scope caveat; gL/gR survive only in the runtime rule bodies), algebraically identical to the grid-derived xc, so the t=0 assertion is exact.",
@@ -36,7 +36,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "kg/m^3",
           "shape": [
             "x"
@@ -68,13 +68,481 @@
           "description": "Prescribed field value at the right wall x=xe[N+1], shared by both Dirichlet closures. Set to e^2 = 7.38905609893065 = u_s(1) (the rules' own free-name default is 0; this problem overrides it nonzero so the inhomogeneous wall term appears at runtime)."
         },
         "xe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "x_nodes"
           ],
-          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` over x_nodes.",
-          "expression": {
+          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` over x_nodes."
+        },
+        "xc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by both rule bodies for the center-to-center stencil spacings."
+        },
+        "dxw": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "x"
+          ],
+          "description": "Finite-volume control widths, GRID-DERIVED from xe by applying nonuniform_cell_width (dxw[i] = xe[i+1]-xe[i]). Read by the diffusive Laplacian as the control-cell divisor and by both Dirichlet closures, halved, as the center-to-wall distance dxw[1]/2, dxw[N]/2. Because both xc and dxw descend from the same xe they are automatically consistent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "exp",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      2,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "exp",
+                    "args": [
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "N"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sin",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "nu",
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      }
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "xe",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "k"
@@ -143,14 +611,9 @@
             }
           }
         },
-        "xc": {
-          "type": "observed",
-          "units": "m",
-          "shape": [
-            "x"
-          ],
-          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by both rule bodies for the center-to-center stencil spacings.",
-          "expression": {
+        {
+          "lhs": "xc",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "nonuniform_cell_center",
@@ -159,211 +622,15 @@
             }
           }
         },
-        "dxw": {
-          "type": "observed",
-          "units": "m",
-          "shape": [
-            "x"
-          ],
-          "description": "Finite-volume control widths, GRID-DERIVED from xe by applying nonuniform_cell_width (dxw[i] = xe[i+1]-xe[i]). Read by the diffusive Laplacian as the control-cell divisor and by both Dirichlet closures, halved, as the center-to-wall distance dxw[1]/2, dxw[N]/2. Because both xc and dxw descend from the same xe they are automatically consistent.",
-          "expression": {
+        {
+          "lhs": "dxw",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "nonuniform_cell_width",
             "bindings": {
               "xe": "xe"
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "exp",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      2,
-                      {
-                        "op": "aggregate",
-                        "output_idx": [ "i" ],
-                        "args": [],
-                        "ranges": { "i": { "from": "x" } },
-                        "expr": {
-                          "op": "*",
-                          "args": [
-                            0.5,
-                            {
-                              "op": "+",
-                              "args": [
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
-                                  ]
-                                },
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "exp",
-                    "args": [
-                      {
-                        "op": "aggregate",
-                        "output_idx": [ "i" ],
-                        "args": [],
-                        "ranges": { "i": { "from": "x" } },
-                        "expr": {
-                          "op": "*",
-                          "args": [
-                            0.5,
-                            {
-                              "op": "+",
-                              "args": [
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
-                                  ]
-                                },
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                    { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "op": "sin",
-                    "args": [
-                      {
-                        "op": "*",
-                        "args": [
-                          3.141592653589793,
-                          {
-                            "op": "aggregate",
-                            "output_idx": [ "i" ],
-                            "args": [],
-                            "ranges": { "i": { "from": "x" } },
-                            "expr": {
-                              "op": "*",
-                              "args": [
-                                0.5,
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
-                                      ]
-                                    },
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "c"
-                    ]
-                  },
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "x"
-                  }
-                ]
-              },
-              {
-                "op": "*",
-                "args": [
-                  "nu",
-                  {
-                    "op": "D",
-                    "args": [
-                      {
-                        "op": "D",
-                        "args": [
-                          "u"
-                        ],
-                        "wrt": "x"
-                      }
-                    ],
-                    "wrt": "x"
-                  }
-                ]
-              }
-            ]
           }
         }
       ],
@@ -396,9 +663,15 @@
                           2,
                           {
                             "op": "aggregate",
-                            "output_idx": [ "i" ],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "*",
                               "args": [
@@ -409,15 +682,95 @@
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     },
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -437,9 +790,15 @@
                         "args": [
                           {
                             "op": "aggregate",
-                            "output_idx": [ "i" ],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "*",
                               "args": [
@@ -450,15 +809,95 @@
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     },
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -477,9 +916,15 @@
                               3.141592653589793,
                               {
                                 "op": "aggregate",
-                                "output_idx": [ "i" ],
+                                "output_idx": [
+                                  "i"
+                                ],
                                 "args": [],
-                                "ranges": { "i": { "from": "x" } },
+                                "ranges": {
+                                  "i": {
+                                    "from": "x"
+                                  }
+                                },
                                 "expr": {
                                   "op": "*",
                                   "args": [
@@ -490,15 +935,95 @@
                                         {
                                           "op": "+",
                                           "args": [
-                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            }
                                           ]
                                         },
                                         {
                                           "op": "+",
                                           "args": [
-                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            }
                                           ]
                                         }
                                       ]
@@ -535,9 +1060,15 @@
                           2,
                           {
                             "op": "aggregate",
-                            "output_idx": [ "i" ],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "*",
                               "args": [
@@ -548,15 +1079,95 @@
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     },
                                     {
                                       "op": "+",
                                       "args": [
-                                        { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                        { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "N"
+                                              ]
+                                            }
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]
@@ -591,9 +1202,15 @@
                             "args": [
                               {
                                 "op": "aggregate",
-                                "output_idx": [ "i" ],
+                                "output_idx": [
+                                  "i"
+                                ],
                                 "args": [],
-                                "ranges": { "i": { "from": "x" } },
+                                "ranges": {
+                                  "i": {
+                                    "from": "x"
+                                  }
+                                },
                                 "expr": {
                                   "op": "*",
                                   "args": [
@@ -604,15 +1221,95 @@
                                         {
                                           "op": "+",
                                           "args": [
-                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            }
                                           ]
                                         },
                                         {
                                           "op": "+",
                                           "args": [
-                                            { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                            { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "N"
+                                                  ]
+                                                }
+                                              ]
+                                            }
                                           ]
                                         }
                                       ]
@@ -631,9 +1328,15 @@
                                   3.141592653589793,
                                   {
                                     "op": "aggregate",
-                                    "output_idx": [ "i" ],
+                                    "output_idx": [
+                                      "i"
+                                    ],
                                     "args": [],
-                                    "ranges": { "i": { "from": "x" } },
+                                    "ranges": {
+                                      "i": {
+                                        "from": "x"
+                                      }
+                                    },
                                     "expr": {
                                       "op": "*",
                                       "args": [
@@ -644,15 +1347,95 @@
                                             {
                                               "op": "+",
                                               "args": [
-                                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] },
-                                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] }, { "op": "/", "args": [ { "op": "-", "args": [ "i", 1 ] }, "N" ] } ] }
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "N"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "N"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        {
+                                                          "op": "-",
+                                                          "args": [
+                                                            "i",
+                                                            1
+                                                          ]
+                                                        },
+                                                        "N"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
                                               ]
                                             },
                                             {
                                               "op": "+",
                                               "args": [
-                                                { "op": "*", "args": [ 0.6, { "op": "/", "args": [ "i", "N" ] } ] },
-                                                { "op": "*", "args": [ 0.4, { "op": "/", "args": [ "i", "N" ] }, { "op": "/", "args": [ "i", "N" ] } ] }
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.6,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        "i",
+                                                        "N"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    0.4,
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        "i",
+                                                        "N"
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "/",
+                                                      "args": [
+                                                        "i",
+                                                        "N"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
                                               ]
                                             }
                                           ]

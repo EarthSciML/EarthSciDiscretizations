@@ -94,9 +94,21 @@ the consuming model must define as ordinary variables. On
 `cartesian_uniform_1d`, for a domain `[a, b]`:
 
 ```json
-"x0": { "type": "parameter",  "default": -1.5 },
-"dx": { "type": "observed",   "expression": { "op": "/", "args": [4, "N"] } }
+"variables": {
+  "x0": { "type": "parameter", "units": "m", "default": -1.5 },
+  "dx": { "type": "unknown",   "units": "m" }
+},
+"equations": [
+  { "lhs": "dx", "rhs": { "op": "/", "args": [4, "N"] } }
+]
 ```
+
+esm 1.0.0 declares exactly two variable types, `unknown` and `parameter`
+(esm-spec §6.3.1). `dx` is an *observed* — but that is a **derived** class now,
+not a declaration: a variable has no `expression` field, and what makes `dx`
+observed is the bare-variable-LHS equation defining it. Ask the binding's
+classification API (`observed_definitions`, `observed_unknowns`) when you need
+to know; never read a declared type to answer it.
 
 `dx = (b − a)/N` is written **dividing by the metaparameter name `N`**, which
 §9.7.6 substitutes as an integer literal at load — so a convergence sweep that

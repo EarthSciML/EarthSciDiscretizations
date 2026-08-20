@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "godunov_norm_2d_eikonal_dirichlet_mms",
     "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_2d/rules/godunov_norm_D2_dirichlet_bc on the unit box [0,1]x[0,1] with inhomogeneous DIRICHLET (state-constraint) boundaries on all four walls, the Dirichlet companion of problems/godunov_norm_2d_eikonal_mms.esm (doubly-periodic) and the 2-D companion of godunov_norm_1d_eikonal_dirichlet_mms. Forced-steady eikonal u_t = -S|grad u| + S|grad g| with the manufactured solution g(x,y) = 0.5 + sin(pi x) sin(pi y): because u_t = -S|grad g| + S|grad g| = 0, g is the EXACT solution of the continuous forced PDE for all t, so the analytic reference at every time is g. The forcing S|grad g| = S pi sqrt(cos^2(pi x) sin^2(pi y) + sin^2(pi x) cos^2(pi y)) balances the operator. Discretely u_t = S*(|grad g| - godunov(u)); the imbalance is the first-order Godunov truncation S*(|grad g| - godunov(g)) = O(dx + dy), so ||u(T) - g|| = O(h) -- expected order 1. The chosen g is CONSTANT (= 0.5) on all four walls (sin(pi x) = 0 at x = 0, 1 and sin(pi y) = 0 at y = 0, 1), so the prescribed constant-along-wall Dirichlet free names are gL = gR = gB = gT = 0.5 (nonzero, matched; homogeneous case is 0). g is antisymmetric about each wall (sin(pi x) is odd about x = 0 and about x = 1), so the antisymmetric mirror ghost 2*g_wall - u reproduces g's true smooth extension across every wall and the edge/corner faces converge at the same order-1 rate as the interior -- a clean order-1 gate with nothing to exempt (unlike a doubly-periodic ramp, which is a contradiction). THE KINKS ARE NOT A PROBLEM: |grad g| has slope-sign kinks where each gradient component changes sign and a norm cusp at the interior extremum (1/2,1/2) where grad g vanishes, yet the per-axis Rouy-Tourin/Osher-Sethian entropy fix selects the correct one-sided branch, so the scheme stays first order in L2 AND Linf. EXACTNESS: the operator annihilates a constant field exactly (null-space |grad const| = 0) and, because every wall trace of g is the constant 0.5, the mirror-ghost closure is compatible with the scalar wall values (a general non-constant affine field would have wall traces varying along each wall, out of scope for scalar Dirichlet data). Geometry contract fulfilled for the unit box: x0 = y0 = 0, dx = 1/NX, dy = 1/NY. The ic, forcing, and test references spell x_i = (i - 1/2)/NX, y_j = (j - 1/2)/NY inline from literals and NX, NY (build-time scope-free). Per-resolution error norms pinned in tests/conformance/convergence/godunov_norm_2d_eikonal_dirichlet_mms/golden/errors.json.",
@@ -37,7 +37,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x",
@@ -88,38 +88,201 @@
           "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "NX"
-            ]
-          },
           "description": "x-spacing 1/NX: the grid's dx free name. NX substituted as an integer literal at load (esm-spec 9.7.6)."
         },
         "dy": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "NY"
-            ]
-          },
           "description": "y-spacing 1/NY: the grid's dy free name. NY substituted at load."
         },
         "forcing": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "x",
             "y"
           ],
-          "description": "The manufactured source |grad g| = pi sqrt(cos^2(pi x_i) sin^2(pi y_j) + sin^2(pi x_i) cos^2(pi y_j)) (S folded via the du/dt scaling; x_i,y_j spelled inline). It balances the continuous operator so g is the steady exact solution; the residual is the O(h) truncation error.",
-          "expression": {
+          "description": "The manufactured source |grad g| = pi sqrt(cos^2(pi x_i) sin^2(pi y_j) + sin^2(pi x_i) cos^2(pi y_j)) (S folded via the du/dt scaling; x_i,y_j spelled inline). It balances the continuous operator so g is the steady exact solution; the residual is the O(h) truncation error."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                0.5,
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "S",
+              {
+                "op": "-",
+                "args": [
+                  "forcing",
+                  {
+                    "op": "sqrt",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "x"
+                              },
+                              2
+                            ]
+                          },
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "y"
+                              },
+                              2
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          }
+        },
+        {
+          "lhs": "forcing",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "i",
@@ -304,160 +467,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "x"
-              },
-              "j": {
-                "from": "y"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                0.5,
-                {
-                  "op": "*",
-                  "args": [
-                    {
-                      "op": "sin",
-                      "args": [
-                        {
-                          "op": "*",
-                          "args": [
-                            3.141592653589793,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "i",
-                                    0.5
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    1,
-                                    "NX"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "sin",
-                      "args": [
-                        {
-                          "op": "*",
-                          "args": [
-                            3.141592653589793,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    0.5
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    1,
-                                    "NY"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "*",
-            "args": [
-              "S",
-              {
-                "op": "-",
-                "args": [
-                  "forcing",
-                  {
-                    "op": "sqrt",
-                    "args": [
-                      {
-                        "op": "+",
-                        "args": [
-                          {
-                            "op": "^",
-                            "args": [
-                              {
-                                "op": "D",
-                                "args": [
-                                  "u"
-                                ],
-                                "wrt": "x"
-                              },
-                              2
-                            ]
-                          },
-                          {
-                            "op": "^",
-                            "args": [
-                              {
-                                "op": "D",
-                                "args": [
-                                  "u"
-                                ],
-                                "wrt": "y"
-                              },
-                              2
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
           }
         }
       ],

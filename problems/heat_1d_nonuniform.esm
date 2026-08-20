@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "heat_1d_nonuniform",
     "description": "MMS driver: 1-D heat equation u_t = alpha u_xx on the unit interval [0, 1] discretized on a SMOOTHLY STRETCHED non-uniform mesh by grids/cartesian_nonuniform_1d/rules/central_D2_nonuniform_zero_flux_bc (conservative finite-volume, zero-flux walls). Manufactured solution u(x,t) = exp(-alpha pi^2 t) cos(pi x): cos(pi x) has zero gradient at x=0 and x=1, matching the zero-flux closure, and u_xx = -pi^2 u with u_t = -alpha pi^2 u, so u_t = alpha u_xx exactly with no forcing term. The mesh follows the grid's EDGE-ARRAY contract (grids/cartesian_nonuniform_1d/grid.esm): the consumer supplies ONE node array xe (shape [x_nodes], N+1 values) for the quadratic stretch x(xi) = 0.6 xi + 0.4 xi^2 on uniform computational nodes xi_k = (k-1)/N, i.e. xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 (xe[1]=0, xe[N+1]=1), and the GRID derives the cell centers xc and control widths dxw from it via the nonuniform_cell_center / nonuniform_cell_width templates -- so xc and dxw cannot disagree, and a loader-API rebinding of N re-sizes x_nodes and re-derives the whole mesh consistently. The conservative FV Laplacian is second-order in the L2 norm on this smooth mesh (supraconvergence; verified L2 orders ~1.8-2.0), while the Linf order lags (~1.4 rising toward 2) because the wall face-gradient is assigned to the cell face rather than the midpoint -- the classic cell-centered zero-flux boundary signature, so the convergence gate checks L2 only. Initial condition and test references spell xc[i] = (xe(i-1)+xe(i))/2 inline from literals and N alone (the build-time 6.6.5/ic cellwise evaluation is scope-free; AGENTS.md build-time scope caveat), algebraically identical to the grid-derived xc observed used at runtime by the rule, so the t=0 assertion is exact.",
@@ -29,7 +29,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
           "shape": [
             "x"
@@ -43,112 +43,28 @@
           "description": "Thermal diffusivity."
         },
         "xe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "x_nodes"
           ],
-          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input, over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` (over x_nodes), distinct from the cell index.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "k": {
-                "from": "x_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "k",
-                            1
-                          ]
-                        },
-                        "N"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "k",
-                            1
-                          ]
-                        },
-                        "N"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "k",
-                            1
-                          ]
-                        },
-                        "N"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Node (edge) coordinates of the quadratic-stretch mesh, xe[k] = 0.6 ((k-1)/N) + 0.4 ((k-1)/N)^2 for node k = 1..N+1 (xe[1]=0, xe[N+1]=1): the grid's single geometry input, over the N+1-member node axis x_nodes. N is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so a convergence-sweep rebinding of N re-derives the nodes. Aggregation index `k` (over x_nodes), distinct from the cell index."
         },
         "xc": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "x"
           ],
-          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by the rule body for the center-to-center face-gradient denominators.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "nonuniform_cell_center",
-            "bindings": {
-              "xe": "xe"
-            }
-          }
+          "description": "Cell centers, GRID-DERIVED from xe by applying grids/cartesian_nonuniform_1d nonuniform_cell_center (xc[i] = (xe[i]+xe[i+1])/2). Read by the rule body for the center-to-center face-gradient denominators."
         },
         "dxw": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "x"
           ],
-          "description": "Finite-volume control widths, GRID-DERIVED from xe by applying nonuniform_cell_width (dxw[i] = xe[i+1]-xe[i]). Read by the rule body as the outer control-cell divisor. Because both xc and dxw descend from the same xe they are automatically consistent.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "nonuniform_cell_width",
-            "bindings": {
-              "xe": "xe"
-            }
-          }
+          "description": "Finite-volume control widths, GRID-DERIVED from xe by applying nonuniform_cell_width (dxw[i] = xe[i+1]-xe[i]). Read by the rule body as the outer control-cell divisor. Because both xc and dxw descend from the same xe they are automatically consistent."
         }
       },
       "equations": [
@@ -314,6 +230,99 @@
                 "wrt": "x"
               }
             ]
+          }
+        },
+        {
+          "lhs": "xe",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "k": {
+                "from": "x_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        },
+                        "N"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "xc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_center",
+            "bindings": {
+              "xe": "xe"
+            }
+          }
+        },
+        {
+          "lhs": "dxw",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "nonuniform_cell_width",
+            "bindings": {
+              "xe": "xe"
+            }
           }
         }
       ],

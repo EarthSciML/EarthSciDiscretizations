@@ -1,10 +1,16 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "laplacian_mpas",
     "description": "Exactness driver for grids/mpas/rules/fv_laplacian_cell on the icosahedral level-0 mesh (12 cells, 30 edges, 20 vertices; grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem). The TRiSK discrete Laplacian lap = div(grad) is gated by TWO exact mimetic properties, mirroring how divergence_mpas (div(curl) = 0) and gradient_mpas (grad(const) = 0) are gated. (1) NULL-SPACE / annihilation of constants: u_t = -laplacian(phi_const) with phi_const(i) = 3 a spatially CONSTANT cell field, so every edge's inlined gradient (phi_const(c2) - phi_const(c1)) / dcEdge(e) = (3 - 3)/dcEdge = 0 to the bit and every summand edgeSignOnCell*dvEdge*0/dcEdge = 0, hence lap_const = 0 at all 12 cells regardless of geometry and u(t) = u(0) to rounding. The constant field is the honest exact property: it needs NO coordinate geometry, so the ic/reference evaluations stay build-time scope-free (cell coordinates never enter; a floating-point 3.0 - 3.0 is exactly 0.0). (2) CONSERVATION / discrete divergence-theorem closure: for the NON-constant cell field phi_lat(i) = latCell(i) the per-cell Laplacian lap_lat is nonzero, but the area-weighted global integral sum_i areaCell(i)*lap_lat(i) = 0 to rounding, because every interior edge appears in its two flanking cells cellsOnEdge(e,1)/cellsOnEdge(e,2) with opposite edgeSignOnCell and identical dvEdge*(edge-normal gradient), so the two cells' contributions cancel edge-by-edge -- the discrete Gauss theorem the Laplacian inherits from fv_divergence_cell. It is asserted as mean over cells of the integrand areaCell*lap_lat (= (1/NCELLS) sum_i areaCell(i)*lap_lat(i)), which vanishes iff the weighted sum does, and genuinely exercises cancellation because lap_lat is not per-cell zero. The problem also demonstrates the MPAS keyed-factor wiring contract: the mesh subsystem's const arrays are re-exposed as bare-name observed aliases (nEdgesOnCell, edgesOnCell, edgeSignOnCell, dvEdge, cellsOnEdge, dcEdge, areaCell, latCell := mesh.*) -- the union of fv_divergence_cell's cell-boundary factors and fv_gradient_edge's flanking-cell gather, since the composed Laplacian stencil needs both -- where the grid's ragged edges_of_cell offsets/values factors and the rule body's free geometry names resolve in the model scope (esm-spec 4.6 dot notation; grids/mpas/grid.esm). Import bindings close the grid metaparameters at the level-0 sizes; rebinding {NCELLS: 42, NEDGES: 120, NVERTICES: 80, MAXEDGES: 6} with mesh/level1.esm is the refinement step of a (deferred, out-of-scope-here) convergence sweep -- a smooth phi with a known analytic Laplacian (e.g. a spherical harmonic, whose Laplace-Beltrami eigenvalue is exact) would drive that order study; the constant-annihilation and conservation gates are the exactness deliverable here.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:mpas", "equation:laplacian", "exactness", "unstructured"],
+    "tags": [
+      "esd:problem",
+      "grid:mpas",
+      "equation:laplacian",
+      "exactness",
+      "unstructured"
+    ],
     "references": [
       {
         "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090. Eqs. (21)-(22): the discrete Laplacian as div-of-grad annihilates constants and is globally conservative by edge-cancellation."
@@ -16,172 +22,325 @@
       "expression_template_imports": [
         {
           "ref": "../grids/mpas/rules/fv_laplacian_cell.esm",
-          "bindings": { "NCELLS": 12, "NEDGES": 30, "NVERTICES": 20, "MAXEDGES": 5 }
+          "bindings": {
+            "NCELLS": 12,
+            "NEDGES": 30,
+            "NVERTICES": 20,
+            "MAXEDGES": 5
+          }
         }
       ],
       "subsystems": {
-        "mesh": { "ref": "../grids/mpas/mesh/level0.esm" }
+        "mesh": {
+          "ref": "../grids/mpas/mesh/level0.esm"
+        }
       },
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
+          "shape": [
+            "cells"
+          ],
           "description": "Cell field integrated under u_t = -laplacian(phi_const); since laplacian(phi_const) = 0 exactly it holds its initial field u0(i) = i for all time."
         },
         "nEdgesOnCell": {
-          "type": "observed",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.nEdgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set."
         },
         "edgesOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.edgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set."
         },
         "edgeSignOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the Laplacian's divergence part.",
-          "expression": "mesh.edgeSignOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the Laplacian's divergence part."
         },
         "dvEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere.",
-          "expression": "mesh.dvEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere."
         },
         "cellsOnEdge": {
-          "type": "observed",
-          "shape": ["edges", "edge_ends"],
-          "description": "Bare-name alias of mesh.cellsOnEdge: the two cells flanking each edge (positive normal cellsOnEdge[e][1] -> cellsOnEdge[e][2]); the inlined gradient's flanking-cell gather.",
-          "expression": "mesh.cellsOnEdge"
+          "type": "unknown",
+          "shape": [
+            "edges",
+            "edge_ends"
+          ],
+          "description": "Bare-name alias of mesh.cellsOnEdge: the two cells flanking each edge (positive normal cellsOnEdge[e][1] -> cellsOnEdge[e][2]); the inlined gradient's flanking-cell gather."
         },
         "dcEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dcEdge: cell-center-to-center great-circle arc across each edge, the inlined gradient denominator.",
-          "expression": "mesh.dcEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dcEdge: cell-center-to-center great-circle arc across each edge, the inlined gradient denominator."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas (the (1/A_i) factor of the rule, and the weight of the conservation integral).",
-          "expression": "mesh.areaCell"
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas (the (1/A_i) factor of the rule, and the weight of the conservation integral)."
         },
         "latCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.latCell: cell-center latitudes, used as the non-constant test field phi_lat = latCell for the conservation gate.",
-          "expression": "mesh.latCell"
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.latCell: cell-center latitudes, used as the non-constant test field phi_lat = latCell for the conservation gate."
         },
         "phi_const": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
-          "description": "Spatially constant cell scalar phi_const(i) = 3: every inlined edge gradient phi(c2) - phi(c1) = 0 to the bit, so its discrete Laplacian is exactly zero at every cell.",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": ["i"],
-            "ranges": { "i": { "from": "cells" } },
-            "expr": 3.0
-          }
+          "shape": [
+            "cells"
+          ],
+          "description": "Spatially constant cell scalar phi_const(i) = 3: every inlined edge gradient phi(c2) - phi(c1) = 0 to the bit, so its discrete Laplacian is exactly zero at every cell."
         },
         "lap_const": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/sr",
-          "shape": ["cells"],
-          "description": "The rule output on the constant field, observed for direct assertion: laplacian(phi_const) lowered by fv_laplacian_cell to the ragged div-of-grad aggregate. Exactly zero at every cell because phi_const is constant.",
-          "expression": { "op": "laplacian", "args": ["phi_const"] }
+          "shape": [
+            "cells"
+          ],
+          "description": "The rule output on the constant field, observed for direct assertion: laplacian(phi_const) lowered by fv_laplacian_cell to the ragged div-of-grad aggregate. Exactly zero at every cell because phi_const is constant."
         },
         "lap_lat": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/sr",
-          "shape": ["cells"],
-          "description": "The rule output on the non-constant field latCell (phi_lat = latCell): laplacian(latCell) lowered by fv_laplacian_cell. Nonzero per cell; its area-weighted sum vanishes by edge cancellation.",
-          "expression": { "op": "laplacian", "args": ["latCell"] }
+          "shape": [
+            "cells"
+          ],
+          "description": "The rule output on the non-constant field latCell (phi_lat = latCell): laplacian(latCell) lowered by fv_laplacian_cell. Nonzero per cell; its area-weighted sum vanishes by edge cancellation."
         },
         "conservation_integrand": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
-          "description": "areaCell(i) * lap_lat(i): the per-cell contribution to the discrete integral of the Laplacian, as an explicit elementwise aggregate over cells (the array-observed form the runners require, mirroring divergence_mpas's flux aggregate). Its mean over cells is (1/NCELLS) sum_i areaCell(i)*lap_lat(i), which is zero to rounding by the discrete divergence-theorem closure (every edge cancels between its two cells).",
-          "expression": {
-            "op": "aggregate",
-            "args": ["areaCell", "lap_lat"],
-            "output_idx": ["i"],
-            "ranges": { "i": { "from": "cells" } },
-            "expr": {
-              "op": "*",
-              "args": [
-                { "op": "index", "args": ["areaCell", "i"] },
-                { "op": "index", "args": ["lap_lat", "i"] }
-              ]
-            }
-          }
+          "shape": [
+            "cells"
+          ],
+          "description": "areaCell(i) * lap_lat(i): the per-cell contribution to the discrete integral of the Laplacian, as an explicit elementwise aggregate over cells (the array-observed form the runners require, mirroring divergence_mpas's flux aggregate). Its mean over cells is (1/NCELLS) sum_i areaCell(i)*lap_lat(i), which is zero to rounding by the discrete divergence-theorem closure (every edge cancels between its two cells)."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "aggregate",
             "args": [],
-            "output_idx": ["i"],
-            "ranges": { "i": { "from": "cells" } },
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
             "expr": "i"
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": { "op": "-", "args": [{ "op": "laplacian", "args": ["phi_const"] }] }
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "laplacian",
+                "args": [
+                  "phi_const"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "edgeSignOnCell",
+          "rhs": "mesh.edgeSignOnCell"
+        },
+        {
+          "lhs": "dvEdge",
+          "rhs": "mesh.dvEdge"
+        },
+        {
+          "lhs": "cellsOnEdge",
+          "rhs": "mesh.cellsOnEdge"
+        },
+        {
+          "lhs": "dcEdge",
+          "rhs": "mesh.dcEdge"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "latCell",
+          "rhs": "mesh.latCell"
+        },
+        {
+          "lhs": "phi_const",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "expr": 3.0
+          }
+        },
+        {
+          "lhs": "lap_const",
+          "rhs": {
+            "op": "laplacian",
+            "args": [
+              "phi_const"
+            ]
+          }
+        },
+        {
+          "lhs": "lap_lat",
+          "rhs": {
+            "op": "laplacian",
+            "args": [
+              "latCell"
+            ]
+          }
+        },
+        {
+          "lhs": "conservation_integrand",
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "areaCell",
+              "lap_lat"
+            ],
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "areaCell",
+                    "i"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "lap_lat",
+                    "i"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ],
       "tests": [
         {
           "id": "laplacian_of_const_is_zero_and_conservative",
           "description": "The Laplacian's two exact mimetic properties on the discrete level. (1) NULL-SPACE: lap_const_i = (1/A_i) sum_k edgeSignOnCell(i,k) * dvEdge(e) * (phi_const(cellsOnEdge(e,2)) - phi_const(cellsOnEdge(e,1))) / dcEdge(e), and with phi_const(i) = 3 for every cell each numerator phi(c2) - phi(c1) = 3 - 3 = 0 identically -- no geometry, no orientation, no dvEdge/dcEdge/areaCell value enters the result (a floating-point 3.0 - 3.0 is exactly 0.0) -- so lap_const = 0 to the bit at all 12 cells. The max/min assertions pin the rule output to zero at 1e-13 (as tight as gradient_mpas because, as there, the operative quantity is an exact subtraction of equal floats and no round-tripping through dvEdge/dcEdge can lift a zero off zero), and u (integrated from ic u0(i) = i under du/dt = -laplacian(phi_const) = 0) must return its initial field at t = 1 to 1e-9 in relative L2; the mean assertion checks preservation independently: mean(u0) = (1+2+...+12)/12 = 6.5. (2) CONSERVATION: for the NON-constant field phi_lat = latCell the per-cell lap_lat is nonzero, but sum_i areaCell(i)*lap_lat(i) = 0 to rounding because every interior edge e contributes edgeSign(c1,e)*dvEdge(e)*grad_e to cell c1 = cellsOnEdge(e,1) and edgeSign(c2,e)*dvEdge(e)*grad_e to cell c2 = cellsOnEdge(e,2) with edgeSign(c1,e) = -edgeSign(c2,e) and identical dvEdge(e)*grad_e (the areaCell divisor is undone by the areaCell weight), so the two contributions cancel exactly and the whole telescopes to 0 for ANY cell field -- the discrete Gauss theorem inherited from fv_divergence_cell (verified in double precision at ~3e-16 for latCell at authoring time). It is asserted as mean(conservation_integrand) with conservation_integrand = areaCell*lap_lat, so mean = (1/12) sum_i areaCell(i)*lap_lat(i) = 0 within 1e-12; this genuinely exercises cancellation because lap_lat is not per-cell zero (an orientation, sign, ragged-bound, gather, or flanking-cell error would break the edge-pair cancellation by an O(1) amount and lift the mean far above 1e-12, while the null-space assertions would independently catch any error that leaves a constant field's Laplacian nonzero or leaves laplacian unlowered).",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
             {
               "variable": "lap_const",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-13 },
+              "tolerance": {
+                "abs": 1e-13
+              },
               "reduce": "max"
             },
             {
               "variable": "lap_const",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-13 },
+              "tolerance": {
+                "abs": 1e-13
+              },
               "reduce": "min"
             },
             {
               "variable": "conservation_integrand",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-12 },
+              "tolerance": {
+                "abs": 1e-12
+              },
               "reduce": "mean"
             },
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-12 },
+              "tolerance": {
+                "abs": 1e-12
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
                 "args": [],
-                "output_idx": ["i"],
-                "ranges": { "i": { "from": "cells" } },
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "cells"
+                  }
+                },
                 "expr": "i"
               }
             },
@@ -189,13 +348,21 @@
               "variable": "u",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
                 "args": [],
-                "output_idx": ["i"],
-                "ranges": { "i": { "from": "cells" } },
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "cells"
+                  }
+                },
                 "expr": "i"
               }
             },
@@ -203,7 +370,9 @@
               "variable": "u",
               "time": 1.0,
               "expected": 6.5,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "mean"
             }
           ]

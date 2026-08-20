@@ -77,14 +77,19 @@ target operator and whose body is one `makearray`:
   **Authoring convention:** a `where` shape requires a *bare declared shaped
   field*. Write the constraint over a plain parameter (`f`, `F`), and document
   that a consumer differentiating a compound inline expression (`div(u*h)`,
-  `D(D(u*v,x),x)`) must first bind it to a declared shaped observed — the
-  constraint will not match a compound inline argument.
+  `D(D(u*v,x),x)`) must first bind it to a declared shaped observed — i.e. an
+  `unknown` with a `shape`, defined by a bare-variable-LHS equation (esm 1.0.0
+  declares only `unknown` and `parameter`; "observed" is derived from the
+  equations, esm-spec §6.3.1). The constraint will not match a compound inline
+  argument.
 
 Tags: `esd:rule` + `family:`, `grid:`, `op:`, `order:`, `bc:`, `axes:` (L002);
 `axes:` lists the output dimensions in order, comma-separated. The filename
 stem, `metadata.name`, and the sole `expression_templates` key must agree
 (L003), and the file must live under the grid directory its `grid:` tag names
-(L004/L005). All files declare `esm: 0.8.0` (L008).
+(L004/L005). All files declare the `esm` version the ESS schema's `$id` names —
+currently `1.0.0` (L008); the lint derives it from the schema rather than
+hardcoding it, so an ESS version bump surfaces as a finding on the files.
 
 ## 4. Lint
 

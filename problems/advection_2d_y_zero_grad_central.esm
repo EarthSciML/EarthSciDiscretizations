@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_2d_y_zero_grad_central",
     "description": "MMS driver: forced-steady linear advection along y on the unit box [0,1]x[0,1] with zero-gradient y-walls, discretized by grids/cartesian_uniform_2d/rules/central_D1y_zero_grad_bc (second-order centered interior, 2nd-order one-sided face rows). The y-axis analog of problems/advection_2d_x_zero_grad_central. Manufactured STEADY solution u*(y) = cos(pi y) — constant in x — held steady by the exactly matching forcing c * gy with gy = du*/dy = -pi sin(pi y): the continuous balance is u_t = -c u*_y + c u*_y = 0, so u(t) = u* for all t and the discrete field drifts only by the spatial truncation of the y-operator. BC COMPATIBILITY (why cos(pi y)): u*_y = -pi sin(pi y) vanishes on BOTH walls (sin(0)=sin(pi)=0) — u* is genuinely zero-gradient-compatible — and its third y-derivative also vanishes there, so the rule's 2nd-order one-sided face residual is superconvergent (O(dy^3)) and the global drift is clean interior O(dy^2), mirroring the cos^4 polar-cap trick of problems/latlon_advection_meridional_zero_grad.esm. The one-sided y-operator is weakly non-normal, so the transport time is kept short (t=0.03, so c*t=0.03) to stay in the linear-drift regime where the observed order is a pristine 2 through NY=256. The x axis is PASSIVE: u* is constant in x, no x-operator appears, and NX is closed to 8 at the import edge; NY stays open (grid default 64, rebound by the convergence sweep). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dy=1/NY (observed dividing by the metaparameter name NY per esm-spec 9.7.6), dx=1/NX. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free-name dy survives only in the runtime rule body; the ic, forcing observed, and test references spell y_j = 0 + (j-1/2)(1/NY) inline from literals and NY, never invoking the grid's y_coord free-name template.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:advection", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:advection",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -20,26 +25,196 @@
       "expression_template_imports": [
         {
           "ref": "../grids/cartesian_uniform_2d/rules/central_D1y_zero_grad_bc.esm",
-          "bindings": { "NX": 8 }
+          "bindings": {
+            "NX": 8
+          }
         }
       ],
       "variables": {
-        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected tracer field over the 2-D [x, y] index sets (constant in x in this problem)." },
-        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed along y; multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value." },
-        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge (unit box): the grid's x0 free name (unused here; the solution is constant in x)." },
-        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
-        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name; NX closed to 8 at the import edge." },
-        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name, resolved inside the rewrite rule's expanded body at evaluation. NY is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dy consistent." },
+        "u": {
+          "type": "unknown",
+          "units": "kg/m^3",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Advected tracer field over the 2-D [x, y] index sets (constant in x in this problem)."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed along y; multiplies both the discretized derivative and the manufactured forcing, so the steady MMS balance holds for any value."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge (unit box): the grid's x0 free name (unused here; the solution is constant in x)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX: the grid's dx free name; NX closed to 8 at the import edge."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY: the grid's dy free name, resolved inside the rewrite rule's expanded body at evaluation. NY is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dy consistent."
+        },
         "gy": {
-          "type": "observed",
+          "type": "unknown",
           "units": "kg/m^4",
-          "shape": ["x", "y"],
-          "description": "Analytic y-derivative of the manufactured solution: gy(y) = du*/dy = -pi sin(pi y). Constant in time and x; c * gy is the manufactured forcing that holds u* = cos(pi y) steady. Coordinates spelled inline from literals and NY (build-time scope caveat).",
-          "expression": {
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Analytic y-derivative of the manufactured solution: gy(y) = du*/dy = -pi sin(pi y). Constant in time and x; c * gy is the manufactured forcing that holds u* = cos(pi y) steady. Coordinates spelled inline from literals and NY (build-time scope caveat)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
             "op": "aggregate",
-            "output_idx": ["i", "j"],
+            "output_idx": [
+              "i",
+              "j"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "cos",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    3.141592653589793,
+                    {
+                      "op": "+",
+                      "args": [
+                        0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "NY"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "y"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  "gy"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          }
+        },
+        {
+          "lhs": "gy",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
             "expr": {
               "op": "*",
               "args": [
@@ -47,38 +222,41 @@
                 {
                   "op": "sin",
                   "args": [
-                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": { "op": "ic", "args": ["u"] },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": [],
-            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
-            "expr": {
-              "op": "cos",
-              "args": [
-                { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": {
-            "op": "+",
-            "args": [
-              { "op": "*", "args": [{ "op": "-", "args": ["c"] }, { "op": "D", "args": ["u"], "wrt": "y" }] },
-              { "op": "*", "args": ["c", "gy"] }
-            ]
           }
         }
       ],
@@ -86,23 +264,68 @@
         {
           "id": "mms_steady_y_zero_grad",
           "description": "Manufactured steady solution u*(y) = cos(pi y) with c = 1. Derivation: the continuous balance is u_t = -c u*_y + c u*_y = 0 with u*_y = gy = -pi sin(pi y), which vanishes on both walls, so u* is zero-gradient-compatible and the one-sided face residual is superconvergent (see metadata.description); the discrete drift is pure interior O(dy^2). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.03 assertion bounds the truncation-driven drift against the SAME steady reference (relative L2 far under the bound at the default NY=64; exact per-resolution errors pinned in tests/conformance/convergence/advection_2d_y_zero_grad_central/golden/errors.json). References evaluate at cell centers y_j = 0 + (j - 1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only).",
-          "time_span": { "start": 0.0, "end": 0.03 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.03
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "cos",
                   "args": [
-                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               }
@@ -111,17 +334,59 @@
               "variable": "u",
               "time": 0.03,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-3 },
+              "tolerance": {
+                "abs": 0.001
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "cos",
                   "args": [
-                    { "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               }

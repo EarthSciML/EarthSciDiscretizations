@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_vertical_zero_grad",
     "description": "MMS driver: forced vertical advection on the 3-D latlon3d grid, u_t = -w * D(u, lev) + w g'(z), discretized by grids/latlon3d/rules/central_D_lev_zero_grad_bc (2nd-order centered nonuniform interior, 2nd-order one-sided zero-gradient top/bottom, rank-3) on a SMOOTHLY STRETCHED vertical mesh -- the vertical (lev) analogue of problems/advection_1d_nonuniform_zero_grad with PASSIVE lon (NLON=8) and lat (NLAT=5) axes. Forced-steady manufactured solution u(z) = g(z) = cos(pi z), constant in time: u_t = -w g'(z) + w g'(z) = 0, so the discrete drift is pure operator truncation, second-order in L2 on the stretched mesh (supraconvergence, LeVeque 2007 sec 2.13). cos(pi z) has zero vertical gradient at z=0 and z=1, matching the one-sided zero-gradient top/bottom closures. VERTICAL MESH (grids/latlon3d edge-array contract): the consumer supplies ONE edge array pe (shape [lev_nodes], NLEV+1 values) for the quadratic stretch z(s)=0.6 s+0.4 s^2 on uniform computational nodes s_k=(k-1)/NLEV, i.e. pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 (pe[1]=0, pe[NLEV+1]=1), and the GRID derives the level centers zc via lev_center -- a first derivative needs only centers, not thicknesses. HYGIENE: pe aggregates over the node index kn (not k) so the inlined zc[k] does not capture the operator's k. A loader-API rebinding of NLEV re-sizes lev_nodes and re-derives the mesh. The forcing src=w g'(z) reads zc at runtime; the ic and references spell the stretched center zc[k]=(pe(k-1)+pe(k))/2 inline from literals and the NLEV name (build-time scope caveat), algebraically identical to the grid-derived zc, so the t=0 assertion is exact.",
@@ -33,7 +33,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -49,156 +49,30 @@
           "description": "Constant vertical transport speed in the lev coordinate. Multiplies both the discretized derivative and the forcing so the steady balance holds for any value."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 over node kn=1..NLEV+1 (pe[1]=0, pe[NLEV+1]=1, monotone increasing): the grid's single vertical geometry input over the NLEV+1-member lev_nodes axis. NLEV substituted at load (esm-spec 9.7.6) so a sweep re-derives the mesh. HYGIENE: the aggregation index is `kn` (node index), NOT `k`, so that when the derived zc = lev_center(pe) is inlined by variable index zc[k] into the vertical operator's aggregate over k, this pe body's index does not capture the operator's k (the non-hygienic-observed-inlining footgun propagates through the whole Design-B chain: grid lev_center uses gk, and the consumer's leaf pe must likewise avoid k/i/j).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
-            "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 over node kn=1..NLEV+1 (pe[1]=0, pe[NLEV+1]=1, monotone increasing): the grid's single vertical geometry input over the NLEV+1-member lev_nodes axis. NLEV substituted at load (esm-spec 9.7.6) so a sweep re-derives the mesh. HYGIENE: the aggregation index is `kn` (node index), NOT `k`, so that when the derived zc = lev_center(pe) is inlined by variable index zc[k] into the vertical operator's aggregate over k, this pe body's index does not capture the operator's k (the non-hygienic-observed-inlining footgun propagates through the whole Design-B chain: grid lev_center uses gk, and the consumer's leaf pe must likewise avoid k/i/j)."
         },
         "zc": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev"
           ],
-          "description": "Level centers, GRID-DERIVED from pe by applying grids/latlon3d lev_center (zc[gk]=(pe[gk]+pe[gk+1])/2, hygienic index gk). Read by the vertical rule body for the center-to-center stencil spacings and by the forcing observed src.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lev_center",
-            "bindings": {
-              "pe": "pe"
-            }
-          }
+          "description": "Level centers, GRID-DERIVED from pe by applying grids/latlon3d lev_center (zc[gk]=(pe[gk]+pe[gk+1])/2, hygienic index gk). Read by the vertical rule body for the center-to-center stencil spacings and by the forcing observed src."
         },
         "src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "MMS forcing S = w g'(z) = -w pi sin(pi z) making u=cos(pi z) an exact steady solution of u_t=-w D(u,lev)+S. Runtime observed reading the grid-derived level centers zc[k] (free-name geometry resolves at evaluation); broadcast over lon x lat. Aggregation indices i,j,k.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    "w"
-                  ]
-                },
-                3.141592653589793,
-                {
-                  "op": "sin",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "k"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "MMS forcing S = w g'(z) = -w pi sin(pi z) making u=cos(pi z) an exact steady solution of u_t=-w D(u,lev)+S. Runtime observed reading the grid-derived level centers zc[k] (free-name geometry resolves at evaluation); broadcast over lon x lat. Aggregation indices i,j,k."
         }
       },
       "equations": [
@@ -377,6 +251,141 @@
               },
               "src"
             ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_center",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        {
+          "lhs": "src",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    "w"
+                  ]
+                },
+                3.141592653589793,
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "k"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "conservative_overlap_gated_3x3_to_2x2",
     "description": "Conformance fixture: the CANDIDATE-GATED pathway of regridding/conservative_overlap.esm on EXACTLY the geometry of the dense exemplar conservative_overlap_3x3_to_2x2 (nine 1x1-degree source cells and four 1.5x1.5-degree target cells tiling [0,3]x[0,3], planar manifold), asserting the gated result is VALUE-IDENTICAL to the dense path computed side by side in the same document. The broad phase is now the SPATIAL-OVERLAP join gate (projection-pushdown Phase 2a): the _gated narrow phase and assembly (A_ij/A_j/W_ij through the _gated templates) carry join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]}, so the engine builds the candidate (i,j) set ONCE at build time from the cell-ring ENVELOPES (each ring's axis-aligned bounding box, derived from the SAME polygon stacks the narrow phase clips; no hand-authored binning coordinate, no bin key, no bin-width parameter) and the contraction runs only over candidate pairs. On this compact tiling every source and target cell's bounding box lies in [0,3]x[0,3], so the candidate set is the full 9x4 cross product and the join gate is exercised end-to-end (envelopes computed, STRtree/brute-force candidacy evaluated) while provably admitting every genuine overlap; the sibling case conservative_overlap_gated_clusters_4_to_2 shows automatic pruning on disjoint-cluster geometry where the bounding boxes do not intersect. VALUE-IDENTITY GATE: the dense-path A_ij_dense/A_j_dense/W_ij_dense (the ungated templates on the same rings) are computed alongside, and ident_state integrates the L1 residuals sum|A_ij - A_ij_dense| + sum|A_j - A_j_dense| + sum|W_ij - W_ij_dense|, asserted EXACTLY ZERO (tolerance abs 0.0): the gated and dense contractions visit identical surviving sets and sum identical nonnegative terms, so the values agree bit-for-bit. The two 5.8.3 EXACT invariants (partition-of-unity via the regridded constant-1 field, conservation via the mass residual) gate the gated pipeline itself; the golden per-pair weights (produced by the official Julia runner via scripts/regenerate-goldens.sh) equal the dense exemplar's committed golden numbers, the cross-case face of the same identity. Single-model spelling (no coupling): F_tgt/F_unit_tgt are ordinary observeds through conservative_overlap_apply_gated, keeping every gated template invocable by bare name in one component scope.",
@@ -37,245 +37,117 @@
           "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2), identical to the dense exemplar: shared by the gated and dense assembly templates so the surviving sets coincide by construction."
         },
         "src_poly": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "src_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "Source-cell geometry, byte-identical to the dense exemplar: nine closed CCW lon-lat rings, 1x1-degree cells tiling [0,3]^2, row-major from the southwest.",
-          "expression": {
-            "op": "const",
-            "value": [
-              [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-              [[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0]],
-              [[2.0, 0.0], [3.0, 0.0], [3.0, 1.0], [2.0, 1.0]],
-              [[0.0, 1.0], [1.0, 1.0], [1.0, 2.0], [0.0, 2.0]],
-              [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]],
-              [[2.0, 1.0], [3.0, 1.0], [3.0, 2.0], [2.0, 2.0]],
-              [[0.0, 2.0], [1.0, 2.0], [1.0, 3.0], [0.0, 3.0]],
-              [[1.0, 2.0], [2.0, 2.0], [2.0, 3.0], [1.0, 3.0]],
-              [[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0]]
-            ],
-            "args": []
-          }
+          "description": "Source-cell geometry, byte-identical to the dense exemplar: nine closed CCW lon-lat rings, 1x1-degree cells tiling [0,3]^2, row-major from the southwest."
         },
         "tgt_poly": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "tgt_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "Target-cell geometry, byte-identical to the dense exemplar: four closed CCW rings, 1.5x1.5-degree cells tiling the same [0,3]^2 domain.",
-          "expression": {
-            "op": "const",
-            "value": [
-              [[0.0, 0.0], [1.5, 0.0], [1.5, 1.5], [0.0, 1.5]],
-              [[1.5, 0.0], [3.0, 0.0], [3.0, 1.5], [1.5, 1.5]],
-              [[0.0, 1.5], [1.5, 1.5], [1.5, 3.0], [0.0, 3.0]],
-              [[1.5, 1.5], [3.0, 1.5], [3.0, 3.0], [1.5, 3.0]]
-            ],
-            "args": []
-          }
+          "description": "Target-cell geometry, byte-identical to the dense exemplar: four closed CCW rings, 1.5x1.5-degree cells tiling the same [0,3]^2 domain."
         },
         "src_area": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "True source-cell areas A_i (1 deg^2 each) for the conservation invariant.",
-          "expression": {
-            "op": "const",
-            "value": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            "args": []
-          }
+          "description": "True source-cell areas A_i (1 deg^2 each) for the conservation invariant."
         },
         "F_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "The source field being remapped, F[i] = i (the dense exemplar's field, so the golden F_tgt is the same [7/3, 11/3, 19/3, 23/3]).",
-          "expression": {
-            "op": "const",
-            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            "args": []
-          }
+          "description": "The source field being remapped, F[i] = i (the dense exemplar's field, so the golden F_tgt is the same [7/3, 11/3, 19/3, 23/3])."
         },
         "unit_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells"
           ],
-          "description": "The constant-1 source field whose gated regrid surfaces partition-of-unity as an ordinary field.",
-          "expression": {
-            "op": "const",
-            "value": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            "args": []
-          }
+          "description": "The constant-1 source field whose gated regrid surfaces partition-of-unity as an ordinary field."
         },
         "A_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED narrow phase: the overlap-area matrix through conservative_overlap_A_ij_gated (join.overlap on the src_poly/tgt_poly envelopes), manifold 'planar' bound at the invocation. Must equal A_ij_dense bit-for-bit (the ident_state gate) and the dense exemplar's golden numbers.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij_gated",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "planar"
-            }
-          }
+          "description": "CANDIDATE-GATED narrow phase: the overlap-area matrix through conservative_overlap_A_ij_gated (join.overlap on the src_poly/tgt_poly envelopes), manifold 'planar' bound at the invocation. Must equal A_ij_dense bit-for-bit (the ident_state gate) and the dense exemplar's golden numbers."
         },
         "A_j": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join.overlap gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j_gated",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "atol": "atol"
-            }
-          }
+          "description": "CANDIDATE-GATED row normalization: the denominator broad-phases like the numerator (same join.overlap gate, same sliver filter), keeping partition-of-unity exact by construction. Expected 2.25 for every j."
         },
         "W_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "CANDIDATE-GATED normalized weights (same join.overlap gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_W_ij_gated",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "atol": "atol"
-            }
-          }
+          "description": "CANDIDATE-GATED normalized weights (same join.overlap gate and filter as A_j). Expected the dense exemplar's exact rationals: corner 4/9, edge 2/9, center 1/9."
         },
         "A_ij_dense": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "DENSE REFERENCE PATH: the ungated narrow phase on the same rings (the dense exemplar's spelling), computed side by side for the value-identity gate.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "planar"
-            }
-          }
+          "description": "DENSE REFERENCE PATH: the ungated narrow phase on the same rings (the dense exemplar's spelling), computed side by side for the value-identity gate."
         },
         "A_j_dense": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "DENSE REFERENCE PATH: the ungated filtered row-sum.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij_dense",
-              "atol": "atol"
-            }
-          }
+          "description": "DENSE REFERENCE PATH: the ungated filtered row-sum."
         },
         "W_ij_dense": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "src_cells",
             "tgt_cells"
           ],
-          "description": "DENSE REFERENCE PATH: the ungated normalized weights.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_W_ij",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij_dense",
-              "A_j": "A_j_dense",
-              "atol": "atol"
-            }
-          }
+          "description": "DENSE REFERENCE PATH: the ungated normalized weights."
         },
         "F_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The regridded field through the CANDIDATE-GATED apply (same join.overlap gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3], the dense exemplar's values.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply_gated",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "F_src",
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "atol": "atol"
-            }
-          }
+          "description": "The regridded field through the CANDIDATE-GATED apply (same join.overlap gate and filter as A_j). Expected [7/3, 11/3, 19/3, 23/3], the dense exemplar's values."
         },
         "F_unit_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The constant-1 field through the gated apply: F_unit_tgt[j] = sum_i W_ij = 1 exactly (partition-of-unity, exact by construction because the gated denominator row-sums the same computed areas over the same gated surviving set).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply_gated",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "unit_src",
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "atol": "atol"
-            }
-          }
+          "description": "The constant-1 field through the gated apply: F_unit_tgt[j] = sum_i W_ij = 1 exactly (partition-of-unity, exact by construction because the gated denominator row-sums the same computed areas over the same gated surviving set)."
         },
         "pou_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -284,7 +156,7 @@
           "description": "Surfacing state for partition-of-unity: d(pou_state[j])/dt = F_unit_tgt[j] from a zero IC, so pou_state(1) = sum_i W_ij."
         },
         "cons_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -293,7 +165,7 @@
           "description": "Surfacing state for the conservation residual: d(cons_state[j])/dt = sum_j A_j*F_tgt[j] - sum_i A_i*F_src[i] (both mass reductions INLINE in the equation RHS for the same python bin-pre-pass ordering reason as ident_state) = 0 from a zero IC."
         },
         "regrid_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -302,7 +174,7 @@
           "description": "Surfacing state for the gated regridded field: regrid_state(1) = F_tgt, gated against golden/weights.json and cross-binding."
         },
         "ident_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -588,6 +460,424 @@
                 }
               }
             ]
+          }
+        },
+        {
+          "lhs": "src_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  0.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  0.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  1.0
+                ],
+                [
+                  3.0,
+                  1.0
+                ],
+                [
+                  3.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  1.0,
+                  3.0
+                ],
+                [
+                  0.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  1.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  3.0
+                ],
+                [
+                  1.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  2.0,
+                  2.0
+                ],
+                [
+                  3.0,
+                  2.0
+                ],
+                [
+                  3.0,
+                  3.0
+                ],
+                [
+                  2.0,
+                  3.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "tgt_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  1.5,
+                  0.0
+                ],
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  0.0,
+                  1.5
+                ]
+              ],
+              [
+                [
+                  1.5,
+                  0.0
+                ],
+                [
+                  3.0,
+                  0.0
+                ],
+                [
+                  3.0,
+                  1.5
+                ],
+                [
+                  1.5,
+                  1.5
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  1.5
+                ],
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  1.5,
+                  3.0
+                ],
+                [
+                  0.0,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  1.5,
+                  1.5
+                ],
+                [
+                  3.0,
+                  1.5
+                ],
+                [
+                  3.0,
+                  3.0
+                ],
+                [
+                  1.5,
+                  3.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "src_area",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "F_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              6.0,
+              7.0,
+              8.0,
+              9.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "unit_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "A_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij_gated",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        {
+          "lhs": "A_j",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "W_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "A_ij_dense",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        {
+          "lhs": "A_j_dense",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij_dense",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "W_ij_dense",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij_dense",
+              "A_j": "A_j_dense",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_src",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_unit_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply_gated",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "unit_src",
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "atol": "atol"
+            }
           }
         }
       ],

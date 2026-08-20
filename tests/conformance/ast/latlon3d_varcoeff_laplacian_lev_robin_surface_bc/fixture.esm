@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_varcoeff_laplacian_lev_robin_surface_bc",
     "description": "AST conformance fixture for grids/latlon3d/rules/varcoeff_laplacian_lev_robin_surface_bc.esm. Minimal driver: one state field, the geometry observeds the rule's stencils read as free names, and a single equation carrying the conservative compound D(kz * D(u,lev), lev) that the rule matches. ic = 0 (the AST golden pins STRUCTURE, not values)."
@@ -18,7 +18,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -28,13 +28,99 @@
           "description": "Vertically mixed tracer."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn] = 0.6 s + 0.4 s^2 with s = (kn-1)/NLEV, over node kn = 1..NLEV+1 (pe[1] = 0 at the ground, pe[NLEV+1] = 1 at the model top; monotone increasing since dpe/ds = 0.6 + 0.8 s > 0). Cells are THIN near the surface and thicken upward, which is the physically right stretch for a boundary-layer-resolving column. Identical to the mesh of problems/latlon3d_advection_vertical_ppm, so the advection and diffusion operators are exercised on the same vertical grid. HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/zc[k] reads do not capture a consuming vertical stencil's own aggregate index k.",
-          "expression": {
+          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn] = 0.6 s + 0.4 s^2 with s = (kn-1)/NLEV, over node kn = 1..NLEV+1 (pe[1] = 0 at the ground, pe[NLEV+1] = 1 at the model top; monotone increasing since dpe/ds = 0.6 + 0.8 s > 0). Cells are THIN near the surface and thicken upward, which is the physically right stretch for a boundary-layer-resolving column. Identical to the mesh of problems/latlon3d_advection_vertical_ppm, so the advection and diffusion operators are exercised on the same vertical grid. HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/zc[k] reads do not capture a consuming vertical stencil's own aggregate index k."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Cell thicknesses dz[k] = pe[k+1] - pe[k], derived by the grid's lev_thickness template (which aggregates over the geometry index gk). This is the `dz` free name read by the diffusion rule's stencils."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Cell centres zc[k] = (pe[k] + pe[k+1])/2, derived by the grid's lev_center template (aggregating over the geometry index gk). Read here only to build the diffusivity kz and the manufactured forcing; the diffusion stencils themselves need only `dz`."
+        },
+        "kz": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Vertical turbulent diffusivity Kzz(z) = 0.5 (1 + 4 z (1 - z)), a parabolic boundary-layer mixing profile: it vanishes nowhere on [0,1] (range [0.5, 1.0]), peaks at mid-column and falls to 0.5 at the ground and the lid, which is the classic O'Brien/Troen-Mahrt shape of a well-mixed PBL. Horizontally uniform here (the vertical operator is what is under test), but declared with the full [lon,lat,lev] shape the rule's match requires so a real consumer can supply a genuinely 3-D Kzz. Bound by the rule's match as the coefficient kz -- the LEFT factor of kz * D(u, lev). HYGIENE: aggregates over (ik, jk, kk), all distinct from the operator's (i, j, k)."
+        },
+        "vdep": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Dry-deposition velocity at the ground, vdep = 0.3 (uniform here; a real consumer supplies a land-use / stability-dependent field). Read by the rule's surface slab as the `vdep` free name. Enters the ground flux through the resistance-in-series conductance a*vdep/(a+vdep), a = 2 kz[1]/dz[1]."
+        },
+        "emis": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Surface emission flux, emis = 0.6926990816987242 (uniform here). NOT a free choice: it is fixed by the manufactured solution, emis = vdep*phi(0) - kz(0) phi'(0) = 0.3 + (pi/4)(0.5), which is exactly the value that makes the steady part phi(z) = 1 - 0.5 sin(pi z/2) satisfy the continuous Robin condition at the ground. Physically: phi decreases upward, so the Fickian flux -kz phi_z is UPWARD out of the ground (an emission plume), and emission exceeds deposition by exactly enough to sustain it. Read by the rule's surface slab as the `emis` free name."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "kz",
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lev"
+                  }
+                ]
+              }
+            ],
+            "wrt": "lev"
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "kn"
@@ -103,14 +189,9 @@
             }
           }
         },
-        "dz": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lev"
-          ],
-          "description": "Cell thicknesses dz[k] = pe[k+1] - pe[k], derived by the grid's lev_thickness template (which aggregates over the geometry index gk). This is the `dz` free name read by the diffusion rule's stencils.",
-          "expression": {
+        {
+          "lhs": "dz",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_thickness",
@@ -119,14 +200,9 @@
             }
           }
         },
-        "zc": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lev"
-          ],
-          "description": "Cell centres zc[k] = (pe[k] + pe[k+1])/2, derived by the grid's lev_center template (aggregating over the geometry index gk). Read here only to build the diffusivity kz and the manufactured forcing; the diffusion stencils themselves need only `dz`.",
-          "expression": {
+        {
+          "lhs": "zc",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_center",
@@ -135,16 +211,9 @@
             }
           }
         },
-        "kz": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Vertical turbulent diffusivity Kzz(z) = 0.5 (1 + 4 z (1 - z)), a parabolic boundary-layer mixing profile: it vanishes nowhere on [0,1] (range [0.5, 1.0]), peaks at mid-column and falls to 0.5 at the ground and the lid, which is the classic O'Brien/Troen-Mahrt shape of a well-mixed PBL. Horizontally uniform here (the vertical operator is what is under test), but declared with the full [lon,lat,lev] shape the rule's match requires so a real consumer can supply a genuinely 3-D Kzz. Bound by the rule's match as the coefficient kz -- the LEFT factor of kz * D(u, lev). HYGIENE: aggregates over (ik, jk, kk), all distinct from the operator's (i, j, k).",
-          "expression": {
+        {
+          "lhs": "kz",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "ik",
@@ -205,15 +274,9 @@
             }
           }
         },
-        "vdep": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat"
-          ],
-          "description": "Dry-deposition velocity at the ground, vdep = 0.3 (uniform here; a real consumer supplies a land-use / stability-dependent field). Read by the rule's surface slab as the `vdep` free name. Enters the ground flux through the resistance-in-series conductance a*vdep/(a+vdep), a = 2 kz[1]/dz[1].",
-          "expression": {
+        {
+          "lhs": "vdep",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iv",
@@ -231,15 +294,9 @@
             "expr": 0.3
           }
         },
-        "emis": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat"
-          ],
-          "description": "Surface emission flux, emis = 0.6926990816987242 (uniform here). NOT a free choice: it is fixed by the manufactured solution, emis = vdep*phi(0) - kz(0) phi'(0) = 0.3 + (pi/4)(0.5), which is exactly the value that makes the steady part phi(z) = 1 - 0.5 sin(pi z/2) satisfy the continuous Robin condition at the ground. Physically: phi decreases upward, so the Fickian flux -kz phi_z is UPWARD out of the ground (an emission plume), and emission exceeds deposition by exactly enough to sustain it. Read by the rule's surface slab as the `emis` free name.",
-          "expression": {
+        {
+          "lhs": "emis",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "ie",
@@ -255,45 +312,6 @@
               }
             },
             "expr": 0.6926990816987242
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": 0
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "D",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  "kz",
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "lev"
-                  }
-                ]
-              }
-            ],
-            "wrt": "lev"
           }
         }
       ]

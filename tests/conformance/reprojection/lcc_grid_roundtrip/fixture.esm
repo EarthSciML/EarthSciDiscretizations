@@ -1,10 +1,18 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "lcc_grid_roundtrip",
     "description": "Aggregate-mapped reprojection exemplar: the reprojection/lambert_conformal.esm templates applied INSIDE a model, mapped over a whole 2-D coordinate array via ordinary aggregates -- the esm-spec 9.6.2 Option A expansion of apply_expression_template inside an aggregate expr, with the template parameters bound per apply site. This is the pattern the library's own description prescribes ('a consumer maps it over a coordinate array with an ordinary aggregate: bind lon/lat to indexed reads') but which the scalar-point conformance harness (tests/conformance/reprojection/lambert_conformal, fixture: null) never exercises. STRUCTURE: an 8x6 lattice of projected WRF-CONUS Lambert-conformal x/y coordinates is built from index-affine aggregates over the local xi/eta index sets, with origin and spacing as ordinary model parameters (x[i] = x0 + (i-1)*dx metres, y[j] = y0 + (j-1)*dy metres; x spans -1200 km..+900 km, y spans -750 km..+500 km, so cell (xi=5, eta=4) is exactly the projection origin and the whole lattice sits deep inside the projection's domain of definition). The INVERSE templates map (x_grid, y_grid) to geographic (lon_grid, lat_grid); the FORWARD templates map those back to (x_rt, y_rt). Because inverse(forward) and forward(inverse) are algebraic identities on this domain, x_rt/y_rt must reconstruct x_grid/y_grid to machine precision -- a reference-free closure gate on the whole array. CRS: the WRF CONUS spherical LCC of the scalar harness (lat_1=30, lat_2=60, lat_0=40, lon_0=-97, R=6370000 m). BINDING FORMS: all three esm-spec 9.6.2 binding value forms are exercised at the apply sites -- numeric literals (the four angle constants), a variable name reference (R bound by name to R_sphere; the name-reference binding form is independent of the referenced variable's type), and arbitrary Expression ASTs (lon/lat/x/y bound to per-site indexed reads such as {op: index, args: [x_grid, i, j]}, which is what makes the scalar templates array-capable). ASSERTION DESIGN: the round-trip residuals are asserted as the DIMENSIONLESS fields err_x_rel = (x_rt - x_grid)/R_sphere (and _y_), gated at 1.6e-13 = (1e-6 m)/R -- micrometre-level closure on megametre coordinates -- rather than in metres, so that the near-zero actuals recorded by the conformance runners stay within the cross-binding comparison band (compare-outputs.py gates actuals at rtol 1e-9 / atol 1e-12; raw metre residuals of order 1e-9 differ across bindings by libm-ulp effects amplified through the tan/pow/atan chain, while the /R normalization puts those differences at ~1e-15, far under the 1e-12 floor). Metre-scale closure is additionally pinned pointwise by coords spot-checks on the reconstructed eastings/northings at the lattice corners (O(1e6) actuals, abs 1e-6 m). ASSERTION ROUTING: the round-trip and Snyder spot-check assertions read the rank-2 observed fields DIRECTLY (lon_grid, lat_grid, x_rt, y_rt, err_x_rel, err_y_rel) -- the natural esm-spec 6.6.5 observed-assertion spelling, now that the Julia reference binding materializes observeds of rank >= 2 (the earlier EarthSciAST.jl _observed_field rank-1-only limitation -- sort! over a rank-2 CartesianIndices comprehension failing with 'UndefKeywordError: keyword argument dims not assigned' -- is fixed; Python np.ndindex and Rust IxDyn enumeration were already rank-agnostic, so this fixture is now the natural spelling across all three simulating bindings). GEOMETRY/CRS PARAMETERS: the geometry/CRS scalars (x0, dx, y0, dy, R_sphere) are ordinary model parameters carrying their operative values as defaults; the section-6.6.5 observed-field materializer binds model parameters when it evaluates a resolved observed expression, so every asserted field stays evaluable with the natural direct-assertion spelling and every 9.6.2 binding form unchanged (the name-reference binding of R -> R_sphere still stands, the name-reference form being independent of the referenced variable's type). These values are the parameter DEFAULTS (this fixture's assertions read observed fields directly and rely on no per-test scalar overrides). ONE zero-IC surfacing state remains, `drift`, deliberately: it re-derives the closure invariant through an index-CONTRACTING aggregate over the template-produced residual fields (reducing eta away to a per-column sum), which both adds an independent contraction check and gives the test its time integration, so the whole aggregate-mapped field chain is exercised inside each binding's official ODE pathway. Independent Snyder 1987 spot-check values for lon_grid/lat_grid are derived in the test description below. This file is a conformance fixture, not a library problem: it exercises the reprojection template library over self-declared index sets and no grids/ library, so it lives beside the scalar-point case rather than in problems/ (whose lint contract L002/L004 requires a resolving grid: tag).",
     "license": "MIT",
-    "tags": ["conformance", "reprojection", "crs:lambert_conformal", "template-import", "aggregate-mapped-apply", "roundtrip", "wrf"],
+    "tags": [
+      "conformance",
+      "reprojection",
+      "crs:lambert_conformal",
+      "template-import",
+      "aggregate-mapped-apply",
+      "roundtrip",
+      "wrf"
+    ],
     "references": [
       {
         "citation": "Snyder, J. P. (1987). Map Projections -- A Working Manual. U.S. Geological Survey Professional Paper 1395, pp. 104-110: Lambert Conformal Conic, sphere. Forward eqs. 14-1, 14-2, 14-4, 15-1, 15-2, 15-3; inverse eqs. 14-9, 14-10, 14-11, 15-5.",
@@ -13,13 +21,21 @@
     ]
   },
   "index_sets": {
-    "xi": { "kind": "interval", "size": 8 },
-    "eta": { "kind": "interval", "size": 6 }
+    "xi": {
+      "kind": "interval",
+      "size": 8
+    },
+    "eta": {
+      "kind": "interval",
+      "size": 6
+    }
   },
   "models": {
     "ReprojectGrid": {
       "expression_template_imports": [
-        { "ref": "../../../../reprojection/lambert_conformal.esm" }
+        {
+          "ref": "../../../../reprojection/lambert_conformal.esm"
+        }
       ],
       "variables": {
         "x0": {
@@ -53,219 +69,515 @@
           "description": "Sphere radius of the WRF CONUS CRS. Bound BY NAME to the R template parameter at every apply site (the esm-spec 9.6.2 variable-name-reference binding form), so one variable drives all four transforms and the err_*_rel normalization. Ordinary model parameter (the name-reference binding form is independent of the referenced variable's type)."
         },
         "x_grid": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "shape": ["xi", "eta"],
-          "description": "Projected eastings of the lattice, index-affine over xi: x_grid[i,j] = x0 + (i-1)*dx (independent of j; the full 2-D tensor grid so every downstream field is a plain 2-D aggregate map). Values -1200000..900000 m in 300000 m steps.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": [],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "+",
-              "args": [
-                "x0",
-                { "op": "*", "args": [{ "op": "-", "args": ["i", 1] }, "dx"] }
-              ]
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Projected eastings of the lattice, index-affine over xi: x_grid[i,j] = x0 + (i-1)*dx (independent of j; the full 2-D tensor grid so every downstream field is a plain 2-D aggregate map). Values -1200000..900000 m in 300000 m steps."
         },
         "y_grid": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "shape": ["xi", "eta"],
-          "description": "Projected northings of the lattice, index-affine over eta: y_grid[i,j] = y0 + (j-1)*dy (independent of i). Values -750000..500000 m in 250000 m steps.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": [],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "+",
-              "args": [
-                "y0",
-                { "op": "*", "args": [{ "op": "-", "args": ["j", 1] }, "dy"] }
-              ]
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Projected northings of the lattice, index-affine over eta: y_grid[i,j] = y0 + (j-1)*dy (independent of i). Values -750000..500000 m in 250000 m steps."
         },
         "lon_grid": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "shape": ["xi", "eta"],
-          "description": "Geographic longitude of every lattice point: the library's INVERSE longitude template mapped over the array by binding its x/y parameters to per-site indexed reads (Snyder eqs. 14-9/14-11 through the 9.6.2 Option A expansion inside this aggregate's expr). Asserted DIRECTLY at the Snyder spot-check cells (rank-2 observed assertion).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["x_grid", "y_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "apply_expression_template",
-              "name": "lambert_conformal_inverse_lon",
-              "args": [],
-              "bindings": {
-                "x": { "op": "index", "args": ["x_grid", "i", "j"] },
-                "y": { "op": "index", "args": ["y_grid", "i", "j"] },
-                "lat_1": 30,
-                "lat_2": 60,
-                "lat_0": 40,
-                "lon_0": -97,
-                "R": "R_sphere"
-              }
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Geographic longitude of every lattice point: the library's INVERSE longitude template mapped over the array by binding its x/y parameters to per-site indexed reads (Snyder eqs. 14-9/14-11 through the 9.6.2 Option A expansion inside this aggregate's expr). Asserted DIRECTLY at the Snyder spot-check cells (rank-2 observed assertion)."
         },
         "lat_grid": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "shape": ["xi", "eta"],
-          "description": "Geographic latitude of every lattice point: the library's INVERSE latitude template mapped over the array (Snyder eqs. 14-10/15-5), same per-site bindings as lon_grid. Asserted DIRECTLY at the Snyder spot-check cells.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["x_grid", "y_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "apply_expression_template",
-              "name": "lambert_conformal_inverse_lat",
-              "args": [],
-              "bindings": {
-                "x": { "op": "index", "args": ["x_grid", "i", "j"] },
-                "y": { "op": "index", "args": ["y_grid", "i", "j"] },
-                "lat_1": 30,
-                "lat_2": 60,
-                "lat_0": 40,
-                "lon_0": -97,
-                "R": "R_sphere"
-              }
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Geographic latitude of every lattice point: the library's INVERSE latitude template mapped over the array (Snyder eqs. 14-10/15-5), same per-site bindings as lon_grid. Asserted DIRECTLY at the Snyder spot-check cells."
         },
         "x_rt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "shape": ["xi", "eta"],
-          "description": "Round-trip easting: the FORWARD easting template (Snyder eq. 14-1) mapped over the inverse-projected lon_grid/lat_grid fields. Equals x_grid to machine precision wherever the forward map is defined. Asserted DIRECTLY at the lattice corners (metre-scale closure, rank-2 observed assertion).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["lon_grid", "lat_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "apply_expression_template",
-              "name": "lambert_conformal_forward_x",
-              "args": [],
-              "bindings": {
-                "lon": { "op": "index", "args": ["lon_grid", "i", "j"] },
-                "lat": { "op": "index", "args": ["lat_grid", "i", "j"] },
-                "lat_1": 30,
-                "lat_2": 60,
-                "lat_0": 40,
-                "lon_0": -97,
-                "R": "R_sphere"
-              }
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Round-trip easting: the FORWARD easting template (Snyder eq. 14-1) mapped over the inverse-projected lon_grid/lat_grid fields. Equals x_grid to machine precision wherever the forward map is defined. Asserted DIRECTLY at the lattice corners (metre-scale closure, rank-2 observed assertion)."
         },
         "y_rt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "shape": ["xi", "eta"],
-          "description": "Round-trip northing: the FORWARD northing template (Snyder eq. 14-2) mapped over lon_grid/lat_grid. Equals y_grid to machine precision. Asserted DIRECTLY at the lattice corners.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["lon_grid", "lat_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "apply_expression_template",
-              "name": "lambert_conformal_forward_y",
-              "args": [],
-              "bindings": {
-                "lon": { "op": "index", "args": ["lon_grid", "i", "j"] },
-                "lat": { "op": "index", "args": ["lat_grid", "i", "j"] },
-                "lat_1": 30,
-                "lat_2": 60,
-                "lat_0": 40,
-                "lon_0": -97,
-                "R": "R_sphere"
-              }
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Round-trip northing: the FORWARD northing template (Snyder eq. 14-2) mapped over lon_grid/lat_grid. Equals y_grid to machine precision. Asserted DIRECTLY at the lattice corners."
         },
         "err_x_rel": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["xi", "eta"],
-          "description": "Dimensionless easting closure residual (x_rt - x_grid)/R_sphere. Normalized by the sphere radius so the near-zero actuals the conformance runners record stay inside the cross-binding comparison band (see metadata.description); 1.6e-13 in this field is 1e-6 m of easting. Asserted DIRECTLY via max/min (rank-2 observed reduction), pinning the Linf round-trip closure over the whole array from both sides.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["x_rt", "x_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    { "op": "index", "args": ["x_rt", "i", "j"] },
-                    { "op": "index", "args": ["x_grid", "i", "j"] }
-                  ]
-                },
-                "R_sphere"
-              ]
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Dimensionless easting closure residual (x_rt - x_grid)/R_sphere. Normalized by the sphere radius so the near-zero actuals the conformance runners record stay inside the cross-binding comparison band (see metadata.description); 1.6e-13 in this field is 1e-6 m of easting. Asserted DIRECTLY via max/min (rank-2 observed reduction), pinning the Linf round-trip closure over the whole array from both sides."
         },
         "err_y_rel": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["xi", "eta"],
-          "description": "Dimensionless northing closure residual (y_rt - y_grid)/R_sphere, same normalization rationale as err_x_rel. Asserted DIRECTLY via max/min.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["i", "j"],
-            "args": ["y_rt", "y_grid"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    { "op": "index", "args": ["y_rt", "i", "j"] },
-                    { "op": "index", "args": ["y_grid", "i", "j"] }
-                  ]
-                },
-                "R_sphere"
-              ]
-            }
-          }
+          "shape": [
+            "xi",
+            "eta"
+          ],
+          "description": "Dimensionless northing closure residual (y_rt - y_grid)/R_sphere, same normalization rationale as err_x_rel. Asserted DIRECTLY via max/min."
         },
         "drift": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["xi"],
+          "shape": [
+            "xi"
+          ],
           "default": 0.0,
           "description": "Contracted surfacing state (the one state that remains after the rank>=2 observed-assertion fix): d(drift[i])/dt = sum_j (err_x_rel[i,j] + err_y_rel[i,j]) from a zero IC, so drift(1) is the per-column sum of both residual fields -- the closure invariant surfaced through an index-CONTRACTING aggregate over the template-produced fields (an independent check that also gives the test its time integration, exercising the whole aggregate-mapped chain inside each binding's ODE pathway)."
         }
       },
       "equations": [
-        { "lhs": { "op": "ic", "args": ["drift"] }, "rhs": 0.0 },
         {
-          "lhs": { "op": "D", "args": ["drift"], "wrt": "t" },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "drift"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "drift"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "aggregate",
-            "output_idx": ["i"],
-            "args": ["err_x_rel", "err_y_rel"],
-            "ranges": { "i": { "from": "xi" }, "j": { "from": "eta" } },
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "err_x_rel",
+              "err_y_rel"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
             "expr": {
               "op": "+",
               "args": [
-                { "op": "index", "args": ["err_x_rel", "i", "j"] },
-                { "op": "index", "args": ["err_y_rel", "i", "j"] }
+                {
+                  "op": "index",
+                  "args": [
+                    "err_x_rel",
+                    "i",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "err_y_rel",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "x_grid",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                "x0",
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "i",
+                        1
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "y_grid",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                "y0",
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "j",
+                        1
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "lon_grid",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "x_grid",
+              "y_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "name": "lambert_conformal_inverse_lon",
+              "args": [],
+              "bindings": {
+                "x": {
+                  "op": "index",
+                  "args": [
+                    "x_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "y": {
+                  "op": "index",
+                  "args": [
+                    "y_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat_1": 30,
+                "lat_2": 60,
+                "lat_0": 40,
+                "lon_0": -97,
+                "R": "R_sphere"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "lat_grid",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "x_grid",
+              "y_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "name": "lambert_conformal_inverse_lat",
+              "args": [],
+              "bindings": {
+                "x": {
+                  "op": "index",
+                  "args": [
+                    "x_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "y": {
+                  "op": "index",
+                  "args": [
+                    "y_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat_1": 30,
+                "lat_2": 60,
+                "lat_0": 40,
+                "lon_0": -97,
+                "R": "R_sphere"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "x_rt",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "lon_grid",
+              "lat_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "name": "lambert_conformal_forward_x",
+              "args": [],
+              "bindings": {
+                "lon": {
+                  "op": "index",
+                  "args": [
+                    "lon_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat": {
+                  "op": "index",
+                  "args": [
+                    "lat_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat_1": 30,
+                "lat_2": 60,
+                "lat_0": 40,
+                "lon_0": -97,
+                "R": "R_sphere"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "y_rt",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "lon_grid",
+              "lat_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "name": "lambert_conformal_forward_y",
+              "args": [],
+              "bindings": {
+                "lon": {
+                  "op": "index",
+                  "args": [
+                    "lon_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat": {
+                  "op": "index",
+                  "args": [
+                    "lat_grid",
+                    "i",
+                    "j"
+                  ]
+                },
+                "lat_1": 30,
+                "lat_2": 60,
+                "lat_0": 40,
+                "lon_0": -97,
+                "R": "R_sphere"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "err_x_rel",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "x_rt",
+              "x_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "x_rt",
+                        "i",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "x_grid",
+                        "i",
+                        "j"
+                      ]
+                    }
+                  ]
+                },
+                "R_sphere"
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "err_y_rel",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "y_rt",
+              "y_grid"
+            ],
+            "ranges": {
+              "i": {
+                "from": "xi"
+              },
+              "j": {
+                "from": "eta"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "y_rt",
+                        "i",
+                        "j"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "y_grid",
+                        "i",
+                        "j"
+                      ]
+                    }
+                  ]
+                },
+                "R_sphere"
               ]
             }
           }
@@ -275,26 +587,209 @@
         {
           "id": "lcc_grid_roundtrip",
           "description": "Two independent gates over the aggregate-mapped transforms. The round-trip and Snyder gates now read the rank-2 observed fields DIRECTLY (see metadata.description, ASSERTION ROUTING); only the contracted invariant drift remains surfaced through a zero-IC state. (1) ROUND-TRIP CLOSURE, reference-free: forward(inverse(x,y)) = (x,y) is an algebraic identity, so err_x_rel/err_y_rel must vanish to machine precision over the WHOLE 8x6 array -- max and min of err_x_rel/err_y_rel at t=1 pin the Linf norm from both sides at 1.6e-13 (i.e. |x_rt - x| and |y_rt - y| <= 1e-6 m on megametre coordinates; the double-precision residual is ~5e-16 relative, so the gate carries ~300x margin while any indexing, binding, or expansion defect shows up at O(1)). The corner spot-checks on x_rt/y_rt assert the same closure in metres at O(1e6) actuals. The drift state re-derives the invariant through an index-contracting aggregate: drift(1) = sum_j (err_x_rel + err_y_rel) <= 12*1.6e-13, gated at 2e-12. (2) SNYDER SPOT-CHECKS, independently derived (NOT copied from the scalar harness golden; computed in double precision directly from Snyder 1987 eqs. 14-9/14-10/14-11/15-1/15-2/15-3/15-5 by an implementation that reproduces golden/points.json forward values to <= 5e-10 m and inverse values exactly): with t(phi) = tan(pi/4 + phi/2), the WRF CONUS constants are n = ln(cos 30/cos 60)/ln(t(60)/t(30)) = 0.715566847180628, F = cos 30 * t(30)^n / n = 1.7930256259404227, rho_0 = R*F/t(40)^n = 6616662.587104347 m. For a lattice point (x, y): rho = sqrt(x^2 + (rho_0 - y)^2), theta = atan2(x, rho_0 - y), lon = -97 + (theta/n)*180/pi, lat = 2*atan((R*F/rho)^(1/n))*180/pi - 90. Cell (1,1) = (-1200000, -750000) m: rho_0 - y = 7366662.587104347, theta = -0.16150945678698544 rad, lon = -109.929597416635, lat = 32.219515269776. Cell (3,5) = (-600000, 250000) m: theta = -0.09397454393185097, lon = -104.523692758357, lat = 42.0591335835164. Cell (5,4) = (0, 0) m is the projection origin: theta = atan2(0, rho_0) = 0 exactly, so lon = -97 exactly, and lat = 40 up to the t -> t^n -> t^(1/n) rounding round trip (40.00000000000001, 1e-14 inside the 1e-9 gate). Cell (8,6) = (900000, 500000) m: theta = 0.14620686193324003, lon = -85.3024400134589, lat = 44.034940588627. All spot gates are abs 1e-9 deg: independent-derivation agreement is ~1e-12 deg (association-order and libm differences only), while a wrong cell, a transposed layout, or a mis-bound parameter moves lon/lat by whole degrees. The expected literals are the full-precision Snyder values TRUNCATED TO <= 15 SIGNIFICANT DIGITS (a <= 5e-13 deg perturbation, three orders under the gate): 16-17-digit decimal literals are parsed 1 ulp off by the Rust binding's JSON float fast path, which would break the five-way byte identity of the ast golden this fixture also serves (every other numeric literal in this file is either integral or already short).",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
-            { "variable": "lon_grid", "time": 1.0, "coords": { "xi": 1, "eta": 1 }, "expected": -109.929597416635, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lat_grid", "time": 1.0, "coords": { "xi": 1, "eta": 1 }, "expected": 32.219515269776, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lon_grid", "time": 1.0, "coords": { "xi": 3, "eta": 5 }, "expected": -104.523692758357, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lat_grid", "time": 1.0, "coords": { "xi": 3, "eta": 5 }, "expected": 42.0591335835164, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lon_grid", "time": 1.0, "coords": { "xi": 5, "eta": 4 }, "expected": -97, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lat_grid", "time": 1.0, "coords": { "xi": 5, "eta": 4 }, "expected": 40, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lon_grid", "time": 1.0, "coords": { "xi": 8, "eta": 6 }, "expected": -85.3024400134589, "tolerance": { "abs": 1e-9 } },
-            { "variable": "lat_grid", "time": 1.0, "coords": { "xi": 8, "eta": 6 }, "expected": 44.034940588627, "tolerance": { "abs": 1e-9 } },
-            { "variable": "x_rt", "time": 1.0, "coords": { "xi": 1, "eta": 1 }, "expected": -1200000, "tolerance": { "abs": 1e-6 } },
-            { "variable": "y_rt", "time": 1.0, "coords": { "xi": 1, "eta": 1 }, "expected": -750000, "tolerance": { "abs": 1e-6 } },
-            { "variable": "x_rt", "time": 1.0, "coords": { "xi": 8, "eta": 6 }, "expected": 900000, "tolerance": { "abs": 1e-6 } },
-            { "variable": "y_rt", "time": 1.0, "coords": { "xi": 8, "eta": 6 }, "expected": 500000, "tolerance": { "abs": 1e-6 } },
-            { "variable": "err_x_rel", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1.6e-13 }, "reduce": "max" },
-            { "variable": "err_x_rel", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1.6e-13 }, "reduce": "min" },
-            { "variable": "err_y_rel", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1.6e-13 }, "reduce": "max" },
-            { "variable": "err_y_rel", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1.6e-13 }, "reduce": "min" },
-            { "variable": "drift", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 2e-12 }, "reduce": "max" },
-            { "variable": "drift", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 2e-12 }, "reduce": "min" }
+            {
+              "variable": "lon_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 1,
+                "eta": 1
+              },
+              "expected": -109.929597416635,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lat_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 1,
+                "eta": 1
+              },
+              "expected": 32.219515269776,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lon_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 3,
+                "eta": 5
+              },
+              "expected": -104.523692758357,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lat_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 3,
+                "eta": 5
+              },
+              "expected": 42.0591335835164,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lon_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 5,
+                "eta": 4
+              },
+              "expected": -97,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lat_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 5,
+                "eta": 4
+              },
+              "expected": 40,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lon_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 8,
+                "eta": 6
+              },
+              "expected": -85.3024400134589,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "lat_grid",
+              "time": 1.0,
+              "coords": {
+                "xi": 8,
+                "eta": 6
+              },
+              "expected": 44.034940588627,
+              "tolerance": {
+                "abs": 1e-09
+              }
+            },
+            {
+              "variable": "x_rt",
+              "time": 1.0,
+              "coords": {
+                "xi": 1,
+                "eta": 1
+              },
+              "expected": -1200000,
+              "tolerance": {
+                "abs": 1e-06
+              }
+            },
+            {
+              "variable": "y_rt",
+              "time": 1.0,
+              "coords": {
+                "xi": 1,
+                "eta": 1
+              },
+              "expected": -750000,
+              "tolerance": {
+                "abs": 1e-06
+              }
+            },
+            {
+              "variable": "x_rt",
+              "time": 1.0,
+              "coords": {
+                "xi": 8,
+                "eta": 6
+              },
+              "expected": 900000,
+              "tolerance": {
+                "abs": 1e-06
+              }
+            },
+            {
+              "variable": "y_rt",
+              "time": 1.0,
+              "coords": {
+                "xi": 8,
+                "eta": 6
+              },
+              "expected": 500000,
+              "tolerance": {
+                "abs": 1e-06
+              }
+            },
+            {
+              "variable": "err_x_rel",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1.6e-13
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "err_x_rel",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1.6e-13
+              },
+              "reduce": "min"
+            },
+            {
+              "variable": "err_y_rel",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1.6e-13
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "err_y_rel",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1.6e-13
+              },
+              "reduce": "min"
+            },
+            {
+              "variable": "drift",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 2e-12
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "drift",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 2e-12
+              },
+              "reduce": "min"
+            }
           ]
         }
       ]

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "mpas_l0_to_octants_sphere",
     "description": "SMOKE conformance fixture: MPAS cell rings DERIVED IN-DOCUMENT feeding the conservative regridder on the SPHERE -- the unstructured half of the end-to-end declarative regridding story. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem; the mesh file is the library's one allowed precomputation, with derivation provenance in its own _doc). The source rings are NOT authored here: src_poly comes from the grid's mpas_cell_rings_deg template over the widened mesh contract (latVertex/lonVertex/verticesOnCell aliased bare-name from the subsystem), which gathers each cell's CCW vertex ring and converts radians to the degrees the geometry kernels take; at level 0 every cell has exactly MAXEDGES = 5 vertices, so the template's min(k, nEdgesOnCell) pad clamp never fires (padding tolerance of the kernels is pinned separately -- see the grid _doc). Target: the 8 spherical OCTANTS as an inline const ring stack (NVERT = 3; every edge a 90-degree great-circle arc; all octants share the pole and equator vertices under IDENTICAL coordinate spellings, so seams are exact and the octants tile the sphere: sum A_j = 4*pi). MIXED VERTEX COUNTS, deliberately: the narrow phase slices whole rings per cell (index(src_poly, i) / index(tgt_poly, j)), so a pentagon source and a triangle target compose without a shared vertex-count axis -- the production MPAS-to-latlon shape. DENSE narrow phase at manifold 'spherical' (great-circle-edge clipping, areas in steradians): the candidate-gated broad phase rides the planar gated cases; lon-lat floor-binning is the wrong broad phase near poles and the level-0 mesh has only 96 pairs. Exact gates (CONFORMANCE_SPEC 5.8.3): partition-of-unity is exact by construction (the A_j denominator row-sums the SAME computed areas under the SAME sliver filter); conservation is gated at 1e-9 sr -- the octants tile the sphere and the seams are shared arcs, so the residual sum_j A_j*F_tgt[j] - sum_i areaCell[i]*F_src[i] is pure clip noise (mass_src uses the mesh file's committed areaCell as the true source areas; with F_src = [1..12] and areaCell = pi/3 each, mass_src = 26*pi = 81.68140899333463). Several dodecahedron vertices lie EXACTLY on octant boundary great circles (the x = 0 and z = 0 coordinate planes pass through (0, +/-1/phi, +/-phi)-family vertices), so boundary-degenerate clips are part of what this case smokes out -- the sliver filter (atol 1e-12 sr against true overlaps of order 0.1 sr) is the 5.8.2 mechanism that absorbs them identically in numerator and denominator. Golden per-pair A_ij/A_j/W_ij from the official Julia runner (GeometryOps spherical backend) via scripts/regenerate-goldens.sh; rust gates the same arrays through s2geometry (5.8.4: different kernels, same manifold declaration).",
@@ -50,430 +50,142 @@
           "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2): 1e-12 sr against true pentagon-octant overlaps of order 0.1 sr, and far above any snap-rounding sliver a spherical backend can emit for the measure-zero boundary contacts (several dodecahedron vertices lie exactly on the octant boundary planes)."
         },
         "nEdgesOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells"
           ],
-          "description": "Bare-name alias of mesh.nEdgesOnCell (all 5 at level 0): the ring template's pad clamp bound and the ragged edges_of_cell offsets factor.",
-          "expression": "mesh.nEdgesOnCell"
+          "description": "Bare-name alias of mesh.nEdgesOnCell (all 5 at level 0): the ring template's pad clamp bound and the ragged edges_of_cell offsets factor."
         },
         "edgesOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells",
             "maxEdges"
           ],
-          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the grid's ragged edges_of_cell index set (unused by the regridder but part of the grid's factor contract).",
-          "expression": "mesh.edgesOnCell"
+          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the grid's ragged edges_of_cell index set (unused by the regridder but part of the grid's factor contract)."
         },
         "verticesOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells",
             "maxEdges"
           ],
-          "description": "Bare-name alias of mesh.verticesOnCell (widened contract): vertex ids around each cell, CCW viewed from outside -- the ring template's gather indices.",
-          "expression": "mesh.verticesOnCell"
+          "description": "Bare-name alias of mesh.verticesOnCell (widened contract): vertex ids around each cell, CCW viewed from outside -- the ring template's gather indices."
         },
         "latVertex": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
           "shape": [
             "vertices"
           ],
-          "description": "Bare-name alias of mesh.latVertex (widened contract): vertex latitudes, radians.",
-          "expression": "mesh.latVertex"
+          "description": "Bare-name alias of mesh.latVertex (widened contract): vertex latitudes, radians."
         },
         "lonVertex": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
           "shape": [
             "vertices"
           ],
-          "description": "Bare-name alias of mesh.lonVertex (widened contract): vertex longitudes, radians, in (-pi, pi].",
-          "expression": "mesh.lonVertex"
+          "description": "Bare-name alias of mesh.lonVertex (widened contract): vertex longitudes, radians, in (-pi, pi]."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
           "shape": [
             "cells"
           ],
-          "description": "Bare-name alias of mesh.areaCell: the TRUE source-cell areas (pi/3 each at level 0; they sum to 4*pi exactly) for the conservation invariant.",
-          "expression": "mesh.areaCell"
+          "description": "Bare-name alias of mesh.areaCell: the TRUE source-cell areas (pi/3 each at level 0; they sum to 4*pi exactly) for the conservation invariant."
         },
         "src_poly": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "cells",
             "maxEdges",
             "ring_coord"
           ],
-          "description": "MESH-DERIVED source rings: the grid's mpas_cell_rings_deg template gathers each pentagon's CCW vertex ring from the widened mesh contract and converts radians to degrees -- [12, 5, 2], nothing hand-authored. The factor params are bound to the mesh subsystem's const factors DIRECTLY under their subsystem-scoped names (mesh.latVertex etc.), keeping the build-time geometry-setup closure const-backed (see the grid template's _doc); the bare-name aliases below re-expose the same factors for the grid's rule-body/index-set contract and for readers.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "mpas_cell_rings_deg",
-            "args": [],
-            "bindings": {
-              "latVertex": "mesh.latVertex",
-              "lonVertex": "mesh.lonVertex",
-              "verticesOnCell": "mesh.verticesOnCell",
-              "nEdgesOnCell": "mesh.nEdgesOnCell"
-            }
-          }
+          "description": "MESH-DERIVED source rings: the grid's mpas_cell_rings_deg template gathers each pentagon's CCW vertex ring from the widened mesh contract and converts radians to degrees -- [12, 5, 2], nothing hand-authored. The factor params are bound to the mesh subsystem's const factors DIRECTLY under their subsystem-scoped names (mesh.latVertex etc.), keeping the build-time geometry-setup closure const-backed (see the grid template's _doc); the bare-name aliases below re-expose the same factors for the grid's rule-body/index-set contract and for readers."
         },
         "tgt_poly": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "tgt_cells",
             "overlap_cell_verts",
             "overlap_coord"
           ],
-          "description": "Target-cell geometry: the 8 spherical octants as closed CCW lon-lat-degree triangles (NVERT = 3). Every edge is a 90-degree great-circle arc; the north/south poles are spelled (0, +/-90) IDENTICALLY in every ring that touches them and shared equator vertices reuse identical spellings (270 stays 270, the wrap vertex is 0), so adjacent octants share seams exactly and the eight tile the sphere: expected A_j = pi/2 each, sum 4*pi.",
-          "expression": {
-            "op": "const",
-            "value": [
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  90.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  90.0
-                ]
-              ],
-              [
-                [
-                  90.0,
-                  0.0
-                ],
-                [
-                  180.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  90.0
-                ]
-              ],
-              [
-                [
-                  180.0,
-                  0.0
-                ],
-                [
-                  270.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  90.0
-                ]
-              ],
-              [
-                [
-                  270.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  90.0
-                ]
-              ],
-              [
-                [
-                  0.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  -90.0
-                ],
-                [
-                  90.0,
-                  0.0
-                ]
-              ],
-              [
-                [
-                  90.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  -90.0
-                ],
-                [
-                  180.0,
-                  0.0
-                ]
-              ],
-              [
-                [
-                  180.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  -90.0
-                ],
-                [
-                  270.0,
-                  0.0
-                ]
-              ],
-              [
-                [
-                  270.0,
-                  0.0
-                ],
-                [
-                  0.0,
-                  -90.0
-                ],
-                [
-                  0.0,
-                  0.0
-                ]
-              ]
-            ],
-            "args": []
-          }
+          "description": "Target-cell geometry: the 8 spherical octants as closed CCW lon-lat-degree triangles (NVERT = 3). Every edge is a 90-degree great-circle arc; the north/south poles are spelled (0, +/-90) IDENTICALLY in every ring that touches them and shared equator vertices reuse identical spellings (270 stays 270, the wrap vertex is 0), so adjacent octants share seams exactly and the eight tile the sphere: expected A_j = pi/2 each, sum 4*pi."
         },
         "F_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "cells"
           ],
-          "description": "The source field being remapped, F[i] = i over the level-0 cell enumeration; mass_src = (pi/3) * (1+...+12) = 26*pi.",
-          "expression": {
-            "op": "const",
-            "value": [
-              1.0,
-              2.0,
-              3.0,
-              4.0,
-              5.0,
-              6.0,
-              7.0,
-              8.0,
-              9.0,
-              10.0,
-              11.0,
-              12.0
-            ],
-            "args": []
-          }
+          "description": "The source field being remapped, F[i] = i over the level-0 cell enumeration; mass_src = (pi/3) * (1+...+12) = 26*pi."
         },
         "unit_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "cells"
           ],
-          "description": "The constant-1 source field whose regrid surfaces partition-of-unity.",
-          "expression": {
-            "op": "const",
-            "value": [
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0,
-              1.0
-            ],
-            "args": []
-          }
+          "description": "The constant-1 source field whose regrid surfaces partition-of-unity."
         },
         "A_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "cells",
             "tgt_cells"
           ],
-          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), manifold 'spherical' bound at the invocation: great-circle-edge clipping on the unit sphere, areas in steradians.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
-            "args": [],
-            "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "spherical"
-            }
-          }
+          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), manifold 'spherical' bound at the invocation: great-circle-edge clipping on the unit sphere, areas in steradians."
         },
         "A_j": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "Row normalization: the denominator is the row-sum of the SAME computed areas under the SAME sliver filter, so partition-of-unity is exact by construction regardless of the boundary-degenerate clips. Expected pi/2 = 1.5707963267948966 sr per octant up to clip noise.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "atol": "atol"
-            }
-          }
+          "description": "Row normalization: the denominator is the row-sum of the SAME computed areas under the SAME sliver filter, so partition-of-unity is exact by construction regardless of the boundary-degenerate clips. Expected pi/2 = 1.5707963267948966 sr per octant up to clip noise."
         },
         "W_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "cells",
             "tgt_cells"
           ],
-          "description": "Normalized weights over the surviving set (same filter as A_j/apply); the per-pair golden gate.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_W_ij",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "atol": "atol"
-            }
-          }
+          "description": "Normalized weights over the surviving set (same filter as A_j/apply); the per-pair golden gate."
         },
         "F_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The regridded field: per-octant area-weighted mean of the pentagon values.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "F_src",
-              "atol": "atol"
-            }
-          }
+          "description": "The regridded field: per-octant area-weighted mean of the pentagon values."
         },
         "F_unit_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
           ],
-          "description": "The constant-1 field through the same apply: partition-of-unity as an ordinary field, exactly 1 by construction.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "unit_src",
-              "atol": "atol"
-            }
-          }
+          "description": "The constant-1 field through the same apply: partition-of-unity as an ordinary field, exactly 1 by construction."
         },
         "mass_src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "Source-side mass sum_i areaCell[i]*F_src[i] = 26*pi = 81.68140899333463 (committed true areas from the mesh file).",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "i": {
-                "from": "cells"
-              }
-            },
-            "args": [
-              "areaCell",
-              "F_src"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "areaCell",
-                    "i"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_src",
-                    "i"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Source-side mass sum_i areaCell[i]*F_src[i] = 26*pi = 81.68140899333463 (committed true areas from the mesh file)."
         },
         "mass_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "Target-side mass sum_j A_j*F_tgt[j] with the computed denominators as the target areas (the 5.8.3 construction). Equals mass_src up to clip noise because the octants tile the sphere with exactly-shared seams.",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": {
-              "j": {
-                "from": "tgt_cells"
-              }
-            },
-            "args": [
-              "A_j",
-              "F_tgt"
-            ],
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "A_j",
-                    "j"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "F_tgt",
-                    "j"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Target-side mass sum_j A_j*F_tgt[j] with the computed denominators as the target areas (the 5.8.3 construction). Equals mass_src up to clip noise because the octants tile the sphere with exactly-shared seams."
         },
         "pou_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -482,7 +194,7 @@
           "description": "Surfacing state for partition-of-unity: pou_state(1) = sum_i W_ij, exactly 1 per octant."
         },
         "cons_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -491,7 +203,7 @@
           "description": "Surfacing state for the conservation residual: cons_state(1) = mass_tgt - mass_src, pure clip noise."
         },
         "regrid_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tgt_cells"
@@ -566,6 +278,345 @@
             "wrt": "t"
           },
           "rhs": "F_tgt"
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "verticesOnCell",
+          "rhs": "mesh.verticesOnCell"
+        },
+        {
+          "lhs": "latVertex",
+          "rhs": "mesh.latVertex"
+        },
+        {
+          "lhs": "lonVertex",
+          "rhs": "mesh.lonVertex"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "src_poly",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "mpas_cell_rings_deg",
+            "args": [],
+            "bindings": {
+              "latVertex": "mesh.latVertex",
+              "lonVertex": "mesh.lonVertex",
+              "verticesOnCell": "mesh.verticesOnCell",
+              "nEdgesOnCell": "mesh.nEdgesOnCell"
+            }
+          }
+        },
+        {
+          "lhs": "tgt_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  90.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  180.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  180.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  270.0,
+                  0.0
+                ]
+              ],
+              [
+                [
+                  270.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  -90.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "F_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              6.0,
+              7.0,
+              8.0,
+              9.0,
+              10.0,
+              11.0,
+              12.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "unit_src",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "A_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "spherical"
+            }
+          }
+        },
+        {
+          "lhs": "A_j",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "W_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_src",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "F_unit_tgt",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "unit_src",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "mass_src",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "args": [
+              "areaCell",
+              "F_src"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "areaCell",
+                    "i"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_src",
+                    "i"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "mass_tgt",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "F_tgt"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_j",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ],
       "tests": [

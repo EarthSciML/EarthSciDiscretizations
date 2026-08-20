@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_meridional_ppm_flux",
     "description": "Method-of-manufactured-solutions driver for the UNLIMITED (centred), fourth-order CW84 conservative flux-form MERIDIONAL advection operator grids/latlon3d/rules/ppm_flux_D_lat_polar -- the ACCURACY CEILING of the meridional flux family and the reference against which the limiter's cost is measured (the monotone sibling is problems/latlon3d_advection_meridional_ppm_flux_mono, and the first-order rung is problems/latlon3d_advection_meridional_upwind_flux). The transport equation is du/dt = -D(V*u, wrt: lat) + src. \n\nIT DECLARES ONE FREE NAME THE DONOR-CELL DRIVER DID NOT: dphi_lat, the PPM cell width (the grid's latcell_dphi over the same phie), alongside coslat_e and dS_lat. \n\nTHE MMS IS THE DONOR-CELL SIBLING'S, VERBATIM, AND THAT IS DELIBERATE. Wind, manufactured solution, source and initial condition are copied bit-for-bit from problems/latlon3d_advection_meridional_upwind_flux, so the three meridional flux drivers (donor cell / unlimited PPM / monotone PPM) measure the SAME truncation error of THREE different face reconstructions and their errors are directly comparable rung by rung -- exactly as the three vertical ppm_flux drivers share one MMS. \n\nFORCED-STEADY (TRUNCATION) IDIOM. The exact solution q*(phi) = 2 + sin(phi) is STEADY, u is seeded with its EXACT cos-weighted cell mean, and src is the EXACT flux divergence, so du/dt at t = 0 IS the truncation error and the drift at t = 0.1 measures it. Two closed forms make that spellable inside an `ic` -- which folds BUILD-TIME from literals plus metaparameter NAMES, with the model's own parameters and observeds OUT of scope, so neither dS_lat nor phie may be referenced there. (1) The exact cos-weighted cell mean of 2 + sin(phi) TELESCOPES to the cancellation-free 2 + (sin(phi_e[j]) + sin(phi_e[j+1]))/2. (2) The exact face flux Phi = V cos(phi) q* = (1 - s^2)(2 + s) a(i) b(k), s = sin(phi_e), is a POLYNOMIAL IN sin(phi_e) and is therefore EXACTLY 0.0 in IEEE at both poles, so src reproduces the rule's STRUCTURAL POLE-TERM OMISSION bitwise. \n\nWHY THE WIND VANISHES AT THE POLES, AND WHY THAT IS NOT A DODGE. This grid's truncation error scales as O(dphi / cos(phi)) for ANY reconstruction order -- row j divides its face error by a cell area of O(cos(phi_j) dphi), and at the half-polar caps by O(dphi^2). The consequence is sharp and is MEASURED in full in grids/latlon3d/rules/upwind1_flux_D_lat_polar: the UNWEIGHTED Linf over the WHOLE SPHERE cannot converge for a general 2-D wind, because the pole-adjacent row always sits at cos(phi) ~ dphi. Raising the reconstruction order does NOT fix it (measured: a 2nd-order centred reconstruction still decays 0.72/0.53/0.34) -- which is precisely why THIS driver, whose whole subject is a HIGHER-ORDER reconstruction, must not pretend otherwise. The conformance harness gates every norm in its manifest and its L2/Linf are UNWEIGHTED, so this driver uses the same wind whose meridional component VANISHES AT THE POLES like cos(phi): V(i,j,k) = coslat_e[j] a(i) b(k). Then the product V dq/dphi -> 0 like cos(phi), the 1/cos(phi) amplification is cancelled pointwise, and the raw norms converge over the whole sphere. It is the case a physical model actually runs, since a wind field smooth as a VECTOR on the sphere has v -> 0 at the poles unless it carries a first zonal harmonic there. \n\nTHE WIND REVERSES SIGN WITH HEIGHT. b(k) = cos(pi (k-1)/(NLEV-1)) is +1, +1/2, -1/2, -1 on the four levels, so the flow is NORTHWARD in the lower half of the column and SOUTHWARD in the upper half, and BOTH branches of the donor selection are exercised in every column -- which is the property the upwind-biased reconstruction exists for and which no centred scheme can see. The zonal modulation a(i) = 1 + 0.25 cos(2 pi (i-1/2)/NLON) is strictly positive and makes the rank-3 shape real: a stencil that mis-indexed V as a latitude profile rather than as a full [lon, lat_nodes, lev] field would be caught rather than silently agreeing.\n\nTHE RECONSTRUCTION IS DONE IN phi, NOT IN sin(phi), AND THAT COSTS ORDER AT THE CAPS. The state u is the AREA-weighted (i.e. sin-weighted) cell mean -- that is what the flux form conserves -- while the PPM parabola is fitted with the widths dphi_lat, i.e. it treats u as a phi-weighted mean. The two means differ by (h^2/12) q' tan(phi), an O(dphi^2) discrepancy that the reconstruction cannot see, and dividing it by the O(cos(phi) dphi) cell area leaves an O(dphi^2 / cos(phi)) error floor that is worst at the caps. This is a deliberate, documented choice: it keeps the operator a drop-in replacement for the donor-cell rule's face flux and nothing else. The measured orders in the convergence manifest are the honest consequence.",
@@ -41,7 +41,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -57,10 +57,271 @@
           "description": "Southern domain edge; the grid's lat0_deg free name. -90 makes the recipe the GLOBAL pole-to-pole one, whose two end cells are the half-polar caps."
         },
         "dlat_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "description": "Meridional point spacing 180/(NLAT-1) (pole-to-pole, endpoint-inclusive): the grid's dlat_deg free name. NLAT is the document's live metaparameter, so this follows every rebinding.",
-          "expression": {
+          "description": "Meridional point spacing 180/(NLAT-1) (pole-to-pole, endpoint-inclusive): the grid's dlat_deg free name. NLAT is the document's live metaparameter, so this follows every rebinding."
+        },
+        "phie": {
+          "type": "unknown",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (clamped-midpoint rule; aggregate index `gje`). phie[1] = -90 and phie[NLAT+1] = +90 EXACTLY, and the two end cells are half width -- the GEOS-Chem half-polar caps."
+        },
+        "coslat_e": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "FACE-LENGTH weight cos(phi_e) over the face axis, from the grid's coslat_edge template (aggregate index `gjc`). One of the two free names the flux-form lat rules read. At the two POLE faces this is cos(-/+pi/2) = 6.1e-17 in IEEE, NOT zero -- which is exactly why those rules OMIT the pole-wall flux terms rather than multiplying them by it."
+        },
+        "dS_lat": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]) over the cell axis, from the grid's latcell_area template (aggregate index `gja`). The other free name the flux-form lat rules read. Exact, not a midpoint approximation, which is what makes the flux divergence telescope to an exact global mass budget."
+        },
+        "dphi_lat": {
+          "type": "unknown",
+          "units": "rad",
+          "shape": [
+            "lat"
+          ],
+          "description": "CELL WIDTH IN RADIANS phi_e[j+1] - phi_e[j] over the cell axis, from the grid's latcell_dphi template (aggregate index `gjd`, deliberately distinct from the producer's `gje` and from `gjc`/`gja`). THE ONE FREE NAME THE DONOR-CELL SIBLING DID NOT NEED: a piecewise-constant reconstruction has no width in it, a parabola does. It is dphi at every interior row and dphi/2 at each of the two HALF-POLAR CAPS, which is what makes the latitude axis genuinely NONUNIFORM and is why the PPM face atom's six independent widths -- built for the stretched vertical -- are what the scheme needs here. Not to be confused with dS_lat, the exact spherical cell AREA: dphi_lat drives the RECONSTRUCTION, dS_lat divides the DIVERGENCE."
+        },
+        "V": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ],
+          "description": "THREE-DIMENSIONAL face-staggered MERIDIONAL wind, positive northward: V[i,j,k] = coslat_e[j] a(i) b(k), i.e. V0 cos(phi_e) with V0 = 1. It VANISHES AT THE POLES like cos(phi), which is the condition under which the operator's O(dphi/cos(phi)) truncation error converges POINTWISE (see the metadata). It is built from coslat_e itself, so the wind and the metric share the identical double. b(k) = cos(pi (k-1)/3) reverses sign with height, exercising BOTH donor branches; a(i) = 1 + 0.25 cos(2 pi (i-1/2)/8) is strictly positive. The pole faces V[i,1,k] and V[i,NLAT+1,k] are NEVER READ by the rule."
+        },
+        "src": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "MMS forcing: the EXACT cell-averaged flux divergence ( Phi[j+1] - Phi[j] ) / dS_lat[j] of the exact face flux Phi = V cos(phi) q* = (1 - s^2)(2 + s) a(i) b(k), s = sin(phi_e). Because Phi is a POLYNOMIAL IN sin(phi_e) it is EXACTLY 0.0 at both pole faces, so this single aggregate reproduces the rule's structural pole-term omission BITWISE (x - 0.0 = x; 0.0 - x = -x). It makes u* an exact steady state, so du/dt at t = 0 is precisely the operator's truncation error."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                2,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    -90,
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        90,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            -90,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1.5
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    180,
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    -90,
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        90,
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            -90,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    {
+                                                      "op": "+",
+                                                      "args": [
+                                                        "j",
+                                                        1
+                                                      ]
+                                                    },
+                                                    1.5
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    180,
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "V",
+                          "u"
+                        ]
+                      }
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              "src"
+            ]
+          }
+        },
+        {
+          "lhs": "dlat_deg",
+          "rhs": {
             "op": "/",
             "args": [
               180,
@@ -74,28 +335,18 @@
             ]
           }
         },
-        "phie": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "lat_nodes"
-          ],
-          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (clamped-midpoint rule; aggregate index `gje`). phie[1] = -90 and phie[NLAT+1] = +90 EXACTLY, and the two end cells are half width -- the GEOS-Chem half-polar caps.",
-          "expression": {
+        {
+          "lhs": "phie",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
           }
         },
-        "coslat_e": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat_nodes"
-          ],
-          "description": "FACE-LENGTH weight cos(phi_e) over the face axis, from the grid's coslat_edge template (aggregate index `gjc`). One of the two free names the flux-form lat rules read. At the two POLE faces this is cos(-/+pi/2) = 6.1e-17 in IEEE, NOT zero -- which is exactly why those rules OMIT the pole-wall flux terms rather than multiplying them by it.",
-          "expression": {
+        {
+          "lhs": "coslat_e",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "coslat_edge",
@@ -104,14 +355,9 @@
             }
           }
         },
-        "dS_lat": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat"
-          ],
-          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]) over the cell axis, from the grid's latcell_area template (aggregate index `gja`). The other free name the flux-form lat rules read. Exact, not a midpoint approximation, which is what makes the flux divergence telescope to an exact global mass budget.",
-          "expression": {
+        {
+          "lhs": "dS_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_area",
@@ -120,14 +366,9 @@
             }
           }
         },
-        "dphi_lat": {
-          "type": "observed",
-          "units": "rad",
-          "shape": [
-            "lat"
-          ],
-          "description": "CELL WIDTH IN RADIANS phi_e[j+1] - phi_e[j] over the cell axis, from the grid's latcell_dphi template (aggregate index `gjd`, deliberately distinct from the producer's `gje` and from `gjc`/`gja`). THE ONE FREE NAME THE DONOR-CELL SIBLING DID NOT NEED: a piecewise-constant reconstruction has no width in it, a parabola does. It is dphi at every interior row and dphi/2 at each of the two HALF-POLAR CAPS, which is what makes the latitude axis genuinely NONUNIFORM and is why the PPM face atom's six independent widths -- built for the stretched vertical -- are what the scheme needs here. Not to be confused with dS_lat, the exact spherical cell AREA: dphi_lat drives the RECONSTRUCTION, dS_lat divides the DIVERGENCE.",
-          "expression": {
+        {
+          "lhs": "dphi_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_dphi",
@@ -136,16 +377,9 @@
             }
           }
         },
-        "V": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat_nodes",
-            "lev"
-          ],
-          "description": "THREE-DIMENSIONAL face-staggered MERIDIONAL wind, positive northward: V[i,j,k] = coslat_e[j] a(i) b(k), i.e. V0 cos(phi_e) with V0 = 1. It VANISHES AT THE POLES like cos(phi), which is the condition under which the operator's O(dphi/cos(phi)) truncation error converges POINTWISE (see the metadata). It is built from coslat_e itself, so the wind and the metric share the identical double. b(k) = cos(pi (k-1)/3) reverses sign with height, exercising BOTH donor branches; a(i) = 1 + 0.25 cos(2 pi (i-1/2)/8) is strictly positive. The pole faces V[i,1,k] and V[i,NLAT+1,k] are NEVER READ by the rule.",
-          "expression": {
+        {
+          "lhs": "V",
+          "rhs": {
             "op": "aggregate",
             "args": [
               "coslat_e"
@@ -240,16 +474,9 @@
             }
           }
         },
-        "src": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "MMS forcing: the EXACT cell-averaged flux divergence ( Phi[j+1] - Phi[j] ) / dS_lat[j] of the exact face flux Phi = V cos(phi) q* = (1 - s^2)(2 + s) a(i) b(k), s = sin(phi_e). Because Phi is a POLYNOMIAL IN sin(phi_e) it is EXACTLY 0.0 at both pole faces, so this single aggregate reproduces the rule's structural pole-term omission BITWISE (x - 0.0 = x; 0.0 - x = -x). It makes u* an exact steady state, so du/dt at t = 0 is precisely the operator's truncation error.",
-          "expression": {
+        {
+          "lhs": "src",
+          "rhs": {
             "op": "aggregate",
             "args": [
               "phie",
@@ -614,212 +841,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                2,
-                {
-                  "op": "*",
-                  "args": [
-                    0.5,
-                    {
-                      "op": "+",
-                      "args": [
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    180
-                                  ]
-                                },
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    -90,
-                                    {
-                                      "op": "min",
-                                      "args": [
-                                        90,
-                                        {
-                                          "op": "+",
-                                          "args": [
-                                            -90,
-                                            {
-                                              "op": "*",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    "j",
-                                                    1.5
-                                                  ]
-                                                },
-                                                {
-                                                  "op": "/",
-                                                  "args": [
-                                                    180,
-                                                    {
-                                                      "op": "-",
-                                                      "args": [
-                                                        "NLAT",
-                                                        1
-                                                      ]
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    180
-                                  ]
-                                },
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    -90,
-                                    {
-                                      "op": "min",
-                                      "args": [
-                                        90,
-                                        {
-                                          "op": "+",
-                                          "args": [
-                                            -90,
-                                            {
-                                              "op": "*",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    {
-                                                      "op": "+",
-                                                      "args": [
-                                                        "j",
-                                                        1
-                                                      ]
-                                                    },
-                                                    1.5
-                                                  ]
-                                                },
-                                                {
-                                                  "op": "/",
-                                                  "args": [
-                                                    180,
-                                                    {
-                                                      "op": "-",
-                                                      "args": [
-                                                        "NLAT",
-                                                        1
-                                                      ]
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "D",
-                    "args": [
-                      {
-                        "op": "*",
-                        "args": [
-                          "V",
-                          "u"
-                        ]
-                      }
-                    ],
-                    "wrt": "lat"
-                  }
-                ]
-              },
-              "src"
-            ]
           }
         }
       ],

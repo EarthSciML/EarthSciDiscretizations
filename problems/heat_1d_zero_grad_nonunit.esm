@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "heat_1d_zero_grad_nonunit",
     "description": "MMS driver on a NON-UNIT, NON-ORIGIN domain — the end-to-end proof that grids/cartesian_uniform_1d serves arbitrary consumer-specified extents with no library-file edits: 1-D heat equation u_t = alpha u_xx on x in [-1.5, 2.5] (a = -1.5, b = 2.5, L = b - a = 4; deliberately non-integral endpoints) with zero-gradient (homogeneous Neumann) boundaries, discretized by grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc — the SAME rule file the unit-interval problem uses, unchanged. Manufactured solution u(x,t) = exp(-alpha (pi/L)^2 t) cos(pi (x - a)/L) with alpha = 0.2. Derivation: u_xx = -(pi/L)^2 u and u_t = -alpha (pi/L)^2 u, so u_t = alpha u_xx exactly (no forcing term); u_x = -(pi/L) exp(-alpha (pi/L)^2 t) sin(pi (x - a)/L) vanishes at x = a (sin 0 = 0) and at x = b (sin pi = 0), matching the zero-gradient rule. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [a, b]: x0 = -1.5 (parameter) and dx = (b - a)/N = 4/N (an observed whose expression divides by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent) resolve the rule body's free dx at evaluation — the stencil's 1/dx^2 face and interior coefficients pick up the physical spacing 4/N purely through consumer-defined variables. Initial condition and test references spell the grid's index-to-coordinate conversion x_i = x0 + (i - 1/2) dx = -1.5 + (i - 1/2)(4/N) inline with load-foldable scalars instead of applying the free-name x_coord template: the official 6.6.5/ic build-time cellwise evaluation is scope-free (model parameters/observeds are not in scope there), so build-time coordinate expressions must fold from literals and metaparameters alone. All sweep resolutions are powers of two, so every x_i is a dyadic rational and the (x_i - a) cancellation in the references is exact in double precision.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:heat", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:heat",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -15,13 +20,17 @@
   "models": {
     "HeatNonunit": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Temperature field over the x index set."
         },
         "alpha": {
@@ -37,15 +46,19 @@
           "description": "Left domain edge a = -1.5: the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [4, "N"] },
           "description": "Grid spacing (b - a)/N = 4/N for the domain [-1.5, 2.5]: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter (re-exported up the import chain), substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "cos",
             "args": [
@@ -58,9 +71,15 @@
                     "args": [
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
@@ -68,8 +87,20 @@
                             {
                               "op": "*",
                               "args": [
-                                { "op": "-", "args": ["i", 0.5] },
-                                { "op": "/", "args": [4, "N"] }
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    4,
+                                    "N"
+                                  ]
+                                }
                               ]
                             }
                           ]
@@ -84,12 +115,40 @@
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "alpha",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              4,
+              "N"
             ]
           }
         }
@@ -98,13 +157,18 @@
         {
           "id": "mms_neumann_decay_nonunit",
           "description": "Manufactured solution u(x,t) = exp(-alpha (pi/L)^2 t) cos(pi (x - a)/L) on [a, b] = [-1.5, 2.5], L = 4, alpha = 0.2. Derivation: u_xx = -(pi/L)^2 u and u_t = -alpha (pi/L)^2 u, so u_t = alpha u_xx exactly; u_x proportional to sin(pi (x - a)/L) vanishes at both x = a and x = b, matching the zero-gradient rule; no forcing term. Constants: pi/L = 0.7853981633974483, (pi/L)^2 = 0.6168502750680849. References evaluate at the cell centers x_i = x0 + (i - 1/2) dx = -1.5 + (i - 1/2)(4/N), spelled inline per esm-spec 6.6.5 (1-based index space; build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field); the t=0.1 assertion bounds the relative L2 discretization error, whose leading term t alpha (pi/L)^2 (pi/N)^2 / 12 is approximately 4e-5 at N=16, 1e-5 at N=32, 2.5e-6 at N=64, and 6e-7 at N=128 — O(dx^2), inside the 1e-4 bound at every resolution of the convergence sweep. Exact per-resolution error values are pinned in tests/conformance/convergence/heat_1d_zero_grad_nonunit/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -118,9 +182,15 @@
                         "args": [
                           {
                             "op": "aggregate",
-                            "output_idx": ["i"],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "+",
                               "args": [
@@ -128,8 +198,20 @@
                                 {
                                   "op": "*",
                                   "args": [
-                                    { "op": "-", "args": ["i", 0.5] },
-                                    { "op": "/", "args": [4, "N"] }
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        4,
+                                        "N"
+                                      ]
+                                    }
                                   ]
                                 }
                               ]
@@ -147,7 +229,9 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-4 },
+              "tolerance": {
+                "abs": 0.0001
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "*",
@@ -155,7 +239,14 @@
                   {
                     "op": "exp",
                     "args": [
-                      { "op": "*", "args": [-0.2, 0.6168502750680849, 0.1] }
+                      {
+                        "op": "*",
+                        "args": [
+                          -0.2,
+                          0.6168502750680849,
+                          0.1
+                        ]
+                      }
                     ]
                   },
                   {
@@ -170,9 +261,15 @@
                             "args": [
                               {
                                 "op": "aggregate",
-                                "output_idx": ["i"],
+                                "output_idx": [
+                                  "i"
+                                ],
                                 "args": [],
-                                "ranges": { "i": { "from": "x" } },
+                                "ranges": {
+                                  "i": {
+                                    "from": "x"
+                                  }
+                                },
                                 "expr": {
                                   "op": "+",
                                   "args": [
@@ -180,8 +277,20 @@
                                     {
                                       "op": "*",
                                       "args": [
-                                        { "op": "-", "args": ["i", 0.5] },
-                                        { "op": "/", "args": [4, "N"] }
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            4,
+                                            "N"
+                                          ]
+                                        }
                                       ]
                                     }
                                   ]

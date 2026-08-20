@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_ppm_flux_D_lon_periodic",
     "description": "AST fixture for the UNLIMITED (centred) CW84 PPM flux-form ZONAL advection rule (wind as a matched operand, periodic wrap enforced inside the rule). Carries the derived latitude geometry (phie -> dS_lat, dphi_lat) the rule reads as free names and a genuinely three-dimensional, sign-reversing face-staggered zonal wind on the lon_nodes axis.",
@@ -19,7 +19,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -47,27 +47,109 @@
           "description": "Zonal spacing 360/NLON at NLON = 5 (the zonal circle closes). A LITERAL for the same metaparameter-scope reason as dlat_deg. The rule reads it to form dlam = dlon_deg pi/180, AND feeds it to all six cell-width slots of the PPM face-flux atom -- exact, because the lon axis is uniform and the CW84 reconstruction is degree-0 homogeneous in the widths."
         },
         "phie": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "lat_nodes"
           ],
-          "description": "Latitude cell edges in degrees, from the grid's lat_edge template (aggregate index gje).",
-          "expression": {
+          "description": "Latitude cell edges in degrees, from the grid's lat_edge template (aggregate index gje)."
+        },
+        "dS_lat": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template (aggregate index gja)."
+        },
+        "dphi_lat": {
+          "type": "unknown",
+          "units": "rad",
+          "shape": [
+            "lat"
+          ],
+          "description": "Cell angular width in radians (half-width at the caps), from the grid's latcell_dphi template (aggregate index gjd)."
+        },
+        "U": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ],
+          "description": "Three-dimensional face-staggered ZONAL wind on the NLON+1 face axis, positive eastward, evaluated at the cell west edges: U = (0.5 + cos(lame_i)) a(j) b(k). It REVERSES SIGN in longitude, so both branches of the max/min donor selection appear in the golden. ELEMENT U[NLON+1,j,k] IS NEVER READ by the rule (the east face of cell NLON reuses U[1] -- that is the wrap), so the face index NLON+1 must not appear on U anywhere in the golden."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "U",
+                      "u"
+                    ]
+                  }
+                ],
+                "wrt": "lon"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "phie",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
           }
         },
-        "dS_lat": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat"
-          ],
-          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template (aggregate index gja).",
-          "expression": {
+        {
+          "lhs": "dS_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_area",
@@ -76,14 +158,9 @@
             }
           }
         },
-        "dphi_lat": {
-          "type": "observed",
-          "units": "rad",
-          "shape": [
-            "lat"
-          ],
-          "description": "Cell angular width in radians (half-width at the caps), from the grid's latcell_dphi template (aggregate index gjd).",
-          "expression": {
+        {
+          "lhs": "dphi_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_dphi",
@@ -92,16 +169,9 @@
             }
           }
         },
-        "U": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon_nodes",
-            "lat",
-            "lev"
-          ],
-          "description": "Three-dimensional face-staggered ZONAL wind on the NLON+1 face axis, positive eastward, evaluated at the cell west edges: U = (0.5 + cos(lame_i)) a(j) b(k). It REVERSES SIGN in longitude, so both branches of the max/min donor selection appear in the golden. ELEMENT U[NLON+1,j,k] IS NEVER READ by the rule (the east face of cell NLON reuses U[1] -- that is the wrap), so the face index NLON+1 must not appear on U anywhere in the golden.",
-          "expression": {
+        {
+          "lhs": "U",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iw",
@@ -216,64 +286,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": 1.0
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "D",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      "U",
-                      "u"
-                    ]
-                  }
-                ],
-                "wrt": "lon"
-              }
-            ]
           }
         }
       ]

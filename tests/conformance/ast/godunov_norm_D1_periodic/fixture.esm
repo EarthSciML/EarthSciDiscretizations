@@ -1,24 +1,33 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "godunov_norm_D1_periodic_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic: a minimal consuming model binding N=8 at the import edge. The COMPOUND match sqrt((D(u,x))^2) must fire through the section-9.6.3 rewrite fixpoint at priority 10 (before any plain first-derivative rule could lower the inner D(u,x)) and lower the whole Hamilton-Jacobi gradient-magnitude term to the rule's makearray — interior [2,7] holding the Godunov-norm aggregate sqrt(max(D-,0)^2 + min(D+,0)^2), the two periodic-wrap faces i=1 and i=8 holding the same norm with the seam neighbor wrapped — with all metaparameters folded and the free name dx surviving in the expanded body (the grid's consumer-supplied geometry contract). This is the 1-D reduction of the archive Godunov scheme and the concrete instance of the compound-precedence example cited in esm-spec 9.6.3 / 9.6.8. The model fulfills the geometry contract with x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings, with zero unlowered rewrite-target ops (the spatial D is gone) and zero apply_expression_template nodes.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:godunov_norm_D1_periodic"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:godunov_norm_D1_periodic"
+    ]
   },
   "models": {
     "GodunovNormD1PeriodicAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic.esm",
-          "bindings": { "N": 8 }
+          "bindings": {
+            "N": 8
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Level-set / eikonal field over the x index set."
         },
         "S": {
@@ -34,35 +43,66 @@
           "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, 8] },
           "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": 0.0
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
-              { "op": "-", "args": ["S"] },
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
               {
                 "op": "sqrt",
                 "args": [
                   {
                     "op": "^",
                     "args": [
-                      { "op": "D", "args": ["u"], "wrt": "x" },
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      },
                       2
                     ]
                   }
                 ]
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
             ]
           }
         }

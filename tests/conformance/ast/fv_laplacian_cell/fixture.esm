@@ -1,96 +1,175 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "fv_laplacian_cell_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/mpas/rules/fv_laplacian_cell: a minimal consuming model on the icosahedral level-0 mesh (metaparameters bound to NCELLS=12, NEDGES=30, NVERTICES=20, MAXEDGES=5 at the import edge). The single spatial operator laplacian(phi) must lower, through the section-9.6.3 fixpoint, to the rule's ragged div-of-grad finite-volume aggregate with all metaparameters folded -- the golden pins the byte-identical post-lowering AST across bindings. The cell scalar is pure index arithmetic (phi(i) = i) so the fixture carries no data beyond the mesh subsystem; the mesh's const arrays enter the expanded AST only through the bare-name observed aliases (edgeSignOnCell, edgesOnCell, dvEdge, cellsOnEdge, dcEdge, areaCell) that satisfy the grid's keyed-factor contract -- the union of the divergence rule's cell-boundary factors and the gradient rule's flanking-cell gather, since the composed Laplacian stencil needs both.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:mpas", "rule:fv_laplacian_cell"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mpas",
+      "rule:fv_laplacian_cell"
+    ]
   },
   "models": {
     "FvLaplacianCellAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/mpas/rules/fv_laplacian_cell.esm",
-          "bindings": { "NCELLS": 12, "NEDGES": 30, "NVERTICES": 20, "MAXEDGES": 5 }
+          "bindings": {
+            "NCELLS": 12,
+            "NEDGES": 30,
+            "NVERTICES": 20,
+            "MAXEDGES": 5
+          }
         }
       ],
       "subsystems": {
-        "mesh": { "ref": "../../../../grids/mpas/mesh/level0.esm" }
+        "mesh": {
+          "ref": "../../../../grids/mpas/mesh/level0.esm"
+        }
       },
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
+          "shape": [
+            "cells"
+          ],
           "description": "Cell-mean field driven by the Laplacian (the rule's output axis is cells)."
         },
         "edgeSignOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgeSignOnCell.",
-          "expression": "mesh.edgeSignOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgeSignOnCell."
         },
         "edgesOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgesOnCell (ragged edges_of_cell values factor).",
-          "expression": "mesh.edgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgesOnCell (ragged edges_of_cell values factor)."
         },
         "nEdgesOnCell": {
-          "type": "observed",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.nEdgesOnCell (ragged edges_of_cell offsets factor).",
-          "expression": "mesh.nEdgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.nEdgesOnCell (ragged edges_of_cell offsets factor)."
         },
         "dvEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dvEdge (edge length).",
-          "expression": "mesh.dvEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dvEdge (edge length)."
         },
         "cellsOnEdge": {
-          "type": "observed",
-          "shape": ["edges", "edge_ends"],
-          "description": "Bare-name alias of mesh.cellsOnEdge: the two cells flanking each edge (positive normal cellsOnEdge[e][1] -> cellsOnEdge[e][2]); the inlined gradient's flanking-cell gather.",
-          "expression": "mesh.cellsOnEdge"
+          "type": "unknown",
+          "shape": [
+            "edges",
+            "edge_ends"
+          ],
+          "description": "Bare-name alias of mesh.cellsOnEdge: the two cells flanking each edge (positive normal cellsOnEdge[e][1] -> cellsOnEdge[e][2]); the inlined gradient's flanking-cell gather."
         },
         "dcEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dcEdge: cell-center-to-center arc across each edge (the inlined gradient denominator).",
-          "expression": "mesh.dcEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dcEdge: cell-center-to-center arc across each edge (the inlined gradient denominator)."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.areaCell.",
-          "expression": "mesh.areaCell"
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.areaCell."
         },
         "phi": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
-          "description": "Data-free cell scalar phi(i) = i: enough structure to pin the div-of-grad gather pattern of the expanded Laplacian.",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": ["i"],
-            "ranges": { "i": { "from": "cells" } },
-            "expr": "i"
-          }
+          "shape": [
+            "cells"
+          ],
+          "description": "Data-free cell scalar phi(i) = i: enough structure to pin the div-of-grad gather pattern of the expanded Laplacian."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": 0.0
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": { "op": "laplacian", "args": ["phi"] }
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "laplacian",
+            "args": [
+              "phi"
+            ]
+          }
+        },
+        {
+          "lhs": "edgeSignOnCell",
+          "rhs": "mesh.edgeSignOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "dvEdge",
+          "rhs": "mesh.dvEdge"
+        },
+        {
+          "lhs": "cellsOnEdge",
+          "rhs": "mesh.cellsOnEdge"
+        },
+        {
+          "lhs": "dcEdge",
+          "rhs": "mesh.dcEdge"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "phi",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "expr": "i"
+          }
         }
       ]
     }

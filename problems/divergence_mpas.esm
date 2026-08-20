@@ -1,10 +1,16 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "divergence_mpas",
     "description": "Exactness driver for grids/mpas/rules/fv_divergence_cell on the icosahedral level-0 mesh (12 cells, 30 edges, 20 vertices; grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem): u_t = -div(flux) where flux is the DISCRETE CURL of a vertex stream function, so the TRiSK mimetic identity div(curl) = 0 makes the exact solution u(t) = u(0) to rounding. Construction: eta(v) = v^2 at each mesh vertex (exact small integers), flux(e) = (eta(v2) - eta(v1)) / dvEdge(e) with [v1, v2] = verticesOnEdge(e) — the standard C-grid perpendicular/rotational velocity, F = k x grad(eta) discretized along each edge. The problem also demonstrates the MPAS keyed-factor wiring contract: the mesh subsystem's const arrays are re-exposed as bare-name observed aliases (nEdgesOnCell, edgesOnCell, edgeSignOnCell, dvEdge, areaCell, verticesOnEdge := mesh.*), which is where the grid's ragged edges_of_cell offsets/values factors and the rule body's free geometry names resolve (esm-spec 4.6 dot notation; grids/mpas/grid.esm). Import bindings close the grid metaparameters at the level-0 sizes; rebinding {NCELLS: 42, NEDGES: 120, NVERTICES: 80, MAXEDGES: 6} with mesh/level1.esm is the refinement step of the (deferred) convergence suite.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:mpas", "equation:divergence", "exactness", "unstructured"],
+    "tags": [
+      "esd:problem",
+      "grid:mpas",
+      "equation:divergence",
+      "exactness",
+      "unstructured"
+    ],
     "references": [
       {
         "citation": "Ringler, T., Thuburn, J., Klemp, J. B., & Skamarock, W. C. (2010). A unified approach to energy conservation and potential vorticity dynamics for arbitrarily-structured C-grids. Journal of Computational Physics, 229(9), 3065-3090. Section 3: the discrete divergence of the discrete rotational velocity vanishes identically."
@@ -16,136 +22,290 @@
       "expression_template_imports": [
         {
           "ref": "../grids/mpas/rules/fv_divergence_cell.esm",
-          "bindings": { "NCELLS": 12, "NEDGES": 30, "NVERTICES": 20, "MAXEDGES": 5 }
+          "bindings": {
+            "NCELLS": 12,
+            "NEDGES": 30,
+            "NVERTICES": 20,
+            "MAXEDGES": 5
+          }
         }
       ],
       "subsystems": {
-        "mesh": { "ref": "../grids/mpas/mesh/level0.esm" }
+        "mesh": {
+          "ref": "../grids/mpas/mesh/level0.esm"
+        }
       },
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
+          "shape": [
+            "cells"
+          ],
           "description": "Cell-mean tracer over the Voronoi cells."
         },
         "nEdgesOnCell": {
-          "type": "observed",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.nEdgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set."
         },
         "edgesOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.edgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set."
         },
         "edgeSignOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the divergence rule.",
-          "expression": "mesh.edgeSignOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the divergence rule."
         },
         "dvEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere.",
-          "expression": "mesh.dvEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas.",
-          "expression": "mesh.areaCell"
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas."
         },
         "verticesOnEdge": {
-          "type": "observed",
-          "shape": ["edges", "edge_ends"],
-          "description": "Bare-name alias of mesh.verticesOnEdge: the ordered vertex pair of each edge (positive tangent v1 -> v2 = k x n).",
-          "expression": "mesh.verticesOnEdge"
+          "type": "unknown",
+          "shape": [
+            "edges",
+            "edge_ends"
+          ],
+          "description": "Bare-name alias of mesh.verticesOnEdge: the ordered vertex pair of each edge (positive tangent v1 -> v2 = k x n)."
         },
         "eta": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["vertices"],
-          "description": "Vertex stream function eta(v) = v^2: exact small integers (1..400), index arithmetic only, so every eta difference along an edge is exact in double precision.",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": ["v"],
-            "ranges": { "v": { "from": "vertices" } },
-            "expr": { "op": "*", "args": ["v", "v"] }
-          }
+          "shape": [
+            "vertices"
+          ],
+          "description": "Vertex stream function eta(v) = v^2: exact small integers (1..400), index arithmetic only, so every eta difference along an edge is exact in double precision."
         },
         "flux": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["edges"],
-          "description": "Edge-normal flux flux(e) = (eta(v2) - eta(v1)) / dvEdge(e), [v1, v2] = verticesOnEdge(e): the discrete curl (rotational C-grid velocity k x grad eta) of the vertex stream function, hence exactly divergence-free under the TRiSK divergence.",
-          "expression": {
+          "shape": [
+            "edges"
+          ],
+          "description": "Edge-normal flux flux(e) = (eta(v2) - eta(v1)) / dvEdge(e), [v1, v2] = verticesOnEdge(e): the discrete curl (rotational C-grid velocity k x grad eta) of the vertex stream function, hence exactly divergence-free under the TRiSK divergence."
+        },
+        "div_flux": {
+          "type": "unknown",
+          "units": "1/sr",
+          "shape": [
+            "cells"
+          ],
+          "description": "The rule output itself, observed for direct assertion: div(flux) lowered by fv_divergence_cell to the ragged finite-volume aggregate."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
             "op": "aggregate",
-            "args": ["eta", "verticesOnEdge", "dvEdge"],
-            "output_idx": ["e"],
-            "ranges": { "e": { "from": "edges" } },
+            "args": [],
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "cells"
+              }
+            },
+            "expr": "i"
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "div",
+                "args": [
+                  "flux"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "edgeSignOnCell",
+          "rhs": "mesh.edgeSignOnCell"
+        },
+        {
+          "lhs": "dvEdge",
+          "rhs": "mesh.dvEdge"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "verticesOnEdge",
+          "rhs": "mesh.verticesOnEdge"
+        },
+        {
+          "lhs": "eta",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "v"
+            ],
+            "ranges": {
+              "v": {
+                "from": "vertices"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                "v",
+                "v"
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "flux",
+          "rhs": {
+            "op": "aggregate",
+            "args": [
+              "eta",
+              "verticesOnEdge",
+              "dvEdge"
+            ],
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
             "expr": {
               "op": "/",
               "args": [
                 {
                   "op": "-",
                   "args": [
-                    { "op": "index", "args": ["eta", { "op": "index", "args": ["verticesOnEdge", "e", 2] }] },
-                    { "op": "index", "args": ["eta", { "op": "index", "args": ["verticesOnEdge", "e", 1] }] }
+                    {
+                      "op": "index",
+                      "args": [
+                        "eta",
+                        {
+                          "op": "index",
+                          "args": [
+                            "verticesOnEdge",
+                            "e",
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "eta",
+                        {
+                          "op": "index",
+                          "args": [
+                            "verticesOnEdge",
+                            "e",
+                            1
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 },
-                { "op": "index", "args": ["dvEdge", "e"] }
+                {
+                  "op": "index",
+                  "args": [
+                    "dvEdge",
+                    "e"
+                  ]
+                }
               ]
             }
           }
         },
-        "div_flux": {
-          "type": "observed",
-          "units": "1/sr",
-          "shape": ["cells"],
-          "description": "The rule output itself, observed for direct assertion: div(flux) lowered by fv_divergence_cell to the ragged finite-volume aggregate.",
-          "expression": { "op": "div", "args": ["flux"] }
-        }
-      },
-      "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": "div_flux",
           "rhs": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": ["i"],
-            "ranges": { "i": { "from": "cells" } },
-            "expr": "i"
+            "op": "div",
+            "args": [
+              "flux"
+            ]
           }
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": { "op": "-", "args": [{ "op": "div", "args": ["flux"] }] }
         }
       ],
       "tests": [
         {
           "id": "div_of_curl_is_zero",
           "description": "The TRiSK mimetic identity, exact on the discrete level. Derivation: div_i = (1/A_i) sum_k sign(i,k) * flux(e) * dvEdge(e), e = edgesOnCell(i,k), and flux(e)*dvEdge(e) = eta(v2(e)) - eta(v1(e)) by construction. edgeSignOnCell = +1 exactly where the positive normal leaves cell i, and the mesh orientation convention t = k x n means that traversing an edge v1 -> v2 runs counterclockwise around the cell its normal leaves; so, walking cell i's boundary counterclockwise, sign(i,k)*(eta(v2)-eta(v1)) is a closed telescoping cycle over the cell's vertices (each vertex enters once as head and once as tail) and sums to 0 for ANY vertex field eta — verified exactly, in integer arithmetic, for this mesh's connectivity at authoring time. In floating point each summand recovers an exact integer difference (|eta diff| <= ~400) to relative epsilon through the /dvEdge * dvEdge round trip, so |div_flux| <~ 1e-12: the max/min assertions pin the rule output to zero at 1e-11, and u (integrated from ic u0(i) = i with du/dt = -div(flux) ~ 0) must return its initial field at t = 1 to 1e-9 in relative L2. The mean assertion checks conservation independently: mean(u0) = (1+2+...+12)/12 = 6.5. Any orientation, sign, ragged-bound, or gather error breaks the telescoping by an O(1) amount (the smallest nonzero eta difference over dvEdge*A is ~1), so the 1e-11 tolerance separates pass from fail by ~11 orders of magnitude.",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-12 },
+              "tolerance": {
+                "abs": 1e-12
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
                 "args": [],
-                "output_idx": ["i"],
-                "ranges": { "i": { "from": "cells" } },
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "cells"
+                  }
+                },
                 "expr": "i"
               }
             },
@@ -153,13 +313,21 @@
               "variable": "u",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
                 "args": [],
-                "output_idx": ["i"],
-                "ranges": { "i": { "from": "cells" } },
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "cells"
+                  }
+                },
                 "expr": "i"
               }
             },
@@ -167,21 +335,27 @@
               "variable": "u",
               "time": 1.0,
               "expected": 6.5,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "mean"
             },
             {
               "variable": "div_flux",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-11 },
+              "tolerance": {
+                "abs": 1e-11
+              },
               "reduce": "max"
             },
             {
               "variable": "div_flux",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-11 },
+              "tolerance": {
+                "abs": 1e-11
+              },
               "reduce": "min"
             }
           ]

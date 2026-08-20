@@ -1,83 +1,156 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "fv_divergence_cell_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/mpas/rules/fv_divergence_cell: a minimal consuming model on the icosahedral level-0 mesh (metaparameters bound to NCELLS=12, NEDGES=30, NVERTICES=20, MAXEDGES=5 at the import edge). The single spatial operator div(flux) must lower, through the section-9.6.3 fixpoint, to the rule's ragged finite-volume aggregate with all metaparameters folded — the golden pins the byte-identical post-lowering AST across bindings. The edge flux is pure index arithmetic (flux(e) = e) so the fixture carries no data beyond the mesh subsystem; the mesh's const arrays enter the expanded AST only through the bare-name observed aliases that satisfy the grid's keyed-factor contract.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:mpas", "rule:fv_divergence_cell"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mpas",
+      "rule:fv_divergence_cell"
+    ]
   },
   "models": {
     "FvDivergenceCellAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/mpas/rules/fv_divergence_cell.esm",
-          "bindings": { "NCELLS": 12, "NEDGES": 30, "NVERTICES": 20, "MAXEDGES": 5 }
+          "bindings": {
+            "NCELLS": 12,
+            "NEDGES": 30,
+            "NVERTICES": 20,
+            "MAXEDGES": 5
+          }
         }
       ],
       "subsystems": {
-        "mesh": { "ref": "../../../../grids/mpas/mesh/level0.esm" }
+        "mesh": {
+          "ref": "../../../../grids/mpas/mesh/level0.esm"
+        }
       },
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["cells"],
+          "shape": [
+            "cells"
+          ],
           "description": "Cell-mean tracer over the Voronoi cells."
         },
         "nEdgesOnCell": {
-          "type": "observed",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.nEdgesOnCell (ragged edges_of_cell offsets factor).",
-          "expression": "mesh.nEdgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.nEdgesOnCell (ragged edges_of_cell offsets factor)."
         },
         "edgesOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgesOnCell (ragged edges_of_cell values factor).",
-          "expression": "mesh.edgesOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgesOnCell (ragged edges_of_cell values factor)."
         },
         "edgeSignOnCell": {
-          "type": "observed",
-          "shape": ["cells", "maxEdges"],
-          "description": "Bare-name alias of mesh.edgeSignOnCell.",
-          "expression": "mesh.edgeSignOnCell"
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges"
+          ],
+          "description": "Bare-name alias of mesh.edgeSignOnCell."
         },
         "dvEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
-          "shape": ["edges"],
-          "description": "Bare-name alias of mesh.dvEdge.",
-          "expression": "mesh.dvEdge"
+          "shape": [
+            "edges"
+          ],
+          "description": "Bare-name alias of mesh.dvEdge."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
-          "shape": ["cells"],
-          "description": "Bare-name alias of mesh.areaCell.",
-          "expression": "mesh.areaCell"
+          "shape": [
+            "cells"
+          ],
+          "description": "Bare-name alias of mesh.areaCell."
         },
         "flux": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["edges"],
-          "description": "Data-free edge flux flux(e) = e: enough structure to pin the gather pattern of the expanded divergence.",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": ["e"],
-            "ranges": { "e": { "from": "edges" } },
-            "expr": "e"
-          }
+          "shape": [
+            "edges"
+          ],
+          "description": "Data-free edge flux flux(e) = e: enough structure to pin the gather pattern of the expanded divergence."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": 0.0
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": { "op": "-", "args": [{ "op": "div", "args": ["flux"] }] }
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "div",
+                "args": [
+                  "flux"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "edgeSignOnCell",
+          "rhs": "mesh.edgeSignOnCell"
+        },
+        {
+          "lhs": "dvEdge",
+          "rhs": "mesh.dvEdge"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "flux",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "e"
+            ],
+            "ranges": {
+              "e": {
+                "from": "edges"
+              }
+            },
+            "expr": "e"
+          }
         }
       ]
     }

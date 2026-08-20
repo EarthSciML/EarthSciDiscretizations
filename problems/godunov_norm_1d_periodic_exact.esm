@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "godunov_norm_1d_periodic_exact",
     "description": "Exactness driver for grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic on the periodic unit interval [0,1] at N=64: the first-order Godunov (Rouy-Tourin / Osher-Sethian) gradient magnitude ANNIHILATES a spatially constant field EXACTLY, the null-space mimetic property |grad(const)| = 0 (the low-order 1-D cartesian analogue of the grad(const) = 0 gate in problems/gradient_mpas.esm). The state holds a constant field u(x) = 3, evolved under the Hamilton-Jacobi step u_t = -S|u_x| discretized as u_t = -S*godunov(u); with u constant every backward and forward difference is a subtraction of equal floats (u[i]-u[i-1] = 3-3 = 0.0 to the bit, at the interior AND at the two periodic-wrap faces u[1]-u[N] = u[N+1=1]-u[N] = 0.0), so sqrt(max(0,0)^2 + min(0,0)^2) = 0 EXACTLY at every cell, du/dt = 0.0 to the bit, and u(t) = u(0) = 3 for all time with NO rounding drift (a constant difference is an exact zero, not an O(eps) residual). The gate asserts the preserved state directly: L2_error of u versus the constant reference 3 is 0 at t=0 and t=1 (within 1e-13), and mean(u) = 3 (within 1e-13). Because this is a STATE assertion (the binding evaluates reductions of the state solution, and analytic build-time references, but cannot evaluate an observed that reads the state), it is the sim-expressible exactness deliverable. The stronger interior property that the Godunov norm reproduces |u_x| = |a| EXACTLY for a NON-constant affine field u = a x + b (interior D- = D+ = a, so sqrt(max(a,0)^2 + min(a,0)^2) = |a| with no truncation error) is NOT expressible as a periodic simulation gate: a non-constant ramp cannot be periodic, so its two wrap faces are seam artifacts that a state reduction cannot exempt, and the binding cannot assert a face-masking observed of the state. That interior exactness is pinned instead by the AST golden (tests/conformance/ast/godunov_norm_D1_periodic, the correct max/min stencil structure) and is exercised on nontrivial data by the order-1 convergence sweep problems/godunov_norm_1d_eikonal_mms.esm, whose clean first-order error confirms the entropy fix selects the exact one-sided branch. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6). The constant field needs no coordinate geometry, so the ic and reference evaluations stay build-time scope-free.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:hamilton_jacobi", "exactness"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:hamilton_jacobi",
+      "exactness"
+    ],
     "references": [
       {
         "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49. The Godunov |grad phi| upwind construction, whose max/min differences vanish on a constant field.",
@@ -15,13 +20,17 @@
   "models": {
     "GodunovNormExact": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Constant level-set field u(x) = 3; the Godunov norm annihilates it, so u_t = -S*godunov(u) = 0 and u holds its ic for all time."
         },
         "S": {
@@ -37,35 +46,78 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, "N"] },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6)."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "aggregate",
-            "output_idx": ["i"],
+            "output_idx": [
+              "i"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
             "expr": 3.0
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
-              { "op": "-", "args": ["S"] },
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
               {
                 "op": "sqrt",
                 "args": [
-                  { "op": "^", "args": [ { "op": "D", "args": ["u"], "wrt": "x" }, 2 ] }
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "x"
+                      },
+                      2
+                    ]
+                  }
                 ]
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }
@@ -74,19 +126,30 @@
         {
           "id": "constant_field_annihilated_exact",
           "description": "The Godunov gradient magnitude annihilates a constant field to the bit (|grad(const)| = 0), so the constant state is preserved exactly. Derivation: u(i) = 3 for every cell, so every backward difference u[i]-u[i-1] and forward difference u[i+1]-u[i] — interior AND the periodic-wrap faces (u[1]-u[N], u[1]-u[N]) — is 3.0 - 3.0 = 0.0 exactly, and sqrt(max(0,0)^2 + min(0,0)^2) = 0.0; hence u_t = -S*0 = 0.0 to the bit and u(t) = 3 for all t with no drift. The L2_error assertions pin u to the constant reference 3 at t=0 (ic wiring) and t=1 (preservation under the lowered operator) within 1e-13, and mean(u) = 3 confirms independently. Any lowering or evaluation defect in the max/min/sqrt makearray (a surviving unlowered D, a broken face region, a sign error) that produced a nonzero |grad| on the constant field would drive u off 3 by O(S t) and blow past the 1e-13 tolerance by orders of magnitude. Because a constant difference is an exact float zero, the tolerance could be 0; 1e-13 leaves headroom for the solver's own arithmetic.",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-13 },
+              "tolerance": {
+                "abs": 1e-13
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i"],
+                "output_idx": [
+                  "i"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  }
+                },
                 "expr": 3.0
               }
             },
@@ -94,13 +157,21 @@
               "variable": "u",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-13 },
+              "tolerance": {
+                "abs": 1e-13
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i"],
+                "output_idx": [
+                  "i"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  }
+                },
                 "expr": 3.0
               }
             },
@@ -108,7 +179,9 @@
               "variable": "u",
               "time": 1.0,
               "expected": 3.0,
-              "tolerance": { "abs": 1e-13 },
+              "tolerance": {
+                "abs": 1e-13
+              },
               "reduce": "mean"
             }
           ]

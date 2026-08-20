@@ -20,7 +20,7 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
           of any model math)
     L007  kind/payload agreement: grid|stencil|rule|regrid|reproject are pure
           template-library files; problem files carry models
-    L008  esm version is 0.8.0
+    L008  esm version matches the ESS schema's $id (see esm_version())
 
 Usage:
   validate-library.py               validate + lint the library (exit 1 on findings)
@@ -50,12 +50,26 @@ REQUIRED_TAGS = {
     "reproject": ["crs:"],
     "problem": ["grid:"],
 }
-COMPONENT_KEYS = ("models", "reaction_systems", "data_loaders", "coupling", "domain")
+COMPONENT_KEYS = ("models", "reaction_systems", "data_sources", "coupling", "domain")
 # Sampled sizes for L006 metaparameter folding. Rules must tile for every size at or
 # above the smallest stencil-supporting grid; one even and one odd sample catches
 # parity mistakes in region arithmetic.
 SAMPLE_SIZES = (16, 17)
 MAX_COVERAGE_CELLS = 1_000_000
+
+
+def esm_version() -> str:
+    """The `esm` version every library file must declare (L008).
+
+    Read from the ESS schema's `$id` rather than hardcoded here: the previous
+    hardcode ("0.8.0") silently outlived four spec revisions and only surfaced
+    when 1.0.0 rejected the whole corpus. Deriving it means an ESS bump shows
+    up as a lint finding on the FILES, not as a stale constant in this script.
+    """
+    schema_id = load_json(ess_root() / "esm-schema.json")["$id"]
+    # https://earthsciml.org/schemas/esm/<version>/esm.schema.json
+    return schema_id.rstrip("/").split("/")[-2]
+
 
 
 def ess_root() -> Path:
@@ -170,8 +184,9 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
     tags = prefix_tags(doc)
     stem = path.stem
 
-    if doc.get("esm") != "0.8.0":
-        findings.add(path, "L008", f"esm version {doc.get('esm')!r}, expected '0.8.0'")
+    expected_esm = esm_version()
+    if doc.get("esm") != expected_esm:
+        findings.add(path, "L008", f"esm version {doc.get('esm')!r}, expected {expected_esm!r}")
 
     kinds = tags.get("esd", [])
     if len(kinds) != 1 or kinds[0] not in KINDS:

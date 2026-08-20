@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_meridional_ppm",
     "description": "MMS driver: forced meridional advection on the 3-D latlon3d grid, u_t = -v_deg * D(u, lat) + v_deg * dPdlat, discretized by grids/latlon3d/rules/ppm_D_lat_zero_grad_bc (Piecewise Parabolic Method, Colella-Woodward 1984; conservative finite-volume, semi-discrete method-of-lines upwind flux, zero-gradient pole ghosts, rank-3). The higher-order GC-faithful counterpart of latlon3d_advection_meridional_zero_grad (same manufactured solution, same passive lon/lev, swapping the 2nd-order centered rule for PPM). PASSIVE lon (NLON=8, zonally symmetric) and PASSIVE lev (NLEV=4, level-independent). Manufactured STEADY solution u*(lat) = cos^4((pi/180) lat) with exactly matching steady forcing v_deg * dPdlat, dPdlat = -4 (pi/180) cos^3(Phi) sin(Phi), Phi = (pi/180) lat, so u_t = 0 and u(t) = u* in the continuous problem; the discrete field drifts only by spatial truncation. BC COMPATIBILITY: u* has its first three Phi-derivatives vanishing at the poles (all carry a cos factor), so the both-ends zeroth-order-extrapolation ghost residual is small and the observed order is set by the one-sided PPM boundary reconstruction -- near 2nd order in practice (like the 1-D bounded sibling advection_1d_inflow_ppm), pinned honestly in tests/conformance/convergence/latlon3d_advection_meridional_ppm (NOT a claim of 3rd order). GRID CONTRACT WIRING: NLON=8 and NLEV=4 are closed at the import edge (both passive), NLAT stays open (default 91, swept via the loader API); dlat_deg = 180/(NLAT-1) is an observed dividing by the metaparameter NAME NLAT (esm-spec 9.7.6); lat0_deg = -90. The ic, forcing, and references inline lat_j = -90 + (j-1)*180/(NLAT-1) via the NLAT name (build-time scope caveat: lat_coord is not resolvable in build-time ic/reference positions). ERROR MODEL: with v_deg=30 and t=0.2 the truncation drift falls at the pinned observed order over the NLAT ladder; per-resolution values in the convergence golden. Sign convention: v_deg >= 0 (northward); the PPM upwind reconstruction takes its parabola from the south (upwind) cells.",
@@ -33,7 +33,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -49,9 +49,146 @@
           "description": "Constant meridional transport speed (deg latitude per second, positive northward). Multiplies both the discretized derivative and the forcing so the steady balance holds for any value."
         },
         "dlat_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": {
+          "description": "Meridional spacing 180/(NLAT-1): the grid's dlat_deg free name. NLAT is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so the sweep keeps it consistent."
+        },
+        "dPdlat": {
+          "type": "unknown",
+          "units": "1/deg",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Analytic per-degree meridional derivative of u*: -4 (pi/180) cos^3(Phi) sin(Phi). v_deg*dPdlat is the forcing that holds u*=cos^4 steady."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "^",
+              "args": [
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            3.141592653589793,
+                            180
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            -90,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    180,
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "NLAT",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                4
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "v_deg"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "v_deg",
+                  "dPdlat"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dlat_deg",
+          "rhs": {
             "op": "/",
             "args": [
               180,
@@ -63,19 +200,11 @@
                 ]
               }
             ]
-          },
-          "description": "Meridional spacing 180/(NLAT-1): the grid's dlat_deg free name. NLAT is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so the sweep keeps it consistent."
+          }
         },
-        "dPdlat": {
-          "type": "observed",
-          "units": "1/deg",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Analytic per-degree meridional derivative of u*: -4 (pi/180) cos^3(Phi) sin(Phi). v_deg*dPdlat is the forcing that holds u*=cos^4 steady.",
-          "expression": {
+        {
+          "lhs": "dPdlat",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "i",
@@ -209,129 +338,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "^",
-              "args": [
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            3.141592653589793,
-                            180
-                          ]
-                        },
-                        {
-                          "op": "+",
-                          "args": [
-                            -90,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    1
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    180,
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "NLAT",
-                                        1
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                4
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "v_deg"
-                    ]
-                  },
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "lat"
-                  }
-                ]
-              },
-              {
-                "op": "*",
-                "args": [
-                  "v_deg",
-                  "dPdlat"
-                ]
-              }
-            ]
           }
         }
       ],

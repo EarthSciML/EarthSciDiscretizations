@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_2d_y_dirichlet_central",
     "description": "MMS driver: linear advection-diffusion along y, u_t = -c D(u,y) + nu D(D(u,y),y), on the unit box [0,1]x[0,1] with fixed-value (DIRICHLET) y-walls, over the full 2-D field u[x,y]. The advective y-gradient term D(u,y) is discretized by grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc (2nd-order centered interior, mirror-ghost fixed-value face rows) — the RULE UNDER TEST — and the diffusive term D(D(u,y),y) by grids/cartesian_uniform_2d/rules/central_D2y_dirichlet_bc (both closures share the same y-wall values gB, gT). The y-axis analog of problems/advection_2d_x_dirichlet_central. WHY ADVECTION-DIFFUSION, NOT PURE ADVECTION: a fixed-value mirror-ghost gradient closure pins the field at a wall, which reflects at an outflow wall in pure first-order advection (a Kreiss/GKS-unstable boundary mode whose error grows under refinement), so a two-sided fixed-value gradient is well posed only where a physical diffusion supplies the boundary dissipation (Dirichlet being the diffusion's natural condition); the advective term is still genuinely exercised and dominates the truncation, so the observed order is a real order test of central_D1y_dirichlet_bc. EXACT UNFORCED SOLUTION (decay structure, parabolic boundary smoothing keeps truncation at global O(dy^2)): u*(y,t) = e^{2y} + e^{-lambda t} e^{y} sin(pi y), constant in x, with c = 1, nu = 1/2, lambda = nu pi^2 + c^2/(4 nu) = 5.434802200544679. Both terms solve u_t = -c u_y + nu u_yy exactly: (i) the STEADY mode e^{2y} = e^{(c/nu) y} carries the NONZERO y-wall values gB = 1 (bottom, j=1) and gT = e^2 = 7.38905609893065 (top, j=NY), exercising the inhomogeneous mirror-ghost face term 2*g at BOTH y-walls; (ii) the DECAY part e^{-lambda t} e^{y} sin(pi y) is the first Dirichlet eigenfunction (zero on both y-walls), driving the time evolution. The y-operator truncation dominates the drift. The x axis is PASSIVE: u* is constant in x, no x-operator appears, and NX is closed to 8 at the import edge; NY stays open (grid default 64, rebound by the convergence sweep). OBSERVATION WINDOW t=0.05: the y-diffusion is dissipative, so no short-window trick is needed; t is kept modest so the decay part (e^{-lambda t} = 0.76 at t=0.05) is still O(1), keeping the operator test active. Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dy=1/NY (an observed dividing by the metaparameter name NY per esm-spec 9.7.6 so the sweep keeps dy consistent), dx=1/NX. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free-name dy survives only in the runtime rule bodies; the ic and test references spell y_j = 0 + (j-1/2)(1/NY) inline from literals and NY, never invoking the grid's y_coord free-name template; the gB/gT wall values likewise survive only in the runtime rule bodies. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_2d_y_dirichlet_central/golden/errors.json.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:advection_diffusion", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:advection_diffusion",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -22,37 +27,207 @@
   "models": {
     "Advection2DyDirichlet": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc.esm", "bindings": { "NX": 8 } },
-        { "ref": "../grids/cartesian_uniform_2d/rules/central_D2y_dirichlet_bc.esm", "bindings": { "NX": 8 } }
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/central_D1y_dirichlet_bc.esm",
+          "bindings": {
+            "NX": 8
+          }
+        },
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/central_D2y_dirichlet_bc.esm",
+          "bindings": {
+            "NX": 8
+          }
+        }
       ],
       "variables": {
-        "u": { "type": "state", "units": "kg/m^3", "shape": ["x", "y"], "description": "Advected-diffused tracer field over the 2-D [x, y] index sets (constant in x in this problem)." },
-        "c": { "type": "parameter", "units": "m/s", "default": 1.0, "description": "Constant transport speed along y for the advective gradient term D(u,y) (the rule under test)." },
-        "nu": { "type": "parameter", "units": "m^2/s", "default": 0.5, "description": "y-diffusivity for the stabilizing D(D(u,y),y) term; c/nu = 2 keeps advection a leading contributor to the truncation." },
-        "gB": { "type": "parameter", "units": "kg/m^3", "default": 1.0, "description": "Prescribed value on the bottom y-wall y=y0 (j=1), shared by the advective (central_D1y_dirichlet_bc) and diffusive (central_D2y_dirichlet_bc) y-closures. Set to 1 = u_s(0) = e^0 (nonzero, so the inhomogeneous mirror-ghost face term appears at runtime)." },
-        "gT": { "type": "parameter", "units": "kg/m^3", "default": 7.38905609893065, "description": "Prescribed value on the top y-wall y=y0+NY*dy (j=NY), shared by both y-closures. Set to e^2 = u_s(1) (nonzero, so the inhomogeneous mirror-ghost face term appears at runtime)." },
-        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge (unit box): the grid's x0 free name (unused here; the solution is constant in x)." },
-        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)." },
-        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NX"] }, "description": "x-spacing 1/NX: the grid's dx free name; NX closed to 8 at the import edge (unused here; the y-operators reference only dy)." },
-        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, "NY"] }, "description": "y-spacing 1/NY: the grid's dy free name, resolved inside the rewrite rules' expanded bodies at evaluation. NY is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dy consistent." }
+        "u": {
+          "type": "unknown",
+          "units": "kg/m^3",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Advected-diffused tracer field over the 2-D [x, y] index sets (constant in x in this problem)."
+        },
+        "c": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Constant transport speed along y for the advective gradient term D(u,y) (the rule under test)."
+        },
+        "nu": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.5,
+          "description": "y-diffusivity for the stabilizing D(D(u,y),y) term; c/nu = 2 keeps advection a leading contributor to the truncation."
+        },
+        "gB": {
+          "type": "parameter",
+          "units": "kg/m^3",
+          "default": 1.0,
+          "description": "Prescribed value on the bottom y-wall y=y0 (j=1), shared by the advective (central_D1y_dirichlet_bc) and diffusive (central_D2y_dirichlet_bc) y-closures. Set to 1 = u_s(0) = e^0 (nonzero, so the inhomogeneous mirror-ghost face term appears at runtime)."
+        },
+        "gT": {
+          "type": "parameter",
+          "units": "kg/m^3",
+          "default": 7.38905609893065,
+          "description": "Prescribed value on the top y-wall y=y0+NY*dy (j=NY), shared by both y-closures. Set to e^2 = u_s(1) (nonzero, so the inhomogeneous mirror-ghost face term appears at runtime)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge (unit box): the grid's x0 free name (unused here; the solution is constant in x)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge b = 0 (unit box): the grid's y0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_2d/grid.esm)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX: the grid's dx free name; NX closed to 8 at the import edge (unused here; the y-operators reference only dy)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY: the grid's dy free name, resolved inside the rewrite rules' expanded bodies at evaluation. NY is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so the convergence sweep keeps dy consistent."
+        }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "aggregate",
-            "output_idx": ["i", "j"],
+            "output_idx": [
+              "i",
+              "j"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
             "expr": {
               "op": "+",
               "args": [
-                { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] },
+                {
+                  "op": "exp",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
                 {
                   "op": "*",
                   "args": [
-                    { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] },
-                    { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] }
+                    {
+                      "op": "exp",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            0,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sin",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               ]
@@ -60,12 +235,73 @@
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "+",
             "args": [
-              { "op": "*", "args": [{ "op": "-", "args": ["c"] }, { "op": "D", "args": ["u"], "wrt": "y" }] },
-              { "op": "*", "args": ["nu", { "op": "D", "args": [{ "op": "D", "args": ["u"], "wrt": "y" }], "wrt": "y" }] }
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "y"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "nu",
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "D",
+                        "args": [
+                          "u"
+                        ],
+                        "wrt": "y"
+                      }
+                    ],
+                    "wrt": "y"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
             ]
           }
         }
@@ -74,28 +310,142 @@
         {
           "id": "mms_y_dirichlet_decay",
           "description": "Exact unforced advection-diffusion solution u*(y,t) = e^{2y} + e^{-lambda t} e^{y} sin(pi y) (constant in x) with c = 1, nu = 1/2, lambda = 5.434802200544679, fixed-value y-walls gB = 1, gT = e^2. Derivation: the steady mode e^{2y} (nonzero y-walls) and the decaying first Dirichlet eigenfunction e^{-lambda t} e^{y} sin(pi y) (homogeneous y-walls) each solve u_t = -c u_y + nu u_yy exactly, so the discrete drift is the spatial truncation of the two y-operators, dominated by the advective central_D1y_dirichlet_bc term (metadata.description). References evaluate at cell centers y_j = 0 + (j - 1/2)/NY, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.05 assertion bounds the truncation error against the exact reference (well under the bound at the default NY=64, falling at order 2). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_2d_y_dirichlet_central/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.05 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.05
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "+",
                   "args": [
-                    { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] },
+                    {
+                      "op": "exp",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            2,
+                            {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
                     {
                       "op": "*",
                       "args": [
-                        { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] },
-                        { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] }
+                        {
+                          "op": "exp",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            1,
+                                            "NY"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -106,26 +456,148 @@
               "variable": "u",
               "time": 0.05,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-3 },
+              "tolerance": {
+                "abs": 0.001
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "aggregate",
-                "output_idx": ["i", "j"],
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
                 "args": [],
-                "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
                 "expr": {
                   "op": "+",
                   "args": [
-                    { "op": "exp", "args": [{ "op": "*", "args": [2, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] },
                     {
-                      "op": "*",
+                      "op": "exp",
                       "args": [
-                        { "op": "exp", "args": [{ "op": "*", "args": [-5.434802200544679, 0.05] }] },
                         {
                           "op": "*",
                           "args": [
-                            { "op": "exp", "args": [{ "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] },
-                            { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, { "op": "+", "args": [0, { "op": "*", "args": [{ "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] }] }] }] }] }
+                            2,
+                            {
+                              "op": "+",
+                              "args": [
+                                0,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "exp",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                -5.434802200544679,
+                                0.05
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "exp",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    0,
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            0.5
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            1,
+                                            "NY"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "sin",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    3.141592653589793,
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        0,
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "j",
+                                                0.5
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                1,
+                                                "NY"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       ]

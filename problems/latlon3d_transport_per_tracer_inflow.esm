@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_transport_per_tracer_inflow",
     "description": "PER-TRACER LATERAL INFLOW on a limited-area latlon patch (12x9x4, lon [0,60], lat [20,60], no poles, no zonal wrap): two tracers ride the SAME air-mass flux through the SAME monotone PPM inflow rules on lon and lat, each carrying its OWN prescribed Dirichlet halo. Geometry, winds, metric and initial mass profile are taken verbatim from problems/latlon3d_transport_cwc_regional_inflow.esm, so the only new thing under test is halo independence. Tracer A's halo is 1.0 on all four walls and matches its uniform interior: every CW84 correction is a difference of equal values, exactly 0.0 in IEEE, each wall flux collapses to F = M bitwise, and devA = mqA - m stays EXACTLY 0. Tracer B is identical except its WEST halo is 2.0; the west wind blows into the domain, so that halo is donated and devB departs zero. This document is the regression gate for the halo being a rule PARAM rather than a free name: with a free name, one model scope holds exactly one `qbc_w` and the two tracers could not disagree. See also the sibling CWC case (all-halos-match) and _falsifier_regional_inflow.esm (all halos perturbed).",
@@ -52,7 +52,7 @@
       ],
       "variables": {
         "m": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -74,333 +74,69 @@
           "description": "Grid's lat0_deg free name; -90 for the pole-to-pole global recipe."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": 5.0,
           "description": "Regional zonal spacing 5.0 deg (lon in [0.0, 60.0]); the domain does NOT close, so the zonal axis is OPEN (west/east walls), not periodic."
         },
         "dlat_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": 5.0,
           "description": "Regional meridional spacing 5.0 deg (lat in [20.0, 60.0]); the domain does NOT reach the poles, so the meridional axis is OPEN (south/north walls), not polar."
         },
         "phie": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "lat_nodes"
           ],
-          "description": "Latitude cell EDGES from the grid's lat_edge template; the half-polar caps fall out of the clamp at +/-90.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lat_edge",
-            "bindings": {}
-          }
+          "description": "Latitude cell EDGES from the grid's lat_edge template; the half-polar caps fall out of the clamp at +/-90."
         },
         "coslat_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat_nodes"
           ],
-          "description": "cos of the latitude edges. Zero-length face at each pole. Never read at faces 1 or NLAT+1 -- the pole terms are structurally omitted.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "coslat_edge",
-            "bindings": {
-              "phie": "phie"
-            }
-          }
+          "description": "cos of the latitude edges. Zero-length face at each pole. Never read at faces 1 or NLAT+1 -- the pole terms are structurally omitted."
         },
         "dS_lat": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat"
           ],
-          "description": "Exact spherical cell-area weight sin(phie[j+1]) - sin(phie[j]).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "latcell_area",
-            "bindings": {
-              "phie": "phie"
-            }
-          }
+          "description": "Exact spherical cell-area weight sin(phie[j+1]) - sin(phie[j])."
         },
         "dphi_lat": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
           "shape": [
             "lat"
           ],
-          "description": "Meridional cell extent; HALF-width at the two polar caps.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "latcell_dphi",
-            "bindings": {
-              "phie": "phie"
-            }
-          }
+          "description": "Meridional cell extent; HALF-width at the two polar caps."
         },
         "Mx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon_nodes",
             "lat",
             "lev"
           ],
-          "description": "Zonal face-normal air-mass flux at the WEST edge of each cell. Element NLON+1 IS read here (open east wall). Positive throughout [0,60] deg lon, so the west wall is inflow and the east wall outflow.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ci",
-              "cj",
-              "ck"
-            ],
-            "args": [
-              "phie"
-            ],
-            "ranges": {
-              "ci": {
-                "from": "lon_nodes"
-              },
-              "cj": {
-                "from": "lat"
-              },
-              "ck": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                0.7,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        0.017453292519943295,
-                        {
-                          "op": "+",
-                          "args": [
-                            "lon0_deg",
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "ci",
-                                    1
-                                  ]
-                                },
-                                "dlon_deg"
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    1.0,
-                    {
-                      "op": "*",
-                      "args": [
-                        0.3,
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                0.017453292519943295,
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    0.5,
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        {
-                                          "op": "index",
-                                          "args": [
-                                            "phie",
-                                            "cj"
-                                          ]
-                                        },
-                                        {
-                                          "op": "index",
-                                          "args": [
-                                            "phie",
-                                            {
-                                              "op": "+",
-                                              "args": [
-                                                "cj",
-                                                1
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    1.0,
-                    {
-                      "op": "*",
-                      "args": [
-                        0.05,
-                        {
-                          "op": "-",
-                          "args": [
-                            "ck",
-                            1
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Zonal face-normal air-mass flux at the WEST edge of each cell. Element NLON+1 IS read here (open east wall). Positive throughout [0,60] deg lon, so the west wall is inflow and the east wall outflow."
         },
         "My": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat_nodes",
             "lev"
           ],
-          "description": "Meridional face-normal air-mass flux at the SOUTH edge of each cell. Faces 1 and NLAT+1 are the open south/north walls (real face lengths, NOT poles). Positive across the patch, so the south wall is inflow and the north wall outflow.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ci",
-              "cj",
-              "ck"
-            ],
-            "args": [
-              "phie"
-            ],
-            "ranges": {
-              "ci": {
-                "from": "lon"
-              },
-              "cj": {
-                "from": "lat_nodes"
-              },
-              "ck": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                0.5,
-                {
-                  "op": "sin",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        2.0,
-                        {
-                          "op": "*",
-                          "args": [
-                            0.017453292519943295,
-                            {
-                              "op": "+",
-                              "args": [
-                                "lon0_deg",
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "ci",
-                                        0.5
-                                      ]
-                                    },
-                                    "dlon_deg"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        0.017453292519943295,
-                        {
-                          "op": "index",
-                          "args": [
-                            "phie",
-                            "cj"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    1.0,
-                    {
-                      "op": "*",
-                      "args": [
-                        0.05,
-                        {
-                          "op": "-",
-                          "args": [
-                            "ck",
-                            1
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Meridional face-normal air-mass flux at the SOUTH edge of each cell. Faces 1 and NLAT+1 are the open south/north walls (real face lengths, NOT poles). Positive across the patch, so the south wall is inflow and the north wall outflow."
         },
         "mqA": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -410,7 +146,7 @@
           "description": "Tracer A mass mixing-ratio density (mq = m*q), carried through the open walls against tracer A's OWN lateral halo."
         },
         "devA": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -420,63 +156,17 @@
           "description": "CWC deviation for tracer A: dev = mqA - m. Zero iff tracer A's halo matches its uniform interior."
         },
         "qA": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "Tracer A mixing ratio, qA = mqA/m.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "iq",
-              "jq",
-              "kq"
-            ],
-            "args": [
-              "mqA",
-              "m"
-            ],
-            "ranges": {
-              "iq": {
-                "from": "lon"
-              },
-              "jq": {
-                "from": "lat"
-              },
-              "kq": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "mqA",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "m",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Tracer A mixing ratio, qA = mqA/m."
         },
         "mqB": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -486,7 +176,7 @@
           "description": "Tracer B mass mixing-ratio density (mq = m*q), carried through the open walls against tracer B's OWN lateral halo."
         },
         "devB": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -496,268 +186,86 @@
           "description": "CWC deviation for tracer B: dev = mqB - m. Zero iff tracer B's halo matches its uniform interior."
         },
         "qB": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "Tracer B mixing ratio, qB = mqB/m.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "iq",
-              "jq",
-              "kq"
-            ],
-            "args": [
-              "mqB",
-              "m"
-            ],
-            "ranges": {
-              "iq": {
-                "from": "lon"
-              },
-              "jq": {
-                "from": "lat"
-              },
-              "kq": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "index",
-                  "args": [
-                    "mqB",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "m",
-                    "iq",
-                    "jq",
-                    "kq"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Tracer B mixing ratio, qB = mqB/m."
         },
         "qbcA_w": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Tracer A's inflow mixing ratio on the w wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lat"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer A's inflow mixing ratio on the w wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcA_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Tracer A's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lat"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer A's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcA_s": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Tracer A's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lon"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer A's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcA_n": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Tracer A's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lon"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer A's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcB_w": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Tracer B's inflow mixing ratio on the w wall = 2.0. DELIBERATELY MISMATCHED against the uniform interior (q=1): the west wind blows IN, so this halo is donated and drives devB off zero. This is the non-vacuity half.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lat"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 2.0
-          }
+          "description": "Tracer B's inflow mixing ratio on the w wall = 2.0. DELIBERATELY MISMATCHED against the uniform interior (q=1): the west wind blows IN, so this halo is donated and drives devB off zero. This is the non-vacuity half."
         },
         "qbcB_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lat",
             "lev"
           ],
-          "description": "Tracer B's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lat"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer B's inflow mixing ratio on the e wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcB_s": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Tracer B's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lon"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer B's inflow mixing ratio on the s wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         },
         "qbcB_n": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lev"
           ],
-          "description": "Tracer B's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ga",
-              "gb"
-            ],
-            "ranges": {
-              "ga": {
-                "from": "lon"
-              },
-              "gb": {
-                "from": "lev"
-              }
-            },
-            "args": [],
-            "expr": 1.0
-          }
+          "description": "Tracer B's inflow mixing ratio on the n wall = 1.0. MATCHES the uniform interior (q=1), so tracer A stays free-stream."
         }
       },
       "tests": [
@@ -1471,6 +979,552 @@
             ]
           },
           "_comment": "Tracer B: the halo travels as OPERANDS of the matched derivative (D(Mx*qB, qbcB_w, qbcB_e, wrt: lon)), so tracer B binds ITS OWN boundary field. Under the former free-name contract both tracers would have resolved the single model-scope `qbc_w`."
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": 5.0
+        },
+        {
+          "lhs": "dlat_deg",
+          "rhs": 5.0
+        },
+        {
+          "lhs": "phie",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lat_edge",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "coslat_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "coslat_edge",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        {
+          "lhs": "dS_lat",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_area",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        {
+          "lhs": "dphi_lat",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "latcell_dphi",
+            "bindings": {
+              "phie": "phie"
+            }
+          }
+        },
+        {
+          "lhs": "Mx",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ci",
+              "cj",
+              "ck"
+            ],
+            "args": [
+              "phie"
+            ],
+            "ranges": {
+              "ci": {
+                "from": "lon_nodes"
+              },
+              "cj": {
+                "from": "lat"
+              },
+              "ck": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                0.7,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.017453292519943295,
+                        {
+                          "op": "+",
+                          "args": [
+                            "lon0_deg",
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "ci",
+                                    1
+                                  ]
+                                },
+                                "dlon_deg"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.3,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.017453292519943295,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.5,
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": [
+                                            "phie",
+                                            "cj"
+                                          ]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": [
+                                            "phie",
+                                            {
+                                              "op": "+",
+                                              "args": [
+                                                "cj",
+                                                1
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.05,
+                        {
+                          "op": "-",
+                          "args": [
+                            "ck",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "My",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ci",
+              "cj",
+              "ck"
+            ],
+            "args": [
+              "phie"
+            ],
+            "ranges": {
+              "ci": {
+                "from": "lon"
+              },
+              "cj": {
+                "from": "lat_nodes"
+              },
+              "ck": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                0.5,
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2.0,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.017453292519943295,
+                            {
+                              "op": "+",
+                              "args": [
+                                "lon0_deg",
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "ci",
+                                        0.5
+                                      ]
+                                    },
+                                    "dlon_deg"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.017453292519943295,
+                        {
+                          "op": "index",
+                          "args": [
+                            "phie",
+                            "cj"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "*",
+                      "args": [
+                        0.05,
+                        {
+                          "op": "-",
+                          "args": [
+                            "ck",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "qA",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "iq",
+              "jq",
+              "kq"
+            ],
+            "args": [
+              "mqA",
+              "m"
+            ],
+            "ranges": {
+              "iq": {
+                "from": "lon"
+              },
+              "jq": {
+                "from": "lat"
+              },
+              "kq": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mqA",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "m",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "qB",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "iq",
+              "jq",
+              "kq"
+            ],
+            "args": [
+              "mqB",
+              "m"
+            ],
+            "ranges": {
+              "iq": {
+                "from": "lon"
+              },
+              "jq": {
+                "from": "lat"
+              },
+              "kq": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "mqB",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "m",
+                    "iq",
+                    "jq",
+                    "kq"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "qbcA_w",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcA_e",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcA_s",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcA_n",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcB_w",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 2.0
+          }
+        },
+        {
+          "lhs": "qbcB_e",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lat"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcB_s",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "qbcB_n",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ga",
+              "gb"
+            ],
+            "ranges": {
+              "ga": {
+                "from": "lon"
+              },
+              "gb": {
+                "from": "lev"
+              }
+            },
+            "args": [],
+            "expr": 1.0
+          }
         }
       ]
     }

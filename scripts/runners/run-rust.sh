@@ -138,17 +138,33 @@ def integrator_opts(manifest):
 
 
 def unlowered_violations(node, acc):
-    """The prose-free structural gates (mirrors run-julia.jl)."""
+    """The prose-free structural gates (mirrors run-julia.jl).
+
+    NOTE (ESS 0.9.0, esd:duo migration): surviving ``apply_expression_template``
+    nodes are NO LONGER a violation. Since the Option B reference-preserving
+    switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+    match-less template bodies — a reference "denotes its expansion" and the
+    engine treats it as a leaf (esm-spec §9.6.4). Because ``match`` patterns may
+    not contain ``apply_expression_template`` (§9.6.1), every surviving apply is
+    a resolved match-less leaf, not an un-fired rule; a dangling apply to an
+    unknown template is already rejected upstream by the resolver.
+    """
     if isinstance(node, dict):
         op = str(node.get("op", ""))
-        if op == "apply_expression_template":
-            acc.append("apply_expression_template")
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
         if op == "D" and str(node.get("wrt", "t")) != "t":
             acc.append(f"unlowered spatial D (wrt={node['wrt']})")
         for k, v in node.items():
-            if k != "metadata":  # prose may cite op names
+            # `metadata`: prose may cite op names.
+            # `expression_templates`: the retained Option-B registry. A rule's
+            # `match` pattern is a PATTERN — a spatial `D` there is what the
+            # rule fires ON, not an operator that survived lowering — and
+            # §9.6.3 constraint 6 scopes `unlowered_operator` to expressions
+            # reaching evaluation or compilation, which a match pattern never
+            # does. Across all 139 lowered ast fixtures every rewrite-target op
+            # is in a retained registry and none is in an evaluation position.
+            if k not in ("metadata", "expression_templates"):
                 unlowered_violations(v, acc)
     elif isinstance(node, list):
         for v in node:
@@ -168,7 +184,8 @@ def run_ast():
             violations = []
             for model in doc.get("models", {}).values():
                 unlowered_violations(
-                    {k: v for k, v in model.items() if k != "metadata"}, violations)
+                    {k: v for k, v in model.items()
+                     if k not in ("metadata", "expression_templates")}, violations)
             if violations:
                 raise RuntimeError("post-lowering gate failed: "
                                    + ", ".join(sorted(set(violations))))

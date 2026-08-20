@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_3d",
     "description": "INTEGRATION driver: full 3-D advection on the latlon3d grid, u_t = -(omega_deg D(u,lon) + v_deg D(u,lat) + w_lev D(u,lev)) + S, composing ALL THREE directional rules at once — grids/latlon3d/rules/upwind1_D_lon_periodic (1st-order upwind, periodic), central_D_lat_zero_grad_bc (2nd-order centered, zero-gradient poles), and central_D_lev_zero_grad_bc (2nd-order centered nonuniform, zero-gradient top/bottom) — to demonstrate that the three rules fire independently on the same [lon,lat,lev] field and assemble into one RHS with no match conflict. Forced-steady manufactured solution u*(lon,lat,z) = sin((pi/180) lon) * cos^4((pi/180) lat) * cos(pi z): periodic in lon (period 360, closes the zonal circle at NLON dlon_deg=360), zero meridional gradient at the poles (cos^4 vanishes to 3rd order — compatible with the zero-gradient pole rows), and zero vertical gradient at the top/bottom (cos(pi z), z in [0,1] — compatible with the zero-gradient lev closures). The matching steady forcing S = omega_deg u*_lon + v_deg u*_lat + w_lev u*_z (each analytic per-degree / per-z derivative) makes u* a continuous steady state, so the simulated field drifts only by the combined discrete truncation of the three operators (dominated by the 1st-order upwind lon term). Fixed resolution NLON=36, NLAT=19, NLEV=10 (GEOS-Chem 4x5-like horizontal, a 10-level column) edge-closed at the import edges; dlon_deg=10, dlat_deg=10 as literals; the vertical uses the grid Design-B edge array pe (quadratic stretch) -> zc. This is a single-resolution SIMULATION gate (the per-direction ORDER claims are proven separately by the three latlon3d convergence cases); it asserts the ic wiring is exact at t=0 and the combined drift stays bounded at t=T.",
@@ -51,7 +51,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -91,13 +91,314 @@
           "description": "Meridional spacing 180/(NLAT-1)=10 (NLAT edge-closed)."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Quadratic-stretch vertical edge array pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 (hygienic node index kn); NLEV edge-closed to 10 here.",
-          "expression": {
+          "description": "Quadratic-stretch vertical edge array pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 (hygienic node index kn); NLEV edge-closed to 10 here."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Level centers zc = lev_center(pe) (grid Design-B; hygienic index gk). Read by the vertical rule."
+        },
+        "src": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "Combined MMS forcing S = omega_deg*u*_lon + v_deg*u*_lat + w_lev*u*_z holding u* = sin((pi/180)lon) cos^4((pi/180)lat) cos(pi z) steady under u_t = -(omega_deg D(u,lon)+v_deg D(u,lat)+w_lev D(u,lev)) + S. Spelled inline from literals (all metaparameters edge-closed), broadcast is explicit over i,j,k."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "sin",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.017453292519943295,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            10
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.017453292519943295,
+                            {
+                              "op": "+",
+                              "args": [
+                                -90,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        1
+                                      ]
+                                    },
+                                    10
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    4
+                  ]
+                },
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            10
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            10
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "k",
+                                                1
+                                              ]
+                                            },
+                                            10
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "k",
+                                            10
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "k",
+                                            10
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "k",
+                                            10
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "omega_deg"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lon"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "v_deg"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "w_lev"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lev"
+                  }
+                ]
+              },
+              "src"
+            ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "kn"
@@ -166,14 +467,9 @@
             }
           }
         },
-        "zc": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lev"
-          ],
-          "description": "Level centers zc = lev_center(pe) (grid Design-B; hygienic index gk). Read by the vertical rule.",
-          "expression": {
+        {
+          "lhs": "zc",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lev_center",
@@ -182,16 +478,9 @@
             }
           }
         },
-        "src": {
-          "type": "observed",
-          "units": "1/s",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "Combined MMS forcing S = omega_deg*u*_lon + v_deg*u*_lat + w_lev*u*_z holding u* = sin((pi/180)lon) cos^4((pi/180)lat) cos(pi z) steady under u_t = -(omega_deg D(u,lon)+v_deg D(u,lat)+w_lev D(u,lev)) + S. Spelled inline from literals (all metaparameters edge-closed), broadcast is explicit over i,j,k.",
-          "expression": {
+        {
+          "lhs": "src",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "i",
@@ -815,286 +1104,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "sin",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        0.017453292519943295,
-                        {
-                          "op": "*",
-                          "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "i",
-                                0.5
-                              ]
-                            },
-                            10
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "^",
-                  "args": [
-                    {
-                      "op": "cos",
-                      "args": [
-                        {
-                          "op": "*",
-                          "args": [
-                            0.017453292519943295,
-                            {
-                              "op": "+",
-                              "args": [
-                                -90,
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        1
-                                      ]
-                                    },
-                                    10
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    4
-                  ]
-                },
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "*",
-                          "args": [
-                            0.5,
-                            {
-                              "op": "+",
-                              "args": [
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        0.6,
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            {
-                                              "op": "-",
-                                              "args": [
-                                                "k",
-                                                1
-                                              ]
-                                            },
-                                            10
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        0.4,
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            {
-                                              "op": "-",
-                                              "args": [
-                                                "k",
-                                                1
-                                              ]
-                                            },
-                                            10
-                                          ]
-                                        },
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            {
-                                              "op": "-",
-                                              "args": [
-                                                "k",
-                                                1
-                                              ]
-                                            },
-                                            10
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        0.6,
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            "k",
-                                            10
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        0.4,
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            "k",
-                                            10
-                                          ]
-                                        },
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            "k",
-                                            10
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "omega_deg"
-                    ]
-                  },
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "lon"
-                  }
-                ]
-              },
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "v_deg"
-                    ]
-                  },
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "lat"
-                  }
-                ]
-              },
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "-",
-                    "args": [
-                      "w_lev"
-                    ]
-                  },
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "lev"
-                  }
-                ]
-              },
-              "src"
-            ]
           }
         }
       ],
