@@ -450,25 +450,33 @@ function _reproj_wrapper_doc(params)
     mkapply(tpl, args...) = Dict{String,Any}(
         "op" => "apply_expression_template", "args" => Any[], "name" => tpl,
         "bindings" => Base.merge(Dict{String,Any}(a => a for a in args), crs))
+    # esm 1.0.0 declares exactly two variable types. The four projection
+    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
+    # the template invocations; there is no `expression` field on a variable and
+    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
+    # run_reprojection reads them back — the binding's classification API, not a
+    # local re-derivation.
+    observed = [
+        ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
+        ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
+        ("inv_lon", "deg", mkapply("lambert_conformal_inverse_lon", "x", "y")),
+        ("inv_lat", "deg", mkapply("lambert_conformal_inverse_lat", "x", "y"))]
     vars = Dict{String,Any}(
         "lon" => Dict("type" => "parameter", "units" => "deg", "default" => 0.0),
         "lat" => Dict("type" => "parameter", "units" => "deg", "default" => 0.0),
         "x" => Dict("type" => "parameter", "units" => "m", "default" => 0.0),
-        "y" => Dict("type" => "parameter", "units" => "m", "default" => 0.0),
-        "fwd_x" => Dict("type" => "observed", "units" => "m",
-            "expression" => mkapply("lambert_conformal_forward_x", "lon", "lat")),
-        "fwd_y" => Dict("type" => "observed", "units" => "m",
-            "expression" => mkapply("lambert_conformal_forward_y", "lon", "lat")),
-        "inv_lon" => Dict("type" => "observed", "units" => "deg",
-            "expression" => mkapply("lambert_conformal_inverse_lon", "x", "y")),
-        "inv_lat" => Dict("type" => "observed", "units" => "deg",
-            "expression" => mkapply("lambert_conformal_inverse_lat", "x", "y")))
-    return Dict{String,Any}("esm" => "0.8.0",
+        "y" => Dict("type" => "parameter", "units" => "m", "default" => 0.0))
+    for (name, units, _expr) in observed
+        vars[name] = Dict{String,Any}("type" => "unknown", "units" => units)
+    end
+    eqs = Any[Dict{String,Any}("lhs" => name, "rhs" => expr)
+              for (name, _units, expr) in observed]
+    return Dict{String,Any}("esm" => "1.0.0",
         "metadata" => Dict{String,Any}("name" => "lambert_conformal_eval",
             "description" => "Runner-built template invocation (manifest fixture: null)."),
         "models" => Dict{String,Any}("Reproject" => Dict{String,Any}(
             "expression_template_imports" => Any[Dict{String,Any}("ref" => "lambert_conformal.esm")],
-            "variables" => vars, "equations" => Any[])))
+            "variables" => vars, "equations" => eqs)))
 end
 
 function run_reprojection(output_dir, files, verbose)
@@ -484,8 +492,9 @@ function run_reprojection(output_dir, files, verbose)
                 doc = _reproj_wrapper_doc(params)
                 file = ESS.load(IOBuffer(JSON3.write(doc)); base_path=dirname(lib))
                 m = file.models["Reproject"]
+                defs = ESS.observed_definitions(m)
                 exprs[String(setname)] = Dict{String,Any}(
-                    k => m.variables[k].expression
+                    k => defs[k]
                     for k in ("fwd_x", "fwd_y", "inv_lon", "inv_lat"))
             end
             fwd = Any[]

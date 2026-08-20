@@ -500,30 +500,38 @@ def _reproj_wrapper_doc(params):
         return {"op": "apply_expression_template", "args": [], "name": tpl,
                 "bindings": {**{a: a for a in args}, **crs}}
 
+    # esm 1.0.0 declares exactly two variable types. The four projection
+    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
+    # the template invocations; there is no `expression` field on a variable and
+    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
+    # run_reprojection reads them back — the binding's classification API, not a
+    # local re-derivation.
+    observed = (
+        ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
+        ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
+        ("inv_lon", "deg", mkapply("lambert_conformal_inverse_lon", "x", "y")),
+        ("inv_lat", "deg", mkapply("lambert_conformal_inverse_lat", "x", "y")),
+    )
     variables = {
         "lon": {"type": "parameter", "units": "deg", "default": 0.0},
         "lat": {"type": "parameter", "units": "deg", "default": 0.0},
         "x": {"type": "parameter", "units": "m", "default": 0.0},
         "y": {"type": "parameter", "units": "m", "default": 0.0},
-        "fwd_x": {"type": "observed", "units": "m",
-                  "expression": mkapply("lambert_conformal_forward_x", "lon", "lat")},
-        "fwd_y": {"type": "observed", "units": "m",
-                  "expression": mkapply("lambert_conformal_forward_y", "lon", "lat")},
-        "inv_lon": {"type": "observed", "units": "deg",
-                    "expression": mkapply("lambert_conformal_inverse_lon", "x", "y")},
-        "inv_lat": {"type": "observed", "units": "deg",
-                    "expression": mkapply("lambert_conformal_inverse_lat", "x", "y")},
     }
-    return {"esm": "0.8.0",
+    for name, units, _expr in observed:
+        variables[name] = {"type": "unknown", "units": units}
+    equations = [{"lhs": name, "rhs": expr} for name, _units, expr in observed]
+    return {"esm": "1.0.0",
             "metadata": {"name": "lambert_conformal_eval",
                          "description": "Runner-built template invocation "
                                         "(manifest fixture: null)."},
             "models": {"Reproject": {
                 "expression_template_imports": [{"ref": "lambert_conformal.esm"}],
-                "variables": variables, "equations": []}}}
+                "variables": variables, "equations": equations}}}
 
 
 def run_reprojection(output_dir: Path, files, verbose):
+    from earthsci_ast.classification import observed_definitions
     from earthsci_ast.numpy_interpreter import evaluate
     from earthsci_ast.parse import load
 
@@ -547,7 +555,8 @@ def run_reprojection(output_dir: Path, files, verbose):
                 doc = _reproj_wrapper_doc(params)
                 file = load(json.dumps(doc), base_path=str(lib.parent))
                 m = file.models["Reproject"]
-                exprs[setname] = {k: m.variables[k].expression
+                defs = observed_definitions(m)
+                exprs[setname] = {k: defs[k]
                                   for k in ("fwd_x", "fwd_y", "inv_lon", "inv_lat")}
             fwd = []
             for pt in gold["forward"]:
