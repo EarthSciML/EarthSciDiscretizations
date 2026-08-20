@@ -47,7 +47,13 @@ ESS_ROOT = Path(os.environ.get("ESS_ROOT", ESD_ROOT.parent / "EarthSciAST"))
 if not (ESS_ROOT / "esm-schema.json").is_file():
     sys.exit(f"error: EarthSciAST not found at '{ESS_ROOT}'; set ESS_ROOT "
              "or clone it as a sibling checkout (scripts/ess-locate.sh contract)")
-sys.path.insert(0, str(ESS_ROOT / "packages" / "earthsci_ast" / "src"))
+# The ESS checkout's src tree comes FIRST so the runner is pinned to the
+# EarthSciAST at $ESS_ROOT and cannot silently pick up an unrelated
+# `earthsci_ast` that happens to be installed in the interpreter — a stale
+# version is exactly what the esm 1.0.0 migration existed to surface. (The
+# directory moved from `packages/earthsci_ast` to `pkg/earthsci-ast-py`
+# upstream; the old spelling had gone dead, so this insert did nothing.)
+sys.path.insert(0, str(ESS_ROOT / "pkg" / "earthsci-ast-py" / "src"))
 
 from earthsci_ast.lower_expression_templates import lower_expression_templates
 from earthsci_ast.template_imports import resolve_template_machinery
