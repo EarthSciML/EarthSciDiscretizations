@@ -320,13 +320,20 @@ func readJSONMap(path string) (map[string]interface{}, error) {
 	return m, nil
 }
 
+// unloweredViolations is the prose-free structural gate (mirrors run-julia.jl).
+//
+// NOTE (ESS 0.9.0, esd:duo migration): surviving apply_expression_template
+// nodes are NO LONGER a violation. Since the Option B reference-preserving
+// switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+// match-less template bodies — a reference "denotes its expansion" and the
+// engine treats it as a leaf (esm-spec §9.6.4). Because match patterns may not
+// contain apply_expression_template (§9.6.1), every surviving apply is a
+// resolved match-less leaf, not an un-fired rule; a dangling apply to an
+// unknown template is already rejected upstream by esm.ResolveAndLower.
 func unloweredViolations(node interface{}, acc *[]string) {
 	switch v := node.(type) {
 	case map[string]interface{}:
 		op, _ := v["op"].(string)
-		if op == "apply_expression_template" {
-			*acc = append(*acc, "apply_expression_template")
-		}
 		if op == "grad" || op == "div" || op == "laplacian" {
 			*acc = append(*acc, "unlowered "+op)
 		}

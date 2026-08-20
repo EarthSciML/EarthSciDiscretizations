@@ -227,12 +227,27 @@ def assertion_dicts(results):
 # ast — raw §9.7 expansion to canonical bytes + post-lowering gates.
 # ---------------------------------------------------------------------------
 
+# Post-lowering gates (the ast manifests' contract): zero unlowered
+# rewrite-target ops (spatial D / grad / div / laplacian), zero surviving
+# metaparameter machinery. ONE definition across the five bindings — the
+# reference spelling lives in scripts/runners/run-julia.jl; keep this in step
+# with it.
+#
+# NOTE (ESS 0.9.0, esd:duo migration): surviving ``apply_expression_template``
+# nodes are NO LONGER a violation. Since the Option B reference-preserving
+# switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+# match-less template bodies — a reference "denotes its expansion" and the
+# engine treats it as a leaf (esm-spec §9.6.4). Because ``match`` patterns may
+# not contain ``apply_expression_template`` (§9.6.1), every surviving apply is a
+# resolved match-less leaf, not an un-fired rule; a dangling apply to an unknown
+# template is already rejected upstream by resolve_template_machinery. The
+# pre-0.9.0 goldens (built when applies were inlined) are intentionally NOT
+# regenerated here — only the duo cases run under the current loader.
+
 
 def unlowered_violations(node, acc):
     if isinstance(node, dict):
         op = str(node.get("op", ""))
-        if op == "apply_expression_template":
-            acc.append("apply_expression_template")
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
         if op == "D" and str(node.get("wrt", "t")) != "t":

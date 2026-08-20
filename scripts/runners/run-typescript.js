@@ -163,12 +163,21 @@ function discoverManifests (category, files) {
     .map(mp => [path.dirname(mp), JSON.parse(fs.readFileSync(mp, 'utf8'))])
 }
 
+// The prose-free structural gates (mirrors run-julia.jl).
+//
+// NOTE (ESS 0.9.0, esd:duo migration): surviving `apply_expression_template`
+// nodes are NO LONGER a violation. Since the Option B reference-preserving
+// switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+// match-less template bodies — a reference "denotes its expansion" and the
+// engine treats it as a leaf (esm-spec §9.6.4). Because `match` patterns may
+// not contain `apply_expression_template` (§9.6.1), every surviving apply is a
+// resolved match-less leaf, not an un-fired rule; a dangling apply to an
+// unknown template is already rejected upstream by resolveTemplateMachinery.
 function unloweredViolations (node, acc) {
   if (Array.isArray(node)) {
     node.forEach(v => unloweredViolations(v, acc))
   } else if (node !== null && typeof node === 'object') {
     const op = String(node.op || '')
-    if (op === 'apply_expression_template') acc.push('apply_expression_template')
     if (op === 'grad' || op === 'div' || op === 'laplacian') acc.push(`unlowered ${op}`)
     if (op === 'D' && String(node.wrt || 't') !== 't') {
       acc.push(`unlowered spatial D (wrt=${node.wrt})`)

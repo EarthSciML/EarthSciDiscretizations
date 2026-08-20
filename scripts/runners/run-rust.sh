@@ -138,11 +138,19 @@ def integrator_opts(manifest):
 
 
 def unlowered_violations(node, acc):
-    """The prose-free structural gates (mirrors run-julia.jl)."""
+    """The prose-free structural gates (mirrors run-julia.jl).
+
+    NOTE (ESS 0.9.0, esd:duo migration): surviving ``apply_expression_template``
+    nodes are NO LONGER a violation. Since the Option B reference-preserving
+    switch (EarthSciAST commit aff96f29, esm 0.9.0) the loader does not inline
+    match-less template bodies — a reference "denotes its expansion" and the
+    engine treats it as a leaf (esm-spec §9.6.4). Because ``match`` patterns may
+    not contain ``apply_expression_template`` (§9.6.1), every surviving apply is
+    a resolved match-less leaf, not an un-fired rule; a dangling apply to an
+    unknown template is already rejected upstream by the resolver.
+    """
     if isinstance(node, dict):
         op = str(node.get("op", ""))
-        if op == "apply_expression_template":
-            acc.append("apply_expression_template")
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
         if op == "D" and str(node.get("wrt", "t")) != "t":
