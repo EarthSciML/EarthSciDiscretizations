@@ -29,6 +29,15 @@ jobs:
           python-version: "3.12"
       - name: Install jsonschema
         run: pip install jsonschema
+      # Diagnostic, not a gate — the first thing to look at when this run goes
+      # red. An upstream `esm` version bump makes L008 fire on every library
+      # file at once (the expected version derives from the schema's $id), and
+      # a major bump additionally makes upstream's parser reject this corpus
+      # outright; both look like mass failure without this line.
+      - name: Upstream esm schema version
+        run: |
+          echo "EarthSciAST main: $(git -C ess rev-parse --short HEAD)"
+          jq -r '."$id"' ess/esm-schema.json
       - name: Validate library against upstream HEAD schema
         run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py
       - name: Lint-fixture expectations
@@ -53,5 +62,5 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo, title,
               labels: ["upstream-drift"],
-              body: `The nightly run against EarthSciAST main HEAD failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nEither upstream changed lowering/canonicalization (regenerate goldens with a stated cause per AGENTS.md) or a real regression landed upstream (file it there).`
+              body: `The nightly run against EarthSciAST main HEAD failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nCheck the "Upstream esm schema version" step first. Three causes, in decreasing likelihood:\n\n1. **Upstream bumped the \`esm\` version.** L008 derives the expected version from the schema's \`$id\`, so every library file becomes a finding at once; a MAJOR bump also makes upstream's parser reject this corpus outright, taking every binding job with it. The fix is a corpus migration here, not a change to the lint.\n2. **Upstream changed lowering/canonicalization.** Regenerate goldens with a stated cause per AGENTS.md §5 — never "refreshed to green".\n3. **A real regression landed upstream.** File it there.`
             });

@@ -43,6 +43,15 @@ jobs:
           python-version: "3.12"
       - name: Install jsonschema
         run: pip install jsonschema
+      # Diagnostic, not a gate. This repo's corpus and the upstream schema move
+      # in lockstep (L008 derives the expected `esm` version from the schema's
+      # $id), so an upstream major bump turns every library file into a finding
+      # at once. Printing the version the run is actually validating against
+      # makes that failure mode readable in one line instead of 509.
+      - name: Upstream esm schema version
+        run: |
+          echo "EarthSciAST: $(git -C ess rev-parse --short HEAD)"
+          jq -r '."$id"' ess/esm-schema.json
       - name: Validate library (schema + policy lint)
         run: ESS_ROOT="$PWD/ess" python scripts/validate-library.py
       - name: Lint-fixture expectations
