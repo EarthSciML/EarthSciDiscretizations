@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_vertical_ppm_mono",
     "description": "MMS driver: MONOTONE conservative flux-form vertical advection on the 3-D latlon3d grid, u_t = -D(u, lev) + src, discretized by grids/latlon3d/rules/ppm_D_lev_mono_noflux_bc (full Colella-Woodward 1984 PPM: eq (1.6) edge on eq (1.8) monotonized slopes plus the eq (1.10) parabola limiter; non-uniform finite-volume flux divergence (w u)_z with genuine no-flux top/surface, rank-3). The PRODUCTION-grade counterpart of latlon3d_advection_vertical_ppm (same operator, unlimited reconstruction): identical manufactured solution, identical mesh, identical forcing -- the ONLY difference is the imported rule, so the two convergence goldens isolate exactly what the monotonicity limiter costs in order (4.0 -> ~2.5 L2 / ~2.0 Linf) and, read alongside the rule's boundedness claim, what it buys. FLUX-FORM (the velocity w_edge enters inside the operator, so the consumer writes u_t=-D(u,lev)+src, NOT -w*D). PASSIVE lon (NLON=8) and lat (NLAT=5). Manufactured STEADY solution u*(z)=cos(pi z) (as cell averages) with vertical velocity w(z)=sin(pi z) that VANISHES at the surface and model top (natural no-flux, exact mass conservation) and matching steady forcing src = cell-average of (w u*)_z; u_t=0 continuously, so the discrete drift is pure flux-divergence truncation. NOTE the limiter's fingerprint: cos(pi z) has its extrema exactly AT the two walls (cos'(0)=cos'(pi)=0), which is where eq (1.8)/(1.10) clip hardest, so Linf lags L2. VERTICAL MESH: the consumer supplies pe (quadratic stretch, shape [lev_nodes]); the grid derives dz via lev_thickness; w_edge=sin(pi pe) is the interface velocity. HYGIENE: pe over kn, w_edge over kw, dz via gk -- all distinct from the operator's k. ic/references spell the cell-average of cos(pi z) inline from the stretch formula and the NLEV name (build-time scope caveat).",
@@ -42,7 +42,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -52,235 +52,38 @@
           "description": "Advected tracer over lon x lat x lev (horizontally uniform here); treated as cell averages for the finite-volume flux-form scheme."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 over node kn=1..NLEV+1 (pe[1]=0, pe[NLEV+1]=1). HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/w_edge[k] reads do not capture the operator's k.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
-            "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn]=0.6((kn-1)/NLEV)+0.4((kn-1)/NLEV)^2 over node kn=1..NLEV+1 (pe[1]=0, pe[NLEV+1]=1). HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/w_edge[k] reads do not capture the operator's k."
         },
         "dz": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev"
           ],
-          "description": "Cell thicknesses dz[k]=pe[k+1]-pe[k] via the grid's lev_thickness template: the grid's dz free name read by grids/latlon3d/rules/ppm_D_lev_noflux_bc. lev_thickness uses the grid-hygienic index gk, distinct from the operator's k.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lev_thickness",
-            "bindings": {
-              "pe": "pe"
-            }
-          }
+          "description": "Cell thicknesses dz[k]=pe[k+1]-pe[k] via the grid's lev_thickness template: the grid's dz free name read by grids/latlon3d/rules/ppm_D_lev_noflux_bc. lev_thickness uses the grid-hygienic index gk, distinct from the operator's k."
         },
         "w_edge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Vertical velocity at cell interfaces, w_edge[kw]=sin(pi pe[kw]): the grid's w_edge free name read by the flux-form operator. VANISHES at the surface (pe[1]=0 -> sin 0 = 0) and model top (pe[NLEV+1]=1 -> sin pi = 0), so the wall fluxes are identically zero and the scheme is exactly mass-conserving. aggregates over `kw` (distinct from k).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "kw"
-            ],
-            "args": [],
-            "ranges": {
-              "kw": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "sin",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    3.141592653589793,
-                    {
-                      "op": "index",
-                      "args": [
-                        "pe",
-                        "kw"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Vertical velocity at cell interfaces, w_edge[kw]=sin(pi pe[kw]): the grid's w_edge free name read by the flux-form operator. VANISHES at the surface (pe[1]=0 -> sin 0 = 0) and model top (pe[NLEV+1]=1 -> sin pi = 0), so the wall fluxes are identically zero and the scheme is exactly mass-conserving. aggregates over `kw` (distinct from k)."
         },
         "src": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "Steady forcing = analytic cell-average of the flux divergence (w u*)_z with w=sin(pi z), u*=cos(pi z): w u* = 0.5 sin(2 pi z), so (w u*)_z cell-average = (0.5 sin(2 pi pe[k+1]) - 0.5 sin(2 pi pe[k]))/dz[k]. Reads pe and dz at runtime; holds u*=cos(pi z) steady so the discrete drift is pure flux-divergence truncation.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "/",
-              "args": [
-                {
-                  "op": "-",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        0.5,
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "pe",
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        "k",
-                                        1
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "*",
-                      "args": [
-                        0.5,
-                        {
-                          "op": "sin",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "pe",
-                                    "k"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "index",
-                  "args": [
-                    "dz",
-                    "k"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Steady forcing = analytic cell-average of the flux divergence (w u*)_z with w=sin(pi z), u*=cos(pi z): w u* = 0.5 sin(2 pi z), so (w u*)_z cell-average = (0.5 sin(2 pi pe[k+1]) - 0.5 sin(2 pi pe[k]))/dz[k]. Reads pe and dz at runtime; holds u*=cos(pi z) steady so the discrete drift is pure flux-divergence truncation."
         }
       },
       "equations": [
@@ -640,6 +443,215 @@
               },
               "src"
             ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        {
+          "lhs": "w_edge",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kw"
+            ],
+            "args": [],
+            "ranges": {
+              "kw": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "sin",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    3.141592653589793,
+                    {
+                      "op": "index",
+                      "args": [
+                        "pe",
+                        "kw"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "src",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "pe",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "pe",
+                                    "k"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    "k"
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

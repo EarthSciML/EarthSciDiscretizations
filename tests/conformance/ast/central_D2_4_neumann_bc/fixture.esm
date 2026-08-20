@@ -1,24 +1,33 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "central_D2_4_neumann_bc_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/central_D2_4_neumann_bc: a minimal consuming model binding N=8 at the import edge. The compound match D(D(u,x),x) fires (priority 10) through the section-9.6.3 fixpoint and lowers to the rule's makearray — interior [3,6] holding the imported 5-point fourth-order stencil aggregate, boundary rows i in {1,2,7,8} holding the one-sided fourth-order Neumann face closures (the right wall binds the derivative datum -qR by reflection) — with all metaparameters folded and the free names dx, qL, qR surviving in the expanded body. The model declares qL and qR as ordinary real parameters (qL homogeneous, qR a nonzero fixed flux). x0 = 0 and dx = 1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:central_D2_4_neumann_bc"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:central_D2_4_neumann_bc"
+    ]
   },
   "models": {
     "CentralD2Order4NeumannBcAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/cartesian_uniform_1d/rules/central_D2_4_neumann_bc.esm",
-          "bindings": { "N": 8 }
+          "bindings": {
+            "N": 8
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Temperature field over the x index set."
         },
         "alpha": {
@@ -46,24 +55,56 @@
           "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, 8] },
           "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": 0.0
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "alpha",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "x" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
             ]
           }
         }

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_periodic_superbee_tvd",
     "description": "Monotonicity / TVD driver for grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic (superbee flux limiter (second-order TVD, compressive)) on the periodic unit interval [0,1], c = 1. A piecewise-linear tent profile u0(x) = max(0, 1 - 4|x - 1/2|) (peak 1 at x=1/2, min 0, mean 1/4; zero at the domain edges so the periodic wrap carries no seam) is advected to t=0.5. A TVD / monotonicity-preserving scheme develops NO new extrema (total variation non-increasing): it neither overshoots above the initial maximum (max stays under ~0.99, whereas a dispersive/non-TVD scheme would exceed 1) nor undershoots below the initial minimum (min stays >= -0.03; a non-TVD central scheme undershoots to about -0.04 on this profile), and the flux-difference form conserves the mean EXACTLY (1/4 to machine precision). Because the assertion evaluator cannot evaluate a state-dependent observed at assertion time, the gate drives the STATE and asserts REDUCTIONS of the state directly (max/min bounds + mean conservation), never an observed of the operator output — the sim-expressible form of the monotonicity claim. De-risked in numpy at N=64, t=0.5: this scheme's max/min/mean sit inside the asserted bands with comfortable margin. The grid geometry contract is fulfilled for [0,1] (x0 = 0, dx = 1/N); the tent ic is spelled inline from literals and N (build-time cellwise evaluation is scope-free). Companion MMS accuracy driver: problems/advection_1d_periodic_superbee.esm.",
@@ -29,7 +29,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x"
@@ -49,15 +49,8 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "N"
-            ]
-          },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
@@ -154,6 +147,16 @@
                 ],
                 "wrt": "x"
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }

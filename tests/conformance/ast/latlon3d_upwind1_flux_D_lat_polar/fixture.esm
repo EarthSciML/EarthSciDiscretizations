@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_upwind1_flux_D_lat_polar",
     "description": "AST fixture for the flux-form first-order-upwind MERIDIONAL advection rule -- the tracer half of the meridional CWC transport pair. Carries BOTH a cell-centred tracer and a face-staggered meridional wind, and BOTH the compound flux-form rule and the plain-D lat rule, so the golden pins that the esm-spec 9.6.3 outermost-first precedence plus the 9.6.1 shape constraint route each derivative to its own rule with no ambiguity and no priority race.",
@@ -27,7 +27,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -49,27 +49,101 @@
           "description": "180/(NLAT-1) = 36 for NLAT = 6, spelled as a LITERAL: every metaparameter is pinned at the import edge of an AST fixture, so NLAT is consumed there and is not live in this document's runtime scope (esm-spec 9.7.6). Read by lat_edge and by central_D_lat_zero_grad_bc."
         },
         "phie": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "lat_nodes"
           ],
-          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps.",
-          "expression": {
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps."
+        },
+        "coslat_e": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros."
+        },
+        "dS_lat": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden."
+        },
+        "V": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ],
+          "description": "Face-staggered MERIDIONAL wind on the NLAT+1 face axis, positive northward: V = coslat_e[j] a(i) b(k), a wind that vanishes at the poles like cos(phi). It is the lat_nodes index-set NAME in this declared shape -- not its size -- that lets the rule's `where` constraint tell the face wind apart from the cell tracer u."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "V",
+                          "u"
+                        ]
+                      }
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lat"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "phie",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
           }
         },
-        "coslat_e": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat_nodes"
-          ],
-          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros.",
-          "expression": {
+        {
+          "lhs": "coslat_e",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "coslat_edge",
@@ -78,14 +152,9 @@
             }
           }
         },
-        "dS_lat": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat"
-          ],
-          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden.",
-          "expression": {
+        {
+          "lhs": "dS_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_area",
@@ -94,16 +163,9 @@
             }
           }
         },
-        "V": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat_nodes",
-            "lev"
-          ],
-          "description": "Face-staggered MERIDIONAL wind on the NLAT+1 face axis, positive northward: V = coslat_e[j] a(i) b(k), a wind that vanishes at the poles like cos(phi). It is the lat_nodes index-set NAME in this declared shape -- not its size -- that lets the rule's `where` constraint tell the face wind apart from the cell tracer u.",
-          "expression": {
+        {
+          "lhs": "V",
+          "rhs": {
             "op": "aggregate",
             "args": [
               "coslat_e"
@@ -196,56 +258,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": 0
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "D",
-                    "args": [
-                      {
-                        "op": "*",
-                        "args": [
-                          "V",
-                          "u"
-                        ]
-                      }
-                    ],
-                    "wrt": "lat"
-                  }
-                ]
-              },
-              {
-                "op": "D",
-                "args": [
-                  "u"
-                ],
-                "wrt": "lat"
-              }
-            ]
           }
         }
       ]

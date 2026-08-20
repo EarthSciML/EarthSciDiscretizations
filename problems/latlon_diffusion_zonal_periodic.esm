@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon_diffusion_zonal_periodic",
     "description": "MMS driver: zonal diffusion on the global latlon grid, u_t = kappa * D(D(u, lon), lon) with constant per-degree diffusivity kappa (deg^2/s), discretized by grids/latlon/rules/central_D2_lon_periodic (2nd-order centered second difference, explicit wrap). This is the PER-DEGREE diffusion companion to latlon_advection_zonal_periodic; the full metric spherical Laplacian with cos(lat) weighting is a documented FOLLOW-UP, not this problem. Manufactured DECAYING solution u(lon, lat, t) = exp(-kappa (pi/180)^2 t) cos((pi/180) lon) — the m=1 zonal cosine mode, which is an exact eigenfunction of the continuous per-degree operator (u_lonlon = -(pi/180)^2 u), so u_t = kappa u_lonlon = -kappa (pi/180)^2 u holds with NO forcing term; the mode is periodic with period 360, matching the global recipe closure, and on the periodic grid it is also an exact eigenvector of the discrete wrap operator, so the discrete drift is pure eigenvalue (dispersion) truncation and falls as O(dlon_deg^2). The field is uniform in lat (the lon-only second derivative carries any passive lat profile; a constant is simplest), so no lat operator or lat BC is exercised here (see latlon_diffusion_meridional_zero_grad for the pole-row second derivative). GRID CONTRACT WIRING (grids/latlon/grid.esm): NLAT is closed to 5 at the import edge (the lat axis is passive), NLON stays open (default 144, rebound by the convergence sweep via the loader API); dlon_deg = 360/NLON is an observed whose expression divides by the metaparameter NAME NLON (substituted at load per esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline the grid's coordinate convention (lon_i = (i - 1/2) * 360/NLON via the NLON name) instead of invoking the lon_coord template, and spell the decay factor exp(-kappa (pi/180)^2 t) with kappa and t as LITERALS (200 and 1.0): free-name geometry and model parameters are not resolvable in the bindings' build-time ic/reference evaluator (parameters and observeds are out of scope there — upstream limitation, EarthSciAST tree-walk _eval_cellwise), so geometry and parameter values in ic/reference positions must fold to constants at load. ERROR MODEL: the smooth m=1 mode decays slowly relative to the grid-scale stiffness (kappa (pi/180)^2 = 0.0609 /s at kappa = 200), so at t = 1 the exact field has decayed to 0.9409 of its initial amplitude; the discrete relative L2 error is the eigenvalue truncation kappa t ((pi/180 dlon)^2 (pi/180)^2 ... ) ~= kappa t (pi/180)^2 (theta dlon)^2/12: 7.79e-4 at NLON=16, 1.96e-4 at 32, 4.89e-5 at 64, 1.22e-5 at 128, 9.67e-6 at the default 144 — an exact O(dlon_deg^2) ladder well inside the 2e-3 t=1 bound. The centered + wrap operator has zero net column weight, so sum(u) is conserved exactly and the zonal mean of the m=1 mode stays 0 to rounding at all times.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:latlon", "equation:heat", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:latlon",
+      "equation:heat",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -20,14 +25,19 @@
       "expression_template_imports": [
         {
           "ref": "../grids/latlon/rules/central_D2_lon_periodic.esm",
-          "bindings": { "NLAT": 5 }
+          "bindings": {
+            "NLAT": 5
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["lon", "lat"],
+          "shape": [
+            "lon",
+            "lat"
+          ],
           "description": "Diffused tracer field over the lon x lat index sets (zonally periodic, uniform in lat in this problem)."
         },
         "kappa": {
@@ -37,32 +47,64 @@
           "description": "Constant per-degree zonal diffusivity (degrees^2 of longitude per second). Scales both the discretized second derivative and the manufactured decay rate kappa (pi/180)^2, so the decaying-eigenmode MMS balance holds for any value."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": { "op": "/", "args": [360, "NLON"] },
           "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name (consumer-supplied geometry contract, grids/latlon/grid.esm). NLON is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlon_deg consistent."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "cos",
             "args": [
               {
                 "op": "*",
                 "args": [
-                  { "op": "/", "args": [3.141592653589793, 180] },
+                  {
+                    "op": "/",
+                    "args": [
+                      3.141592653589793,
+                      180
+                    ]
+                  },
                   {
                     "op": "aggregate",
-                    "output_idx": ["i", "j"],
+                    "output_idx": [
+                      "i",
+                      "j"
+                    ],
                     "args": [],
-                    "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                    "ranges": {
+                      "i": {
+                        "from": "lon"
+                      },
+                      "j": {
+                        "from": "lat"
+                      }
+                    },
                     "expr": {
                       "op": "*",
                       "args": [
-                        { "op": "-", "args": ["i", 0.5] },
-                        { "op": "/", "args": [360, "NLON"] }
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            0.5
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            360,
+                            "NLON"
+                          ]
+                        }
                       ]
                     }
                   }
@@ -72,12 +114,40 @@
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "kappa",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "lon" } ], "wrt": "lon" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lon"
+                  }
+                ],
+                "wrt": "lon"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
             ]
           }
         }
@@ -86,13 +156,18 @@
         {
           "id": "mms_zonal_diffusion_decay",
           "description": "Manufactured decaying solution u = exp(-kappa (pi/180)^2 t) cos((pi/180) lon) with kappa = 200. Derivation: cos((pi/180) lon) is an exact eigenfunction of the per-degree operator, u_lonlon = -(pi/180)^2 u, so u_t = kappa u_lonlon = -kappa (pi/180)^2 u exactly; periodic in lon with period 360; no forcing term. The t=0 assertion pins the ic wiring (reference equals the initial field). The t=1 assertion (the field has decayed to 0.9409 of amplitude) bounds the centered second-difference eigenvalue truncation, an exact O(dlon_deg^2) sequence: 9.67e-6 at the default NLON=144 and at worst 7.79e-4 at the sweep's coarsest NLON=16, so the 2e-3 bound holds across the whole convergence ladder (exact per-resolution errors pinned in tests/conformance/convergence/latlon_diffusion_zonal_periodic/golden/errors.json). The mean assertion pins exact conservation of the centered + wrap operator (each column telescopes to zero net weight) together with the zero zonal mean of the m=1 mode.",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -100,17 +175,45 @@
                   {
                     "op": "*",
                     "args": [
-                      { "op": "/", "args": [3.141592653589793, 180] },
+                      {
+                        "op": "/",
+                        "args": [
+                          3.141592653589793,
+                          180
+                        ]
+                      },
                       {
                         "op": "aggregate",
-                        "output_idx": ["i", "j"],
+                        "output_idx": [
+                          "i",
+                          "j"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                        "ranges": {
+                          "i": {
+                            "from": "lon"
+                          },
+                          "j": {
+                            "from": "lat"
+                          }
+                        },
                         "expr": {
                           "op": "*",
                           "args": [
-                            { "op": "-", "args": ["i", 0.5] },
-                            { "op": "/", "args": [360, "NLON"] }
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                360,
+                                "NLON"
+                              ]
+                            }
                           ]
                         }
                       }
@@ -123,7 +226,9 @@
               "variable": "u",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 2e-3 },
+              "tolerance": {
+                "abs": 0.002
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "*",
@@ -135,7 +240,19 @@
                         "op": "*",
                         "args": [
                           -200,
-                          { "op": "^", "args": [ { "op": "/", "args": [3.141592653589793, 180] }, 2 ] },
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "/",
+                                "args": [
+                                  3.141592653589793,
+                                  180
+                                ]
+                              },
+                              2
+                            ]
+                          },
                           1.0
                         ]
                       }
@@ -147,17 +264,45 @@
                       {
                         "op": "*",
                         "args": [
-                          { "op": "/", "args": [3.141592653589793, 180] },
+                          {
+                            "op": "/",
+                            "args": [
+                              3.141592653589793,
+                              180
+                            ]
+                          },
                           {
                             "op": "aggregate",
-                            "output_idx": ["i", "j"],
+                            "output_idx": [
+                              "i",
+                              "j"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "lon" }, "j": { "from": "lat" } },
+                            "ranges": {
+                              "i": {
+                                "from": "lon"
+                              },
+                              "j": {
+                                "from": "lat"
+                              }
+                            },
                             "expr": {
                               "op": "*",
                               "args": [
-                                { "op": "-", "args": ["i", 0.5] },
-                                { "op": "/", "args": [360, "NLON"] }
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    360,
+                                    "NLON"
+                                  ]
+                                }
                               ]
                             }
                           }
@@ -172,7 +317,9 @@
               "variable": "u",
               "time": 1.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "mean"
             }
           ]

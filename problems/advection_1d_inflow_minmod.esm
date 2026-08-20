@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_inflow_minmod",
     "description": "MMS driver: forced-steady 1-D linear advection u_t = -c D(u,x) + c dGdx on the unit interval [0, 1] with OPEN boundaries -- a prescribed inflow at the upstream (left) wall and a non-reflecting extrapolation outflow at the downstream (right) wall -- discretized by grids/cartesian_uniform_1d/rules/flux_limiter_minmod_D_inflow_bc (second-order TVD minmod flux-limited flux-difference; inflow face G_{1/2}=gL with u[0] ghost = gL, outflow face G_{N+1/2}=u[N] by zeroth-order extrapolation). This is the open-boundary companion of problems/advection_1d_periodic_minmod.esm and the minmod-limiter analogue of problems/advection_1d_inflow_lax_friedrichs.esm. Manufactured STEADY solution u*(x) = cos(pi x) with the exactly matching steady forcing c dGdx, dGdx = g'(x) = -pi sin(pi x) (the analytic derivative of u*), so the continuous balance is u_t = -c u*_x + c u*_x = 0 and u(t) = u* for all t; the discrete field drifts only by the operator truncation error (forced-steady MMS: observed order = operator order in this configuration). WHY cos(pi x) FOR A LIMITER: cos(pi x) is smooth and strictly MONOTONE DECREASING on [0, 1] (no interior extremum), so the minmod limiter never clips in the interior -- r_i = (u_i - u_{i-1})/(u_{i+1} - u_i) > 0 with r_i -> 1 as dx -> 0, phi -> 1 -- and the interior scheme runs at its formal second order (the limited flux reduces to the centred face value, whose flux-difference is the 2nd-order central derivative). The boundary faces (the prescribed inflow wall flux gL, the non-reflecting extrapolation outflow) are a FORMALLY first-order closure, but for this compatible MMS -- exact inflow value gL = u*(0) and zero wall gradient u*_x = 0 at both walls -- their residual is higher order, so the OBSERVED global order stays close to the second-order interior: median ~1.88 in L2 and ~1.76 in Linf over N=16..128, both approaching 2 from below, pinned HONESTLY (not forced) from the Julia sweep in tests/conformance/convergence/advection_1d_inflow_minmod. INFLOW/OUTFLOW COMPATIBILITY (why cos(pi x) with c = 1, gL = 1): flow is in +x (c = 1 > 0), so the inflow is the left wall and the inflow value must equal the exact wall value gL = u*(0) = cos(0) = 1; the profile has u*_x(0) = -pi sin(0) = 0 at the inflow wall so the boundary-cell residual is O(dx) (a nonzero wall gradient would pollute the order toward 1/2). The outflow (right) wall carries no external data (the limited flux there collapses to u[N] regardless of the extrapolated ghost -- non-reflecting), so it needs no compatibility condition; u*_x(1) = -pi sin(pi) = 0 there as well. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). gL is the rule's inflow free name, declared here as a parameter equal to the wall value; it lives only in the runtime rule body, never in a build-time ic/reference. The ic, the dGdx forcing, and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic/observed cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_inflow_minmod/golden/errors.json.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "mms"
+    ],
     "references": [
       {
         "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
@@ -22,13 +27,17 @@
   "models": {
     "AdvectionMinmodInflow": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/flux_limiter_minmod_D_inflow_bc.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/flux_limiter_minmod_D_inflow_bc.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "kg/m^3",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Advected tracer field over the x index set."
         },
         "c": {
@@ -50,21 +59,138 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, "N"] },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         },
         "dGdx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "kg/m^4",
-          "shape": ["x"],
-          "description": "Analytic derivative of the manufactured solution: dGdx(x) = g'(x) = -pi sin(pi x). Constant in time; c dGdx is the manufactured forcing that holds u* = cos(pi x) steady. Cell centers x_i = 0 + (i - 1/2)/N are spelled inline from literals and the metaparameter name N (build-time-foldable; never the free-name x_coord template).",
-          "expression": {
+          "shape": [
+            "x"
+          ],
+          "description": "Analytic derivative of the manufactured solution: dGdx(x) = g'(x) = -pi sin(pi x). Constant in time; c dGdx is the manufactured forcing that holds u* = cos(pi x) steady. Cell centers x_i = 0 + (i - 1/2)/N are spelled inline from literals and the metaparameter name N (build-time-foldable; never the free-name x_coord template)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        0,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "c"
+                    ]
+                  },
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  "dGdx"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          }
+        },
+        {
+          "lhs": "dGdx",
+          "rhs": {
             "op": "aggregate",
-            "output_idx": ["i"],
+            "output_idx": [
+              "i"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
             "expr": {
               "op": "*",
               "args": [
@@ -80,7 +206,25 @@
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       ]
@@ -91,63 +235,23 @@
             }
           }
         }
-      },
-      "equations": [
-        {
-          "lhs": { "op": "ic", "args": ["u"] },
-          "rhs": {
-            "op": "cos",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  3.141592653589793,
-                  {
-                    "op": "aggregate",
-                    "output_idx": ["i"],
-                    "args": [],
-                    "ranges": { "i": { "from": "x" } },
-                    "expr": {
-                      "op": "+",
-                      "args": [
-                        0,
-                        { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  { "op": "-", "args": ["c"] },
-                  { "op": "D", "args": ["u"], "wrt": "x" }
-                ]
-              },
-              { "op": "*", "args": ["c", "dGdx"] }
-            ]
-          }
-        }
       ],
       "tests": [
         {
           "id": "mms_steady_inflow_minmod",
           "description": "Manufactured steady solution u*(x) = cos(pi x) with c = 1 and left inflow gL = u*(0) = 1. Derivation: the continuous balance is u_t = -c u*_x + c u*_x = 0 with u*_x = dGdx = -pi sin(pi x), so u(t) = u* exactly; the discrete drift is the truncation error of flux_limiter_minmod_D_inflow_bc -- second-order in the smooth monotone interior (the minmod limiter is inactive, phi -> 1) and a formally first-order but higher-order-residual closure at the two compatible open-boundary faces, giving an observed order near 2 (median ~1.88 L2 / ~1.76 Linf; pinned honestly in the convergence golden, not forced). u*_x(0) = 0 makes the inflow-cell residual O(dx) and the non-reflecting outflow needs no data (metadata.description). References evaluate at cell centers x_i = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring (reference equals the initial field). The t=0.1 assertion bounds the truncation-driven drift against the SAME steady reference (well under the 0.05 bound at the default N=64). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_inflow_minmod/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -158,14 +262,38 @@
                       3.141592653589793,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       }
@@ -178,7 +306,9 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 0.05 },
+              "tolerance": {
+                "abs": 0.05
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "cos",
@@ -189,14 +319,38 @@
                       3.141592653589793,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
                             0,
-                            { "op": "*", "args": [{ "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "N"] }] }
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       }

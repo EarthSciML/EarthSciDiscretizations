@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_zonal_upwind_flux",
     "description": "Method-of-manufactured-solutions driver for the FLUX-FORM first-order-upwind ZONAL advection operator grids/latlon3d/rules/upwind1_flux_D_lon_periodic, i.e. (1/(a cos phi)) d/dlambda (U q) with the velocity INSIDE the operator and the periodic wrap INSIDE the rule. The transport equation is written du/dt = -D(U*u, wrt: lon) + src, and the rule's compound match D(U*q, wrt: lon) lowers the whole product. \n\nWHAT THIS PINS THAT THE PRE-EXISTING ZONAL DRIVERS CANNOT. latlon3d_advection_zonal_upwind and _zonal_ppm multiply a scalar angular velocity in from OUTSIDE a bare D(q, wrt: lon), which is only correct for a CONSTANT wind and hard-codes a single flow direction (upwind1_D_lon_interior is literally (f[i] - f[i-1])/dlon_deg -- there is no velocity argument to take the sign of). Here U is a declared variable of shape [lon_nodes, lat, lev]: a genuine three-dimensional FACE-STAGGERED wind, and it CHANGES SIGN. \n\nTHE WIND REVERSES, AND THE SOLUTION IS STRICTLY POSITIVE. U = U0 (0.5 + cos lambda) a(j) b(k) is eastward over most of the circle and westward on the 120-deg arc around lambda = 180, so both branches of the donor-cell selection fire in every row; a(j) and b(k) are mild strictly-positive modulations that make the rank-3 indexing real without touching the sign. The exact solution q*(lambda) = 2 + sin(lambda) is periodic (no boundary anywhere -- the zonal circle closes) and stays in [1, 3], so a donor-cell scheme cannot pass by clipping. \n\nFORCED-STEADY (TRUNCATION) IDIOM, following the vertical sibling latlon3d_advection_vertical_upwind_flux. src is the EXACT flux divergence of q*, which for a finite-volume cell is just the difference of the exact face fluxes times the exact spherical weight dphi_lat[j]/(dlam dS_lat[j]) -- no quadrature needed. The state is initialised to the exact CELL AVERAGE 2 + (cos(lame_i) - cos(lame_{i+1}))/dlam, not the point value at the cell centre. In exact arithmetic du/dt vanishes identically, so the drift at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order (1 for donor-cell upwind). \n\nWHY THE SWEEP REFINES NLON ONLY. NLAT = 5 and NLEV = 4 are pinned at the rule's import edge; NLON is left LIVE for the loader API. That is deliberate, not laziness: the polar metric weights ARE exercised (at NLAT = 5 the half-polar caps carry dphi_lat/dS_lat ~ 5.2 against ~1.0 in the tropics, so the cap rows dominate Linf) but they are NOT REFINED, which keeps the lat-lon coordinate singularity -- the thing that stalls the MERIDIONAL operator's pointwise Linf under refinement, see grids/latlon3d/rules/upwind1_flux_D_lat_polar -- out of the zonal order measurement. The result is a clean first-order zonal check with no polar interference. It also means this file's build-time ic/reference expressions, which cannot read observeds, fold lambda from literals plus the NLON name alone, while NLAT-1 = 4 and NLEV = 4 are spelled as literals (a metaparameter closed at an import edge is consumed there and is not live in the importing document's runtime scope).",
@@ -41,7 +41,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -69,10 +69,197 @@
           "description": "Meridional spacing 180/(NLAT-1) = 45 with NLAT = 5. Spelled as a LITERAL, not as 180/(NLAT-1): NLAT is CLOSED at the rule's import edge, so it is consumed there and is not a live name in this document's runtime scope (esm-spec 9.7.6 binding sites)."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name, read by the flux rule to form dlam = dlon_deg pi/180. NLON is LIVE (the loader API rebinds it per resolution), so dividing by the metaparameter NAME keeps the geometry consistent across the sweep automatically.",
-          "expression": {
+          "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name, read by the flux rule to form dlam = dlon_deg pi/180. NLON is LIVE (the loader API rebinds it per resolution), so dividing by the metaparameter NAME keeps the geometry consistent across the sweep automatically."
+        },
+        "phie": {
+          "type": "unknown",
+          "units": "deg",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "Latitude cell EDGES in degrees, from the grid's lat_edge template (the clamped-midpoint rule). The single producer of the derived latitude geometry: dS_lat and dphi_lat are both built from THIS array, which is the grid's keyed-factor contract."
+        },
+        "dS_lat": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template. Read by the zonal flux rule as a free name (the same contract by which the vertical rules read dz)."
+        },
+        "dphi_lat": {
+          "type": "unknown",
+          "units": "rad",
+          "shape": [
+            "lat"
+          ],
+          "description": "Cell angular width in radians (a HALF width at the two polar caps), from the grid's latcell_dphi template. Read by the zonal flux rule as a free name. The cap rows carry the largest dphi_lat/dS_lat ratio in the mesh (~5.2 at NLAT = 5 versus ~1.0 in the tropics), so the polar metric weights ARE exercised by this sweep -- they are simply not REFINED, since only NLON moves."
+        },
+        "U": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon_nodes",
+            "lat",
+            "lev"
+          ],
+          "description": "THREE-DIMENSIONAL face-staggered zonal wind on the NLON+1 face axis, positive eastward, evaluated at the cell WEST edges lame_i = 2 pi (i-1)/NLON: U[i,j,k] = U0 (0.5 + cos(lame_i)) a(j) b(k) with a(j) = 1 + 0.25 sin(pi (j-1)/4) and b(k) = 1 + 0.2 (k-1)/4, both strictly positive, so the SIGN of U is set by (0.5 + cos lambda) alone and reverses at lambda = +/-120 deg. The horizontal/vertical modulation makes the rank-3 indexing real: a stencil that read a column profile where it should read U[.,j,k] would be caught rather than silently agreeing. ELEMENT U[NLON+1,j,k] IS NEVER READ BY THE RULE (the east face of cell NLON reuses U[1] -- that is how the wrap is enforced by the operator); it is defined here only because the lon_nodes axis has NLON+1 members."
+        },
+        "src": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
+          "description": "MMS forcing: the EXACT flux divergence of the exact solution, src[i,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( Phi(lame_{i+1}) - Phi(lame_i) ) with Phi(lambda) = U0 (0.5 + cos lambda)(2 + sin lambda) a(j) b(k). No quadrature is needed: for a finite-volume cell the exact cell-mean divergence IS the difference of the exact POINT-VALUED fluxes at its two faces, times the exact spherical weight -- the same weight the operator uses. In exact arithmetic du/dt therefore vanishes identically at t = 0, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order (1 for donor-cell upwind). The only difference between src and the discrete divergence is that the operator's face fluxes use the DONOR CELL MEAN where src uses the exact face point value."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                2,
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        1
+                                      ]
+                                    },
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    },
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        6.283185307179586,
+                        "NLON"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "U",
+                          "u"
+                        ]
+                      }
+                    ],
+                    "wrt": "lon"
+                  }
+                ]
+              },
+              "src"
+            ]
+          }
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": {
             "op": "/",
             "args": [
               360,
@@ -80,28 +267,18 @@
             ]
           }
         },
-        "phie": {
-          "type": "observed",
-          "units": "deg",
-          "shape": [
-            "lat_nodes"
-          ],
-          "description": "Latitude cell EDGES in degrees, from the grid's lat_edge template (the clamped-midpoint rule). The single producer of the derived latitude geometry: dS_lat and dphi_lat are both built from THIS array, which is the grid's keyed-factor contract.",
-          "expression": {
+        {
+          "lhs": "phie",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
           }
         },
-        "dS_lat": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat"
-          ],
-          "description": "EXACT spherical cell-area weight sin(phie[j+1]) - sin(phie[j]), from the grid's latcell_area template. Read by the zonal flux rule as a free name (the same contract by which the vertical rules read dz).",
-          "expression": {
+        {
+          "lhs": "dS_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_area",
@@ -110,14 +287,9 @@
             }
           }
         },
-        "dphi_lat": {
-          "type": "observed",
-          "units": "rad",
-          "shape": [
-            "lat"
-          ],
-          "description": "Cell angular width in radians (a HALF width at the two polar caps), from the grid's latcell_dphi template. Read by the zonal flux rule as a free name. The cap rows carry the largest dphi_lat/dS_lat ratio in the mesh (~5.2 at NLAT = 5 versus ~1.0 in the tropics), so the polar metric weights ARE exercised by this sweep -- they are simply not REFINED, since only NLON moves.",
-          "expression": {
+        {
+          "lhs": "dphi_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_dphi",
@@ -126,16 +298,9 @@
             }
           }
         },
-        "U": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon_nodes",
-            "lat",
-            "lev"
-          ],
-          "description": "THREE-DIMENSIONAL face-staggered zonal wind on the NLON+1 face axis, positive eastward, evaluated at the cell WEST edges lame_i = 2 pi (i-1)/NLON: U[i,j,k] = U0 (0.5 + cos(lame_i)) a(j) b(k) with a(j) = 1 + 0.25 sin(pi (j-1)/4) and b(k) = 1 + 0.2 (k-1)/4, both strictly positive, so the SIGN of U is set by (0.5 + cos lambda) alone and reverses at lambda = +/-120 deg. The horizontal/vertical modulation makes the rank-3 indexing real: a stencil that read a column profile where it should read U[.,j,k] would be caught rather than silently agreeing. ELEMENT U[NLON+1,j,k] IS NEVER READ BY THE RULE (the east face of cell NLON reuses U[1] -- that is how the wrap is enforced by the operator); it is defined here only because the lon_nodes axis has NLON+1 members.",
-          "expression": {
+        {
+          "lhs": "U",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "iw",
@@ -253,16 +418,9 @@
             }
           }
         },
-        "src": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat",
-            "lev"
-          ],
-          "description": "MMS forcing: the EXACT flux divergence of the exact solution, src[i,j,k] = ( dphi_lat[j] / (dlam dS_lat[j]) ) ( Phi(lame_{i+1}) - Phi(lame_i) ) with Phi(lambda) = U0 (0.5 + cos lambda)(2 + sin lambda) a(j) b(k). No quadrature is needed: for a finite-volume cell the exact cell-mean divergence IS the difference of the exact POINT-VALUED fluxes at its two faces, times the exact spherical weight -- the same weight the operator uses. In exact arithmetic du/dt therefore vanishes identically at t = 0, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order (1 for donor-cell upwind). The only difference between src and the discrete divergence is that the operator's face fluxes use the DONOR CELL MEAN where src uses the exact face point value.",
-          "expression": {
+        {
+          "lhs": "src",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "ia",
@@ -534,146 +692,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j",
-              "k"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              },
-              "k": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                2,
-                {
-                  "op": "/",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "cos",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "i",
-                                        1
-                                      ]
-                                    },
-                                    "NLON"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "cos",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        {
-                                          "op": "+",
-                                          "args": [
-                                            "i",
-                                            1
-                                          ]
-                                        },
-                                        1
-                                      ]
-                                    },
-                                    "NLON"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        6.283185307179586,
-                        "NLON"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "+",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "D",
-                    "args": [
-                      {
-                        "op": "*",
-                        "args": [
-                          "U",
-                          "u"
-                        ]
-                      }
-                    ],
-                    "wrt": "lon"
-                  }
-                ]
-              },
-              "src"
-            ]
           }
         }
       ],

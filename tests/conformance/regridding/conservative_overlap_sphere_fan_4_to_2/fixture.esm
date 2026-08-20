@@ -1,35 +1,78 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "conservative_overlap_sphere_fan_4_to_2",
     "description": "Conformance fixture: a 4 -> 2 SPHERICAL conservative coarsening driven through the SAME regridding/conservative_overlap.esm template library as the planar 3x3 -> 2x2 exemplar, differing only in the manifold binding ('spherical', an esm-spec 9.6.1 scalar-field template parameter of conservative_overlap_A_ij) and the cell geometry. GEOMETRY (hand-exact by Girard, unit sphere, steradians): a meridian fan on the octant patch. Apex E = (0E, 0N); base vertices on the meridian lon = 90E at latitudes 0, 15, 30, 45, 60 degrees. E is a POLE of the great circle lon = +-90 (every point of that circle is at 90 degrees angular distance from E = the unit vector x-hat, since that circle is the x = 0 great circle), so every fan arc E -> (90E, phi) meets the meridian at a RIGHT angle -- exactly as meridians from the north pole meet the equator. Each spherical triangle (E, (90E, phi_a), (90E, phi_b)) therefore has angles (delta_phi, 90, 90) and by Girard's theorem area = spherical excess = delta_phi in radians: ITS BASE'S LATITUDE SPAN. Every edge in both grids is a great-circle arc (fan arcs by construction; base segments lie ON the lon = 90E meridian), so the source triangles tile each target triangle EXACTLY -- no parallel-edge (small-circle) modelling error anywhere, which is what makes every quantity below hand-derivable. Source: four triangles S_k = (E, (90E, 15(k-1)), (90E, 15k)), k = 1..4, each of area pi/12 = 0.2617993877991494 sr. Target: two triangles T_1 = (E, (90E, 0), (90E, 30)) and T_2 = (E, (90E, 30), (90E, 60)), each of area pi/6. EXPECTED (non-golden, manifest reference_weights): A_ij = pi/12 for the four nested pairs (S1,S2 in T1; S3,S4 in T2), exactly 0 elsewhere (S2/S3 touch the opposite target only along the shared arc E -> (90E, 30), a measure-zero overlap dropped by the sliver filter); A_j = pi/6 for both targets; W_ij = (pi/12)/(pi/6) = 1/2 EXACTLY for the four surviving pairs; total patch area sum_j A_j = pi/3 = 1.0471975511965976 sr (the fan triangle (E, (90E,0), (90E,60)), excess 60 degrees). With F_src = [1,2,3,4]: F_tgt = [(1+2)/2, (3+4)/2] = [1.5, 3.5]; both mass sums equal (pi/12)*(1+2+3+4) = 5*pi/6 = 2.6179938779914944. These are documentation for eyeball checking ONLY -- the committed golden (golden/weights.json) is produced by the official Julia runner via scripts/regenerate-goldens.sh, per the repo's single-pathway doctrine. Inline tests assert only the two EXACT invariants (CONFORMANCE_SPEC 5.8.3): partition-of-unity (exact by construction: the apply divides by the row-sum of the SAME computed areas under the SAME filter, regardless of manifold or backend) and conservation (exact because the targets tile the source patch with shared great-circle seams; src_area carries the true areas pi/12, so the residual is pure FP noise, gated at 1e-9). Per-pair spherical areas are tolerance-gated cross-binding (5.8.2): Julia clips via the GeometryOps spherical backend, Rust via s2geometry -- different kernels, same manifold declaration (5.8.4), agreement inherited from the exact-tiling geometry.",
-    "tags": ["conformance", "regridding", "conservative_overlap", "spherical", "manifold-parameter", "coupling", "template-import", "partition-of-unity", "conservation"]
+    "tags": [
+      "conformance",
+      "regridding",
+      "conservative_overlap",
+      "spherical",
+      "manifold-parameter",
+      "coupling",
+      "template-import",
+      "partition-of-unity",
+      "conservation"
+    ]
   },
   "models": {
     "Src": {
       "variables": {
         "F": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["src_cells"],
-          "description": "The source field being remapped: F[i] = i over the fan enumeration (south to north along the meridian base). Chosen so the hand-derivable target values are distinct exact binary rationals (1.5, 3.5) and the conserved mass is (pi/12)*10 = 5*pi/6.",
-          "expression": { "op": "const", "value": [1.0, 2.0, 3.0, 4.0], "args": [] }
+          "shape": [
+            "src_cells"
+          ],
+          "description": "The source field being remapped: F[i] = i over the fan enumeration (south to north along the meridian base). Chosen so the hand-derivable target values are distinct exact binary rationals (1.5, 3.5) and the conserved mass is (pi/12)*10 = 5*pi/6."
         },
         "unit": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["src_cells"],
-          "description": "The constant-1 source field. Its regrid is exactly the weight row-sums sum_i W_ij, so the partition-of-unity invariant is surfaced as an ordinary regridded field.",
-          "expression": { "op": "const", "value": [1.0, 1.0, 1.0, 1.0], "args": [] }
+          "shape": [
+            "src_cells"
+          ],
+          "description": "The constant-1 source field. Its regrid is exactly the weight row-sums sum_i W_ij, so the partition-of-unity invariant is surfaced as an ordinary regridded field."
         }
       },
-      "equations": []
+      "equations": [
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              2.0,
+              3.0,
+              4.0
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "unit",
+          "rhs": {
+            "op": "const",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "args": []
+          }
+        }
+      ]
     },
     "Regrid": {
       "expression_template_imports": [
         {
           "ref": "../../../../regridding/conservative_overlap.esm",
-          "bindings": { "NSRC": 4, "NTGT": 2, "NVERT": 3 }
+          "bindings": {
+            "NSRC": 4,
+            "NTGT": 2,
+            "NVERT": 3
+          }
         }
       ],
       "variables": {
@@ -40,86 +83,71 @@
           "description": "Sliver floor (CONFORMANCE_SPEC 5.8.2): overlap areas at or below atol are treated as equal-to-zero by the A_j and apply templates. 1e-12 sr against true overlaps of pi/12 = 0.26 sr -- and far above any snap-rounding sliver a backend can produce for the measure-zero shared-arc contacts (S2 <-> T1, S3 <-> T2)."
         },
         "src_poly": {
-          "type": "observed",
-          "shape": ["src_cells", "overlap_cell_verts", "overlap_coord"],
-          "description": "Source-cell geometry: four closed CCW spherical-triangle rings (vertex = [lon, lat] in degrees, NVERT = 3), the meridian fan S_k = (E, (90E, 15(k-1)), (90E, 15k)) from apex E = (0,0). Every edge is a great-circle arc; each triangle's area is exactly pi/12 sr by Girard (angles delta_phi = 15 degrees, 90, 90).",
-          "expression": {
-            "op": "const",
-            "value": [
-              [[0.0, 0.0], [90.0, 0.0], [90.0, 15.0]],
-              [[0.0, 0.0], [90.0, 15.0], [90.0, 30.0]],
-              [[0.0, 0.0], [90.0, 30.0], [90.0, 45.0]],
-              [[0.0, 0.0], [90.0, 45.0], [90.0, 60.0]]
-            ],
-            "args": []
-          }
+          "type": "unknown",
+          "shape": [
+            "src_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Source-cell geometry: four closed CCW spherical-triangle rings (vertex = [lon, lat] in degrees, NVERT = 3), the meridian fan S_k = (E, (90E, 15(k-1)), (90E, 15k)) from apex E = (0,0). Every edge is a great-circle arc; each triangle's area is exactly pi/12 sr by Girard (angles delta_phi = 15 degrees, 90, 90)."
         },
         "tgt_poly": {
-          "type": "observed",
-          "shape": ["tgt_cells", "overlap_cell_verts", "overlap_coord"],
-          "description": "Target-cell geometry: two closed CCW spherical-triangle rings coarsening the same fan 2:1 -- T_1 = (E, (90E,0), (90E,30)), T_2 = (E, (90E,30), (90E,60)), each of area pi/6 sr. The targets tile the source patch exactly (all seams are shared great-circle arcs).",
-          "expression": {
-            "op": "const",
-            "value": [
-              [[0.0, 0.0], [90.0, 0.0], [90.0, 30.0]],
-              [[0.0, 0.0], [90.0, 30.0], [90.0, 60.0]]
-            ],
-            "args": []
-          }
+          "type": "unknown",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Target-cell geometry: two closed CCW spherical-triangle rings coarsening the same fan 2:1 -- T_1 = (E, (90E,0), (90E,30)), T_2 = (E, (90E,30), (90E,60)), each of area pi/6 sr. The targets tile the source patch exactly (all seams are shared great-circle arcs)."
         },
         "src_area": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["src_cells"],
-          "description": "True source-cell areas A_i = pi/12 sr each (hand-exact by Girard) for the conservation invariant sum_j A_j*F_tgt[j] = sum_i A_i*F_src[i].",
-          "expression": { "op": "const", "value": [0.2617993877991494, 0.2617993877991494, 0.2617993877991494, 0.2617993877991494], "args": [] }
+          "shape": [
+            "src_cells"
+          ],
+          "description": "True source-cell areas A_i = pi/12 sr each (hand-exact by Girard) for the conservation invariant sum_j A_j*F_tgt[j] = sum_i A_i*F_src[i]."
         },
         "A_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["src_cells", "tgt_cells"],
-          "description": "Overlap-area matrix from the library's narrow-phase template (build-once). The geometry manifold is bound HERE, at the invocation ('spherical' -- an esm-spec 9.6.1 scalar-field template parameter of conservative_overlap_A_ij): great-circle-edge clipping on the unit sphere, areas in steradians. Expected (non-golden, manifest reference_weights): pi/12 for the four nested pairs, 0 elsewhere.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
-            "args": [],
-            "bindings": { "src_poly": "src_poly", "tgt_poly": "tgt_poly", "manifold": "spherical" }
-          }
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "Overlap-area matrix from the library's narrow-phase template (build-once). The geometry manifold is bound HERE, at the invocation ('spherical' -- an esm-spec 9.6.1 scalar-field template parameter of conservative_overlap_A_ij): great-circle-edge clipping on the unit sphere, areas in steradians. Expected (non-golden, manifest reference_weights): pi/12 for the four nested pairs, 0 elsewhere."
         },
         "A_j": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["tgt_cells"],
-          "description": "Row-normalization denominator from the library template: A_j = sum_i A_ij over the filtered surviving set. Expected pi/6 = 0.5235987755982988 sr for both targets (each target is tiled by exactly two source triangles).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j",
-            "args": [],
-            "bindings": { "A_ij": "A_ij", "atol": "atol" }
-          }
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Row-normalization denominator from the library template: A_j = sum_i A_ij over the filtered surviving set. Expected pi/6 = 0.5235987755982988 sr for both targets (each target is tiled by exactly two source triangles)."
         },
         "W_ij": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["src_cells", "tgt_cells"],
-          "description": "Normalized weight matrix from the library's W_ij template (build-once, same filter as A_j/apply): W_ij[i,j] = A_ij[i,j]/A_j[j] over the surviving set. Expected (non-golden, manifest reference_weights): exactly 1/2 for the four nested pairs, 0 elsewhere -- the cleanest hand-exact weights a spherical case can have.",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "conservative_overlap_W_ij",
-            "args": [],
-            "bindings": { "A_ij": "A_ij", "A_j": "A_j", "atol": "atol" }
-          }
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "Normalized weight matrix from the library's W_ij template (build-once, same filter as A_j/apply): W_ij[i,j] = A_ij[i,j]/A_j[j] over the surviving set. Expected (non-golden, manifest reference_weights): exactly 1/2 for the four nested pairs, 0 elsewhere -- the cleanest hand-exact weights a spherical case can have."
         },
         "F_tgt": {
           "type": "parameter",
           "units": "1",
-          "shape": ["tgt_cells"],
+          "shape": [
+            "tgt_cells"
+          ],
           "description": "The regridded field: the target of the first coupling entry, whose expression `transform` invokes the library's apply template on Src.F (esm-spec 10.4). Expected (non-golden) with Src.F = [1..4]: [1.5, 3.5]."
         },
         "F_unit_tgt": {
           "type": "parameter",
           "units": "1",
-          "shape": ["tgt_cells"],
+          "shape": [
+            "tgt_cells"
+          ],
           "description": "The regrid of the constant-1 field: the target of the second coupling entry (same apply template on Src.unit). F_unit_tgt[j] = sum_i W_ij -- partition-of-unity surfaced as an ordinary regridded field, exactly 1 for every j by construction (the denominator is the row-sum of the same computed areas under the same filter, manifold-independent)."
         },
         "mass_src": {
@@ -128,76 +156,340 @@
           "description": "Source-side mass: the target of the third coupling entry, whose inline aggregate transform computes sum_i A_i*Src.F[i] = (pi/12)*10 = 5*pi/6 = 2.6179938779914944 directly on the source field."
         },
         "mass_tgt": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "description": "Target-side mass sum_j A_j*F_tgt[j], using the computed A_j denominators as the target areas (the 5.8.3 construction). Equals mass_src up to FP noise because the targets tile the source patch exactly (shared great-circle seams).",
-          "expression": {
-            "op": "aggregate",
-            "semiring": "sum_product",
-            "output_idx": [],
-            "ranges": { "j": { "from": "tgt_cells" } },
-            "args": ["A_j", "F_tgt"],
-            "expr": {
-              "op": "*",
-              "args": [
-                { "op": "index", "args": ["A_j", "j"] },
-                { "op": "index", "args": ["F_tgt", "j"] }
-              ]
-            }
-          }
+          "description": "Target-side mass sum_j A_j*F_tgt[j], using the computed A_j denominators as the target areas (the 5.8.3 construction). Equals mass_src up to FP noise because the targets tile the source patch exactly (shared great-circle seams)."
         },
         "pou_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["tgt_cells"],
+          "shape": [
+            "tgt_cells"
+          ],
           "default": 0.0,
           "description": "Surfacing state for the partition-of-unity invariant: d(pou_state[j])/dt = F_unit_tgt[j] from a zero IC, so pou_state(1) = sum_i W_ij (the zero-IC surfacing idiom of the planar exemplar)."
         },
         "cons_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["tgt_cells"],
+          "shape": [
+            "tgt_cells"
+          ],
           "default": 0.0,
           "description": "Surfacing state for the conservation residual, broadcast over tgt_cells so the assertion can reduce it: d(cons_state[j])/dt = mass_tgt - mass_src = 0 from a zero IC."
         },
         "regrid_state": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["tgt_cells"],
+          "shape": [
+            "tgt_cells"
+          ],
           "default": 0.0,
           "description": "Surfacing state for the regridded field itself: regrid_state(1) = F_tgt (expected [1.5, 3.5]). Gated cross-binding against the reference and, per pair, against golden/weights.json."
         }
       },
       "equations": [
-        { "lhs": { "op": "ic", "args": ["pou_state"] }, "rhs": 0.0 },
-        { "lhs": { "op": "ic", "args": ["cons_state"] }, "rhs": 0.0 },
-        { "lhs": { "op": "ic", "args": ["regrid_state"] }, "rhs": 0.0 },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "pou_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "cons_state"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "regrid_state"
+            ]
+          },
+          "rhs": 0.0
+        },
         {
           "_comment": "d(pou_state)/dt = F_unit_tgt (the regridded constant-1 field). From a zero IC, pou_state(1) = sum_i W_ij for each j.",
-          "lhs": { "op": "D", "args": ["pou_state"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "pou_state"
+            ],
+            "wrt": "t"
+          },
           "rhs": "F_unit_tgt"
         },
         {
           "_comment": "d(cons_state)/dt = mass_tgt - mass_src, the scalar conservation residual broadcast over tgt_cells. From a zero IC, cons_state(1) = 0 exactly when the remap conserves mass.",
-          "lhs": { "op": "D", "args": ["cons_state"], "wrt": "t" },
-          "rhs": { "op": "-", "args": ["mass_tgt", "mass_src"] }
+          "lhs": {
+            "op": "D",
+            "args": [
+              "cons_state"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              "mass_tgt",
+              "mass_src"
+            ]
+          }
         },
         {
           "_comment": "d(regrid_state)/dt = F_tgt. From a zero IC, regrid_state(1) = F_tgt -- the value the golden pins.",
-          "lhs": { "op": "D", "args": ["regrid_state"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "regrid_state"
+            ],
+            "wrt": "t"
+          },
           "rhs": "F_tgt"
+        },
+        {
+          "lhs": "src_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  15.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  15.0
+                ],
+                [
+                  90.0,
+                  30.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  30.0
+                ],
+                [
+                  90.0,
+                  45.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  45.0
+                ],
+                [
+                  90.0,
+                  60.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "tgt_poly",
+          "rhs": {
+            "op": "const",
+            "value": [
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  30.0
+                ]
+              ],
+              [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  90.0,
+                  30.0
+                ],
+                [
+                  90.0,
+                  60.0
+                ]
+              ]
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "src_area",
+          "rhs": {
+            "op": "const",
+            "value": [
+              0.2617993877991494,
+              0.2617993877991494,
+              0.2617993877991494,
+              0.2617993877991494
+            ],
+            "args": []
+          }
+        },
+        {
+          "lhs": "A_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "spherical"
+            }
+          }
+        },
+        {
+          "lhs": "A_j",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "W_ij",
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_W_ij",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "atol": "atol"
+            }
+          }
+        },
+        {
+          "lhs": "mass_tgt",
+          "rhs": {
+            "op": "aggregate",
+            "semiring": "sum_product",
+            "output_idx": [],
+            "ranges": {
+              "j": {
+                "from": "tgt_cells"
+              }
+            },
+            "args": [
+              "A_j",
+              "F_tgt"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "A_j",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F_tgt",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ],
       "tests": [
         {
           "id": "exact_invariants",
           "description": "The two EXACT gates of CONFORMANCE_SPEC 5.8.3 on the sphere, and nothing else (per-pair spherical areas and weights are tolerance-gated against the golden). Partition-of-unity: pou_state(1) = sum_i W_ij = 1 for every target cell -- exact by construction regardless of manifold, asserted by max = 1 and min = 1 at the tight epsilon. Conservation: cons_state(1) = sum_j A_j*F_tgt[j] - sum_i A_i*F_src[i] = 0 (both masses equal 5*pi/6; src_area carries the hand-exact Girard areas pi/12, so the residual is pure FP noise).",
-          "time_span": { "start": 0.0, "end": 1.0 },
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
           "assertions": [
-            { "variable": "pou_state", "time": 1.0, "expected": 1.0, "tolerance": { "abs": 1e-12 }, "reduce": "max" },
-            { "variable": "pou_state", "time": 1.0, "expected": 1.0, "tolerance": { "abs": 1e-12 }, "reduce": "min" },
-            { "variable": "cons_state", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1e-9 }, "reduce": "max" },
-            { "variable": "cons_state", "time": 1.0, "expected": 0.0, "tolerance": { "abs": 1e-9 }, "reduce": "min" }
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "pou_state",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 1e-12
+              },
+              "reduce": "min"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "cons_state",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "min"
+            }
           ]
         }
       ]
@@ -212,7 +504,12 @@
         "op": "apply_expression_template",
         "name": "conservative_overlap_apply",
         "args": [],
-        "bindings": { "A_ij": "Regrid.A_ij", "A_j": "Regrid.A_j", "F_src": "Src.F", "atol": "Regrid.atol" }
+        "bindings": {
+          "A_ij": "Regrid.A_ij",
+          "A_j": "Regrid.A_j",
+          "F_src": "Src.F",
+          "atol": "Regrid.atol"
+        }
       },
       "description": "The regridding coupling, spelled natively (esm-spec 8.6 / 10.5): the transform IS the conservative-overlap apply expression -- the imported library template invoked on the source field, with the receiving component's build-once weight arrays bound through fully-scoped references. Identical to the planar exemplar; only the A_ij invocation's manifold binding differs."
     },
@@ -224,7 +521,12 @@
         "op": "apply_expression_template",
         "name": "conservative_overlap_apply",
         "args": [],
-        "bindings": { "A_ij": "Regrid.A_ij", "A_j": "Regrid.A_j", "F_src": "Src.unit", "atol": "Regrid.atol" }
+        "bindings": {
+          "A_ij": "Regrid.A_ij",
+          "A_j": "Regrid.A_j",
+          "F_src": "Src.unit",
+          "atol": "Regrid.atol"
+        }
       },
       "description": "The constant-1 field regridded through the same apply template, whose result surfaces the partition-of-unity invariant."
     },
@@ -236,13 +538,32 @@
         "op": "aggregate",
         "semiring": "sum_product",
         "output_idx": [],
-        "ranges": { "i": { "from": "src_cells" } },
-        "args": ["Regrid.src_area", "Src.F"],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          }
+        },
+        "args": [
+          "Regrid.src_area",
+          "Src.F"
+        ],
         "expr": {
           "op": "*",
           "args": [
-            { "op": "index", "args": ["Regrid.src_area", "i"] },
-            { "op": "index", "args": ["Src.F", "i"] }
+            {
+              "op": "index",
+              "args": [
+                "Regrid.src_area",
+                "i"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "Src.F",
+                "i"
+              ]
+            }
           ]
         }
       },

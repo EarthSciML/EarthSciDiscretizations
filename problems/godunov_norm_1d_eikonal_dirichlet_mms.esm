@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "godunov_norm_1d_eikonal_dirichlet_mms",
     "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_1d/rules/godunov_norm_D1_dirichlet_bc on the unit interval [0,1] with inhomogeneous DIRICHLET (state-constraint) boundaries, the Dirichlet companion of problems/godunov_norm_1d_eikonal_mms.esm (which is periodic). Forced-steady eikonal u_t = -S|u_x| + S|g'(x)| with the manufactured solution g(x) = sin(2 pi x) + 0.5 + x: because u_t = -S|g'| + S|g'| = 0, g is the EXACT solution of the continuous forced PDE for all t, so the analytic reference at every time is g. The forcing S|g'| = S|2 pi cos(2 pi x) + 1| balances the operator. Discretely u_t = S*(|g'| - godunov(u)); the initial imbalance is the first-order Godunov truncation S*(|g'| - godunov(g)) = O(dx), so ||u(T) - g|| = O(dx) -- expected order 1. The prescribed wall values are gL = g(0) = 0.5 and gR = g(1) = 1.5 (distinct, nonzero, matched to the rule's gL/gR free names; the homogeneous case is gL=gR=0). g = sin(2 pi x) + linear is antisymmetric about x=0 and x=1 (the oscillatory part is odd about every integer/half-integer, the linear part is odd about every point), so the antisymmetric mirror ghost u[0]=2*gL-u[1], u[N+1]=2*gR-u[N] reproduces g's true smooth extension and the boundary faces converge at the same order-1 rate as the interior -- a clean order-1 gate with nothing to exempt (unlike a periodic ramp, which is a contradiction). THE KINKS ARE NOT A PROBLEM: |g'| has slope-sign kinks (where 2 pi cos(2 pi x) + 1 changes sign, x approx 0.275, 0.725), yet the Rouy-Tourin/Osher-Sethian entropy fix selects the correct one-sided branch, so the scheme stays first order in L2 AND Linf. The linear part 0.5 + x is represented EXACTLY by the discrete Dirichlet operator (its one-sided mirror-ghost residual vanishes identically, the boundary-preserved affine-exactness), so the discretization error comes solely from the sine mode. The grid geometry contract is fulfilled for [0,1]: x0 = 0 and dx = 1/N. The ic, the forcing observed, and the test references spell the cell-center coordinate x_i = (i - 1/2)/N inline from literals and the metaparameter N (the 6.6.5/ic build-time cellwise evaluation is scope-free). Per-resolution error norms are pinned in tests/conformance/convergence/godunov_norm_1d_eikonal_dirichlet_mms/golden/errors.json.",
@@ -37,7 +37,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x"
@@ -69,83 +69,17 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "N"
-            ]
-          },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is substituted as an integer literal at load (esm-spec 9.7.6)."
         },
         "forcing": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "x"
           ],
-          "description": "The manufactured source |g'(x)| = |2 pi cos(2 pi x_i) + 1| (the S factor folded via the du/dt scaling; x_i = (i - 1/2)/N spelled inline). It exactly balances the continuous operator so g is the steady exact solution; the residual after discretization is the truncation error.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "x"
-              }
-            },
-            "expr": {
-              "op": "abs",
-              "args": [
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        6.283185307179586,
-                        {
-                          "op": "cos",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                6.283185307179586,
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "i",
-                                        0.5
-                                      ]
-                                    },
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        1,
-                                        "N"
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "The manufactured source |g'(x)| = |2 pi cos(2 pi x_i) + 1| (the S factor folded via the du/dt scaling; x_i = (i - 1/2)/N spelled inline). It exactly balances the continuous operator so g is the steady exact solution; the residual after discretization is the truncation error."
         }
       },
       "equations": [
@@ -261,6 +195,78 @@
                 ]
               }
             ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          }
+        },
+        {
+          "lhs": "forcing",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "abs",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        6.283185307179586,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                6.283185307179586,
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

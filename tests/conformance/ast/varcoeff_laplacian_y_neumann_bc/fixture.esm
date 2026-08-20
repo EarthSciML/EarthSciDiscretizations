@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "varcoeff_laplacian_y_neumann_bc_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_neumann_bc: a minimal consuming model binding NX=NY=4 at the import edge. The compound match D( k * D(u,y), y ) fires (priority 10) through the section-9.6.3 fixpoint and lowers to the rule's makearray -- the interior conservative flux-difference stencil aggregate over u and k, plus the two y-edge faces over the singleton-y full-rank strips -- with zero apply_expression_template nodes, zero surviving spatial D, and the free names (qYL, qYR, dy) surviving in the expanded body. The coefficient k is a consumer-supplied [x,y]-shaped field (here k=1+0.5 cos(2 pi x_gi), constant in y), bound by the match as the LEFT factor of the product; u is the state. x0=y0=0 and dx=dy=1/4 spelled with the literal 4 because the edge binding closes NX/NY before this document's scope (grids/cartesian_uniform_2d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
@@ -24,7 +24,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
           "shape": [
             "x",
@@ -33,14 +33,90 @@
           "description": "Temperature field over the 2-D [x, y] index sets."
         },
         "k": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m^2/s",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Consumer-supplied variable conductivity of shape [x, y], k = 1 + 0.5 cos(2 pi x_gi) at cell centers x_gi = (gi - 1/2)/4, spelled inline from literals and the edge-bound NX=4. Bound by the rule's match as the coefficient k (the left factor of k*D(u,wrt)); read by the expanded stencil at the faces. The aggregate loops over gi/gj, distinct from the stencil's interior indices i/j, per the keyed-factor convention (see the rule description).",
-          "expression": {
+          "description": "Consumer-supplied variable conductivity of shape [x, y], k = 1 + 0.5 cos(2 pi x_gi) at cell centers x_gi = (gi - 1/2)/4, spelled inline from literals and the edge-bound NX=4. Bound by the rule's match as the coefficient k (the left factor of k*D(u,wrt)); read by the expanded stencil at the faces. The aggregate loops over gi/gj, distinct from the stencil's interior indices i/j, per the keyed-factor convention (see the rule description)."
+        },
+        "qYL": {
+          "type": "parameter",
+          "units": "K",
+          "default": 0.0,
+          "description": "Prescribed physical flux k du/dy at the bottom y-wall (the rule's Neumann free name). Zero default = homogeneous (zero-flux) bottom wall."
+        },
+        "qYR": {
+          "type": "parameter",
+          "units": "K",
+          "default": 1.0,
+          "description": "Prescribed physical flux k du/dy at the top y-wall (the rule's Neumann free name), nonzero so the inhomogeneous face term appears in the expanded golden."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge: the grid's y0 free name."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "k",
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "y"
+                  }
+                ]
+              }
+            ],
+            "wrt": "y"
+          }
+        },
+        {
+          "lhs": "k",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "gi",
@@ -99,91 +175,24 @@
             }
           }
         },
-        "qYL": {
-          "type": "parameter",
-          "units": "K",
-          "default": 0.0,
-          "description": "Prescribed physical flux k du/dy at the bottom y-wall (the rule's Neumann free name). Zero default = homogeneous (zero-flux) bottom wall."
-        },
-        "qYR": {
-          "type": "parameter",
-          "units": "K",
-          "default": 1.0,
-          "description": "Prescribed physical flux k du/dy at the top y-wall (the rule's Neumann free name), nonzero so the inhomogeneous face term appears in the expanded golden."
-        },
-        "x0": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0,
-          "description": "Left x domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
-        },
-        "y0": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0,
-          "description": "Bottom y domain edge: the grid's y0 free name."
-        },
-        "dx": {
-          "type": "observed",
-          "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              4
-            ]
-          },
-          "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)."
-        },
-        "dy": {
-          "type": "observed",
-          "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              4
-            ]
-          },
-          "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY."
-        }
-      },
-      "equations": [
         {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": 0.0
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
+          "lhs": "dx",
           "rhs": {
-            "op": "D",
+            "op": "/",
             "args": [
-              {
-                "op": "*",
-                "args": [
-                  "k",
-                  {
-                    "op": "D",
-                    "args": [
-                      "u"
-                    ],
-                    "wrt": "y"
-                  }
-                ]
-              }
-            ],
-            "wrt": "y"
+              1,
+              4
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              4
+            ]
           }
         }
       ]

@@ -1,8 +1,8 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "divergence_mpas_l0",
-    "description": "Convergence driver for grids/mpas/rules/fv_divergence_cell on the icosahedral level-0 mesh (12 cells, 30 edges, 20 vertices; grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem) \u2014 one member of the divergence_mpas refinement family (levels 0/1/2; tests/conformance/convergence/divergence_mpas). This realizes the rebinding recipe documented in problems/divergence_mpas.esm: subsystem ref paths cannot be metaparameterized (esm-spec 9.7.6 binds sizes, not file refs), so each refinement level is its own thin problem file binding the grid metaparameters at the import edge and mounting its mesh. Unlike the exactness driver's curl flux (which the TRiSK divergence annihilates to rounding), this flux has NONZERO analytic divergence, giving a measurable discretization error: psi = P2(z) = (3 z^2 - 1)/2 (the l=2 zonal harmonic, z = sin(lat)), V = grad_s psi = 3 z (e_z - z x), and div_s V = laplacian_s psi = -l(l+1) psi = -3 (3 z^2 - 1) exactly on the unit sphere. The per-edge normal flux is the midpoint sample F(e) = V(x_e) . n_e at the MPAS edge location x_e = normalize(x_c1 + x_c2), n_e = normalize(x_c2 - x_c1) (tangent at x_e since |x_c1| = |x_c2| = 1), [c1, c2] = cellsOnEdge(e); because n_e is perpendicular to x_e this collapses to F(e) = 3 z_e n_e,z. Both the flux const array and the analytic per-cell divergence d(i) = -3 (3 sin(latCell(i))^2 - 1) in the test reference were computed at fixture-authoring time from EXACTLY these formulas over the mesh file's published latCell/lonCell/cellsOnEdge arrays (the same authoring discipline as the mesh data itself; byte-reproducible from the serialized mesh). Dynamics: ic u = 0 and u_t = div(flux) with a time-constant flux, so u(1) IS the discrete TRiSK divergence field and the t=1 error norms against d are pure spatial-discretization error (the linear-in-time integration is exact to solver tolerance). The keyed-factor wiring (bare-name observed aliases of the mesh subsystem's const arrays) follows problems/divergence_mpas.esm.",
+    "description": "Convergence driver for grids/mpas/rules/fv_divergence_cell on the icosahedral level-0 mesh (12 cells, 30 edges, 20 vertices; grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem) — one member of the divergence_mpas refinement family (levels 0/1/2; tests/conformance/convergence/divergence_mpas). This realizes the rebinding recipe documented in problems/divergence_mpas.esm: subsystem ref paths cannot be metaparameterized (esm-spec 9.7.6 binds sizes, not file refs), so each refinement level is its own thin problem file binding the grid metaparameters at the import edge and mounting its mesh. Unlike the exactness driver's curl flux (which the TRiSK divergence annihilates to rounding), this flux has NONZERO analytic divergence, giving a measurable discretization error: psi = P2(z) = (3 z^2 - 1)/2 (the l=2 zonal harmonic, z = sin(lat)), V = grad_s psi = 3 z (e_z - z x), and div_s V = laplacian_s psi = -l(l+1) psi = -3 (3 z^2 - 1) exactly on the unit sphere. The per-edge normal flux is the midpoint sample F(e) = V(x_e) . n_e at the MPAS edge location x_e = normalize(x_c1 + x_c2), n_e = normalize(x_c2 - x_c1) (tangent at x_e since |x_c1| = |x_c2| = 1), [c1, c2] = cellsOnEdge(e); because n_e is perpendicular to x_e this collapses to F(e) = 3 z_e n_e,z. Both the flux const array and the analytic per-cell divergence d(i) = -3 (3 sin(latCell(i))^2 - 1) in the test reference were computed at fixture-authoring time from EXACTLY these formulas over the mesh file's published latCell/lonCell/cellsOnEdge arrays (the same authoring discipline as the mesh data itself; byte-reproducible from the serialized mesh). Dynamics: ic u = 0 and u_t = div(flux) with a time-constant flux, so u(1) IS the discrete TRiSK divergence field and the t=1 error norms against d are pure spatial-discretization error (the linear-in-time integration is exact to solver tolerance). The keyed-factor wiring (bare-name observed aliases of the mesh subsystem's const arrays) follows problems/divergence_mpas.esm.",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -37,7 +37,7 @@
       },
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1/sr",
           "shape": [
             "cells"
@@ -45,61 +45,51 @@
           "description": "Accumulated divergence: ic 0 and u_t = div(flux) with time-constant flux, so u(t) = t * div_h(flux) and u(1) is the discrete divergence field itself."
         },
         "nEdgesOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells"
           ],
-          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.nEdgesOnCell"
+          "description": "Bare-name alias of mesh.nEdgesOnCell: the offsets keyed factor of the ragged edges_of_cell index set."
         },
         "edgesOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells",
             "maxEdges"
           ],
-          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set.",
-          "expression": "mesh.edgesOnCell"
+          "description": "Bare-name alias of mesh.edgesOnCell: the values keyed factor of the ragged edges_of_cell index set."
         },
         "edgeSignOnCell": {
-          "type": "observed",
+          "type": "unknown",
           "shape": [
             "cells",
             "maxEdges"
           ],
-          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the divergence rule.",
-          "expression": "mesh.edgeSignOnCell"
+          "description": "Bare-name alias of mesh.edgeSignOnCell: outward-normal sign of each cell's edges, used by the divergence rule."
         },
         "dvEdge": {
-          "type": "observed",
+          "type": "unknown",
           "units": "rad",
           "shape": [
             "edges"
           ],
-          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere.",
-          "expression": "mesh.dvEdge"
+          "description": "Bare-name alias of mesh.dvEdge: edge lengths on the unit sphere."
         },
         "areaCell": {
-          "type": "observed",
+          "type": "unknown",
           "units": "sr",
           "shape": [
             "cells"
           ],
-          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas.",
-          "expression": "mesh.areaCell"
+          "description": "Bare-name alias of mesh.areaCell: spherical Voronoi cell areas."
         },
         "flux": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "edges"
           ],
-          "description": "Edge-normal midpoint flux of V = grad_s P2(z): F(e) = 3 z_e n_e,z at x_e = normalize(x_c1 + x_c2), n_e = normalize(x_c2 - x_c1), [c1, c2] = cellsOnEdge(e). Const fixture data computed at authoring time from the mesh file's latCell/lonCell/cellsOnEdge (formulas in the file description).",
-          "expression": {
-            "op": "const",
-            "args": [],
-            "value": [-1.2135254915624216, -0.7500000000000007, 0.0, -1.2135254915624216, -0.7500000000000007, 0.4635254915624212, 1.2135254915624216, 0.4635254915624212, 0.0, -0.4635254915624212, -0.0, 0.7500000000000007, -0.7500000000000007, -1.2135254915624216, -0.0, -0.7500000000000007, 0.4635254915624212, 1.2135254915624216, 1.2135254915624216, 0.0, 0.7500000000000007, -0.7500000000000007, -1.2135254915624216, 0.4635254915624212, 0.4635254915624212, -0.46352549156242107, -0.0, -1.2135254915624216, -0.7500000000000007, 0.46352549156242107]
-          }
+          "description": "Edge-normal midpoint flux of V = grad_s P2(z): F(e) = 3 z_e n_e,z at x_e = normalize(x_c1 + x_c2), n_e = normalize(x_c2 - x_c1), [c1, c2] = cellsOnEdge(e). Const fixture data computed at authoring time from the mesh file's latCell/lonCell/cellsOnEdge (formulas in the file description)."
         }
       },
       "equations": [
@@ -126,6 +116,65 @@
               "flux"
             ]
           }
+        },
+        {
+          "lhs": "nEdgesOnCell",
+          "rhs": "mesh.nEdgesOnCell"
+        },
+        {
+          "lhs": "edgesOnCell",
+          "rhs": "mesh.edgesOnCell"
+        },
+        {
+          "lhs": "edgeSignOnCell",
+          "rhs": "mesh.edgeSignOnCell"
+        },
+        {
+          "lhs": "dvEdge",
+          "rhs": "mesh.dvEdge"
+        },
+        {
+          "lhs": "areaCell",
+          "rhs": "mesh.areaCell"
+        },
+        {
+          "lhs": "flux",
+          "rhs": {
+            "op": "const",
+            "args": [],
+            "value": [
+              -1.2135254915624216,
+              -0.7500000000000007,
+              0.0,
+              -1.2135254915624216,
+              -0.7500000000000007,
+              0.4635254915624212,
+              1.2135254915624216,
+              0.4635254915624212,
+              0.0,
+              -0.4635254915624212,
+              -0.0,
+              0.7500000000000007,
+              -0.7500000000000007,
+              -1.2135254915624216,
+              -0.0,
+              -0.7500000000000007,
+              0.4635254915624212,
+              1.2135254915624216,
+              1.2135254915624216,
+              0.0,
+              0.7500000000000007,
+              -0.7500000000000007,
+              -1.2135254915624216,
+              0.4635254915624212,
+              0.4635254915624212,
+              -0.46352549156242107,
+              -0.0,
+              -1.2135254915624216,
+              -0.7500000000000007,
+              0.46352549156242107
+            ]
+          }
         }
       ],
       "tests": [
@@ -149,20 +198,93 @@
                 "op": "makearray",
                 "args": [],
                 "regions": [
-                  [[1, 1]],
-                  [[2, 2]],
-                  [[3, 3]],
-                  [[4, 4]],
-                  [[5, 5]],
-                  [[6, 6]],
-                  [[7, 7]],
-                  [[8, 8]],
-                  [[9, 9]],
-                  [[10, 10]],
-                  [[11, 11]],
-                  [[12, 12]]
+                  [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      2,
+                      2
+                    ]
+                  ],
+                  [
+                    [
+                      3,
+                      3
+                    ]
+                  ],
+                  [
+                    [
+                      4,
+                      4
+                    ]
+                  ],
+                  [
+                    [
+                      5,
+                      5
+                    ]
+                  ],
+                  [
+                    [
+                      6,
+                      6
+                    ]
+                  ],
+                  [
+                    [
+                      7,
+                      7
+                    ]
+                  ],
+                  [
+                    [
+                      8,
+                      8
+                    ]
+                  ],
+                  [
+                    [
+                      9,
+                      9
+                    ]
+                  ],
+                  [
+                    [
+                      10,
+                      10
+                    ]
+                  ],
+                  [
+                    [
+                      11,
+                      11
+                    ]
+                  ],
+                  [
+                    [
+                      12,
+                      12
+                    ]
+                  ]
                 ],
-                "values": [-3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111]
+                "values": [
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111
+                ]
               }
             },
             {
@@ -177,20 +299,93 @@
                 "op": "makearray",
                 "args": [],
                 "regions": [
-                  [[1, 1]],
-                  [[2, 2]],
-                  [[3, 3]],
-                  [[4, 4]],
-                  [[5, 5]],
-                  [[6, 6]],
-                  [[7, 7]],
-                  [[8, 8]],
-                  [[9, 9]],
-                  [[10, 10]],
-                  [[11, 11]],
-                  [[12, 12]]
+                  [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      2,
+                      2
+                    ]
+                  ],
+                  [
+                    [
+                      3,
+                      3
+                    ]
+                  ],
+                  [
+                    [
+                      4,
+                      4
+                    ]
+                  ],
+                  [
+                    [
+                      5,
+                      5
+                    ]
+                  ],
+                  [
+                    [
+                      6,
+                      6
+                    ]
+                  ],
+                  [
+                    [
+                      7,
+                      7
+                    ]
+                  ],
+                  [
+                    [
+                      8,
+                      8
+                    ]
+                  ],
+                  [
+                    [
+                      9,
+                      9
+                    ]
+                  ],
+                  [
+                    [
+                      10,
+                      10
+                    ]
+                  ],
+                  [
+                    [
+                      11,
+                      11
+                    ]
+                  ],
+                  [
+                    [
+                      12,
+                      12
+                    ]
+                  ]
                 ],
-                "values": [-3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111, -3.5124611797498138, 3.0, 0.5124611797498111]
+                "values": [
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111,
+                  -3.5124611797498138,
+                  3.0,
+                  0.5124611797498111
+                ]
               }
             }
           ]

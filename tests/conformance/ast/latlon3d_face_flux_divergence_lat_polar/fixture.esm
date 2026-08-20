@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_face_flux_divergence_lat_polar",
     "description": "AST fixture for the meridional face-staggered flux divergence rule (the continuity half of the meridional CWC transport pair). Carries BOTH a cell-centred state and a face-staggered mass flux, and BOTH the plain-D lat rule and the face-divergence rule, so the golden pins that the esm-spec 9.6.1 shape constraint -- not priority -- is what routes each derivative to its own rule.",
@@ -27,7 +27,7 @@
       ],
       "variables": {
         "m": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -49,27 +49,95 @@
           "description": "180/(NLAT-1) = 36 for NLAT = 6, spelled as a LITERAL: every metaparameter is pinned at the import edge of an AST fixture, so NLAT is consumed there and is not live in this document's runtime scope (esm-spec 9.7.6). Read by lat_edge and by central_D_lat_zero_grad_bc."
         },
         "phie": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
           "shape": [
             "lat_nodes"
           ],
-          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps.",
-          "expression": {
+          "description": "Latitude cell EDGES in degrees over the NLAT+1 face axis, from the grid's lat_edge template (aggregate index `gje`). The golden pins the clamped-midpoint recipe max(lat0, min(latN, lat0 + (gje - 3/2) dlat)) -- branch-free min/max, no ifelse -- and hence the half-polar caps."
+        },
+        "coslat_e": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat_nodes"
+          ],
+          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros."
+        },
+        "dS_lat": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lat"
+          ],
+          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden."
+        },
+        "My": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat_nodes",
+            "lev"
+          ],
+          "description": "Face MERIDIONAL air-mass flux on the NLAT+1 face axis, positive northward: My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) -- 5 cos^2(phi) sin(phi) written as a POLYNOMIAL IN sin so that it is EXACTLY 0.0 at both poles in IEEE (cos(+/-pi/2) is 6.1e-17, not zero). It reverses sign at the equator, so it is strongly divergent."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "m"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "m"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "My"
+                    ],
+                    "wrt": "lat"
+                  }
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "m"
+                ],
+                "wrt": "lat"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "phie",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
           }
         },
-        "coslat_e": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat_nodes"
-          ],
-          "description": "FACE-LENGTH weight cos(phi_e), from the grid's coslat_edge template (aggregate index `gjc`, deliberately distinct from the producer's `gje`). The golden pins that the OFFSET GATHER coslat_e[j+1] inside the operator survives inlining with its offset intact -- a colliding aggregate index would silently degenerate it to coslat_e[j] and return exact zeros.",
-          "expression": {
+        {
+          "lhs": "coslat_e",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "coslat_edge",
@@ -78,14 +146,9 @@
             }
           }
         },
-        "dS_lat": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lat"
-          ],
-          "description": "EXACT spherical cell-AREA weight sin(phi_e[j+1]) - sin(phi_e[j]), from the grid's latcell_area template (aggregate index `gja`). Its own offset gather phie[gja+1] is likewise pinned by the golden.",
-          "expression": {
+        {
+          "lhs": "dS_lat",
+          "rhs": {
             "op": "apply_expression_template",
             "args": [],
             "name": "latcell_area",
@@ -94,16 +157,9 @@
             }
           }
         },
-        "My": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat_nodes",
-            "lev"
-          ],
-          "description": "Face MERIDIONAL air-mass flux on the NLAT+1 face axis, positive northward: My = 5 (1 - s^2) s a(i) b(k) with s = sin(phi_e) -- 5 cos^2(phi) sin(phi) written as a POLYNOMIAL IN sin so that it is EXACTLY 0.0 at both poles in IEEE (cos(+/-pi/2) is 6.1e-17, not zero). It reverses sign at the equator, so it is strongly divergent.",
-          "expression": {
+        {
+          "lhs": "My",
+          "rhs": {
             "op": "aggregate",
             "args": [
               "phie"
@@ -273,50 +329,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "m"
-            ]
-          },
-          "rhs": 0
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "m"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "D",
-                    "args": [
-                      "My"
-                    ],
-                    "wrt": "lat"
-                  }
-                ]
-              },
-              {
-                "op": "D",
-                "args": [
-                  "m"
-                ],
-                "wrt": "lat"
-              }
-            ]
           }
         }
       ]

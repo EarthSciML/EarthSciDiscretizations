@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "hjweno_norm_1d_periodic_exact",
     "description": "Exactness driver for grids/cartesian_uniform_1d/rules/hjweno_norm_D1_periodic on the periodic unit interval [0,1] at N=64: the fifth-order Hamilton-Jacobi WENO (Jiang-Peng 2000) gradient magnitude ANNIHILATES a spatially constant field EXACTLY, the null-space mimetic property |grad(const)| = 0 (the high-order 1-D cartesian analogue of the grad(const) = 0 gate in problems/gradient_mpas.esm and the fifth-order companion of problems/godunov_norm_1d_periodic_exact.esm). The state holds a constant field u(x) = 3, evolved under the Hamilton-Jacobi step u_t = -S|u_x| discretized as u_t = -S*hjweno(u). With u constant every divided difference v_k = (u[m+1]-u[m])/dx is a subtraction of equal floats (3-3 = 0.0 to the bit) at the interior AND at all six periodic-wrap faces, so every WENO candidate derivative q_k is 0, every smoothness indicator beta_k is 0, tau_5/(eps+beta_k) = 0/1e-6 = 0 (the eps guard makes this a finite exact zero, never 0/0), the reconstructions u_x^- = u_x^+ = 0, and sqrt(max(0,0)^2 + min(0,0)^2) = 0 EXACTLY at every cell; du/dt = 0.0 to the bit and u(t) = u(0) = 3 for all time with NO rounding drift. The gate asserts the preserved state directly: L2_error of u versus the constant reference 3 is 0 at t=0 and t=1 (within 1e-13), and mean(u) = 3 (within 1e-13). Because this is a STATE assertion (the binding evaluates reductions of the state solution and analytic build-time references, but cannot evaluate an observed that reads the state), it is the sim-expressible exactness deliverable. The stronger interior property that HJ-WENO reproduces |u_x| = |a| for a NON-constant affine field (all v_k = a, so u_x^± = a and sqrt(max(a,0)^2+min(a,0)^2)=|a| to rounding) is NOT expressible as a periodic simulation gate (a non-constant ramp cannot be periodic), so it is pinned by the AST golden (tests/conformance/ast/hjweno_norm_D1_periodic) and exercised on nontrivial smooth data by the order-5 convergence sweep (problems/hjweno_norm_1d_eikonal_mms.esm). The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N; the constant field needs no coordinate geometry, so ic and reference evaluations stay build-time scope-free.",
@@ -26,7 +26,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x"
@@ -46,15 +46,8 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "N"
-            ]
-          },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6)."
         }
       },
@@ -115,6 +108,16 @@
                   }
                 ]
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }

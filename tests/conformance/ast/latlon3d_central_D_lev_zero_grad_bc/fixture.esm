@@ -1,45 +1,94 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_central_D_lev_zero_grad_bc_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/latlon3d/rules/central_D_lev_zero_grad_bc, bound to NLON=8, NLAT=5, NLEV=5 at the import edge. The match D(u,lev) on a [lon,lat,lev] field must lower, through the section-9.6.3 fixpoint, to the rule's rank-3 three-region makearray — interior levels [1,8] x [1,5] x [2,4] holding the imported nonuniform centered stencil, plus the k=1 bottom face and k=5 top face one-sided closures — with all metaparameters folded and the consumer level centers surviving as the free-name array zc (declared here as a simple lev-shaped observed so the fixture is self-contained; its value is irrelevant to the syntactic lowering). The golden pins the byte-identical post-lowering AST across bindings.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:latlon3d", "rule:central_D_lev_zero_grad_bc"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:latlon3d",
+      "rule:central_D_lev_zero_grad_bc"
+    ]
   },
   "models": {
     "Latlon3dCentralDLevZeroGradAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/latlon3d/rules/central_D_lev_zero_grad_bc.esm",
-          "bindings": { "NLON": 8, "NLAT": 5, "NLEV": 5 }
+          "bindings": {
+            "NLON": 8,
+            "NLAT": 5,
+            "NLEV": 5
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
-          "shape": ["lon", "lat", "lev"],
+          "shape": [
+            "lon",
+            "lat",
+            "lev"
+          ],
           "description": "Field over the lon x lat x lev index sets."
         },
         "zc": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
-          "shape": ["lev"],
-          "description": "The grid's level-center free-name array (consumer-supplied geometry). A self-contained placeholder (zc[k]=k) so the fixture needs no vertical-edge machinery; the AST lowering is syntactic and does not depend on its value.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": ["k"],
-            "args": [],
-            "ranges": { "k": { "from": "lev" } },
-            "expr": "k"
-          }
+          "shape": [
+            "lev"
+          ],
+          "description": "The grid's level-center free-name array (consumer-supplied geometry). A self-contained placeholder (zc[k]=k) so the fixture needs no vertical-edge machinery; the AST lowering is syntactic and does not depend on its value."
         }
       },
       "equations": [
-        { "lhs": { "op": "ic", "args": ["u"] }, "rhs": 0 },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
-          "rhs": { "op": "-", "args": [ { "op": "D", "args": ["u"], "wrt": "lev" } ] }
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "args": [],
+            "ranges": {
+              "k": {
+                "from": "lev"
+              }
+            },
+            "expr": "k"
+          }
         }
       ]
     }

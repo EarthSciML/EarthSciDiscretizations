@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "heat_2d_varcoeff_y_zero_flux",
     "description": "MMS driver: 2-D VARIABLE-COEFFICIENT heat equation u_t = div(k(y) grad u) + S(y,t) on the unit box [0,1]x[0,1] reduced to y-diffusion, with zero-flux (homogeneous Neumann) conditions on the two y-walls, discretized by the conservative finite-volume rule grids/cartesian_uniform_2d/rules/varcoeff_laplacian_y_zero_flux_bc over the full 2-D field u[x,y]. The consumer writes the operator as the conservative compound D(k*D(u,y),y) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil plus the two y-edge faces. This is the exact 2-D per-axis lift of problems/heat_1d_varcoeff_zero_flux: the manufactured solution and the coefficient k(y) = 1 + 0.5 cos(2 pi y) depend only on y and are constant in the passive x axis, so the y-operator reproduces the 1-D behaviour on every x-column and the discretization error equals the 1-D case (relative L2 and absolute Linf are invariant under the passive-axis replication). The passive x axis is PASSIVE: u is constant in x, no x-operator appears, and NX is closed to 8 at the import edge; NY stays open (grid default 64, rebound by the convergence sweep via the loader API). k is a consumer-supplied [x,y]-shaped observed read by the rule at the y-faces; its aggregate loops over gj/gi (DISTINCT from the stencil's interior i/j) per the keyed-factor capture-avoidance contract (see the rule). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the wall free names (none) live only in the runtime rule body; the ic, coefficient, forcing, and test references spell the cell-center coordinate (j-1/2)/NY inline from literals and the metaparameter NY (the build-time cellwise evaluator is scope-free), never invoking the grid's y_coord free-name template. The SAME rule also serves the nonlinear case (a consumer declaring k=f(u)); this driver exercises the variable-coefficient dual.",
@@ -32,7 +32,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
           "shape": [
             "x",
@@ -53,95 +53,23 @@
           "description": "Bottom y domain edge (unit box): the grid's y0 free name."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "NX"
-            ]
-          },
           "description": "x-spacing 1/NX: the grid's dx free name, resolved in the rewrite rule's expanded body at evaluation. NX substituted as an integer literal at load (esm-spec 9.7.6) so the convergence sweep stays consistent."
         },
         "dy": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "NY"
-            ]
-          },
           "description": "y-spacing 1/NY: the grid's dy free name; NY substituted at load so the convergence sweep stays consistent."
         },
         "k": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m^2/s",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Variable conductivity k(y) = 1 + 0.5 cos(2 pi y) over the 2-D [x, y] index sets (constant in the passive axis), evaluated at cell centers (gj - 1/2)/NY spelled inline from literals and the metaparameter name NY. Positive (range [0.5, 1.5]). Bound by the rule's match as the coefficient k (the left factor of k*D(u,y)) and read by the expanded stencil at the y-faces via kf = (k[.]+k[.])/2. The aggregate loops over gj/gi, DISTINCT from the stencil's interior indices i/j: an array coefficient authored as an aggregate observed is inlined into the stencil's interior aggregate at evaluation, and a shared loop-index name would be captured (see the rule description).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "gi",
-              "gj"
-            ],
-            "args": [],
-            "ranges": {
-              "gi": {
-                "from": "x"
-              },
-              "gj": {
-                "from": "y"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "*",
-                  "args": [
-                    0.5,
-                    {
-                      "op": "cos",
-                      "args": [
-                        {
-                          "op": "*",
-                          "args": [
-                            6.283185307179586,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "gj",
-                                    0.5
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    1,
-                                    "NY"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Variable conductivity k(y) = 1 + 0.5 cos(2 pi y) over the 2-D [x, y] index sets (constant in the passive axis), evaluated at cell centers (gj - 1/2)/NY spelled inline from literals and the metaparameter name NY. Positive (range [0.5, 1.5]). Bound by the rule's match as the coefficient k (the left factor of k*D(u,y)) and read by the expanded stencil at the y-faces via kf = (k[.]+k[.])/2. The aggregate loops over gj/gi, DISTINCT from the stencil's interior indices i/j: an array coefficient authored as an aggregate observed is inlined into the stencil's interior aggregate at evaluation, and a shared loop-index name would be captured (see the rule description)."
         }
       },
       "equations": [
@@ -340,6 +268,87 @@
                 ]
               }
             ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          }
+        },
+        {
+          "lhs": "k",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "gi",
+              "gj"
+            ],
+            "args": [],
+            "ranges": {
+              "gi": {
+                "from": "x"
+              },
+              "gj": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "gj",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

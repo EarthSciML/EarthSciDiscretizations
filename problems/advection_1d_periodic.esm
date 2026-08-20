@@ -1,10 +1,15 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_periodic",
     "description": "MMS driver: 1-D linear advection u_t = -c u_x on the periodic unit interval [0, 1], discretized by grids/cartesian_uniform_1d/rules/upwind1_D_periodic (first-order upwind, non-negative speed). Exact solution u(x,t) = sin(2 pi (x - c t)) — the initial profile transported at speed c with no change of shape, so no forcing term is required. First-order upwind is diffusive: the dominant error is amplitude damping exp(-c t (1 - cos(2 pi dx)) / dx), roughly 12% relative L2 at N=16 and 3% at N=64 for c=1, t=0.1, halving with each refinement (order 1). The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed whose expression divides by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent) resolve the rule body's free dx at evaluation. Initial condition and test references spell the grid's index-to-coordinate conversion x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)) instead of applying the free-name x_coord template: the official 6.6.5/ic build-time cellwise evaluation is scope-free (model parameters/observeds are not in scope there), so build-time coordinate expressions must fold from literals and metaparameters alone.",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_1d", "equation:advection", "mms"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_1d",
+      "equation:advection",
+      "mms"
+    ],
     "references": [
       {
         "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Chapter 8 (modified equations and numerical diffusion of the upwind method)."
@@ -14,13 +19,17 @@
   "models": {
     "Advection": {
       "expression_template_imports": [
-        { "ref": "../grids/cartesian_uniform_1d/rules/upwind1_D_periodic.esm" }
+        {
+          "ref": "../grids/cartesian_uniform_1d/rules/upwind1_D_periodic.esm"
+        }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "kg/m^3",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Advected tracer field over the x index set."
         },
         "c": {
@@ -36,15 +45,19 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract, grids/cartesian_uniform_1d/grid.esm)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": { "op": "/", "args": [1, "N"] },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter (re-exported up the import chain), substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": {
             "op": "sin",
             "args": [
@@ -54,9 +67,15 @@
                   6.283185307179586,
                   {
                     "op": "aggregate",
-                    "output_idx": ["i"],
+                    "output_idx": [
+                      "i"
+                    ],
                     "args": [],
-                    "ranges": { "i": { "from": "x" } },
+                    "ranges": {
+                      "i": {
+                        "from": "x"
+                      }
+                    },
                     "expr": {
                       "op": "+",
                       "args": [
@@ -64,8 +83,20 @@
                         {
                           "op": "*",
                           "args": [
-                            { "op": "-", "args": ["i", 0.5] },
-                            { "op": "/", "args": [1, "N"] }
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                0.5
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                1,
+                                "N"
+                              ]
+                            }
                           ]
                         }
                       ]
@@ -77,12 +108,39 @@
           }
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
-              { "op": "-", "args": ["c"] },
-              { "op": "D", "args": ["u"], "wrt": "x" }
+              {
+                "op": "-",
+                "args": [
+                  "c"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "x"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }
@@ -91,13 +149,18 @@
         {
           "id": "mms_transport",
           "description": "Exact solution u(x,t) = sin(2 pi (x - c t)) with c = 1. Derivation: u_t = -2 pi c cos(2 pi (x - c t)) = -c u_x exactly, periodic on [0,1]; no forcing term. References evaluate at the cell centers x_i = x0 + (i - 1/2) dx = 0 + (i - 1/2)/N, spelled inline per esm-spec 6.6.5 (1-based index space; build-time evaluation folds literals and metaparameters only). The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the first-order upwind damping (about 12% relative L2 at N=16, shrinking with refinement — the 0.2 bound holds across the convergence sweep). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_periodic/golden/errors.json.",
-          "time_span": { "start": 0.0, "end": 0.1 },
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
           "assertions": [
             {
               "variable": "u",
               "time": 0.0,
               "expected": 0.0,
-              "tolerance": { "abs": 1e-9 },
+              "tolerance": {
+                "abs": 1e-09
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "sin",
@@ -108,9 +171,15 @@
                       6.283185307179586,
                       {
                         "op": "aggregate",
-                        "output_idx": ["i"],
+                        "output_idx": [
+                          "i"
+                        ],
                         "args": [],
-                        "ranges": { "i": { "from": "x" } },
+                        "ranges": {
+                          "i": {
+                            "from": "x"
+                          }
+                        },
                         "expr": {
                           "op": "+",
                           "args": [
@@ -118,8 +187,20 @@
                             {
                               "op": "*",
                               "args": [
-                                { "op": "-", "args": ["i", 0.5] },
-                                { "op": "/", "args": [1, "N"] }
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
                               ]
                             }
                           ]
@@ -134,7 +215,9 @@
               "variable": "u",
               "time": 0.1,
               "expected": 0.0,
-              "tolerance": { "abs": 0.2 },
+              "tolerance": {
+                "abs": 0.2
+              },
               "reduce": "L2_error",
               "reference": {
                 "op": "sin",
@@ -148,9 +231,15 @@
                         "args": [
                           {
                             "op": "aggregate",
-                            "output_idx": ["i"],
+                            "output_idx": [
+                              "i"
+                            ],
                             "args": [],
-                            "ranges": { "i": { "from": "x" } },
+                            "ranges": {
+                              "i": {
+                                "from": "x"
+                              }
+                            },
                             "expr": {
                               "op": "+",
                               "args": [
@@ -158,8 +247,20 @@
                                 {
                                   "op": "*",
                                   "args": [
-                                    { "op": "-", "args": ["i", 0.5] },
-                                    { "op": "/", "args": [1, "N"] }
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "N"
+                                      ]
+                                    }
                                   ]
                                 }
                               ]

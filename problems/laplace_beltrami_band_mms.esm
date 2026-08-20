@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "laplace_beltrami_band_mms",
     "description": "MMS driver: forced-steady metric spherical Laplacian (Laplace-Beltrami) diffusion on a REGIONAL latlon band lat in [30,60] deg (strictly inside (-90,90), so cos phi>0 -- the pole singularity 1/cos^2(+-90) is avoided; the GLOBAL pole-cap Laplacian is a documented FOLLOW-UP), periodic in longitude over the full zonal circle (lon0_deg=0, dlon_deg=360/NLON). u_t = kappa (laplacian(u) - Lstar), laplacian lowered by grids/latlon/rules/laplace_beltrami_lon_periodic_lat_zero_grad (periodic zonal wrap + zero-gradient Neumann band edges, cos(lat)-weighted mimetic FV). Manufactured STEADY solution u*(lon,lat) = cos^4(s) cos(2 lambda), lambda=(pi/180)lon, s=(pi/2)(phi-phi_mid)/B, phi=(pi/180)lat, phi_mid=(pi/180)45, B=(pi/180)15 -- a pole-cap-style profile REMAPPED so the band edges lat=30 and lat=60 play the role of the poles: F=cos^4(s) has F,F',F'',F''' all vanishing at s=+-pi/2 (the edges), making u* supercompatible with the rule's zero-flux Neumann faces to O(dlat_deg^2) (a plain non-vanishing-derivative field would collapse the meridional pole-face order to 1, the same node-coincident-boundary degradation problems/latlon_diffusion_meridional_zero_grad documents). The zonal factor cos(2 lambda) is smooth and periodic, so the (180/pi)^2/(R_sphere^2 cos^2 phi) zonal metric weight is genuinely exercised (both Laplacian terms active, unlike the meridional-only per-degree companion). The manufactured Laplace-Beltrami Lstar = cos(2 lambda) [ (-sin phi F'(phi) + cos phi F''(phi)) /(R_sphere^2 cos phi) - 4 F(phi)/(R_sphere^2 cos^2 phi) ] (F'(phi)=-4 cos^3 s sin s (pi/2)/B, F''(phi)=(12 cos^2 s sin^2 s - 4 cos^4 s)((pi/2)/B)^2) is the exact steady source, so u_t=kappa(laplacian(u*)-Lstar)=0 continuously and the discrete field drifts only by the spatial truncation -- what the assertions and the convergence sweep measure. GRID CONTRACT (grids/latlon/grid.esm): R_sphere=2 (m, test value baked into Lstar as a literal), lat0_deg=30, dlon_deg=360/NLON, dlat_deg=30/(NLAT-1) as observeds using the metaparameter NAMES (substituted as integer literals at load per esm-spec 9.7.6, so the loader-API convergence sweep keeps the geometry consistent). BOTH NLON and NLAT stay OPEN (defaults 144 x 91) and refine together in the sweep (n=NLON=NLAT-1, dphi and dlambda halve together). The ic, Lstar, and reference INLINE the grid coordinates from literals + the metaparameter names (never the free-name lat_coord/coslat templates), because free-name geometry is out of scope in the bindings' build-time cellwise evaluator (esm-spec build-time caveat; same pattern as latlon_diffusion_meridional_zero_grad). ERROR MODEL: at kappa=1, T=0.5 the truncation-driven relative-L2 drift is O(h^2); at the default NLON=144,NLAT=91 it is 4.9e-4 (Linf 5.6e-4), and the NLON/NLAT = 16/32/64/128 (paired 17/33/65/129) sweep gives 2.64e-2 / 6.65e-3 / 1.67e-3 / ~4.2e-4 (observed order ~2 in L2 and Linf); exact per-resolution values are pinned in tests/conformance/convergence/laplace_beltrami_band_mms/golden/errors.json.",
@@ -29,7 +29,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -56,21 +56,245 @@
           "description": "Band's southern edge latitude (=30); the grid's lat0_deg free name (consumer-supplied geometry contract)."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": {
+          "description": "Zonal spacing 360/NLON (full periodic circle); NLON is the document metaparameter, substituted as an integer literal at load (esm-spec 9.7.6) so the sweep keeps dlon_deg consistent."
+        },
+        "dlat_deg": {
+          "type": "unknown",
+          "units": "deg",
+          "description": "Meridional spacing (60-30)/(NLAT-1) over the band; NLAT is the document metaparameter, substituted as an integer literal at load."
+        },
+        "Lstar": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lon",
+            "lat"
+          ],
+          "description": "Analytic Laplace-Beltrami of u* = cos^4(s) cos(2 lambda) (the exact steady source; derivation in metadata.description). Constant in time; kappa (laplacian(u) - Lstar) is the residual that holds u* steady."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lon"
+              },
+              "j": {
+                "from": "lat"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "/",
+                              "args": [
+                                3.141592653589793,
+                                180
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    360,
+                                    "NLON"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    2
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            30.0,
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "j",
+                                                    1
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        60.0,
+                                                        30.0
+                                                      ]
+                                                    },
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "NLAT",
+                                                        1
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            3.141592653589793,
+                                            180
+                                          ]
+                                        },
+                                        45.0
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    3.141592653589793,
+                                    180
+                                  ]
+                                },
+                                15.0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    4
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "kappa",
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "laplacian",
+                    "args": [
+                      "u"
+                    ]
+                  },
+                  "Lstar"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": {
             "op": "/",
             "args": [
               360,
               "NLON"
             ]
-          },
-          "description": "Zonal spacing 360/NLON (full periodic circle); NLON is the document metaparameter, substituted as an integer literal at load (esm-spec 9.7.6) so the sweep keeps dlon_deg consistent."
+          }
         },
-        "dlat_deg": {
-          "type": "observed",
-          "units": "deg",
-          "expression": {
+        {
+          "lhs": "dlat_deg",
+          "rhs": {
             "op": "/",
             "args": [
               {
@@ -88,17 +312,11 @@
                 ]
               }
             ]
-          },
-          "description": "Meridional spacing (60-30)/(NLAT-1) over the band; NLAT is the document metaparameter, substituted as an integer literal at load."
+          }
         },
-        "Lstar": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "lon",
-            "lat"
-          ],
-          "expression": {
+        {
+          "lhs": "Lstar",
+          "rhs": {
             "op": "aggregate",
             "output_idx": [
               "i",
@@ -1169,215 +1387,6 @@
                 }
               ]
             }
-          },
-          "description": "Analytic Laplace-Beltrami of u* = cos^4(s) cos(2 lambda) (the exact steady source; derivation in metadata.description). Constant in time; kappa (laplacian(u) - Lstar) is the residual that holds u* steady."
-        }
-      },
-      "equations": [
-        {
-          "lhs": {
-            "op": "ic",
-            "args": [
-              "u"
-            ]
-          },
-          "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i",
-              "j"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "lon"
-              },
-              "j": {
-                "from": "lat"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        2,
-                        {
-                          "op": "*",
-                          "args": [
-                            {
-                              "op": "/",
-                              "args": [
-                                3.141592653589793,
-                                180
-                              ]
-                            },
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "i",
-                                    0.5
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    360,
-                                    "NLON"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "^",
-                  "args": [
-                    {
-                      "op": "cos",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    2
-                                  ]
-                                },
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            3.141592653589793,
-                                            180
-                                          ]
-                                        },
-                                        {
-                                          "op": "+",
-                                          "args": [
-                                            30.0,
-                                            {
-                                              "op": "*",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    "j",
-                                                    1
-                                                  ]
-                                                },
-                                                {
-                                                  "op": "/",
-                                                  "args": [
-                                                    {
-                                                      "op": "-",
-                                                      "args": [
-                                                        60.0,
-                                                        30.0
-                                                      ]
-                                                    },
-                                                    {
-                                                      "op": "-",
-                                                      "args": [
-                                                        "NLAT",
-                                                        1
-                                                      ]
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "*",
-                                      "args": [
-                                        {
-                                          "op": "/",
-                                          "args": [
-                                            3.141592653589793,
-                                            180
-                                          ]
-                                        },
-                                        45.0
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    3.141592653589793,
-                                    180
-                                  ]
-                                },
-                                15.0
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    4
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": [
-              "u"
-            ],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "*",
-            "args": [
-              "kappa",
-              {
-                "op": "-",
-                "args": [
-                  {
-                    "op": "laplacian",
-                    "args": [
-                      "u"
-                    ]
-                  },
-                  "Lstar"
-                ]
-              }
-            ]
           }
         }
       ],

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_diffusion_vertical_noflux",
     "description": "MMS driver: variable-coefficient VERTICAL TURBULENT DIFFUSION (Kzz / boundary-layer mixing) on the 3-D latlon3d grid, u_t = D(kz * D(u,lev), lev) + S, discretized by grids/latlon3d/rules/varcoeff_laplacian_lev_noflux_bc (conservative finite-volume d/dz(kz du/dz) on the non-uniform vertical, ZERO-FLUX at both the surface and the model top, rank-3). The vertical-mixing counterpart of the latlon3d advection drivers: together with problems/latlon3d_advection_vertical_ppm_mono it makes up the minimum viable chemical-transport COLUMN (transport + mixing), and the two rules compose in one model because their match patterns are structurally distinct (plain D(f,lev) for advection, the compound D(kz*D(u,lev),lev) at priority 10 for diffusion). PASSIVE lon (NLON = 8) and lat (NLAT = 5): the operator is purely vertical, so every column is identical and refinement is in NLEV alone. MANUFACTURED SOLUTION u*(z,t) = exp(-pi^2 t) cos(pi z), a decaying cosine. Its gradient u*_z = -pi exp(-pi^2 t) sin(pi z) VANISHES at z = 0 and z = 1, so the physical flux kz u*_z vanishes at both walls for ANY diffusivity and matches the zero-flux closure exactly, at every t. Because cos(pi z) is not an eigenfunction of the variable-coefficient operator a forcing S = u*_t - d/dz(kz du*/dz) is added so u* solves the continuous PDE exactly; with kz = 0.5(1 + 4z(1-z)) and kz' = 2(1 - 2z) it collapses to S(z,t) = exp(-pi^2 t) [ pi^2 (kz(z) - 1) cos(pi z) + pi kz'(z) sin(pi z) ], spelled below as the time factor exp(-pi^2 t) times a static aggregate over cell centres -- the same shape as problems/heat_1d_varcoeff_zero_flux. SECOND ORDER, verified 2.00 in BOTH L2 and Linf (see tests/conformance/convergence/latlon3d_diffusion_vertical_noflux). Note the operator's INTERIOR truncation error is O(dz^2) but its two boundary cells are O(dz): imposing the EXACT wall flux breaks the leading-order cancellation between neighbouring face-flux errors that the interior enjoys. The parabolic solve smooths that boundary-localised defect back to O(dz^2) in the SOLUTION (Gustafsson), which is what this test measures. Trading the exact wall flux away for a formally higher-order boundary closure would cost exact mass conservation -- a bad trade for a tracer-transport model, so it is not made. VERTICAL MESH: the consumer supplies pe (quadratic stretch, shape [lev_nodes], thin cells at the ground); the grid derives dz via lev_thickness and zc via lev_center. HYGIENE: pe over kn, kz over (ik,jk,kk), the forcing over (ia,ja,ka), dz/zc via gk -- all distinct from the operator's (i,j,k). ic/references spell z inline from the stretch formula and the NLEV name (build-time scope caveat).",
@@ -35,7 +35,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -45,182 +45,38 @@
           "description": "Vertically mixed tracer over lon x lat x lev (horizontally uniform here). Cell-centre values on the stretched vertical mesh."
         },
         "pe": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn] = 0.6 s + 0.4 s^2 with s = (kn-1)/NLEV, over node kn = 1..NLEV+1 (pe[1] = 0 at the ground, pe[NLEV+1] = 1 at the model top; monotone increasing since dpe/ds = 0.6 + 0.8 s > 0). Cells are THIN near the surface and thicken upward, which is the physically right stretch for a boundary-layer-resolving column. Identical to the mesh of problems/latlon3d_advection_vertical_ppm, so the advection and diffusion operators are exercised on the same vertical grid. HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/zc[k] reads do not capture a consuming vertical stencil's own aggregate index k.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
-            "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Level-edge coordinates of the quadratic-stretch vertical mesh, pe[kn] = 0.6 s + 0.4 s^2 with s = (kn-1)/NLEV, over node kn = 1..NLEV+1 (pe[1] = 0 at the ground, pe[NLEV+1] = 1 at the model top; monotone increasing since dpe/ds = 0.6 + 0.8 s > 0). Cells are THIN near the surface and thicken upward, which is the physically right stretch for a boundary-layer-resolving column. Identical to the mesh of problems/latlon3d_advection_vertical_ppm, so the advection and diffusion operators are exercised on the same vertical grid. HYGIENE: aggregates over the node index `kn` (not k), so inlined pe[k]/dz[k]/zc[k] reads do not capture a consuming vertical stencil's own aggregate index k."
         },
         "dz": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev"
           ],
-          "description": "Cell thicknesses dz[k] = pe[k+1] - pe[k], derived by the grid's lev_thickness template (which aggregates over the geometry index gk). This is the `dz` free name read by the diffusion rule's stencils.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lev_thickness",
-            "bindings": {
-              "pe": "pe"
-            }
-          }
+          "description": "Cell thicknesses dz[k] = pe[k+1] - pe[k], derived by the grid's lev_thickness template (which aggregates over the geometry index gk). This is the `dz` free name read by the diffusion rule's stencils."
         },
         "zc": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lev"
           ],
-          "description": "Cell centres zc[k] = (pe[k] + pe[k+1])/2, derived by the grid's lev_center template (aggregating over the geometry index gk). Read here only to build the diffusivity kz and the manufactured forcing; the diffusion stencils themselves need only `dz`.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "lev_center",
-            "bindings": {
-              "pe": "pe"
-            }
-          }
+          "description": "Cell centres zc[k] = (pe[k] + pe[k+1])/2, derived by the grid's lev_center template (aggregating over the geometry index gk). Read here only to build the diffusivity kz and the manufactured forcing; the diffusion stencils themselves need only `dz`."
         },
         "kz": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
             "lat",
             "lev"
           ],
-          "description": "Vertical turbulent diffusivity Kzz(z) = 0.5 (1 + 4 z (1 - z)), a parabolic boundary-layer mixing profile: it vanishes nowhere on [0,1] (range [0.5, 1.0]), peaks at mid-column and falls to 0.5 at the ground and the lid, which is the classic O'Brien/Troen-Mahrt shape of a well-mixed PBL. Horizontally uniform here (the vertical operator is what is under test), but declared with the full [lon,lat,lev] shape the rule's match requires so a real consumer can supply a genuinely 3-D Kzz. Bound by the rule's match as the coefficient kz -- the LEFT factor of kz * D(u, lev). HYGIENE: aggregates over (ik, jk, kk), all distinct from the operator's (i, j, k).",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "ik",
-              "jk",
-              "kk"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "ik": {
-                "from": "lon"
-              },
-              "jk": {
-                "from": "lat"
-              },
-              "kk": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                0.5,
-                {
-                  "op": "+",
-                  "args": [
-                    1,
-                    {
-                      "op": "*",
-                      "args": [
-                        4,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "kk"
-                          ]
-                        },
-                        {
-                          "op": "-",
-                          "args": [
-                            1,
-                            {
-                              "op": "index",
-                              "args": [
-                                "zc",
-                                "kk"
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Vertical turbulent diffusivity Kzz(z) = 0.5 (1 + 4 z (1 - z)), a parabolic boundary-layer mixing profile: it vanishes nowhere on [0,1] (range [0.5, 1.0]), peaks at mid-column and falls to 0.5 at the ground and the lid, which is the classic O'Brien/Troen-Mahrt shape of a well-mixed PBL. Horizontally uniform here (the vertical operator is what is under test), but declared with the full [lon,lat,lev] shape the rule's match requires so a real consumer can supply a genuinely 3-D Kzz. Bound by the rule's match as the coefficient kz -- the LEFT factor of kz * D(u, lev). HYGIENE: aggregates over (ik, jk, kk), all distinct from the operator's (i, j, k)."
         }
       },
       "equations": [
@@ -596,6 +452,162 @@
                 ]
               }
             ]
+          }
+        },
+        {
+          "lhs": "pe",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_thickness",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "lev_center",
+            "bindings": {
+              "pe": "pe"
+            }
+          }
+        },
+        {
+          "lhs": "kz",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "ik",
+              "jk",
+              "kk"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "ik": {
+                "from": "lon"
+              },
+              "jk": {
+                "from": "lat"
+              },
+              "kk": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                0.5,
+                {
+                  "op": "+",
+                  "args": [
+                    1,
+                    {
+                      "op": "*",
+                      "args": [
+                        4,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "kk"
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            1,
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                "kk"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

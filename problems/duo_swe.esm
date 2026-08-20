@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "duo_swe",
     "description": "LMARS shallow-water dynamical core on the gnomonic cubed sphere (Chen 2021, DOI 10.1029/2020MS002280), composed from the duo Phase-4 spatial rules and advanced by the repository's own ODE solvers (method-of-lines) rather than the paper's rk2/rk3 or forward-backward relaxation. Prognostics per tile on the A-grid: dp = g*h (depth pressure), covariant winds ua/va. Uses the g3 volume-mean reconstruction (5th order). D(dp)/dt = flux_divergence_duo (LMARS continuity); D(ua)/dt, D(va)/dt = momentum_{u,v}_duo (Coriolis + upwinded vorticity + kinetic energy) + pgrad_l97_{u,v}_duo (Lin-Rood L97 four-corner pressure gradient). The geometry chain (duo_node_cart -> duo_cell_center/duo_cos_alpha/duo_cell_area) and the 3-layer bilinear donor-cube halo (duo_extend) are wired as observed variables; the Coriolis parameter f = 2*Omega*sin(lat) is taken from the cell-center cartesian z. Fixed resolution N=4 (C4). Model DuoSWFreestream carries the rest / free-stream preservation integration gate; the composed RHS is exactly zero at rest.",
@@ -70,7 +70,7 @@
       ],
       "variables": {
         "dp": {
-          "type": "state",
+          "type": "unknown",
           "units": "m2 s-2",
           "shape": [
             "tile",
@@ -80,7 +80,7 @@
           "description": "Depth pressure Pi = g*h (A-grid cell mean, per tile)."
         },
         "ua": {
-          "type": "state",
+          "type": "unknown",
           "units": "m s-1",
           "shape": [
             "tile",
@@ -90,7 +90,7 @@
           "description": "Covariant wind component along the tile x-direction (Chen 2021 covariant A-grid)."
         },
         "va": {
-          "type": "state",
+          "type": "unknown",
           "units": "m s-1",
           "shape": [
             "tile",
@@ -124,35 +124,23 @@
           "description": "Gnomonic reference radius for duo_ref_x/y (1 with alpha_ref=pi/4 -> equiangular)."
         },
         "refx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x_nodes_ext"
           ],
-          "description": "Gnomonic reference x-coordinate along the extended node axis (duo_ref_x).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_ref_x",
-            "bindings": {}
-          }
+          "description": "Gnomonic reference x-coordinate along the extended node axis (duo_ref_x)."
         },
         "refy": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "y_nodes_ext"
           ],
-          "description": "Gnomonic reference y-coordinate along the extended node axis (duo_ref_y).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_ref_y",
-            "bindings": {}
-          }
+          "description": "Gnomonic reference y-coordinate along the extended node axis (duo_ref_y)."
         },
         "node": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "tile",
@@ -160,19 +148,10 @@
             "y_nodes_ext",
             "space"
           ],
-          "description": "Cartesian cell-corner nodes over the 3-layer halo (duo_node_cart on the extended node axis).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_node_cart",
-            "bindings": {
-              "refx": "refx",
-              "refy": "refy"
-            }
-          }
+          "description": "Cartesian cell-corner nodes over the 3-layer halo (duo_node_cart on the extended node axis)."
         },
         "center": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
           "shape": [
             "tile",
@@ -180,210 +159,77 @@
             "y_cell_ext",
             "space"
           ],
-          "description": "Cartesian cell centers over the halo (duo_cell_center of the named node observed).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_cell_center",
-            "bindings": {
-              "node": "node"
-            }
-          }
+          "description": "Cartesian cell centers over the halo (duo_cell_center of the named node observed)."
         },
         "cosA": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "tile",
             "x_metric",
             "y_metric"
           ],
-          "description": "cos of the local coordinate angle alpha at each cell (node-sourced duo_cos_alpha), the g^ij metric.",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_cos_alpha",
-            "bindings": {
-              "node": "node"
-            }
-          }
+          "description": "cos of the local coordinate angle alpha at each cell (node-sourced duo_cos_alpha), the g^ij metric."
         },
         "area": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m2",
           "shape": [
             "tile",
             "x_cell_ext",
             "y_cell_ext"
           ],
-          "description": "Spherical cell areas over the halo (duo_cell_area, spherical excess).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_cell_area",
-            "bindings": {
-              "node": "node"
-            }
-          }
+          "description": "Spherical cell areas over the halo (duo_cell_area, spherical excess)."
         },
         "f": {
-          "type": "observed",
+          "type": "unknown",
           "units": "s-1",
           "shape": [
             "tile",
             "x",
             "y"
           ],
-          "description": "Coriolis parameter f = 2*Omega*sin(lat) at interior cell centers.",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": [
-              "t",
-              "i",
-              "j"
-            ],
-            "ranges": {
-              "t": {
-                "from": "tile"
-              },
-              "i": {
-                "from": "x"
-              },
-              "j": {
-                "from": "y"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                2.0,
-                "Omega",
-                {
-                  "op": "/",
-                  "args": [
-                    {
-                      "op": "index",
-                      "args": [
-                        "center",
-                        "t",
-                        {
-                          "op": "+",
-                          "args": [
-                            "i",
-                            3
-                          ]
-                        },
-                        {
-                          "op": "+",
-                          "args": [
-                            "j",
-                            3
-                          ]
-                        },
-                        3
-                      ]
-                    },
-                    "R_sphere"
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "Coriolis parameter f = 2*Omega*sin(lat) at interior cell centers."
         },
         "phis": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m2 s-2",
           "shape": [
             "tile",
             "x",
             "y"
           ],
-          "description": "Surface geopotential (flat topography = 0 for Williamson 1992 case 2).",
-          "expression": {
-            "op": "aggregate",
-            "args": [],
-            "output_idx": [
-              "t",
-              "i",
-              "j"
-            ],
-            "ranges": {
-              "t": {
-                "from": "tile"
-              },
-              "i": {
-                "from": "x"
-              },
-              "j": {
-                "from": "y"
-              }
-            },
-            "expr": 0.0
-          }
+          "description": "Surface geopotential (flat topography = 0 for Williamson 1992 case 2)."
         },
         "dp_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m2 s-2",
           "shape": [
             "tile",
             "x_cell_ext",
             "y_cell_ext"
           ],
-          "description": "dp extended into the 3-layer donor-cube halo (duo_extend).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_extend",
-            "bindings": {
-              "q": "dp",
-              "center": "center",
-              "refx": "refx",
-              "refy": "refy"
-            }
-          }
+          "description": "dp extended into the 3-layer donor-cube halo (duo_extend)."
         },
         "ua_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m s-1",
           "shape": [
             "tile",
             "x_cell_ext",
             "y_cell_ext"
           ],
-          "description": "ua extended into the halo (duo_extend).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_extend",
-            "bindings": {
-              "q": "ua",
-              "center": "center",
-              "refx": "refx",
-              "refy": "refy"
-            }
-          }
+          "description": "ua extended into the halo (duo_extend)."
         },
         "va_e": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m s-1",
           "shape": [
             "tile",
             "x_cell_ext",
             "y_cell_ext"
           ],
-          "description": "va extended into the halo (duo_extend).",
-          "expression": {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "duo_extend",
-            "bindings": {
-              "q": "va",
-              "center": "center",
-              "refx": "refx",
-              "refy": "refy"
-            }
-          }
+          "description": "va extended into the halo (duo_extend)."
         }
       },
       "equations": [
@@ -601,6 +447,193 @@
                 }
               }
             ]
+          }
+        },
+        {
+          "lhs": "refx",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_ref_x",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "refy",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_ref_y",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "node",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_node_cart",
+            "bindings": {
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "center",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cell_center",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "cosA",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cos_alpha",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "area",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cell_area",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                2.0,
+                "Omega",
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "center",
+                        "t",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            3
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "j",
+                            3
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "R_sphere"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "phis",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": "dp_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "dp",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "ua_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "ua",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "va_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "va",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
           }
         }
       ],

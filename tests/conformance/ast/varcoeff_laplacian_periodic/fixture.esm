@@ -1,36 +1,106 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "varcoeff_laplacian_periodic_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/cartesian_uniform_1d/rules/varcoeff_laplacian_periodic: a minimal consuming model binding N=8 at the import edge. The compound match D( k * D(u,x), x ) must fire through the section-9.6.3 fixpoint (priority 10, before any plain-D rule could lower the inner derivative) and lower to the rule's makearray -- interior [2,7] holding the imported conservative flux-difference stencil aggregate over u and k, faces i=1 and i=8 holding the periodic-wrap fluxes (wrapping both u and k) -- with zero apply_expression_template nodes, zero surviving spatial D, and the free name dx surviving in the expanded body (the grid's consumer-supplied geometry contract). The coefficient k is a consumer-supplied field of shape [x] (here k=1+0.5 cos(2 pi x_i)), bound by the match as the LEFT factor of the product; u is the state. The model fulfills the geometry contract for [0,1] with x0=0 and dx=1/8; the dx expression is spelled with the literal 8 because the edge binding closes N before it reaches this document's scope (grids/cartesian_uniform_1d/grid.esm). The golden pins the byte-identical post-lowering AST across bindings.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:cartesian_uniform_1d", "rule:varcoeff_laplacian_periodic"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_1d",
+      "rule:varcoeff_laplacian_periodic"
+    ]
   },
   "models": {
     "VarcoeffLaplacianPeriodicAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/cartesian_uniform_1d/rules/varcoeff_laplacian_periodic.esm",
-          "bindings": { "N": 8 }
+          "bindings": {
+            "N": 8
+          }
         }
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "K",
-          "shape": ["x"],
+          "shape": [
+            "x"
+          ],
           "description": "Temperature field over the x index set."
         },
         "k": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m^2/s",
-          "shape": ["x"],
-          "description": "Consumer-supplied variable conductivity of shape [x], k_gi = 1 + 0.5 cos(2 pi x_gi) at cell centers x_gi = (gi - 1/2)/8, spelled inline from literals and the edge-bound N=8. Bound by the rule's match as the coefficient k (the left factor of k*D(u,x)); read by the expanded stencil at the faces. The aggregate loops over `gi`, distinct from the stencil's interior index `i`, per the keyed-factor convention (see the rule description).",
-          "expression": {
+          "shape": [
+            "x"
+          ],
+          "description": "Consumer-supplied variable conductivity of shape [x], k_gi = 1 + 0.5 cos(2 pi x_gi) at cell centers x_gi = (gi - 1/2)/8, spelled inline from literals and the edge-bound N=8. Bound by the rule's match as the coefficient k (the left factor of k*D(u,x)); read by the expanded stencil at the faces. The aggregate loops over `gi`, distinct from the stencil's interior index `i`, per the keyed-factor convention (see the rule description)."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "k",
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ]
+              }
+            ],
+            "wrt": "x"
+          }
+        },
+        {
+          "lhs": "k",
+          "rhs": {
             "op": "aggregate",
-            "output_idx": ["gi"],
+            "output_idx": [
+              "gi"
+            ],
             "args": [],
-            "ranges": { "gi": { "from": "x" } },
+            "ranges": {
+              "gi": {
+                "from": "x"
+              }
+            },
             "expr": {
               "op": "+",
               "args": [
@@ -49,8 +119,20 @@
                             {
                               "op": "*",
                               "args": [
-                                { "op": "-", "args": ["gi", 0.5] },
-                                { "op": "/", "args": [1, 8] }
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "gi",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    8
+                                  ]
+                                }
                               ]
                             }
                           ]
@@ -63,38 +145,14 @@
             }
           }
         },
-        "x0": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0,
-          "description": "Left domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
-        },
-        "dx": {
-          "type": "observed",
-          "units": "m",
-          "expression": { "op": "/", "args": [1, 8] },
-          "description": "Grid spacing 1/N = 1/8, spelled with the literal 8: the import edge binds N, closing it before this document's scope (grids/cartesian_uniform_1d/grid.esm contract)."
-        }
-      },
-      "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
-          "rhs": 0.0
-        },
-        {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": "dx",
           "rhs": {
-            "op": "D",
+            "op": "/",
             "args": [
-              {
-                "op": "*",
-                "args": [
-                  "k",
-                  { "op": "D", "args": ["u"], "wrt": "x" }
-                ]
-              }
-            ],
-            "wrt": "x"
+              1,
+              8
+            ]
           }
         }
       ]

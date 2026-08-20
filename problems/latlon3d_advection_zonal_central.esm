@@ -1,8 +1,8 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_zonal_central",
-    "description": "MMS driver: solid-body zonal advection on the 3-D latlon3d grid, u_t = -omega_deg * D(u, lon) with constant angular velocity omega_deg (deg/s), discretized by grids/latlon3d/rules/central_D_lon_periodic (2nd-order centered interior, explicit periodic wrap columns, rank-3). The rank-3 analogue of problems/latlon_advection_zonal_periodic with a PASSIVE lat axis (NLAT=5, the cos(lat) profile is carried without a lat operator) and a PASSIVE lev axis (NLEV=4, the solution is level-independent). Exact solution u(lon, lat, t) = sin((pi/180)(lon - omega_deg t)) * cos((pi/180) lat) \u2014 the m=1 zonal wave transported rigidly; a constant ANGULAR velocity is latitude-independent, so no metric factor enters the angular-form equation. Periodic in lon with period 360, matching the global recipe closure. GRID CONTRACT WIRING: NLAT=5 and NLEV=4 are closed at the import edge (both passive), NLON stays open (default 144, swept via the loader API); dlon_deg = 360/NLON is an observed dividing by the metaparameter NAME NLON (esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline lon_i = (i - 1/2) * 360/NLON via the NLON name and lat_j = -90 + (j-1)*45 as literals (build-time scope caveat: the lon_coord/lat_coord templates are not resolvable in build-time ic/reference positions). ERROR MODEL: centered differencing of a single Fourier mode has zero amplitude error and pure phase lag \u2014 semi-discrete phase rate omega k sinc(k dlon) vs exact omega k, k = pi/180 per degree \u2014 so the relative L2 error at time t is 2 sin(delta/2) with delta = omega_deg k t (1 - sinc(2 pi / NLON)), an exact O(dlon^2) ladder identical to the rank-2 sibling's (the extra passive axes change no error). Per-resolution values in tests/conformance/convergence/latlon3d_advection_zonal_central/golden/errors.json.",
+    "description": "MMS driver: solid-body zonal advection on the 3-D latlon3d grid, u_t = -omega_deg * D(u, lon) with constant angular velocity omega_deg (deg/s), discretized by grids/latlon3d/rules/central_D_lon_periodic (2nd-order centered interior, explicit periodic wrap columns, rank-3). The rank-3 analogue of problems/latlon_advection_zonal_periodic with a PASSIVE lat axis (NLAT=5, the cos(lat) profile is carried without a lat operator) and a PASSIVE lev axis (NLEV=4, the solution is level-independent). Exact solution u(lon, lat, t) = sin((pi/180)(lon - omega_deg t)) * cos((pi/180) lat) — the m=1 zonal wave transported rigidly; a constant ANGULAR velocity is latitude-independent, so no metric factor enters the angular-form equation. Periodic in lon with period 360, matching the global recipe closure. GRID CONTRACT WIRING: NLAT=5 and NLEV=4 are closed at the import edge (both passive), NLON stays open (default 144, swept via the loader API); dlon_deg = 360/NLON is an observed dividing by the metaparameter NAME NLON (esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline lon_i = (i - 1/2) * 360/NLON via the NLON name and lat_j = -90 + (j-1)*45 as literals (build-time scope caveat: the lon_coord/lat_coord templates are not resolvable in build-time ic/reference positions). ERROR MODEL: centered differencing of a single Fourier mode has zero amplitude error and pure phase lag — semi-discrete phase rate omega k sinc(k dlon) vs exact omega k, k = pi/180 per degree — so the relative L2 error at time t is 2 sin(delta/2) with delta = omega_deg k t (1 - sinc(2 pi / NLON)), an exact O(dlon^2) ladder identical to the rank-2 sibling's (the extra passive axes change no error). Per-resolution values in tests/conformance/convergence/latlon3d_advection_zonal_central/golden/errors.json.",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -33,7 +33,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -49,15 +49,8 @@
           "description": "Constant angular velocity of the solid-body zonal flow (positive eastward)."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": {
-            "op": "/",
-            "args": [
-              360,
-              "NLON"
-            ]
-          },
           "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name. NLON is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so the sweep stays consistent."
         }
       },
@@ -211,6 +204,16 @@
                 ],
                 "wrt": "lon"
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
             ]
           }
         }

@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "advection_1d_periodic_superbee",
     "description": "MMS order-of-accuracy driver for grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_periodic (superbee flux limiter (second-order TVD, compressive)) on the periodic unit interval [0,1]: linear advection u_t = -c u_x with exact solution u(x,t) = sin(2 pi (x - c t)), c = 1 (initial profile transported unchanged, no forcing). The limiter is second-order where inactive but CLIPS at the sin's two smooth extrema, so the OBSERVED order is below 2 and differs by norm; the honest observed order is pinned by the convergence case, the design order (2) by the rule's order: tag. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). The ic and test references spell the cell-center coordinate x_i = (i - 1/2)/N inline from literals and N (the 6.6.5/ic build-time cellwise evaluation is scope-free). The companion monotonicity/TVD driver is problems/advection_1d_periodic_superbee_tvd.esm; per-resolution errors and observed order are pinned in tests/conformance/convergence/advection_1d_periodic_superbee/.",
@@ -29,7 +29,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "kg/m^3",
           "shape": [
             "x"
@@ -49,15 +49,8 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (grids/cartesian_uniform_1d/grid.esm consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "N"
-            ]
-          },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name, resolved inside the rewrite rule's expanded body at evaluation. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         }
       },
@@ -136,6 +129,16 @@
                 ],
                 "wrt": "x"
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
             ]
           }
         }

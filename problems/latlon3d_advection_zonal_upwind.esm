@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "latlon3d_advection_zonal_upwind",
     "description": "MMS driver: solid-body zonal advection on the 3-D latlon3d grid, u_t = -omega_deg * D(u, lon) with constant angular velocity omega_deg (deg/s), discretized by grids/latlon3d/rules/upwind1_D_lon_periodic (first-order upwind backward difference, explicit periodic wrap, rank-3). The rank-3 analogue of problems/latlon_advection_zonal_upwind: the lat and lev axes are PASSIVE (no lat or lev operator appears), so the exact solution is carried rigidly on every (lat, lev) column. Exact solution u(lon, lat, lev, t) = sin((pi/180)(lon - omega_deg t)) * cos((pi/180) lat) — the m=1 zonal wave transported rigidly (constant ANGULAR velocity is latitude-independent), independent of lev. omega_deg > 0 is eastward flow; the backward-difference upwind stencil takes its neighbor from upstream. Periodic in lon with period 360 (global recipe closure dlon_deg = 360/NLON). GRID CONTRACT WIRING (grids/latlon3d/grid.esm): NLAT is closed to 5 and NLEV to 4 at the import edge (both passive; 5 pole-to-pole lat rows at dlat_deg = 45 and 4 arbitrary lev cells suffice), NLON stays open (default 144, rebound by the convergence sweep via the loader API); dlon_deg = 360/NLON is an observed dividing by the metaparameter NAME NLON (esm-spec 9.7.6), so the sweep keeps the spacing consistent; lon0_deg = 0. The ic and test references inline the grid's coordinate conventions (lon_i = (i-1/2)*360/NLON via the NLON name; lat_j = -90 + (j-1)*45 as literals; independent of lev) rather than invoking lon_coord/lat_coord/lev_center — free-name geometry is not resolvable in the build-time ic/reference evaluator (AGENTS.md build-time scope caveat). ERROR MODEL: first-order upwind amplitude damping, relative L2 error ~O(dlon_deg); the coarsest sweep point bounds the 0.2 t=0.5 assertion. The upwind + wrap scheme telescopes so sum(u) is conserved exactly and the zonal mean of the m=1 wave is 0 at all times.",
@@ -36,7 +36,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "lon",
@@ -52,15 +52,8 @@
           "description": "Constant angular velocity of the solid-body zonal flow (positive eastward; the upwind rule assumes this sign)."
         },
         "dlon_deg": {
-          "type": "observed",
+          "type": "unknown",
           "units": "deg",
-          "expression": {
-            "op": "/",
-            "args": [
-              360,
-              "NLON"
-            ]
-          },
           "description": "Zonal spacing 360/NLON: the grid's dlon_deg free name. NLON is the document-scoped metaparameter substituted at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dlon_deg consistent."
         }
       },
@@ -214,6 +207,16 @@
                 ],
                 "wrt": "lon"
               }
+            ]
+          }
+        },
+        {
+          "lhs": "dlon_deg",
+          "rhs": {
+            "op": "/",
+            "args": [
+              360,
+              "NLON"
             ]
           }
         }

@@ -1,39 +1,121 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "central_Dxy_dirichlet_bc_ast_fixture",
     "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/central_Dxy_dirichlet_bc: a minimal consuming model binding NX=NY=4 at the import edge. The compound match D(D(u,x),y) fires (priority 10) through the section-9.6.3 fixpoint and lowers to the rule's makearray - the doubly-interior block [2,3]x[2,3] holding the imported 4-point centered cross-difference stencil aggregate, the four Dirichlet mirror-ghost (odd-reflection) edge strips (i=1, i=4 over j in [2,3]; j=1, j=4 over i in [2,3]), and the four corner cells ((1,1),(1,4),(4,1),(4,4)) that reflect both axes - with all metaparameters folded and the free names dx, dy surviving in the expanded body. The Dirichlet cross closure carries NO wall free names: a constant-along-wall value cancels in the tangential difference of the mixed derivative, so unlike the diagonal central_D2x/D2y_dirichlet_bc rules there are no gL/gR/gB/gT terms - only interior samples with sign patterns set by the odd reflection. The model fulfills the geometry contract with x0=y0=0 and dx=dy=1/4; the dx/dy expressions are spelled with the literal 4 because the edge binding closes NX/NY before this document's scope (grids/cartesian_uniform_2d/grid.esm). The consumer writes the mixed derivative as D(D(u,x),y) (inner wrt x, outer wrt y); the golden pins the byte-identical post-lowering AST across bindings and confirms zero unlowered rewrite-target ops.",
     "license": "MIT",
-    "tags": ["conformance", "ast", "grid:cartesian_uniform_2d", "rule:central_Dxy_dirichlet_bc"]
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_2d",
+      "rule:central_Dxy_dirichlet_bc"
+    ]
   },
   "models": {
     "CentralDxyDirichletBcAst": {
       "expression_template_imports": [
         {
           "ref": "../../../../grids/cartesian_uniform_2d/rules/central_Dxy_dirichlet_bc.esm",
-          "bindings": { "NX": 4, "NY": 4 }
+          "bindings": {
+            "NX": 4,
+            "NY": 4
+          }
         }
       ],
       "variables": {
-        "u": { "type": "state", "units": "K", "shape": ["x", "y"], "description": "Scalar field over the 2-D [x, y] index sets." },
-        "kappa": { "type": "parameter", "units": "m^2/s", "default": 0.01, "description": "Scalar multiplier on the mixed derivative." },
-        "x0": { "type": "parameter", "units": "m", "default": 0, "description": "Left x domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)." },
-        "y0": { "type": "parameter", "units": "m", "default": 0, "description": "Bottom y domain edge: the grid's y0 free name." },
-        "dx": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)." },
-        "dy": { "type": "observed", "units": "m", "expression": { "op": "/", "args": [1, 4] }, "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY." }
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Scalar field over the 2-D [x, y] index sets."
+        },
+        "kappa": {
+          "type": "parameter",
+          "units": "m^2/s",
+          "default": 0.01,
+          "description": "Scalar multiplier on the mixed derivative."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge a = 0: the grid's x0 free name (consumer-supplied geometry contract)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge: the grid's y0 free name."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX = 1/4, spelled with the literal 4: the import edge binds NX, closing it before this document's scope (grids/cartesian_uniform_2d/grid.esm contract)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY = 1/4, spelled with the literal 4: the import edge binds NY."
+        }
       },
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["u"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
           "rhs": 0.0
         },
         {
-          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
           "rhs": {
             "op": "*",
             "args": [
               "kappa",
-              { "op": "D", "args": [ { "op": "D", "args": ["u"], "wrt": "x" } ], "wrt": "y" }
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  }
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              4
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              4
             ]
           }
         }

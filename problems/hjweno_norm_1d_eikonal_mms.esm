@@ -1,5 +1,5 @@
 {
-  "esm": "0.8.0",
+  "esm": "1.0.0",
   "metadata": {
     "name": "hjweno_norm_1d_eikonal_mms",
     "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_1d/rules/hjweno_norm_D1_periodic on the periodic unit interval [0,1]. Forced-steady eikonal / Hamilton-Jacobi equation u_t = -S|u_x| + S|g'(x)| with the manufactured solution g(x) = sin(2 pi x): because u_t = -S|g'| + S|g'| = 0, g is the EXACT solution of the continuous forced PDE for all t, so the analytic reference at every time is g itself. The forcing S|g'(x)| = 2 pi S |cos(2 pi x)| is the constant-in-time source that balances the operator. Discretely u_t = S*(|g'| - hjweno(u)); starting from u(0) = g the imbalance is the fifth-order Hamilton-Jacobi WENO truncation error S*(|g'| - hjweno(g)) = O(dx^5), so the discrete solution drifts from g at rate O(dx^5) and the L2 / Linf error at the assert time falls as O(dx^5) (expected order 5). THE CRITICAL POINTS ARE NOT A PROBLEM: g is SMOOTH everywhere (it is |u_x| that has kinks, at x = 1/4, 3/4 where cos changes sign, not u), so the WENO-Z one-sided derivative reconstructions u_x^± approximate u_x = 2 pi cos(2 pi x) to O(dx^5) everywhere INCLUDING the first-order critical points u_x = 0 at x = 1/4, 3/4 (u_xx != 0 there) where classic Jiang-Shu weights would drop to ~fourth order; the WENO-Z weights tau_5 = |beta_0 - beta_2| restore the full fifth order (Borges 2008, Henrick 2005), and the Godunov max/min entropy fix selects the correct one-sided branch through the |grad| kinks. Numerically verified: pairwise orders 5.00 -> 5.00 across N = 16..256 in BOTH L2 and Linf (de-risked in numpy: |g'| - hjweno(g) falls at exactly fifth order; the integrated forced-steady error matches). Both g and |g'| are periodic (g(0)=g(1)=0, |cos| has period 1/2), so the periodic wrap is fully consistent (no seam artifact); the six wrap faces converge at the same fifth-order rate as the interior, so the state L2/Linf reduction over the whole field is a clean order-5 gate with nothing to exempt. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6, so the loader-API rebinding of N for the convergence sweep keeps dx consistent). The ic, the forcing observed, and the test reference spell the cell-center coordinate x_i = (i - 1/2)/N inline from literals and the metaparameter N (the 6.6.5/ic build-time cellwise evaluation is scope-free). Per-resolution error norms are pinned in tests/conformance/convergence/hjweno_norm_1d_eikonal_mms/golden/errors.json.",
@@ -34,7 +34,7 @@
       ],
       "variables": {
         "u": {
-          "type": "state",
+          "type": "unknown",
           "units": "1",
           "shape": [
             "x"
@@ -54,77 +54,17 @@
           "description": "Left domain edge a = 0 (unit interval): the grid's x0 free name (consumer-supplied geometry contract)."
         },
         "dx": {
-          "type": "observed",
+          "type": "unknown",
           "units": "m",
-          "expression": {
-            "op": "/",
-            "args": [
-              1,
-              "N"
-            ]
-          },
           "description": "Grid spacing (b - a)/N = 1/N: the grid's dx free name. N is the document-scoped metaparameter, substituted as an integer literal at load (esm-spec 9.7.6), so loader-API rebinding for the convergence sweep keeps dx consistent."
         },
         "forcing": {
-          "type": "observed",
+          "type": "unknown",
           "units": "1/s",
           "shape": [
             "x"
           ],
-          "description": "The manufactured source |g'(x)| = 2 pi |cos(2 pi x_i)| (the S factor is folded via the du/dt scaling; x_i = (i - 1/2)/N spelled inline). It exactly balances the continuous operator so g = sin(2 pi x) is the steady exact solution; the residual after discretization is the O(dx^5) truncation error.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "x"
-              }
-            },
-            "expr": {
-              "op": "*",
-              "args": [
-                6.283185307179586,
-                {
-                  "op": "abs",
-                  "args": [
-                    {
-                      "op": "cos",
-                      "args": [
-                        {
-                          "op": "*",
-                          "args": [
-                            6.283185307179586,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "i",
-                                    0.5
-                                  ]
-                                },
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    1,
-                                    "N"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "The manufactured source |g'(x)| = 2 pi |cos(2 pi x_i)| (the S factor is folded via the du/dt scaling; x_i = (i - 1/2)/N spelled inline). It exactly balances the continuous operator so g = sin(2 pi x) is the steady exact solution; the residual after discretization is the O(dx^5) truncation error."
         }
       },
       "equations": [
@@ -215,6 +155,72 @@
                 ]
               }
             ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "N"
+            ]
+          }
+        },
+        {
+          "lhs": "forcing",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                6.283185307179586,
+                {
+                  "op": "abs",
+                  "args": [
+                    {
+                      "op": "cos",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            6.283185307179586,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "N"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         }
       ],
