@@ -2,10 +2,17 @@
 // (invoked through scripts/runners/run-go.sh, which resolves the ESS module).
 //
 // THIN WRAPPER (AGENTS.md §2, single pathway): every byte this program emits
-// comes from the official earthsci-ast-go entry point esm.ResolveAndLower —
-// the raw §9.7 pipeline (.esm → parse → import/metaparameter resolution →
-// §9.6.3 rewrite fixpoint). No evaluator, rule engine, or numeric kernel
-// lives here — only argument marshalling and JSON I/O.
+// comes from the official earthsci-ast-go entry point
+// esm.ResolveAndLowerReferencePreserving — the raw §9.7 pipeline (.esm → parse
+// → import/metaparameter resolution → §9.6.3 rewrite fixpoint), stopping at the
+// Option-B image. No evaluator, rule engine, or numeric kernel lives here —
+// only argument marshalling and JSON I/O.
+//
+// It is deliberately NOT esm.ResolveAndLower, which appends Expand-at-build.
+// The other four runners all stop at the Option-B image, so expanding here made
+// Go's artifact structurally incomparable with theirs; and expansion multiplies
+// out a reference-dense document — every duo case OOM-killed the runner past
+// 5 GB, so Go produced no artifact for that family at all.
 //
 // CLI (EarthSciAST CONFORMANCE_SPEC.md §4.2):
 //
@@ -329,7 +336,10 @@ func readJSONMap(path string) (map[string]interface{}, error) {
 // engine treats it as a leaf (esm-spec §9.6.4). Because match patterns may not
 // contain apply_expression_template (§9.6.1), every surviving apply is a
 // resolved match-less leaf, not an un-fired rule; a dangling apply to an
-// unknown template is already rejected upstream by esm.ResolveAndLower.
+// unknown template is already rejected upstream by
+// esm.ResolveAndLowerReferencePreserving (stopping before Expand skips no
+// validation — the resolver, the fixpoint and the §9.6.9 call-site check all
+// still reject).
 // A model's retained `expression_templates` registry is NOT walked. Option
 // B materializes each component's referenced templates into it, and a
 // rule's `match` pattern is a PATTERN — `D(f, x)` there is what the rule
@@ -402,11 +412,12 @@ func runAst(esdRoot, outputDir string, files []string, verbose bool) (map[string
 			if err != nil {
 				return err
 			}
-			expanded, err := esm.ResolveAndLower(string(data), filepath.Dir(fixture), nil)
+			lowered, err := esm.ResolveAndLowerReferencePreserving(
+				string(data), filepath.Dir(fixture), nil)
 			if err != nil {
 				return err
 			}
-			dec := json.NewDecoder(strings.NewReader(expanded))
+			dec := json.NewDecoder(strings.NewReader(lowered))
 			dec.UseNumber()
 			var doc map[string]interface{}
 			if err := dec.Decode(&doc); err != nil {

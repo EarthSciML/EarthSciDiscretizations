@@ -3,7 +3,7 @@
 #
 # Thin shell over scripts/runners/go/main.go (the §4.2 CLI, ast category),
 # which drives the official earthsci-ast-go raw §9.7 pipeline
-# (esm.ResolveAndLower). This wrapper only resolves the ESS checkout and
+# (esm.ResolveAndLowerReferencePreserving). This wrapper only resolves the ESS checkout and
 # builds the runner in a scratch dir so the committed tree stays clean:
 # the runner module's `replace` directive is rewritten to the resolved
 # $ESS_ROOT (scripts/ess-locate.sh contract), then `go run` forwards the
