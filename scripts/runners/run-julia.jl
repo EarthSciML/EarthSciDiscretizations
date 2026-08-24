@@ -23,7 +23,7 @@
 #                lower_expression_templates), canonical bytes exactly as
 #                $ESS_ROOT/scripts/generate-template-import-goldens.jl emits them
 #   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over simulate())
-#   convergence  load(problem; metaparameters=…) per manifest resolution →
+#   convergence  load_path(problem; metaparameters=…) per manifest resolution →
 #                simulate → evaluate_cellwise(reference) → field_reduce norms
 #   regridding   run_pde_tests on the fixture (exact-invariant gates) +
 #                the regrid_state(1) field + the per-pair A_ij/A_j/W_ij setup
@@ -353,7 +353,7 @@ function run_convergence(output_dir, files, verbose)
                 # refinement family ships one thin problem file per level).
                 res_problem = haskey(res, "problem") ?
                     normpath(joinpath(case_dir, String(res["problem"]))) : problem
-                file = ESS.load(res_problem; metaparameters=bindings)
+                file = ESS.load_path(res_problem; metaparameters=bindings)
                 m = file.models[model]
                 # The analytic reference is the problem's own §6.6.5 assertion
                 # at assert_time (references are authored over the grid's
@@ -429,7 +429,7 @@ function run_regridding(output_dir, files, verbose)
             rec["passed"] = !isempty(results) && all(r.passed for r in results)
             # regrid_state integrates the constant regridded field from 0 over
             # [0,1], so state(1) IS the regridded field F_tgt.
-            file = ESS.load(fixture)
+            file = ESS.load_path(fixture)
             insp = ESS.BuildInspection()
             sim = ESS.simulate(file, (0.0, 1.0); alg=ODE.Tsit5(),
                                reltol=1e-10, abstol=1e-12, saveat=[1.0],
@@ -509,7 +509,7 @@ function run_reprojection(output_dir, files, verbose)
             exprs = Dict{String,Dict{String,Any}}()
             for (setname, params) in pairs(gold["parameter_sets"])
                 doc = _reproj_wrapper_doc(params)
-                file = ESS.load(IOBuffer(JSON3.write(doc)); base_path=dirname(lib))
+                file = ESS.load_string(JSON3.write(doc); base_path=dirname(lib))
                 m = file.models["Reproject"]
                 defs = ESS.observed_definitions(m)
                 exprs[String(setname)] = Dict{String,Any}(

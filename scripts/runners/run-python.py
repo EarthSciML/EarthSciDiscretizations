@@ -25,7 +25,7 @@ Category → official earthsci_ast pathway:
                float tokens)
   simulation   pde_inline_tests.run_pde_tests (§6.6/§6.6.5 inline tests over
                simulation.simulate, scipy method pinned by the manifest)
-  convergence  parse.load(problem, metaparameters=…) per manifest resolution →
+  convergence  parse.load_path(problem, metaparameters=…) per manifest resolution →
                simulate → evaluate_cellwise(reference) → field_reduce norms
 
 Environment: the earthsci_ast venv ($ESS_ROOT/pkg/earthsci-ast-py/
@@ -370,7 +370,7 @@ def run_simulation(output_dir: Path, files, verbose):
 
 
 def run_convergence(output_dir: Path, files, verbose):
-    from earthsci_ast.parse import load
+    from earthsci_ast.parse import load_path
     from earthsci_ast.pde_inline_tests import (
         evaluate_cellwise, field_reduce, simulate_states, state_cells)
 
@@ -401,7 +401,7 @@ def run_convergence(output_dir: Path, files, verbose):
                 # mirrors run-julia.jl's per-resolution override.
                 res_problem = ((case_dir / res["problem"]).resolve()
                                if "problem" in res else problem)
-                file = load(str(res_problem), metaparameters=bindings)
+                file = load_path(str(res_problem), metaparameters=bindings)
                 m = file.models[model]
                 refs = [a for t in m.tests for a in t.assertions
                         if a.time == assert_time and a.reduce == "L2_error"]
@@ -468,7 +468,7 @@ def _rows(m):
 
 
 def run_regridding(output_dir: Path, files, verbose):
-    from earthsci_ast.parse import load
+    from earthsci_ast.parse import load_path
     from earthsci_ast.pde_inline_tests import (
         run_pde_tests, simulate_states, state_cells)
     from earthsci_ast.simulation import BuildInspection
@@ -494,7 +494,7 @@ def run_regridding(output_dir: Path, files, verbose):
             rec["passed"] = bool(results) and all(r.passed for r in results)
             # regrid_state integrates the constant regridded field from 0 over
             # [0,1], so state(1) IS the regridded field F_tgt.
-            file = load(str(fixture))
+            file = load_path(str(fixture))
             insp = BuildInspection()
             sim = simulate_states(file, (0.0, 1.0), method="LSODA",
                                   rtol=1e-12, atol=1e-14, saveat=[1.0],
@@ -570,7 +570,7 @@ def _reproj_wrapper_doc(params):
 def run_reprojection(output_dir: Path, files, verbose):
     from earthsci_ast.classification import observed_definitions
     from earthsci_ast.numpy_interpreter import evaluate
-    from earthsci_ast.parse import load
+    from earthsci_ast.parse import load_string
 
     cases = {}
     for case_dir, manifest in discover_manifests("reprojection", files):
@@ -590,7 +590,7 @@ def run_reprojection(output_dir: Path, files, verbose):
             exprs = {}
             for setname, params in gold["parameter_sets"].items():
                 doc = _reproj_wrapper_doc(params)
-                file = load(json.dumps(doc), base_path=str(lib.parent))
+                file = load_string(json.dumps(doc), base_path=str(lib.parent))
                 m = file.models["Reproject"]
                 defs = observed_definitions(m)
                 exprs[setname] = {k: defs[k]
