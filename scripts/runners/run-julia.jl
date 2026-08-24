@@ -22,7 +22,7 @@
 #   ast          raw §9.7 pipeline (resolve_template_machinery →
 #                lower_expression_templates), canonical bytes exactly as
 #                $ESS_ROOT/scripts/generate-template-import-goldens.jl emits them
-#   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over simulate())
+#   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over esm_problem+solve)
 #   convergence  load_path(problem; metaparameters=…) per manifest resolution →
 #                simulate → evaluate_cellwise(reference) → field_reduce norms
 #   regridding   run_pde_tests on the fixture (exact-invariant gates) +
@@ -407,7 +407,7 @@ end
 # ---------------------------------------------------------------------------
 # regridding — the fixture's exact-invariant inline tests, the regridded field,
 # and the per-pair build-time setup arrays (A_ij / A_j / W_ij) read from the
-# official BuildInspection surface (`simulate(...; inspect=…)` →
+# official BuildInspection surface (`esm_problem(...; inspect=…)` →
 # `build_evaluator` setup-array observability) — the §5.8 per-pair gates.
 # ---------------------------------------------------------------------------
 
