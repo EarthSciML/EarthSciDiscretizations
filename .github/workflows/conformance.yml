@@ -111,7 +111,12 @@ jobs:
           cache: pip
           cache-dependency-path: ess/pkg/earthsci-ast-py/pyproject.toml
       - name: Install earthsci_ast
-        run: pip install -e ess/pkg/earthsci-ast-py
+        # phase-6 H-4: SciPy is NOT a base dependency of earthsci-ast (a library
+        # must not embed a solver; esm-libraries-spec §2.4/§2.5.9). The
+        # simulation and convergence categories below integrate trajectories
+        # through `pde_inline_tests.run_pde_tests` -> `solve`, so the solver is
+        # asked for by name via the `simulate` extra.
+        run: pip install -e "ess/pkg/earthsci-ast-py[simulate]"
       - name: Conformance (python; all categories)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
