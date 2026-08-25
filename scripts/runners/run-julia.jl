@@ -22,7 +22,7 @@
 #   ast          raw §9.7 pipeline (resolve_template_machinery →
 #                lower_expression_templates), canonical bytes exactly as
 #                $ESS_ROOT/scripts/generate-template-import-goldens.jl emits them
-#   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over simulate())
+#   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over esm_problem+solve)
 #   convergence  load_path(problem; metaparameters=…) per manifest resolution →
 #                simulate → evaluate_cellwise(reference) → field_reduce norms
 #   regridding   run_pde_tests on the fixture (exact-invariant gates) +
@@ -75,6 +75,11 @@ using EarthSciAST
 using EarthSciAST: resolve_template_machinery, lower_expression_templates
 using JSON3
 import OrdinaryDiffEqTsit5
+# EarthSciAST phase 4: a run is `esm_problem(...)` then `solve(...)`, and
+# `solve` / `successful_retcode` are SciMLBase's own -- EarthSciAST
+# specializes `SciMLBase.__init` / `__solve` on an `EsmProblem` rather than
+# exporting copies that would collide with any loaded solver.
+import SciMLBase
 # The spherical geometry kernel (manifold "spherical" on intersect_polygon /
 # polygon_intersection_area) lives in the EarthSciASTGeometryOpsExt
 # package extension, which loads only when GeometryOps + GeoInterface are in
@@ -363,11 +368,18 @@ function run_convergence(output_dir, files, verbose)
                 isempty(refs) && error("problem declares no L2_error assertion at " *
                                        "t=$assert_time to take the reference from")
                 a = refs[1]
-                sim = ESS.simulate(file, (0.0, assert_time);
-                                   alg=alg, reltol=reltol, abstol=abstol,
-                                   saveat=[assert_time])
-                sim.success || error("solver retcode $(sim.retcode) at n=$n")
-                cells = ESS._state_cells(sim.var_map, a.variable, model)
+                # EarthSciAST phase 4: `simulate` is gone -- build an
+                # EsmProblem once, then `solve` it. The state-name -> slot map
+                # now lives on the PROBLEM (the solution is a plain
+                # ODESolution), and success is a SciML ReturnCode rather than a
+                # `success` boolean beside a free-text message.
+                prob = ESS.esm_problem(file, (0.0, assert_time))
+                sim = SciMLBase.solve(prob, alg;
+                                      reltol=reltol, abstol=abstol,
+                                      saveat=[assert_time])
+                SciMLBase.successful_retcode(sim) ||
+                    error("solver retcode $(sim.retcode) at n=$n")
+                cells = ESS._state_cells(prob.var_map, a.variable, model)
                 isempty(cells) && error("state '$(a.variable)' has no cells at n=$n")
                 state = sim.u[end]
                 field = Float64[state[slot] for (_, slot) in cells]
@@ -395,7 +407,7 @@ end
 # ---------------------------------------------------------------------------
 # regridding — the fixture's exact-invariant inline tests, the regridded field,
 # and the per-pair build-time setup arrays (A_ij / A_j / W_ij) read from the
-# official BuildInspection surface (`simulate(...; inspect=…)` →
+# official BuildInspection surface (`esm_problem(...; inspect=…)` →
 # `build_evaluator` setup-array observability) — the §5.8 per-pair gates.
 # ---------------------------------------------------------------------------
 
@@ -431,12 +443,15 @@ function run_regridding(output_dir, files, verbose)
             # [0,1], so state(1) IS the regridded field F_tgt.
             file = ESS.load_path(fixture)
             insp = ESS.BuildInspection()
-            sim = ESS.simulate(file, (0.0, 1.0); alg=ODE.Tsit5(),
-                               reltol=1e-10, abstol=1e-12, saveat=[1.0],
-                               inspect=insp)
-            sim.success || error("solver retcode $(sim.retcode)")
+            # phase 4: `inspect` is a BUILD concern, so it moves to
+            # construction; only the solver knobs stay on `solve`.
+            prob = ESS.esm_problem(file, (0.0, 1.0); inspect=insp)
+            sim = SciMLBase.solve(prob, ODE.Tsit5();
+                                  reltol=1e-10, abstol=1e-12, saveat=[1.0])
+            SciMLBase.successful_retcode(sim) ||
+                error("solver retcode $(sim.retcode)")
             for var in ("regrid_state", "pou_state", "cons_state")
-                cells = ESS._state_cells(sim.var_map, var, model)
+                cells = ESS._state_cells(prob.var_map, var, model)
                 rec[var * "_at_1"] = Float64[sim.u[end][slot] for (_, slot) in cells]
             end
             # Per-pair setup arrays (manifest §5.8 gates): the raw overlap-area
