@@ -524,7 +524,17 @@ function run_reprojection(output_dir, files, verbose)
             exprs = Dict{String,Dict{String,Any}}()
             for (setname, params) in pairs(gold["parameter_sets"])
                 doc = _reproj_wrapper_doc(params)
-                file = ESS.load_string(JSON3.write(doc); base_path=dirname(lib))
+                # Under Option B lowering (esm 0.9.0, §9.6.4) the wrapper's
+                # non-eager applies survive as leaves, and `evaluate_expr`
+                # (registry-free, single expression) cannot resolve them — so
+                # run the official Expand (rule 2, `expand_document`) over the
+                # import-resolved document first, exactly the §9.7 pipeline the
+                # ast category drives, then read back the composed bodies.
+                raw = JSON3.read(JSON3.write(doc))
+                resolved = resolve_template_machinery(raw, dirname(lib))
+                lowered = lower_expression_templates(resolved === nothing ? raw : resolved)
+                expanded = ESS.expand_document(lowered)
+                file = ESS.load_string(JSON3.write(expanded); base_path=dirname(lib))
                 m = file.models["Reproject"]
                 defs = ESS.observed_definitions(m)
                 exprs[String(setname)] = Dict{String,Any}(
