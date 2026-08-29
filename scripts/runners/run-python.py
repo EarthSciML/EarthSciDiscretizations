@@ -341,28 +341,39 @@ def _runner_jobs(n_items: int) -> int:
 def _map_cases(case_fn, work, verbose, label):
     """Run `case_fn(case_dir_str, manifest) -> rec` over `work`, in parallel
     when more than one job is available. Results are keyed by case name, so
-    the emitted JSON is byte-identical regardless of completion order."""
+    the emitted JSON is byte-identical regardless of completion order.
+
+    `max_tasks_per_child=1` recycles each worker after one case: a numeric
+    case's evaluator caches and numpy buffers die with the process, so the
+    pool's resident set is bounded by the LARGEST single case times the worker
+    count instead of accumulating across the whole category — long-lived
+    workers ran the 16 GB CI runner out of memory mid-convergence."""
+    import time
     cases = {}
     jobs = _runner_jobs(len(work))
     if jobs == 1:
         for case_dir, manifest in work:
+            t0 = time.time()
             rec = case_fn(str(case_dir), manifest)
             if verbose:
-                print(f"  {label}/{rec['case']}: {rec['status']}")
+                print(f"  {label}/{rec['case']}: {rec['status']} "
+                      f"({time.time() - t0:.0f}s)", flush=True)
             cases[rec["case"]] = rec
         return cases
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
-        futs = {pool.submit(case_fn, str(case_dir), manifest): manifest["case"]
-                for case_dir, manifest in work}
-        for fut in as_completed(futs):
+    import multiprocessing as mp
+    t0 = time.time()
+    with mp.Pool(processes=jobs, maxtasksperchild=1) as pool:
+        results = [pool.apply_async(case_fn, (str(case_dir), manifest))
+                   for case_dir, manifest in work]
+        for (_, manifest), res in zip(work, results):
             try:
-                rec = fut.result()
+                rec = res.get()
             except Exception as err:  # noqa: BLE001 — a crashed worker is a case error
-                rec = {"case": futs[fut], "status": "error",
+                rec = {"case": manifest["case"], "status": "error",
                        "message": f"worker crashed: {type(err).__name__}: {err}"}
             if verbose:
-                print(f"  {label}/{rec['case']}: {rec['status']}", flush=True)
+                print(f"  {label}/{rec['case']}: {rec['status']} "
+                      f"(t+{time.time() - t0:.0f}s)", flush=True)
             cases[rec["case"]] = rec
     return cases
 
@@ -412,61 +423,65 @@ def run_simulation(output_dir: Path, files, verbose):
 # ---------------------------------------------------------------------------
 
 
-def _convergence_case(case_dir: str, manifest: dict) -> dict:
+def _convergence_resolution(case_dir: str, manifest: dict, res_idx: int) -> dict:
+    """One (case, resolution) work unit: load at this entry's metaparameter
+    bindings, simulate, reduce the error norms. Returns the row (or the error)
+    tagged with its position so the caller can reassemble the manifest-ordered
+    ``errors`` list — the emitted JSON is identical to the former serial
+    per-case loop's."""
     from earthsci_ast.parse import load_path
     from earthsci_ast.pde_inline_tests import (
         evaluate_cellwise, field_reduce, simulate_states, state_cells)
 
-    case = manifest["case"]
-    rec = {"case": case, "status": "ok"}
+    res = manifest["resolutions"][res_idx]
+    out = {"case": manifest["case"], "res_idx": res_idx}
     try:
         problem = (Path(case_dir) / manifest["problem"]).resolve()
         model = manifest["model"]
         assert_time = float(manifest["assert_time"])
         method, rtol, atol = integrator_opts(manifest)
-        errors = []
-        for res in manifest["resolutions"]:
-            n = int(res["n"])
-            bindings = {str(k): int(v) for k, v in res["bindings"].items()}
-            # A resolution entry MAY name its own problem file (meshes are
-            # subsystem refs, which §9.7.6 cannot rebind — the MPAS
-            # refinement family ships one thin problem file per level);
-            # mirrors run-julia.jl's per-resolution override.
-            res_problem = ((Path(case_dir) / res["problem"]).resolve()
-                           if "problem" in res else problem)
-            file = load_path(str(res_problem), metaparameters=bindings)
-            m = file.models[model]
-            refs = [a for t in m.tests for a in t.assertions
-                    if a.time == assert_time and a.reduce == "L2_error"]
-            if not refs:
-                raise RuntimeError("problem declares no L2_error assertion at "
-                                   f"t={assert_time} to take the reference from")
-            a = refs[0]
-            sim = simulate_states(file, (0.0, assert_time),
-                                  method=method, rtol=rtol, atol=atol,
-                                  saveat=[assert_time])
-            cells = state_cells(sim.var_map, a.variable, model)
-            if not cells:
-                raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
-            state = sim.states[-1]
-            field = [float(state[slot]) for _, slot in cells]
-            ref = evaluate_cellwise(a.reference, [c for c, _ in cells],
-                                    index_sets=file.index_sets)
-            row = {"n": n}
-            for norm in manifest["norms"]:
-                row[norm] = field_reduce(norm, field, reference=ref)
-            errors.append(row)
-        rec["assert_time"] = assert_time
-        rec["errors"] = errors
+        n = int(res["n"])
+        bindings = {str(k): int(v) for k, v in res["bindings"].items()}
+        # A resolution entry MAY name its own problem file (meshes are
+        # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+        # refinement family ships one thin problem file per level);
+        # mirrors run-julia.jl's per-resolution override.
+        res_problem = ((Path(case_dir) / res["problem"]).resolve()
+                       if "problem" in res else problem)
+        file = load_path(str(res_problem), metaparameters=bindings)
+        m = file.models[model]
+        refs = [a for t in m.tests for a in t.assertions
+                if a.time == assert_time and a.reduce == "L2_error"]
+        if not refs:
+            raise RuntimeError("problem declares no L2_error assertion at "
+                               f"t={assert_time} to take the reference from")
+        a = refs[0]
+        sim = simulate_states(file, (0.0, assert_time),
+                              method=method, rtol=rtol, atol=atol,
+                              saveat=[assert_time])
+        cells = state_cells(sim.var_map, a.variable, model)
+        if not cells:
+            raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
+        state = sim.states[-1]
+        field = [float(state[slot]) for _, slot in cells]
+        ref = evaluate_cellwise(a.reference, [c for c, _ in cells],
+                                index_sets=file.index_sets)
+        row = {"n": n}
+        for norm in manifest["norms"]:
+            row[norm] = field_reduce(norm, field, reference=ref)
+        out["row"] = row
+        out["assert_time"] = assert_time
     except Exception as err:  # noqa: BLE001
-        rec["status"] = "error"
-        rec["message"] = f"{type(err).__name__}: {err}"
-    return rec
+        out["error"] = f"{type(err).__name__}: {err}"
+    return out
 
 
 def run_convergence(output_dir: Path, files, verbose):
+    import multiprocessing as mp
+    import time
+
     cases = {}
-    work = []
+    units = []  # (case_dir, manifest, res_idx)
     for case_dir, manifest in discover_manifests("convergence", files):
         case = manifest["case"]
         excluded = python_excluded(manifest)
@@ -475,8 +490,59 @@ def run_convergence(output_dir: Path, files, verbose):
                 print(f"  {manifest['category']}/{case}: skipped ({excluded})")
             cases[case] = {"case": case, "status": "skipped", "message": excluded}
             continue
-        work.append((case_dir, manifest))
-    cases.update(_map_cases(_convergence_case, work, verbose, "convergence"))
+        for i in range(len(manifest["resolutions"])):
+            units.append((case_dir, manifest, i))
+
+    # Fan the (case, resolution) units out LARGEST-n first: the highest
+    # resolution dominates a case's cost, and category wall time is capped by
+    # whatever is still running at the end — a 4-point refinement ladder run
+    # inside one worker left a single case pinning the job for an hour while
+    # the other workers sat idle.
+    units.sort(key=lambda u: -int(u[1]["resolutions"][u[2]].get("n", 0)))
+    jobs = _runner_jobs(len(units))
+    results = []
+    if jobs == 1:
+        for case_dir, manifest, i in units:
+            results.append(_convergence_resolution(str(case_dir), manifest, i))
+    else:
+        t0 = time.time()
+        with mp.Pool(processes=jobs, maxtasksperchild=1) as pool:
+            asyncs = [(u, pool.apply_async(_convergence_resolution,
+                                           (str(u[0]), u[1], u[2])))
+                      for u in units]
+            for (case_dir, manifest, i), res in asyncs:
+                try:
+                    results.append(res.get())
+                except Exception as err:  # noqa: BLE001
+                    results.append({"case": manifest["case"], "res_idx": i,
+                                    "error": f"worker crashed: {err}"})
+                if verbose:
+                    n = manifest["resolutions"][i].get("n")
+                    print(f"  convergence/{manifest['case']} n={n}: done "
+                          f"(t+{time.time() - t0:.0f}s)", flush=True)
+
+    # Reassemble per-case records in manifest resolution order. The serial
+    # loop stopped at a case's FIRST failing resolution; here every resolution
+    # ran, so report the lowest-index failure to keep the message deterministic.
+    by_case = {}
+    for r in results:
+        by_case.setdefault(r["case"], {})[r["res_idx"]] = r
+    for case_dir, manifest in discover_manifests("convergence", files):
+        case = manifest["case"]
+        if case in cases or case not in by_case:
+            continue
+        parts = by_case[case]
+        rec = {"case": case, "status": "ok"}
+        failing = [parts[i] for i in sorted(parts) if "error" in parts[i]]
+        if failing:
+            rec["status"] = "error"
+            rec["message"] = failing[0]["error"]
+        else:
+            rec["assert_time"] = parts[min(parts)]["assert_time"]
+            rec["errors"] = [parts[i]["row"] for i in sorted(parts)]
+        if verbose:
+            print(f"  convergence/{case}: {rec['status']}", flush=True)
+        cases[case] = rec
     return {"binding": "python", "category": "convergence", "cases": cases}
 
 
