@@ -29,7 +29,7 @@ They fail in opposite directions, and neither alone is sufficient.
 | assertion | measured | what its failure would mean |
 |---|---|---|
 | `devA` Linf = 0.0, tol 0 (`abs` 1e-12) | **0.0 exactly** | carrying the halo as an operand perturbed the scheme — free-stream/CWC no longer holds bitwise |
-| `devB` Linf = 1.8742645277859651, tol 1e-9 | **1.8742645277859651** | B's halo is not read, or not read independently of A's |
+| `devB` Linf = 1.8742645288372637, tol 1e-9 | **1.8742645288372637** | B's halo is not read, or not read independently of A's |
 
 Tracer A's halo matches its uniform interior `q == 1`, so every CW84 correction is a
 difference of equal values — exactly `0.0` in IEEE — each parabola is the constant 1,
