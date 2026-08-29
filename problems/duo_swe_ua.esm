@@ -1,0 +1,638 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "duo_swe_ua",
+    "description": "Per-equation decomposition (ua) of the duo LMARS shallow-water freestream gate. LMARS shallow-water dynamical core on the gnomonic cubed sphere (Chen 2021, DOI 10.1029/2020MS002280), composed from the duo Phase-4 spatial rules and advanced by the repository's own ODE solvers (method-of-lines) rather than the paper's rk2/rk3 or forward-backward relaxation. Prognostics per tile on the A-grid: dp = g*h (depth pressure), covariant winds ua/va. Uses the g3 volume-mean reconstruction (5th order). D(dp)/dt = flux_divergence_duo (LMARS continuity); D(ua)/dt, D(va)/dt = momentum_{u,v}_duo (Coriolis + upwinded vorticity + kinetic energy) + pgrad_l97_{u,v}_duo (Lin-Rood L97 four-corner pressure gradient). The geometry chain (duo_node_cart -> duo_cell_center/duo_cos_alpha/duo_cell_area) and the 3-layer bilinear donor-cube halo (duo_extend) are wired as observed variables; the Coriolis parameter f = 2*Omega*sin(lat) is taken from the cell-center cartesian z. Fixed resolution N=4 (C4). Model DuoSWFreestream carries the rest / free-stream preservation integration gate; the composed RHS is exactly zero at rest.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:duo",
+      "equation:shallow_water",
+      "cubed_sphere",
+      "lmars"
+    ],
+    "references": [
+      {
+        "citation": "Chen, C. (2021). The LMARS Based Shallow-Water Dynamical Core on Generic Gnomonic Cubed-Sphere Geometry. Journal of Advances in Modeling Earth Systems, 13, e2020MS002280.",
+        "doi": "10.1029/2020MS002280"
+      },
+      {
+        "citation": "Williamson, D. L., Drake, J. B., Hack, J. J., Jakob, R., & Swarztrauber, P. N. (1992). A standard test set for numerical approximations to the shallow water equations in spherical geometry. Journal of Computational Physics, 102(1), 211-224.",
+        "doi": "10.1016/S0021-9991(05)80016-6"
+      }
+    ]
+  },
+  "models": {
+    "DuoSWFreestreamUa": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/duo/grid.esm",
+          "bindings": {
+            "N": 4
+          }
+        },
+        {
+          "ref": "../grids/duo/rules/duo_extend.esm",
+          "bindings": {
+            "N": 4
+          }
+        },
+        {
+          "ref": "../grids/duo/rules/momentum_u_duo_g3.esm",
+          "bindings": {
+            "N": 4
+          }
+        },
+        {
+          "ref": "../grids/duo/rules/pgrad_l97_u_duo_g3.esm",
+          "bindings": {
+            "N": 4
+          }
+        }
+      ],
+      "variables": {
+        "dp": {
+          "type": "unknown",
+          "units": "m^2 s^-2",
+          "shape": [
+            "tile",
+            "x",
+            "y"
+          ],
+          "description": "Depth pressure Pi = g*h (A-grid cell mean, per tile)."
+        },
+        "ua": {
+          "type": "unknown",
+          "units": "m s^-1",
+          "shape": [
+            "tile",
+            "x",
+            "y"
+          ],
+          "description": "Covariant wind component along the tile x-direction (Chen 2021 covariant A-grid)."
+        },
+        "va": {
+          "type": "unknown",
+          "units": "m s^-1",
+          "shape": [
+            "tile",
+            "x",
+            "y"
+          ],
+          "description": "Covariant wind component along the tile y-direction."
+        },
+        "R_sphere": {
+          "type": "parameter",
+          "units": "m",
+          "default": 6371000.0,
+          "description": "Sphere radius; the grid geometry templates' R_sphere free name."
+        },
+        "Omega": {
+          "type": "parameter",
+          "units": "s^-1",
+          "default": 7.292e-05,
+          "description": "Planetary rotation rate for the Coriolis parameter f = 2*Omega*sin(lat)."
+        },
+        "alpha_ref": {
+          "type": "parameter",
+          "units": "rad",
+          "default": 0.7853981633974483,
+          "description": "Gnomonic reference half-angle for duo_ref_x/y. (alpha_ref, R_ref) = (pi/4, 1) selects the EQUIANGULAR grid (FV3 grid_type 2)."
+        },
+        "R_ref": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1.0,
+          "description": "Gnomonic reference radius for duo_ref_x/y (1 with alpha_ref=pi/4 -> equiangular)."
+        },
+        "refx": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "x_nodes_ext"
+          ],
+          "description": "Gnomonic reference x-coordinate along the extended node axis (duo_ref_x)."
+        },
+        "refy": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "y_nodes_ext"
+          ],
+          "description": "Gnomonic reference y-coordinate along the extended node axis (duo_ref_y)."
+        },
+        "node": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "tile",
+            "x_nodes_ext",
+            "y_nodes_ext",
+            "space"
+          ],
+          "description": "Cartesian cell-corner nodes over the 3-layer halo (duo_node_cart on the extended node axis)."
+        },
+        "center": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "tile",
+            "x_cell_ext",
+            "y_cell_ext",
+            "space"
+          ],
+          "description": "Cartesian cell centers over the halo (duo_cell_center of the named node observed)."
+        },
+        "cosA": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "tile",
+            "x_metric",
+            "y_metric"
+          ],
+          "description": "cos of the local coordinate angle alpha at each cell (node-sourced duo_cos_alpha), the g^ij metric."
+        },
+        "area": {
+          "type": "unknown",
+          "units": "m^2",
+          "shape": [
+            "tile",
+            "x_cell_ext",
+            "y_cell_ext"
+          ],
+          "description": "Spherical cell areas over the halo (duo_cell_area, spherical excess)."
+        },
+        "f": {
+          "type": "unknown",
+          "units": "s^-1",
+          "shape": [
+            "tile",
+            "x",
+            "y"
+          ],
+          "description": "Coriolis parameter f = 2*Omega*sin(lat) at interior cell centers."
+        },
+        "phis": {
+          "type": "unknown",
+          "units": "m^2 s^-2",
+          "shape": [
+            "tile",
+            "x",
+            "y"
+          ],
+          "description": "Surface geopotential (flat topography = 0 for Williamson 1992 case 2)."
+        },
+        "dp_e": {
+          "type": "unknown",
+          "units": "m^2 s^-2",
+          "shape": [
+            "tile",
+            "x_cell_ext",
+            "y_cell_ext"
+          ],
+          "description": "dp extended into the 3-layer donor-cube halo (duo_extend)."
+        },
+        "ua_e": {
+          "type": "unknown",
+          "units": "m s^-1",
+          "shape": [
+            "tile",
+            "x_cell_ext",
+            "y_cell_ext"
+          ],
+          "description": "ua extended into the halo (duo_extend)."
+        },
+        "va_e": {
+          "type": "unknown",
+          "units": "m s^-1",
+          "shape": [
+            "tile",
+            "x_cell_ext",
+            "y_cell_ext"
+          ],
+          "description": "va extended into the halo (duo_extend)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "dp"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 29400.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "ua"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "va"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "dp"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "ua"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "momentum_u_duo_g3",
+                "bindings": {
+                  "dp": "dp_e",
+                  "ua": "ua_e",
+                  "va": "va_e",
+                  "node": "node",
+                  "center": "center",
+                  "cosA": "cosA",
+                  "area": "area",
+                  "f": "f"
+                }
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "pgrad_l97_u_duo_g3",
+                "bindings": {
+                  "dp": "dp_e",
+                  "ua": "ua_e",
+                  "va": "va_e",
+                  "node": "node",
+                  "center": "center",
+                  "cosA": "cosA",
+                  "phis": {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "duo_extend",
+                    "bindings": {
+                      "q": "phis",
+                      "center": "center",
+                      "refx": "refx",
+                      "refy": "refy"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "va"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": "refx",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_ref_x",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "refy",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_ref_y",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "node",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_node_cart",
+            "bindings": {
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "center",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cell_center",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "cosA",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cos_alpha",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "area",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_cell_area",
+            "bindings": {
+              "node": "node"
+            }
+          }
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                2.0,
+                "Omega",
+                {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "center",
+                        "t",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            3
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            "j",
+                            3
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "R_sphere"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "phis",
+          "rhs": {
+            "op": "aggregate",
+            "args": [],
+            "output_idx": [
+              "t",
+              "i",
+              "j"
+            ],
+            "ranges": {
+              "t": {
+                "from": "tile"
+              },
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.0
+          }
+        },
+        {
+          "lhs": "dp_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "dp",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "ua_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "ua",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        },
+        {
+          "lhs": "va_e",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "duo_extend",
+            "bindings": {
+              "q": "va",
+              "center": "center",
+              "refx": "refx",
+              "refy": "refy"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "freestream_rest_ua",
+          "description": "Per-equation rest-preservation gate: only D(ua)/dt is the live rule (momentum_u_duo_g3, pgrad_l97_u_duo_g3); the other two tendencies are set to the zero field so this problem compiles ONE rule's RHS (the full 6-rule system OOMs the 40 GB cgroup). At rest the live tendency is exactly 0. Rest / free-stream preservation. Initialize at rest: uniform dp = GH0, ua = va = 0, flat topography phis = 0. The composed LMARS RHS is exactly 0 in this state -- zero wind makes every contravariant velocity, LMARS flux, Coriolis term, kinetic-energy gradient and upwinded vorticity vanish, and a uniform dp over flat topography makes the L97 four-corner pressure gradient vanish -- so the discrete field must remain at rest to solver tolerance for all time regardless of the (nonzero) Coriolis f. The t=0 assertions pin the ic wiring; the t=T assertions bound any drift. Any sign, index-offset, halo, or metric error in the composition breaks exact rest by an O(1) amount, so the tight tolerance separates pass from fail by many orders of magnitude.",
+          "time_span": {
+            "start": 0.0,
+            "end": 3600.0
+          },
+          "assertions": [
+            {
+              "variable": "ua",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-08
+              },
+              "reduce": "max"
+            },
+            {
+              "variable": "ua",
+              "time": 3600.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-08
+              },
+              "reduce": "max"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
