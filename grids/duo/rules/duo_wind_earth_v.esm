@@ -1,0 +1,1195 @@
+{
+ "esm": "1.0.0",
+ "metadata": {
+  "name": "duo_wind_earth_v",
+  "description": "Rotate A-grid COVARIANT winds (ua,va) to EARTH-RELATIVE (meridional component) at each cell centre -- step 2 of the Mouallem 2023 vector halo remap. Physical velocity from the covariant components via the metric raise g^ij=(1/sin2A)[[1,-cosA],[-cosA,1]] with the node-tangent basis e1,e2 (e_i=normalize(cross(cross(ka,kother),ka)) from duo_cell_center), then dotted with the local meridional (elat) unit vector (elon=(-sinL,cosL,0) / elat=(-sinP cosL,-sinP sinL,cosP), lon=atan2, lat=asin from the cell centre). Earth-relative winds are globally continuous, so the halo is then filled by the scalar duo_extend and rotated back by duo_wind_cov_v. Params [ua,va,center]; bind center=duo_cell_center; R_sphere free name. Verified to ~3e-16 vs a direct reimplementation.",
+  "license": "MIT",
+  "tags": [
+   "esd:rule",
+   "family:finite_volume",
+   "grid:duo",
+   "op:wind_rotate",
+   "order:0",
+   "bc:duo",
+   "axes:tile,x,y",
+   "form:rotate",
+   "spec:9.6.8"
+  ],
+  "references": [
+   {
+    "citation": "Mouallem, J., Harris, L., & Chen, X. (2023). Implementation of the novel Duo-Grid in GFDL's FV3. JAMES, 15, e2023MS003712."
+   }
+  ]
+ },
+ "expression_template_imports": [
+  {
+   "ref": "../grid.esm"
+  },
+  {
+   "ref": "../stencils/duo_wind_geom.esm"
+  }
+ ],
+ "expression_templates": {
+  "duo_wind_earth_v": {
+   "params": [
+    "ua",
+    "va",
+    "center"
+   ],
+   "description": "Rotate A-grid COVARIANT winds (ua,va) to EARTH-RELATIVE (meridional component) at each cell centre -- step 2 of the Mouallem 2023 vector halo remap. Physical velocity from the covariant components via the metric raise g^ij=(1/sin2A)[[1,-cosA],[-cosA,1]] with the node-tangent basis e1,e2 (e_i=normalize(cross(cross(ka,kother),ka)) from duo_cell_center), then dotted with the local meridional (elat) unit vector (elon=(-sinL,cosL,0) / elat=(-sinP cosL,-sinP sinL,cosP), lon=atan2, lat=asin from the cell centre). Earth-relative winds are globally continuous, so the halo is then filled by the scalar duo_extend and rotated back by duo_wind_cov_v. Params [ua,va,center]; bind center=duo_cell_center; R_sphere free name. Verified to ~3e-16 vs a direct reimplementation.",
+   "body": {
+    "op": "aggregate",
+    "args": [
+     "ua",
+     "va",
+     "center"
+    ],
+    "output_idx": [
+     "gt",
+     "gi",
+     "gj"
+    ],
+    "ranges": {
+     "gt": {
+      "from": "tile"
+     },
+     "gi": {
+      "from": "x"
+     },
+     "gj": {
+      "from": "y"
+     }
+    },
+    "expr": {
+     "op": "+",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_14",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            }
+           }
+          },
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_13",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              1
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              3
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              2
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            }
+           }
+          }
+         ]
+        },
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "sin",
+             "args": [
+              {
+               "op": "asin",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  {
+                   "op": "index",
+                   "args": [
+                    "center",
+                    "gt",
+                    {
+                     "op": "+",
+                     "args": [
+                      "gi",
+                      3
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      "gj",
+                      3
+                     ]
+                    },
+                    3
+                   ]
+                  },
+                  "R_sphere"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "cos",
+             "args": [
+              {
+               "op": "atan2",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "center",
+                  "gt",
+                  {
+                   "op": "+",
+                   "args": [
+                    "gi",
+                    3
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    "gj",
+                    3
+                   ]
+                  },
+                  2
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "center",
+                  "gt",
+                  {
+                   "op": "+",
+                   "args": [
+                    "gi",
+                    3
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    "gj",
+                    3
+                   ]
+                  },
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_14",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            }
+           }
+          },
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_13",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              2
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              1
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              3
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            }
+           }
+          }
+         ]
+        },
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "sin",
+             "args": [
+              {
+               "op": "asin",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  {
+                   "op": "index",
+                   "args": [
+                    "center",
+                    "gt",
+                    {
+                     "op": "+",
+                     "args": [
+                      "gi",
+                      3
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      "gj",
+                      3
+                     ]
+                    },
+                    3
+                   ]
+                  },
+                  "R_sphere"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "sin",
+             "args": [
+              {
+               "op": "atan2",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "center",
+                  "gt",
+                  {
+                   "op": "+",
+                   "args": [
+                    "gi",
+                    3
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    "gj",
+                    3
+                   ]
+                  },
+                  2
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "center",
+                  "gt",
+                  {
+                   "op": "+",
+                   "args": [
+                    "gi",
+                    3
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    "gj",
+                    3
+                   ]
+                  },
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_14",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                4
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            }
+           }
+          },
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "duo_wind_assy_13",
+           "bindings": {
+            "center": "center",
+            "ua": "ua",
+            "va": "va",
+            "p1": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              2
+             ]
+            },
+            "p2": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              3
+             ]
+            },
+            "p3": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              3
+             ]
+            },
+            "p4": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              2
+             ]
+            },
+            "p5": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                4
+               ]
+              },
+              1
+             ]
+            },
+            "p6": {
+             "op": "index",
+             "args": [
+              "center",
+              "gt",
+              {
+               "op": "+",
+               "args": [
+                "gi",
+                3
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                "gj",
+                3
+               ]
+              },
+              1
+             ]
+            }
+           }
+          }
+         ]
+        },
+        {
+         "op": "cos",
+         "args": [
+          {
+           "op": "asin",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "center",
+                "gt",
+                {
+                 "op": "+",
+                 "args": [
+                  "gi",
+                  3
+                 ]
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  "gj",
+                  3
+                 ]
+                },
+                3
+               ]
+              },
+              "R_sphere"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  }
+ }
+}
