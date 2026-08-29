@@ -327,39 +327,82 @@ def run_ast(output_dir: Path, files, verbose):
 # ---------------------------------------------------------------------------
 
 
-def run_simulation(output_dir: Path, files, verbose):
+def _runner_jobs(n_items: int) -> int:
+    """How many worker processes to fan a category's cases across.
+
+    Cases are independent (each is one official-entry-point invocation over its
+    own problem file), so this is pure marshalling — every number still comes
+    from the same pathway, one case per process. `ESD_RUNNER_JOBS` overrides;
+    `1` restores the strictly serial loop."""
+    jobs = int(os.environ.get("ESD_RUNNER_JOBS", os.cpu_count() or 1))
+    return max(1, min(jobs, n_items))
+
+
+def _map_cases(case_fn, work, verbose, label):
+    """Run `case_fn(case_dir_str, manifest) -> rec` over `work`, in parallel
+    when more than one job is available. Results are keyed by case name, so
+    the emitted JSON is byte-identical regardless of completion order."""
+    cases = {}
+    jobs = _runner_jobs(len(work))
+    if jobs == 1:
+        for case_dir, manifest in work:
+            rec = case_fn(str(case_dir), manifest)
+            if verbose:
+                print(f"  {label}/{rec['case']}: {rec['status']}")
+            cases[rec["case"]] = rec
+        return cases
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        futs = {pool.submit(case_fn, str(case_dir), manifest): manifest["case"]
+                for case_dir, manifest in work}
+        for fut in as_completed(futs):
+            try:
+                rec = fut.result()
+            except Exception as err:  # noqa: BLE001 — a crashed worker is a case error
+                rec = {"case": futs[fut], "status": "error",
+                       "message": f"worker crashed: {type(err).__name__}: {err}"}
+            if verbose:
+                print(f"  {label}/{rec['case']}: {rec['status']}", flush=True)
+            cases[rec["case"]] = rec
+    return cases
+
+
+def _simulation_case(case_dir: str, manifest: dict) -> dict:
     from earthsci_ast.pde_inline_tests import run_pde_tests
 
+    case = manifest["case"]
+    rec = {"case": case, "status": "ok"}
+    try:
+        problem = (Path(case_dir) / manifest["problem"]).resolve()
+        method, rtol, atol = integrator_opts(manifest)
+        results = run_pde_tests(str(problem), model_name=manifest["model"],
+                                method=method, rtol=rtol, atol=atol)
+        wanted = set(manifest["tests"])
+        results = [r for r in results if r.test_id in wanted]
+        if not results:
+            raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
+        rec["assertions"] = assertion_dicts(results)
+        rec["passed"] = all(r.passed for r in results)
+        rec["status"] = "ok" if rec["passed"] else "failed"
+    except Exception as err:  # noqa: BLE001
+        rec["status"] = "error"
+        rec["message"] = f"{type(err).__name__}: {err}"
+    return rec
+
+
+def run_simulation(output_dir: Path, files, verbose):
     cases = {}
+    work = []
     for case_dir, manifest in discover_manifests("simulation", files):
         case = manifest["case"]
-        rec = {"case": case, "status": "ok"}
         excluded = python_excluded(manifest)
         if excluded is not None:
-            rec["status"] = "skipped"
-            rec["message"] = excluded
             if verbose:
                 print(f"  {manifest['category']}/{case}: skipped ({excluded})")
-            cases[case] = rec
+            cases[case] = {"case": case, "status": "skipped", "message": excluded}
             continue
-        try:
-            problem = (case_dir / manifest["problem"]).resolve()
-            method, rtol, atol = integrator_opts(manifest)
-            results = run_pde_tests(str(problem), model_name=manifest["model"],
-                                    method=method, rtol=rtol, atol=atol)
-            wanted = set(manifest["tests"])
-            results = [r for r in results if r.test_id in wanted]
-            if not results:
-                raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
-            rec["assertions"] = assertion_dicts(results)
-            rec["passed"] = all(r.passed for r in results)
-            rec["status"] = "ok" if rec["passed"] else "failed"
-        except Exception as err:  # noqa: BLE001
-            rec["status"] = "error"
-            rec["message"] = f"{type(err).__name__}: {err}"
-        if verbose:
-            print(f"  simulation/{case}: {rec['status']}")
-        cases[case] = rec
+        work.append((case_dir, manifest))
+    cases.update(_map_cases(_simulation_case, work, verbose, "simulation"))
     return {"binding": "python", "category": "simulation", "cases": cases}
 
 
@@ -369,71 +412,71 @@ def run_simulation(output_dir: Path, files, verbose):
 # ---------------------------------------------------------------------------
 
 
-def run_convergence(output_dir: Path, files, verbose):
+def _convergence_case(case_dir: str, manifest: dict) -> dict:
     from earthsci_ast.parse import load_path
     from earthsci_ast.pde_inline_tests import (
         evaluate_cellwise, field_reduce, simulate_states, state_cells)
 
+    case = manifest["case"]
+    rec = {"case": case, "status": "ok"}
+    try:
+        problem = (Path(case_dir) / manifest["problem"]).resolve()
+        model = manifest["model"]
+        assert_time = float(manifest["assert_time"])
+        method, rtol, atol = integrator_opts(manifest)
+        errors = []
+        for res in manifest["resolutions"]:
+            n = int(res["n"])
+            bindings = {str(k): int(v) for k, v in res["bindings"].items()}
+            # A resolution entry MAY name its own problem file (meshes are
+            # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+            # refinement family ships one thin problem file per level);
+            # mirrors run-julia.jl's per-resolution override.
+            res_problem = ((Path(case_dir) / res["problem"]).resolve()
+                           if "problem" in res else problem)
+            file = load_path(str(res_problem), metaparameters=bindings)
+            m = file.models[model]
+            refs = [a for t in m.tests for a in t.assertions
+                    if a.time == assert_time and a.reduce == "L2_error"]
+            if not refs:
+                raise RuntimeError("problem declares no L2_error assertion at "
+                                   f"t={assert_time} to take the reference from")
+            a = refs[0]
+            sim = simulate_states(file, (0.0, assert_time),
+                                  method=method, rtol=rtol, atol=atol,
+                                  saveat=[assert_time])
+            cells = state_cells(sim.var_map, a.variable, model)
+            if not cells:
+                raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
+            state = sim.states[-1]
+            field = [float(state[slot]) for _, slot in cells]
+            ref = evaluate_cellwise(a.reference, [c for c, _ in cells],
+                                    index_sets=file.index_sets)
+            row = {"n": n}
+            for norm in manifest["norms"]:
+                row[norm] = field_reduce(norm, field, reference=ref)
+            errors.append(row)
+        rec["assert_time"] = assert_time
+        rec["errors"] = errors
+    except Exception as err:  # noqa: BLE001
+        rec["status"] = "error"
+        rec["message"] = f"{type(err).__name__}: {err}"
+    return rec
+
+
+def run_convergence(output_dir: Path, files, verbose):
     cases = {}
+    work = []
     for case_dir, manifest in discover_manifests("convergence", files):
         case = manifest["case"]
-        rec = {"case": case, "status": "ok"}
         excluded = python_excluded(manifest)
         if excluded is not None:
-            rec["status"] = "skipped"
-            rec["message"] = excluded
             if verbose:
                 print(f"  {manifest['category']}/{case}: skipped ({excluded})")
-            cases[case] = rec
+            cases[case] = {"case": case, "status": "skipped", "message": excluded}
             continue
-        try:
-            problem = (case_dir / manifest["problem"]).resolve()
-            model = manifest["model"]
-            assert_time = float(manifest["assert_time"])
-            method, rtol, atol = integrator_opts(manifest)
-            errors = []
-            for res in manifest["resolutions"]:
-                n = int(res["n"])
-                bindings = {str(k): int(v) for k, v in res["bindings"].items()}
-                # A resolution entry MAY name its own problem file (meshes are
-                # subsystem refs, which §9.7.6 cannot rebind — the MPAS
-                # refinement family ships one thin problem file per level);
-                # mirrors run-julia.jl's per-resolution override.
-                res_problem = ((case_dir / res["problem"]).resolve()
-                               if "problem" in res else problem)
-                file = load_path(str(res_problem), metaparameters=bindings)
-                m = file.models[model]
-                refs = [a for t in m.tests for a in t.assertions
-                        if a.time == assert_time and a.reduce == "L2_error"]
-                if not refs:
-                    raise RuntimeError("problem declares no L2_error assertion at "
-                                       f"t={assert_time} to take the reference from")
-                a = refs[0]
-                sim = simulate_states(file, (0.0, assert_time),
-                                      method=method, rtol=rtol, atol=atol,
-                                      saveat=[assert_time])
-                cells = state_cells(sim.var_map, a.variable, model)
-                if not cells:
-                    raise RuntimeError(f"state '{a.variable}' has no cells at n={n}")
-                state = sim.states[-1]
-                field = [float(state[slot]) for _, slot in cells]
-                ref = evaluate_cellwise(a.reference, [c for c, _ in cells],
-                                        index_sets=file.index_sets)
-                row = {"n": n}
-                for norm in manifest["norms"]:
-                    row[norm] = field_reduce(norm, field, reference=ref)
-                errors.append(row)
-                if verbose:
-                    print(f"  convergence/{case} n={n}: " + " ".join(
-                        f"{k}={row[k]}" for k in sorted(row) if k != "n"))
-            rec["assert_time"] = assert_time
-            rec["errors"] = errors
-        except Exception as err:  # noqa: BLE001
-            rec["status"] = "error"
-            rec["message"] = f"{type(err).__name__}: {err}"
-        if verbose:
-            print(f"  convergence/{case}: {rec['status']}")
-        cases[case] = rec
+        work.append((case_dir, manifest))
+    cases.update(_map_cases(_convergence_case, work, verbose, "convergence"))
     return {"binding": "python", "category": "convergence", "cases": cases}
 
 

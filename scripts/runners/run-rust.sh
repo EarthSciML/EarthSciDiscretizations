@@ -119,14 +119,61 @@ def rust_out_of_scope(manifest):
 
 
 def cargo_example(example, *argv):
-    """Run one upstream cargo example; return parsed-JSON stdout."""
-    proc = subprocess.run(
-        ["cargo", "run", "--quiet", "--manifest-path",
-         MANIFEST_PATH, "--example", example, "--", *argv],
-        capture_output=True)
+    """Run one upstream cargo example; return parsed-JSON stdout.
+
+    The wrapper built every example up front, so invoke the built binary
+    directly when it exists — `cargo run` takes the build-directory lock on
+    every invocation, which would serialize the parallel case fan-out below.
+    The cargo fallback keeps behavior identical if the layout ever changes."""
+    binary = Path(MANIFEST_PATH).parent / "target" / "debug" / "examples" / example
+    if binary.is_file():
+        cmd = [str(binary), *argv]
+    else:
+        cmd = ["cargo", "run", "--quiet", "--manifest-path",
+               MANIFEST_PATH, "--example", example, "--", *argv]
+    proc = subprocess.run(cmd, capture_output=True)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip())
     return proc.stdout
+
+
+def runner_jobs(n_items):
+    """Worker fan-out for a category's independent cases. Each case is one
+    upstream-example subprocess, so threads just wait on subprocesses — every
+    number still comes from the official pathway, one case per invocation.
+    `ESD_RUNNER_JOBS` overrides; `1` restores the strictly serial loop."""
+    jobs = int(os.environ.get("ESD_RUNNER_JOBS", os.cpu_count() or 1))
+    return max(1, min(jobs, n_items))
+
+
+def map_cases(case_fn, work, label):
+    """Run `case_fn(case_dir, manifest) -> rec` over `work` (a list of
+    discover() pairs), in parallel when more than one job is available.
+    Results are keyed by case name, so the emitted JSON is identical
+    regardless of completion order."""
+    cases = {}
+    jobs = runner_jobs(len(work))
+    if jobs == 1:
+        for case_dir, manifest in work:
+            rec = case_fn(case_dir, manifest)
+            if verbose:
+                print(f"  {label}/{rec['case']}: {rec['status']}", flush=True)
+            cases[rec["case"]] = rec
+        return cases
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futs = {pool.submit(case_fn, case_dir, manifest): manifest["case"]
+                for case_dir, manifest in work}
+        for fut in as_completed(futs):
+            try:
+                rec = fut.result()
+            except Exception as err:  # noqa: BLE001 — a crashed worker is a case error
+                rec = {"case": futs[fut], "status": "error",
+                       "message": f"worker crashed: {err}"}
+            if verbose:
+                print(f"  {label}/{rec['case']}: {rec['status']}", flush=True)
+            cases[rec["case"]] = rec
+    return cases
 
 
 def integrator_opts(manifest):
@@ -206,90 +253,92 @@ def run_ast():
     return {"binding": "rust", "category": "ast", "cases": cases}
 
 
+def simulation_case(case_dir, manifest):
+    case = manifest["case"]
+    rec = {"case": case, "status": "ok"}
+    try:
+        problem = (case_dir / manifest["problem"]).resolve()
+        solver, reltol, abstol = integrator_opts(manifest)
+        out = json.loads(cargo_example(
+            "pde_conformance", "pde-tests", str(problem),
+            "--model", manifest["model"], "--solver", solver,
+            "--reltol", repr(reltol), "--abstol", repr(abstol)))
+        wanted = set(manifest["tests"])
+        assertions = [a for a in out["assertions"] if a["test_id"] in wanted]
+        if not assertions:
+            raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
+        rec["assertions"] = assertions
+        rec["passed"] = all(a["passed"] for a in assertions)
+        rec["status"] = "ok" if rec["passed"] else "failed"
+    except Exception as err:  # noqa: BLE001
+        rec["status"] = "error"
+        rec["message"] = str(err)
+    return rec
+
+
 def run_simulation():
-    cases = {}
+    work = []
     for case_dir, manifest in discover("simulation"):
-        case = manifest["case"]
         reason = rust_out_of_scope(manifest)
         if reason is not None:
             if verbose:
-                print(f"  simulation/{case}: skipped ({reason})")
+                print(f"  simulation/{manifest['case']}: skipped ({reason})")
             continue
-        rec = {"case": case, "status": "ok"}
-        try:
-            problem = (case_dir / manifest["problem"]).resolve()
-            solver, reltol, abstol = integrator_opts(manifest)
-            out = json.loads(cargo_example(
-                "pde_conformance", "pde-tests", str(problem),
-                "--model", manifest["model"], "--solver", solver,
-                "--reltol", repr(reltol), "--abstol", repr(abstol)))
-            wanted = set(manifest["tests"])
-            assertions = [a for a in out["assertions"] if a["test_id"] in wanted]
-            if not assertions:
-                raise RuntimeError(f"no assertions ran for tests {sorted(wanted)}")
-            rec["assertions"] = assertions
-            rec["passed"] = all(a["passed"] for a in assertions)
-            rec["status"] = "ok" if rec["passed"] else "failed"
-        except Exception as err:  # noqa: BLE001
-            rec["status"] = "error"
-            rec["message"] = str(err)
-        if verbose:
-            print(f"  simulation/{case}: {rec['status']}")
-        cases[case] = rec
+        work.append((case_dir, manifest))
+    cases = map_cases(simulation_case, work, "simulation")
     return {"binding": "rust", "category": "simulation", "cases": cases}
 
 
+def convergence_case(case_dir, manifest):
+    case = manifest["case"]
+    rec = {"case": case, "status": "ok"}
+    try:
+        problem = (case_dir / manifest["problem"]).resolve()
+        solver, reltol, abstol = integrator_opts(manifest)
+        # A resolution entry MAY name its own problem file (meshes are
+        # subsystem refs, which §9.7.6 cannot rebind — the MPAS
+        # refinement family ships one thin problem file per level);
+        # mirrors run-julia.jl's per-resolution override. Consecutive
+        # entries sharing a problem run as ONE upstream invocation, so a
+        # manifest without overrides keeps today's single call.
+        groups = []
+        for res in manifest["resolutions"]:
+            res_problem = ((case_dir / res["problem"]).resolve()
+                           if "problem" in res else problem)
+            entry = {k: v for k, v in res.items() if k != "problem"}
+            if groups and groups[-1][0] == res_problem:
+                groups[-1][1].append(entry)
+            else:
+                groups.append((res_problem, [entry]))
+        errors = []
+        for res_problem, entries in groups:
+            out = json.loads(cargo_example(
+                "pde_conformance", "convergence", str(res_problem),
+                "--model", manifest["model"],
+                "--assert-time", repr(float(manifest["assert_time"])),
+                "--solver", solver,
+                "--reltol", repr(reltol), "--abstol", repr(abstol),
+                "--norms", ",".join(manifest["norms"]),
+                "--resolutions", json.dumps(entries)))
+            errors.extend(out["errors"])
+        rec["assert_time"] = float(manifest["assert_time"])
+        rec["errors"] = errors
+    except Exception as err:  # noqa: BLE001
+        rec["status"] = "error"
+        rec["message"] = str(err)
+    return rec
+
+
 def run_convergence():
-    cases = {}
+    work = []
     for case_dir, manifest in discover("convergence"):
-        case = manifest["case"]
         reason = rust_out_of_scope(manifest)
         if reason is not None:
             if verbose:
-                print(f"  convergence/{case}: skipped ({reason})")
+                print(f"  convergence/{manifest['case']}: skipped ({reason})")
             continue
-        rec = {"case": case, "status": "ok"}
-        try:
-            problem = (case_dir / manifest["problem"]).resolve()
-            solver, reltol, abstol = integrator_opts(manifest)
-            # A resolution entry MAY name its own problem file (meshes are
-            # subsystem refs, which §9.7.6 cannot rebind — the MPAS
-            # refinement family ships one thin problem file per level);
-            # mirrors run-julia.jl's per-resolution override. Consecutive
-            # entries sharing a problem run as ONE upstream invocation, so a
-            # manifest without overrides keeps today's single call.
-            groups = []
-            for res in manifest["resolutions"]:
-                res_problem = ((case_dir / res["problem"]).resolve()
-                               if "problem" in res else problem)
-                entry = {k: v for k, v in res.items() if k != "problem"}
-                if groups and groups[-1][0] == res_problem:
-                    groups[-1][1].append(entry)
-                else:
-                    groups.append((res_problem, [entry]))
-            errors = []
-            for res_problem, entries in groups:
-                out = json.loads(cargo_example(
-                    "pde_conformance", "convergence", str(res_problem),
-                    "--model", manifest["model"],
-                    "--assert-time", repr(float(manifest["assert_time"])),
-                    "--solver", solver,
-                    "--reltol", repr(reltol), "--abstol", repr(abstol),
-                    "--norms", ",".join(manifest["norms"]),
-                    "--resolutions", json.dumps(entries)))
-                errors.extend(out["errors"])
-            rec["assert_time"] = float(manifest["assert_time"])
-            rec["errors"] = errors
-            if verbose:
-                for row in errors:
-                    print(f"  convergence/{case} n={row['n']}: " + " ".join(
-                        f"{k}={row[k]}" for k in sorted(row) if k != "n"))
-        except Exception as err:  # noqa: BLE001
-            rec["status"] = "error"
-            rec["message"] = str(err)
-        if verbose:
-            print(f"  convergence/{case}: {rec['status']}")
-        cases[case] = rec
+        work.append((case_dir, manifest))
+    cases = map_cases(convergence_case, work, "convergence")
     return {"binding": "rust", "category": "convergence", "cases": cases}
 
 
