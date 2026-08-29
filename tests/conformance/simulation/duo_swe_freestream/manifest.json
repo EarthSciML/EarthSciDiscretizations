@@ -2,7 +2,7 @@
   "category": "simulation",
   "version": "1.0",
   "case": "duo_swe_freestream",
-  "description": "Integration gate for the composed LMARS gnomonic cubed-sphere shallow-water RHS (problems/duo_swe.esm, model DuoSWFreestream, test freestream_rest_preservation) at fixed resolution N=8 (C8). Runs the full three-prognostic system -- D(dp)/dt = flux_divergence_duo_g3 (LMARS continuity), D(ua)/dt & D(va)/dt = momentum_{u,v}_duo_g3 (Coriolis + upwinded vorticity + kinetic energy) + pgrad_l97_{u,v}_duo_g3 (L97 four-corner pressure gradient) -- through each binding's official simulation pathway from a rest initial state. The composed RHS is exactly zero at rest, so this proves the whole duo spatial core (geometry chain, 3-layer donor-cube halo duo_extend, volume-mean reconstruction, LMARS solve, metric raise-then-reconstruct) lowers and integrates as one field system without match conflict, and preserves the free stream. The per-rule discretizations are pinned separately by the duo ast conformance cases; this manifest routes the runners (assertions + tolerances live in the problem).",
+  "description": "Integration gate for the composed LMARS gnomonic cubed-sphere shallow-water RHS (problems/duo_swe.esm, model DuoSWFreestream, test freestream_rest_preservation) at fixed resolution N=8 (C8). Runs the full three-prognostic system -- D(dp)/dt = flux_divergence_duo_g3 (LMARS continuity), D(ua)/dt & D(va)/dt = momentum_{u,v}_duo_g3 (Coriolis + upwinded vorticity + kinetic energy) + pgrad_l97_{u,v}_duo_g3 (L97 four-corner pressure gradient) -- through each binding's official simulation pathway from a rest initial state. The composed RHS is exactly zero at rest, so this proves the whole duo spatial core (geometry chain, 3-layer donor-cube halo duo_extend, volume-mean reconstruction, LMARS solve, metric raise-then-reconstruct) lowers and integrates as one field system without match conflict, and preserves the free stream. The per-rule discretizations are pinned separately by the duo ast conformance cases; this manifest routes the runners (assertions + tolerances live in the problem). Python is REQUIRED as of EarthSciAST caea886aa (whole-box broadcast contraction in the numpy interpreter): full gate 6/6 PASS in 2688 s measured 2026-08-29 under CPU contention.",
   "problem": "../../../../problems/duo_swe.esm",
   "model": "DuoSWFreestream",
   "tests": [
@@ -10,7 +10,8 @@
   ],
   "reference_binding": "julia",
   "bindings_required": [
-    "julia"
+    "julia",
+    "python"
   ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
@@ -21,11 +22,15 @@
       "algorithm": "Tsit5",
       "reltol": 1e-10,
       "abstol": 1e-12
+    },
+    "python": {
+      "method": "RK45",
+      "rtol": 1e-10,
+      "atol": 1e-12
     }
   },
   "status": "active",
   "blocked_upstream_bindings": {
-    "rust": "Rust does NOT complete this case in CI-tolerable time as of EarthSciAST 9a81afd8b (dev profile at opt-level 2, the run-rust.sh build): the momentum-side rules fall off the taped evaluator (RhsStats: duo_swe_dp already shows 24 fallback rules against 60 taped; its RHS costs 332 ms) and this case's per-RHS cost is >= minutes \u2014 the full pde-tests invocation was killed at 2400 s wall, and even rhs_bench (compile + 6 RHS evaluations) exceeded 1800 s. MEASURED 2026-08-28 on duo_swe_ua; duo_swe_va and the full duo_swe freestream system are strictly larger. The sibling duo_swe_dp case IS armed for Rust (49 s, passes; the shape fix in EarthSciAST 64cb58335 unblocked it). Re-arm when the Rust taped/vectorized evaluator covers the esm-spec 9.6.8 reduced-rank/contracted makearray region values the duo momentum rules lower to \u2014 the same construct EarthSciAST fd81e922f taught the Julia affine stencilizer.",
-    "python": "The Python numpy interpreter evaluates the duo halo-extension makearray region values (esm-spec 9.6.8 reduced-rank strips with a (k,l) contraction) through its scalar per-cell path (_eval_arrayop_scalar/_reduce_over_gated): cProfile on duo_swe_dp shows 1.77M scalar index-gathers per RHS evaluation, 17.4 s per warm RHS call. This case's momentum-side RHS is a multiple of that, putting the [0,3600] integration at many hours. MEASURED 2026-08-28 against EarthSciAST 9a81afd8b. Re-arm when the numpy interpreter vectorizes these gathers \u2014 the same construct EarthSciAST fd81e922f taught the Julia affine stencilizer."
+    "rust": "Rust does NOT complete this case in CI-tolerable time as of EarthSciAST 9a81afd8b (dev profile at opt-level 2, the run-rust.sh build): the momentum-side rules fall off the taped evaluator (RhsStats: duo_swe_dp already shows 24 fallback rules against 60 taped; its RHS costs 332 ms) and this case's per-RHS cost is >= minutes \u2014 the full pde-tests invocation was killed at 2400 s wall, and even rhs_bench (compile + 6 RHS evaluations) exceeded 1800 s. MEASURED 2026-08-28 on duo_swe_ua; duo_swe_va and the full duo_swe freestream system are strictly larger. The sibling duo_swe_dp case IS armed for Rust (49 s, passes; the shape fix in EarthSciAST 64cb58335 unblocked it). Re-arm when the Rust taped/vectorized evaluator covers the esm-spec 9.6.8 reduced-rank/contracted makearray region values the duo momentum rules lower to \u2014 the same construct EarthSciAST fd81e922f taught the Julia affine stencilizer and EarthSciAST caea886aa taught the Python numpy interpreter (which re-armed python on this case)."
   }
 }

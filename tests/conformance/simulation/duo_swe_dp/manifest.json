@@ -2,7 +2,7 @@
   "category": "simulation",
   "version": "1.0",
   "case": "duo_swe_dp",
-  "description": "Per-equation rest-preservation gate (continuity, D(dp)/dt=flux_divergence_duo_g3) of the duo LMARS SWE. The full 6-rule system exceeds the 40 GB Slurm cgroup at build; this compiles only the continuity rule's RHS. Rest tendency exactly 0. Rust is REQUIRED here (Erk 1e-10/1e-12, ~49 s at the dev-opt2 build): this is the one duo case the Rust binding completes today, so it pins the whole duo pathway (geometry chain, duo_extend, LMARS continuity) cross-language.",
+  "description": "Per-equation rest-preservation gate (continuity, D(dp)/dt=flux_divergence_duo_g3) of the duo LMARS SWE. The full 6-rule system exceeds the 40 GB Slurm cgroup at build; this compiles only the continuity rule's RHS. Rest tendency exactly 0. Rust is REQUIRED here (Erk 1e-10/1e-12, ~49 s at the dev-opt2 build): this is the one duo case the Rust binding completes today, so it pins the whole duo pathway (geometry chain, duo_extend, LMARS continuity) cross-language. Python is REQUIRED as of EarthSciAST caea886aa (whole-box broadcast contraction in the numpy interpreter — the fd81e922f mirror): warm RHS 17.1 s -> 0.22 s, full gate PASS in 657 s measured 2026-08-29.",
   "problem": "../../../../problems/duo_swe_dp.esm",
   "model": "DuoSWFreestreamDp",
   "tests": [
@@ -11,7 +11,8 @@
   "reference_binding": "julia",
   "bindings_required": [
     "julia",
-    "rust"
+    "rust",
+    "python"
   ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
@@ -27,10 +28,12 @@
       "solver": "Erk",
       "reltol": 1e-10,
       "abstol": 1e-12
+    },
+    "python": {
+      "method": "RK45",
+      "rtol": 1e-10,
+      "atol": 1e-12
     }
   },
-  "status": "active",
-  "blocked_upstream_bindings": {
-    "python": "The Python numpy interpreter evaluates the duo halo-extension makearray region values (esm-spec 9.6.8 reduced-rank strips with a (k,l) contraction) through its scalar per-cell path (_eval_arrayop_scalar/_reduce_over_gated): cProfile shows 1.77M scalar index-gathers and 17.4 s per warm RHS call on THIS case, and the official runner invocation was killed incomplete at 7000 s wall. MEASURED 2026-08-28 against EarthSciAST 9a81afd8b. Re-arm when the numpy interpreter vectorizes these gathers \u2014 the same construct EarthSciAST fd81e922f taught the Julia affine stencilizer."
-  }
+  "status": "active"
 }
