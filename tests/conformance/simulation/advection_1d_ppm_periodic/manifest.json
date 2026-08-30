@@ -38,5 +38,11 @@
   "status": "active",
   "blocked_upstream_bindings": {
     "rust": "Rust TERMINATES at this manifest's own tolerance (Erk 1e-10/1e-12, ~6 s) as of EarthSciAST dc76c5bf: the whole-array overlay retired the hang, so the previous note's premise ('terminates only at reltol >= 1e-6') is obsolete. The gate it still misses is the one that note named: mms_transport[2] L2_error 2.155427189603012e-3 (rust) vs 2.1554288683622116e-3 (julia), 7.8e-7 relative -- outside the 1e-9 cross-binding-actuals floor. NOTE the convergence case of the same name IS armed for Rust: it gates against the committed golden/errors.json, which Rust matches at every resolution. Reproduced bit-identically across two independent runs, so this is a deterministic Erk-vs-Tsit5 method-disagreement floor, not flakiness and not a discretization error. MEASURED 2026-07-28 against EarthSciAST dc76c5bf via scripts/runners/run-rust.sh. Re-arm when both bindings run the same integrator, or when SIM_CROSS_RTOL in scripts/compare-outputs.py admits solver-method disagreement -- the sibling cases advection_2d_x_zero_grad_central and advection_2d_y_zero_grad_central are excluded for exactly this reason and nothing else."
+  },
+  "cross_binding_overrides": {
+    "python": {
+      "rtol": 1e-05,
+      "_doc": "Deterministic LSODA/RK45-vs-Tsit5 integrator-method disagreement on a floor-sensitive time-integrated functional: mms_transport[2] rel 3.74e-07 / abs 8.06e-10 (ref 2.155429e-03). MEASURED from CI run 33272496703 (2026-08-29); the values are bit-stable across runs and the inline assertions pass at the problem-file tolerances, so only the cross-binding re-evaluation band is widened (10x headroom, decade-rounded). Re-tighten if the bindings ever pin the same integrator."
+    }
   }
 }

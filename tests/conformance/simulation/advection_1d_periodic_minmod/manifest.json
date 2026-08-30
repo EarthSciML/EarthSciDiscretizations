@@ -2,7 +2,7 @@
   "category": "simulation",
   "version": "1.0",
   "case": "advection_1d_periodic_minmod",
-  "description": "Monotonicity / TVD gate: run the inline esm-spec 6.6 test tvd_monotone of problems/advection_1d_periodic_minmod.esm (model AdvectionMinmodTVD) at the default resolution (N=64) through each binding's official simulation pathway. The tent profile is advected at c=1; the assertions bound the state's max (no overshoot), min (no undershoot), and mean (exact conservation) — the sim-expressible form of the TVD claim. Assertions and tolerances live in the problem file; this manifest routes runners.",
+  "description": "Monotonicity / TVD gate: run the inline esm-spec 6.6 test tvd_monotone of problems/advection_1d_periodic_minmod.esm (model AdvectionMinmodTVD) at the default resolution (N=64) through each binding's official simulation pathway. The tent profile is advected at c=1; the assertions bound the state's max (no overshoot), min (no undershoot), and mean (exact conservation) \u2014 the sim-expressible form of the TVD claim. Assertions and tolerances live in the problem file; this manifest routes runners.",
   "problem": "../../../../problems/advection_1d_periodic_minmod_tvd.esm",
   "model": "AdvectionMinmodTVD",
   "tests": [
@@ -38,5 +38,12 @@
   "status": "active",
   "blocked_upstream_bindings": {
     "rust": "Rust TERMINATES at this manifest's own tolerance (Erk 1e-10/1e-12, ~9 s) as of EarthSciAST dc76c5bf: the whole-array overlay retired the hang, so the previous note's premise ('terminates only at reltol >= 1e-7') is obsolete. The gate it still misses is the one that note named: at 1e-10 the actuals are outside the 1e-9 cross-binding-actuals floor vs the Julia (Tsit5) reference -- tvd_monotone[3] 0.8648718345096678 vs 0.8648718113585462 (2.7e-8 relative) and tvd_monotone[4] 2.7417808634562034e-7 vs 2.7417533318983675e-7 (1.0e-5 relative). Reproduced bit-identically across two independent runs, so this is a deterministic Erk-vs-Tsit5 method-disagreement floor, not flakiness and not a discretization error. MEASURED 2026-07-28 against EarthSciAST dc76c5bf via scripts/runners/run-rust.sh. Re-arm when both bindings run the same integrator, or when SIM_CROSS_RTOL in scripts/compare-outputs.py admits solver-method disagreement -- the sibling cases advection_2d_x_zero_grad_central and advection_2d_y_zero_grad_central are excluded for exactly this reason and nothing else."
+  },
+  "cross_binding_overrides": {
+    "python": {
+      "rtol": 1e-06,
+      "atol": 1e-10,
+      "_doc": "Deterministic LSODA/RK45-vs-Tsit5 integrator-method disagreement on a floor-sensitive time-integrated functional: tvd_monotone[3] rel 1.51e-08 / abs 1.30e-08 (ref 8.648718e-01); tvd_monotone[4] rel 5.89e-06 / abs 1.61e-12 (ref 2.741753e-07). MEASURED from CI run 33272496703 (2026-08-29); the values are bit-stable across runs and the inline assertions pass at the problem-file tolerances, so only the cross-binding re-evaluation band is widened (10x headroom, decade-rounded). Re-tighten if the bindings ever pin the same integrator."
+    }
   }
 }

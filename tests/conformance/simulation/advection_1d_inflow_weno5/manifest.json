@@ -5,20 +5,44 @@
   "description": "MMS gate: run the inline esm-spec 6.6 tests of problems/advection_1d_inflow_weno5.esm (model AdvectionWENO5Inflow, test mms_steady_inflow_weno5) at the problem's default resolution (N=64) through each binding's official simulation pathway. Exercises the open-boundary WENO5 inflow/outflow first-derivative rule weno5_D_inflow_bc (fifth-order interior WENO5-Z conservative flux difference, reduced-order WENO3 one-sided reconstruction near the walls, prescribed inflow ghost gL at the left wall and non-reflecting zeroth-order extrapolation at the right wall). Pins the WENO5 lowering (ic wiring at t=0) and bounds the steady-drift transport error at t=0.1. The assertions and their tolerances live in the problem file itself; this manifest only routes the runners.",
   "problem": "../../../../problems/advection_1d_inflow_weno5.esm",
   "model": "AdvectionWENO5Inflow",
-  "tests": ["mms_steady_inflow_weno5"],
+  "tests": [
+    "mms_steady_inflow_weno5"
+  ],
   "reference_binding": "julia",
-  "bindings_required": ["julia", "python", "rust"],
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
   },
   "integrators": {
-    "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 },
-    "python": { "method": "LSODA", "rtol": 1e-12, "atol": 1e-14 },
-    "rust": { "solver": "Erk", "reltol": 1e-10, "abstol": 1e-12 }
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
   },
   "status": "active",
   "blocked_upstream_bindings": {
     "rust": "Rust TERMINATES on this case as of EarthSciAST dc76c5bf and passes its own inline MMS assertions (Erk, reltol 1e-10 / abstol 1e-12, ~3 s): the whole-array overlay retired the per-cell-interpreter hang the previous note described, so the 'drives dt->0 without terminating' half of that note is obsolete. What remains, and is NOT stale, is its second half -- the Rust actual misses the 1e-9 cross-binding-actuals floor against the Julia (Tsit5) reference: mms_steady_inflow_weno5[2] L2_error 1.5728295233743465e-4 (rust) vs 1.5728295600758084e-4 (julia), 2.3e-8 relative. Reproduced bit-identically across two independent runs, so this is a deterministic Erk-vs-Tsit5 method-disagreement floor, not flakiness and not a discretization error. MEASURED 2026-07-28 against EarthSciAST dc76c5bf via scripts/runners/run-rust.sh. Re-arm when both bindings run the same integrator, or when SIM_CROSS_RTOL in scripts/compare-outputs.py admits solver-method disagreement -- the sibling cases advection_2d_x_zero_grad_central and advection_2d_y_zero_grad_central are excluded for exactly this reason and nothing else."
+  },
+  "cross_binding_overrides": {
+    "python": {
+      "atol": 1e-10,
+      "_doc": "Deterministic LSODA/RK45-vs-Tsit5 integrator-method disagreement on a floor-sensitive time-integrated functional: mms_steady_inflow_weno5[2] rel 8.93e-09 / abs 1.40e-12 (ref 1.572830e-04). MEASURED from CI run 33272496703 (2026-08-29); the values are bit-stable across runs and the inline assertions pass at the problem-file tolerances, so only the cross-binding re-evaluation band is widened (10x headroom, decade-rounded). Re-tighten if the bindings ever pin the same integrator."
+    }
   }
 }

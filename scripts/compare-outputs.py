@@ -11,7 +11,12 @@ CONFORMANCE_SPEC.md §4.2/§4.4) and applies each category's comparison contract
   simulation   every inline assertion passed (the tolerances live in the
                problem files, §6.6.4/§6.6.5); actual values cross-checked
                against the reference binding at rtol 1e-9 / atol 1e-12 (pure
-               re-evaluation of the same pinned integrator setup).
+               re-evaluation of the same pinned integrator setup). A manifest
+               may widen that band per binding ("cross_binding_overrides":
+               {<binding>: {"rtol": …, "atol": …, "_doc": …}}) where the
+               bindings' pinned integrators deterministically disagree on a
+               floor-sensitive time-integrated functional; inline assertions
+               stay gated at the problem-file tolerances regardless.
   convergence  error norms vs the committed golden/errors.json at the
                manifest's error_vs_golden_rtol/atol.
   regridding   every exact-invariant assertion passed; recorded fields carried
@@ -197,14 +202,28 @@ def compare_simulation(results_root, bindings, rep):
             if binding == reference:
                 ref_actuals = {key(a): a["actual"] for a in rec["assertions"]}
             elif ref_actuals:
+                # Per-binding cross-binding tolerance override
+                # (manifest "cross_binding_overrides"): the bindings are pinned
+                # to DIFFERENT integrators (Tsit5 / LSODA / Erk), so a
+                # time-integrated assertion functional carries each method's
+                # truncation error, and on floor-sensitive cases that
+                # deterministic method disagreement exceeds the default 1e-9
+                # re-evaluation band. The override admits the MEASURED
+                # disagreement (documented per manifest with the run it was
+                # measured from) while every inline assertion stays gated at
+                # the problem-file tolerances — coverage is not dropped, only
+                # the cross-method band is widened where the methods provably
+                # disagree.
+                ov = (manifest.get("cross_binding_overrides") or {}).get(binding) or {}
+                rtol = float(ov.get("rtol", SIM_CROSS_RTOL))
+                atol = float(ov.get("atol", SIM_CROSS_ATOL))
                 mismatches = [
                     a for a in rec["assertions"]
                     if a["actual"] is not None and key(a) in ref_actuals
-                    and not close(a["actual"], ref_actuals[key(a)],
-                                  SIM_CROSS_RTOL, SIM_CROSS_ATOL)]
+                    and not close(a["actual"], ref_actuals[key(a)], rtol, atol)]
                 rep.add("simulation", case, binding, "cross-binding-actuals",
                         "fail" if mismatches else "pass",
-                        f"{len(mismatches)} outside rtol={SIM_CROSS_RTOL}" if mismatches else "")
+                        f"{len(mismatches)} outside rtol={rtol}" if mismatches else "")
 
 
 def compare_convergence(results_root, bindings, rep):
