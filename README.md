@@ -190,7 +190,9 @@ atmospheric column, surface layer first, from one consumer-supplied interface
 array `ze` with grid-derived `zc`/`dz`; a face-flux divergence `D(F, lev)` on an
 interface field, a conservative diffusion `D(K·D(u, lev), lev)` whose coefficient
 lives on the interfaces as PBL schemes define it, with prescribed surface/top
-fluxes, and the first `integral` lowerings in the library — whole-column and
+fluxes, its free-name-free flux-form twin `D(K·D(u, lev) − F, lev)` that carries
+every prescribed flux — surface exchange, counter-gradient, entrainment, rigid
+lid — inside one interface field `F`, and the first `integral` lowerings in the library — whole-column and
 cumulative-from-surface / cumulative-to-top forms to layer centres or interfaces
 as dz-weighted midpoint sums — all second order on a stretched column), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat

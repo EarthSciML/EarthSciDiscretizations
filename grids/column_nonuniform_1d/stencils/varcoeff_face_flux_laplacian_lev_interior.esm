@@ -1,0 +1,245 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "varcoeff_face_flux_laplacian_lev_interior",
+    "description": "Interior-only conservative finite-volume divergence of the TOTAL interface flux K du/dz - F on column_nonuniform_1d: L u[k] = ( (K[k+1] (u[k+1]-u[k])/(zc[k+1]-zc[k]) - F[k+1]) - (K[k] (u[k]-u[k-1])/(zc[k]-zc[k-1]) - F[k]) ) / dz[k] over k in [2, NLEV-1], with the coefficient K and the prescribed flux F both supplied AT THE INTERFACES (shape [lev_nodes]; node 1 is the surface, node k separates layers k-1 and k, node NLEV+1 is the model top). It is the interior stencil of stencils/varcoeff_face_laplacian_lev_interior with the interface flux F subtracted inside the same difference, so the diffusive and the prescribed parts of the flux telescope together: sum_k dz[k] L u[k] over the interior equals the difference of the total flux across the two bounding interfaces. Match-less named template; rules/varcoeff_face_flux_laplacian_lev wraps it with the two boundary layers. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). Second-order in L2 on a smoothly stretched column (supraconvergent).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_face_flux_laplacian_lev_interior": {
+      "params": [
+        "u",
+        "K",
+        "F"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "u",
+          "K",
+          "F"
+        ],
+        "ranges": {
+          "k": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "K",
+                            {
+                              "op": "+",
+                              "args": [
+                                "k",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "k"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    "k"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "K",
+                            "k"
+                          ]
+                        },
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    "k"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "u",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    "k"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "F",
+                        "k"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
