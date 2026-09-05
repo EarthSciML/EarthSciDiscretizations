@@ -1,0 +1,67 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "column_nonuniform_1d",
+    "description": "Single atmospheric (or oceanic/soil) COLUMN with consumer-supplied edge geometry: NLEV cell-centered layers stacked along the vertical index `lev`, plus the NLEV+1 layer interfaces `lev_nodes`. Layer 1 is the BOTTOM (surface) layer and `lev` increases upward, following the WRF/CCPP convention (k=1 lowest model level); a model whose vertical index runs top-down reverses its arrays at the boundary of the component. NLEV (the layer count) is the esm-spec 9.7 metaparameter, bound at the import edge or the loader API; the interface axis is sized by the metaparameter expression {op:+, args:[NLEV, 1]} (esm-spec 9.7.6). The geometry is NOT baked in: a consuming model supplies a SINGLE data array `ze` -- the interface coordinates, shape [lev_nodes], monotone increasing with the lev index, ze[1] the surface and ze[NLEV+1] the model top -- and the GRID derives everything else from it through two match-less templates (the grids/cartesian_nonuniform_1d edge-array contract, restated on a vertical axis): `column_cell_center` gives layer mid-points zc[k] = (ze[k] + ze[k+1])/2 and `column_cell_thickness` gives layer thicknesses dz[k] = ze[k+1] - ze[k]. A consuming model exposes those as its lev-shaped `zc` and `dz` observeds by APPLYING the templates to its `ze`, and every rule on this grid then reads `zc`, `dz` (and, for the integral rules, only `dz`) by bare name -- the keyed-factor contract grids/mpas uses for areaCell/dvEdge. Because centers and thicknesses both descend from ONE interface array they are automatically mutually consistent. The coordinate need not be geometric height: a pressure- or mass-based column supplies its own monotone interface coordinate as `ze` (or rebinds `dz` at the import edge, esm-spec 9.7.7, to a mass-per-area layer measure such as dp/g), and the finite-volume operators and Riemann-sum integrals below are then taken with respect to that coordinate. This grid exists separately from grids/cartesian_nonuniform_1d (rather than as an import-edge rename of it) because (a) column physics is the dominant use of a 1-D non-uniform mesh in Earth-system models and reads naturally in lev/zc/dz vocabulary shared with grids/latlon3d, and (b) the `integral` lowerings below name the axis in the integral node's `var`/`lower`/`upper` fields, which the esm-spec 9.7.7 rename sites (`wrt`/`dim`) do not cover, so an x-axis integral rule cannot be renamed onto a column. The aggregation index of the two geometry templates is `gk`, NOT `k`, so a derived zc/dz observed does not capture a consuming rule's own aggregate index `k` when it is inlined (the non-hygienic-inlining footgun documented in grids/cartesian_nonuniform_1d). On a smoothly stretched column the conservative finite-volume operators built on this geometry are second-order in L2 (supraconvergence, LeVeque 2007 section 2.13), and the midpoint-rule integrals are second-order. The build-time scope caveat (AGENTS.md) applies to any ic / 6.6.5 reference, which must fold the layer coordinate from literals and the metaparameter name NLEV inline.",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:column", "ndim:1", "spacing:nonuniform", "axis:lev"],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Skamarock, W. C., et al. (2021). A Description of the Advanced Research WRF Model Version 4.3. NCAR Technical Note NCAR/TN-556+STR. Chapter 2 (vertical coordinate and level indexing).",
+        "doi": "10.5065/1dfh-6p97"
+      }
+    ]
+  },
+  "metaparameters": {
+    "NLEV": { "type": "integer", "default": 64, "description": "Number of layers (cells) along lev; the interface axis lev_nodes has NLEV+1 members." }
+  },
+  "index_sets": {
+    "lev": { "kind": "interval", "size": "NLEV" },
+    "lev_nodes": { "kind": "interval", "size": { "op": "+", "args": ["NLEV", 1] } }
+  },
+  "expression_templates": {
+    "column_cell_center": {
+      "params": ["ze"],
+      "description": "Layer mid-points from the interface array: zc[gk] = (ze[gk] + ze[gk+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gk` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["gk"],
+        "args": ["ze"],
+        "ranges": { "gk": { "from": "lev" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.5,
+            {
+              "op": "+",
+              "args": [
+                { "op": "index", "args": ["ze", "gk"] },
+                { "op": "index", "args": ["ze", { "op": "+", "args": ["gk", 1] }] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "column_cell_thickness": {
+      "params": ["ze"],
+      "description": "Layer thicknesses from the interface array: dz[gk] = ze[gk+1] - ze[gk] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid. Aggregation index `gk` for the same hygiene reason as column_cell_center.",
+      "body": {
+        "op": "aggregate",
+        "output_idx": ["gk"],
+        "args": ["ze"],
+        "ranges": { "gk": { "from": "lev" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            { "op": "index", "args": ["ze", { "op": "+", "args": ["gk", 1] }] },
+            { "op": "index", "args": ["ze", "gk"] }
+          ]
+        }
+      }
+    }
+  }
+}

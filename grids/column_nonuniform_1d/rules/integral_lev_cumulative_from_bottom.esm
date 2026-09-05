@@ -1,0 +1,114 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "integral_lev_cumulative_from_bottom",
+    "description": "Cumulative integral from the SURFACE to the centre of the current layer: lowers integral(f, var: lev, lower: a, upper: lev) -- the upper bound literally the axis name, esm-spec 4.2 'partial/cumulative' mode -- to the layer field F[k] = sum_{j<k} f[j] dz[j] + f[k] dz[k]/2, i.e. the midpoint-rule integral from ze[1] to zc[k] (the whole layers below plus half of the current layer). Priority 10 over the whole-column form. F[1] = f[1] dz[1]/2 (the empty prefix sum is zero). The integrand `f` must be a bare layer-shaped (lev) field of THIS grid (where {f: {shape: [lev]}}, esm-spec 9.6.1); bind a compound integrand to a declared [lev] observed first. The measure is the consumer's free-name layer-thickness observed `dz` (grids/column_nonuniform_1d/grid.esm) -- rebind it at the import edge (esm-spec 9.7.7) to integrate against another monotone layer measure such as dp/g. The integral node's `var` names the axis (`lev`); esm-spec 4.2 leaves the bounds measure-free, so the bounds carry no numeric weight here: they select the FORM of the sum (whole column / cumulative from the surface / cumulative from the top / to layer centres / to interfaces) and are otherwise documentation. Because the layer values are midpoint samples, every form is the composite midpoint rule and is second-order accurate on a smoothly stretched column.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:integral",
+      "order:2",
+      "stencil_width:1",
+      "bc:none",
+      "spec:9.6.8",
+      "axes:lev"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "integral_lev_cumulative_from_bottom": {
+      "params": [
+        "f",
+        "a"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "integral",
+        "args": [
+          "f"
+        ],
+        "var": "lev",
+        "lower": "a",
+        "upper": "lev"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "reduce": "+",
+            "args": [
+              "f"
+            ],
+            "ranges": {
+              "k": {
+                "from": "lev"
+              },
+              "j": {
+                "from": "lev"
+              }
+            },
+            "filter": {
+              "op": "<",
+              "args": [
+                "j",
+                "k"
+              ]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "f",
+                    "j"
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "*",
+            "args": [
+              0.5,
+              "f",
+              "dz"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

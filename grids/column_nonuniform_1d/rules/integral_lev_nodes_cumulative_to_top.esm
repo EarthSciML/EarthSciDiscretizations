@@ -1,0 +1,101 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "integral_lev_nodes_cumulative_to_top",
+    "description": "Cumulative integral from each INTERFACE to the MODEL TOP: lowers integral(f, var: lev, lower: lev_nodes, upper: b) -- the lower bound literally the interface axis name -- to the interface field G[kn] = sum_{j>=kn} f[j] dz[j] over kn in lev_nodes (shape [lev_nodes]): G[NLEV+1] = 0 at the top and G[1] the whole-column integral at the surface. Whole layers only, exact telescoping with face_flux_D_lev_supplied_faces (D(G, wrt: lev) = -f). This is the optical depth from the top of the atmosphere down to each interface, the quantity a two-stream or Beer-Lambert shortwave scheme (e.g. WRF's Dudhia scheme) needs at the level interfaces where it evaluates fluxes. The integrand `f` must be a bare layer-shaped (lev) field of THIS grid (where {f: {shape: [lev]}}, esm-spec 9.6.1); bind a compound integrand to a declared [lev] observed first. The measure is the consumer's free-name layer-thickness observed `dz` (grids/column_nonuniform_1d/grid.esm) -- rebind it at the import edge (esm-spec 9.7.7) to integrate against another monotone layer measure such as dp/g. The integral node's `var` names the axis (`lev`); esm-spec 4.2 leaves the bounds measure-free, so the bounds carry no numeric weight here: they select the FORM of the sum (whole column / cumulative from the surface / cumulative from the top / to layer centres / to interfaces) and are otherwise documentation. Because the layer values are midpoint samples, every form is the composite midpoint rule and is second-order accurate on a smoothly stretched column.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:integral",
+      "order:2",
+      "stencil_width:1",
+      "bc:none",
+      "spec:9.6.8",
+      "axes:lev_nodes"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "integral_lev_nodes_cumulative_to_top": {
+      "params": [
+        "f",
+        "b"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "integral",
+        "args": [
+          "f"
+        ],
+        "var": "lev",
+        "lower": "lev_nodes",
+        "upper": "b"
+      },
+      "where": {
+        "f": {
+          "shape": [
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "kn"
+        ],
+        "reduce": "+",
+        "args": [
+          "f"
+        ],
+        "ranges": {
+          "kn": {
+            "from": "lev_nodes"
+          },
+          "j": {
+            "from": "lev"
+          }
+        },
+        "filter": {
+          "op": ">=",
+          "args": [
+            "j",
+            "kn"
+          ]
+        },
+        "expr": {
+          "op": "*",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "f",
+                "j"
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "j"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
