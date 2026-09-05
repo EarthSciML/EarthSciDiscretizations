@@ -1,0 +1,2143 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "integral_column_midpoint",
+    "description": "MMS driver for the five `integral` lowerings on grids/column_nonuniform_1d, one model per form (the convergence runner takes one L2_error assertion per model): FromBottomCenter (integral_lev_cumulative_from_bottom, upper bound `lev`), ToTopCenter (integral_lev_cumulative_to_top, lower bound `lev`), FromBottomNodes (integral_lev_nodes_cumulative_from_bottom, upper bound `lev_nodes`), ToTopNodes (integral_lev_nodes_cumulative_to_top, lower bound `lev_nodes`) and Whole (integral_lev_whole, both bounds constants). The integrand is the state-free layer field f = 1 + cos(pi z) sampled at the layer centres of the quadratic-stretch column z(xi) = 0.6 xi + 0.4 xi^2, whose antiderivative z + sin(pi z)/pi gives every form in closed form (whole column = 1). Each model carries an accumulator state (w_fbc, w_ttc, w_fbn, w_ttn, w_whole -- one distinct name per model, so sibling models never share a state name) with ic 0 and d/dt = F, so its value at t = 1 equals the lowered integral F exactly whatever the integrator does (the right-hand side is constant in time), and the L2 error of w against the analytic integral -- evaluated at the layer centres for the centre forms and at the interfaces for the node forms -- isolates the midpoint-rule error, which is second order on the smoothly stretched mesh. The mesh follows the grid's edge-array contract (ze supplied; zc, dz grid-derived); the references spell the layer centre or interface coordinate from literals and NLEV (build-time scope caveat).",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:column_nonuniform_1d",
+      "equation:integral",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      },
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (midpoint rule)."
+      }
+    ]
+  },
+  "models": {
+    "FromBottomCenter": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/integral_lev_cumulative_from_bottom.esm"
+        }
+      ],
+      "variables": {
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "The lowered integral: cumulative integral from the surface to the layer centre, z + sin(pi z)/pi at z = zc."
+        },
+        "zbot": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
+        },
+        "ztop": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top coordinate, the constant upper bound of the integral."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        },
+        "w_fbc": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Accumulator state with ic 0 and dw_fbc/dt = F, so w_fbc(1) = F exactly for every integrator (the integrand of the ODE is constant in time) and the L2 error of w at t = 1 against the analytic integral is the error of the midpoint-rule lowering alone."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w_fbc"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w_fbc"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "zbot",
+            "upper": "lev"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "midpoint_center_from_bottom",
+          "description": "w_fbc(1) = F, the midpoint-rule lowering of the integral of 1 + cos(pi z) on the quadratic-stretch column, compared in L2 against the analytic cumulative integral from the surface to the layer centre, z + sin(pi z)/pi at z = zc. at the default NLEV = 64 (second-order; per-resolution errors pinned in tests/conformance/convergence/integral_column_center_from_bottom/golden/errors.json).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "w_fbc",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "sin",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              3.141592653589793,
+                              {
+                                "op": "aggregate",
+                                "output_idx": [
+                                  "i"
+                                ],
+                                "args": [],
+                                "ranges": {
+                                  "i": {
+                                    "from": "lev"
+                                  }
+                                },
+                                "expr": {
+                                  "op": "*",
+                                  "args": [
+                                    0.5,
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      3.141592653589793
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "ToTopCenter": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/integral_lev_cumulative_to_top.esm"
+        }
+      ],
+      "variables": {
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "The lowered integral: cumulative integral from the layer centre to the top, (1 - z) - sin(pi z)/pi at z = zc."
+        },
+        "zbot": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
+        },
+        "ztop": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top coordinate, the constant upper bound of the integral."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        },
+        "w_ttc": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev"
+          ],
+          "description": "Accumulator state with ic 0 and dw_ttc/dt = F, so w_ttc(1) = F exactly for every integrator (the integrand of the ODE is constant in time) and the L2 error of w at t = 1 against the analytic integral is the error of the midpoint-rule lowering alone."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w_ttc"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w_ttc"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "lev",
+            "upper": "ztop"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "midpoint_center_to_top",
+          "description": "w_ttc(1) = F, the midpoint-rule lowering of the integral of 1 + cos(pi z) on the quadratic-stretch column, compared in L2 against the analytic cumulative integral from the layer centre to the top, (1 - z) - sin(pi z)/pi at z = zc. at the default NLEV = 64 (second-order; per-resolution errors pinned in tests/conformance/convergence/integral_column_center_to_top/golden/errors.json).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "w_ttc",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      1.0,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "i"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "i": {
+                            "from": "lev"
+                          }
+                        },
+                        "expr": {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "i",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            "i",
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "sin",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              3.141592653589793,
+                              {
+                                "op": "aggregate",
+                                "output_idx": [
+                                  "i"
+                                ],
+                                "args": [],
+                                "ranges": {
+                                  "i": {
+                                    "from": "lev"
+                                  }
+                                },
+                                "expr": {
+                                  "op": "*",
+                                  "args": [
+                                    0.5,
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    {
+                                                      "op": "-",
+                                                      "args": [
+                                                        "i",
+                                                        1
+                                                      ]
+                                                    },
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.6,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                0.4,
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "/",
+                                                  "args": [
+                                                    "i",
+                                                    "NLEV"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      3.141592653589793
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "FromBottomNodes": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom.esm"
+        }
+      ],
+      "variables": {
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "The lowered integral: cumulative integral from the surface to each interface, z + sin(pi z)/pi at z = ze."
+        },
+        "zbot": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
+        },
+        "ztop": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top coordinate, the constant upper bound of the integral."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        },
+        "w_fbn": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Accumulator state with ic 0 and dw_fbn/dt = F, so w_fbn(1) = F exactly for every integrator (the integrand of the ODE is constant in time) and the L2 error of w at t = 1 against the analytic integral is the error of the midpoint-rule lowering alone."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w_fbn"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w_fbn"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "zbot",
+            "upper": "lev_nodes"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "midpoint_nodes_from_bottom",
+          "description": "w_fbn(1) = F, the midpoint-rule lowering of the integral of 1 + cos(pi z) on the quadratic-stretch column, compared in L2 against the analytic cumulative integral from the surface to each interface, z + sin(pi z)/pi at z = ze. at the default NLEV = 64 (second-order; per-resolution errors pinned in tests/conformance/convergence/integral_column_nodes_from_bottom/golden/errors.json).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "w_fbn",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "kn"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "kn": {
+                        "from": "lev_nodes"
+                      }
+                    },
+                    "expr": {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            0.6,
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "kn",
+                                    1
+                                  ]
+                                },
+                                "NLEV"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            0.4,
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "kn",
+                                    1
+                                  ]
+                                },
+                                "NLEV"
+                              ]
+                            },
+                            {
+                              "op": "/",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "kn",
+                                    1
+                                  ]
+                                },
+                                "NLEV"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "sin",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              3.141592653589793,
+                              {
+                                "op": "aggregate",
+                                "output_idx": [
+                                  "kn"
+                                ],
+                                "args": [],
+                                "ranges": {
+                                  "kn": {
+                                    "from": "lev_nodes"
+                                  }
+                                },
+                                "expr": {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      3.141592653589793
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "ToTopNodes": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top.esm"
+        }
+      ],
+      "variables": {
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "The lowered integral: cumulative integral from each interface to the top, (1 - z) - sin(pi z)/pi at z = ze."
+        },
+        "zbot": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
+        },
+        "ztop": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top coordinate, the constant upper bound of the integral."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        },
+        "w_ttn": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Accumulator state with ic 0 and dw_ttn/dt = F, so w_ttn(1) = F exactly for every integrator (the integrand of the ODE is constant in time) and the L2 error of w at t = 1 against the analytic integral is the error of the midpoint-rule lowering alone."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w_ttn"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w_ttn"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "lev_nodes",
+            "upper": "ztop"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "midpoint_nodes_to_top",
+          "description": "w_ttn(1) = F, the midpoint-rule lowering of the integral of 1 + cos(pi z) on the quadratic-stretch column, compared in L2 against the analytic cumulative integral from each interface to the top, (1 - z) - sin(pi z)/pi at z = ze. at the default NLEV = 64 (second-order; per-resolution errors pinned in tests/conformance/convergence/integral_column_nodes_to_top/golden/errors.json).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "w_ttn",
+              "time": 1.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0001
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      1.0,
+                      {
+                        "op": "aggregate",
+                        "output_idx": [
+                          "kn"
+                        ],
+                        "args": [],
+                        "ranges": {
+                          "kn": {
+                            "from": "lev_nodes"
+                          }
+                        },
+                        "expr": {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                0.6,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "kn",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                0.4,
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "kn",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "kn",
+                                        1
+                                      ]
+                                    },
+                                    "NLEV"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "sin",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              3.141592653589793,
+                              {
+                                "op": "aggregate",
+                                "output_idx": [
+                                  "kn"
+                                ],
+                                "args": [],
+                                "ranges": {
+                                  "kn": {
+                                    "from": "lev_nodes"
+                                  }
+                                },
+                                "expr": {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.6,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        0.4,
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        },
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                "kn",
+                                                1
+                                              ]
+                                            },
+                                            "NLEV"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      3.141592653589793
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "Whole": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/integral_lev_whole.esm"
+        }
+      ],
+      "variables": {
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+        },
+        "Itot": {
+          "type": "unknown",
+          "units": "1",
+          "description": "Whole-column integral of f, analytically exactly 1."
+        },
+        "zbot": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface coordinate (lower bound)."
+        },
+        "ztop": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top coordinate (upper bound)."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        },
+        "w_whole": {
+          "type": "unknown",
+          "units": "1",
+          "description": "Accumulator with dw_whole/dt = Itot, so w_whole(1) = Itot."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w_whole"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w_whole"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "Itot"
+        },
+        {
+          "lhs": "f",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [
+              "zc"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "cos",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "i"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "Itot",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "zbot",
+            "upper": "ztop"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "midpoint_whole_column",
+          "description": "w_whole(1) = the whole-column midpoint sum of 1 + cos(pi z) over the quadratic-stretch column at NLEV = 64, analytically 1; the residual is the O(dz^2) midpoint error of the cosine on the stretched mesh (the constant part is summed exactly).",
+          "time_span": {
+            "start": 0.0,
+            "end": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "w_whole",
+              "time": 1.0,
+              "expected": 1.0,
+              "tolerance": {
+                "abs": 0.001
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

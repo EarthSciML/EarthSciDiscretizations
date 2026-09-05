@@ -1,0 +1,197 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "face_flux_D_lev_supplied_faces_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = -D(F, wrt: lev) for a declared interface flux F (shape [lev_nodes]). The plain-D match must fire through the fixpoint (priority 0, where F: [lev_nodes]) and lower to the rule's single-region makearray over [1,8] holding the imported flux-difference aggregate (F[k+1]-F[k])/dz[k]. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:face_flux_D_lev_supplied_faces"
+    ]
+  },
+  "models": {
+    "FaceFluxDLevAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": [
+            "lev"
+          ],
+          "description": "Temperature field over the lev index set."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "K m/s",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Upward flux at the 9 interfaces, here the interface coordinate itself."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8)."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "F"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": "ze"
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

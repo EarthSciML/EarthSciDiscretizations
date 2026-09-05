@@ -1,0 +1,85 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "face_flux_D_lev_interior",
+    "description": "Finite-volume divergence of an INTERFACE (lev_nodes-shaped) flux on column_nonuniform_1d: (d/dz F)[k] = (F[k+1] - F[k]) / dz[k] over every layer k in [1, NLEV]. Because the flux is supplied at all NLEV+1 interfaces -- including the surface F[1] and the model top F[NLEV+1] -- the operator is complete on the whole axis and has no separate boundary layer; the consuming model's flux field carries its own boundary values (a rigid lid is F[NLEV+1] = 0, a surface flux is F[1]). Match-less named template; rules/face_flux_D_lev_supplied_faces wraps it into the complete rewrite rule. `dz` is the free-name layer-thickness array resolving to the consuming model's geometry observed (grids/column_nonuniform_1d/grid.esm). Exact telescoping: the sum over k of dz[k] (d/dz F)[k] equals F[NLEV+1] - F[1], so column totals are conserved to round-off whatever F is.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:D",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "face_flux_D_lev_interior": {
+      "params": [
+        "F"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "F"
+        ],
+        "ranges": {
+          "k": [
+            1,
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "index",
+                  "args": [
+                    "F",
+                    {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "F",
+                    "k"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
