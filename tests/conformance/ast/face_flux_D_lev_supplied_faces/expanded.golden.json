@@ -1,0 +1,411 @@
+{
+  "esm": "1.0.0",
+  "index_sets": {
+    "lev": {
+      "kind": "interval",
+      "size": 8
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 9
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = -D(F, wrt: lev) for a declared interface flux F (shape [lev_nodes]). The plain-D match must fire through the fixpoint (priority 0, where F: [lev_nodes]) and lower to the rule's single-region makearray over [1,8] holding the imported flux-difference aggregate (F[k+1]-F[k])/dz[k]. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "name": "face_flux_D_lev_supplied_faces_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:face_flux_D_lev_supplied_faces"
+    ]
+  },
+  "models": {
+    "FaceFluxDLevAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "u"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      1,
+                      8
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "F": "F"
+                    },
+                    "name": "face_flux_D_lev_interior",
+                    "op": "apply_expression_template"
+                  }
+                ]
+              }
+            ],
+            "op": "-"
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": "ze"
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    0.6,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    0.4,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_thickness",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ze",
+                        "gk"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ze",
+                        {
+                          "args": [
+                            "gk",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer mid-points from the interface array: zc[gk] = (ze[gk] + ze[gk+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gk` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ze",
+                    {
+                      "args": [
+                        "gk",
+                        1
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "ze",
+                    "gk"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer thicknesses from the interface array: dz[gk] = ze[gk+1] - ze[gk] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid. Aggregation index `gk` for the same hygiene reason as column_cell_center.",
+          "params": [
+            "ze"
+          ]
+        },
+        "face_flux_D_lev_interior": {
+          "body": {
+            "args": [
+              "F"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "F",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "F",
+                        "k"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "-"
+                },
+                {
+                  "args": [
+                    "dz",
+                    "k"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "k": [
+                1,
+                8
+              ]
+            }
+          },
+          "params": [
+            "F"
+          ]
+        },
+        "face_flux_D_lev_supplied_faces": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  8
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "F": "F"
+                },
+                "name": "face_flux_D_lev_interior",
+                "op": "apply_expression_template"
+              }
+            ]
+          },
+          "match": {
+            "args": [
+              "F"
+            ],
+            "op": "D",
+            "wrt": "lev"
+          },
+          "params": [
+            "F"
+          ],
+          "priority": 0,
+          "where": {
+            "F": {
+              "shape": [
+                "lev_nodes"
+              ]
+            }
+          }
+        }
+      },
+      "variables": {
+        "F": {
+          "description": "Upward flux at the 9 interfaces, here the interface coordinate itself.",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "K m/s"
+        },
+        "dz": {
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "u": {
+          "description": "Temperature field over the lev index set.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "K"
+        },
+        "zc": {
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "ze": {
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8).",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "m"
+        }
+      }
+    }
+  }
+}

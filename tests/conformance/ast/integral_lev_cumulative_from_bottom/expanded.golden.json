@@ -1,0 +1,434 @@
+{
+  "esm": "1.0.0",
+  "index_sets": {
+    "lev": {
+      "kind": "interval",
+      "size": 8
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 9
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/integral_lev_cumulative_from_bottom: a minimal consuming model binding NLEV=8 at the import edge, declaring a layer integrand f (shape [lev]) and the observed F = integral(f, var: lev, lower: 0.0, upper: lev), i.e. the cumulative integral from the surface to each layer centre. The integral match must fire through the fixpoint (where f: [lev]; a bound literal naming an axis selects the cumulative forms at priority 10 over the whole-column rule at priority 0) and lower to the rule's measure-weighted (dz) midpoint-sum aggregate. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "name": "integral_lev_cumulative_from_bottom_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:integral_lev_cumulative_from_bottom"
+    ]
+  },
+  "models": {
+    "IntegralLevCumFromBottomAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "w"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "w"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": "zc"
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  "f"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        "f",
+                        "j"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "dz",
+                        "j"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                "filter": {
+                  "args": [
+                    "j",
+                    "k"
+                  ],
+                  "op": "<"
+                },
+                "op": "aggregate",
+                "output_idx": [
+                  "k"
+                ],
+                "ranges": {
+                  "j": {
+                    "from": "lev"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "reduce": "+"
+              },
+              {
+                "args": [
+                  0.5,
+                  "f",
+                  "dz"
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "+"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    0.6,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    0.4,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_thickness",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ze",
+                        "gk"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ze",
+                        {
+                          "args": [
+                            "gk",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer mid-points from the interface array: zc[gk] = (ze[gk] + ze[gk+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gk` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ze",
+                    {
+                      "args": [
+                        "gk",
+                        1
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "ze",
+                    "gk"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer thicknesses from the interface array: dz[gk] = ze[gk+1] - ze[gk] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid. Aggregation index `gk` for the same hygiene reason as column_cell_center.",
+          "params": [
+            "ze"
+          ]
+        },
+        "integral_lev_cumulative_from_bottom": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  "f"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        "f",
+                        "j"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "dz",
+                        "j"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "*"
+                },
+                "filter": {
+                  "args": [
+                    "j",
+                    "k"
+                  ],
+                  "op": "<"
+                },
+                "op": "aggregate",
+                "output_idx": [
+                  "k"
+                ],
+                "ranges": {
+                  "j": {
+                    "from": "lev"
+                  },
+                  "k": {
+                    "from": "lev"
+                  }
+                },
+                "reduce": "+"
+              },
+              {
+                "args": [
+                  0.5,
+                  "f",
+                  "dz"
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "+"
+          },
+          "match": {
+            "args": [
+              "f"
+            ],
+            "lower": "a",
+            "op": "integral",
+            "upper": "lev",
+            "var": "lev"
+          },
+          "params": [
+            "f",
+            "a"
+          ],
+          "priority": 10,
+          "where": {
+            "f": {
+              "shape": [
+                "lev"
+              ]
+            }
+          }
+        }
+      },
+      "variables": {
+        "F": {
+          "description": "The integral (shape follows the form).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "dz": {
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "f": {
+          "description": "Integrand, here the layer centre coordinate.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1/m"
+        },
+        "w": {
+          "description": "Accumulator state, dw/dt = F.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "zc": {
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "ze": {
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8).",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "m"
+        }
+      }
+    }
+  }
+}
