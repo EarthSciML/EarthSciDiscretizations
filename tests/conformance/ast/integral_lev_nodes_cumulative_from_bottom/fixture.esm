@@ -1,0 +1,206 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "integral_lev_nodes_cumulative_from_bottom_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom: a minimal consuming model binding NLEV=8 at the import edge, declaring a layer integrand f (shape [lev]) and the observed F = integral(f, var: lev, lower: 0.0, upper: lev_nodes), i.e. the cumulative integral from the surface to each interface. The integral match must fire through the fixpoint (where f: [lev]; a bound literal naming an axis selects the cumulative forms at priority 10 over the whole-column rule at priority 0) and lower to the rule's measure-weighted (dz) midpoint-sum aggregate. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:integral_lev_nodes_cumulative_from_bottom"
+    ]
+  },
+  "models": {
+    "IntegralLevNodesCumFromBottomAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        }
+      ],
+      "variables": {
+        "w": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Accumulator state, dw/dt = F."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "The integral (shape follows the form)."
+        },
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand, here the layer centre coordinate."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8)."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": "zc"
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": 0.0,
+            "upper": "lev_nodes"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
