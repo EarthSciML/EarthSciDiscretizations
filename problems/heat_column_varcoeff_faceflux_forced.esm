@@ -1,0 +1,772 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "heat_column_varcoeff_faceflux_forced",
+    "description": "MMS driver for the free-name-free flux-form operator d/dz(K du/dz - F): u_t = d/dz(K du/dz - F) + S(z,t) on the unit column [0, 1], K(z) = 1 + z supplied on the NLEV+1 interfaces (K[kn] = 1 + ze[kn]), a PRESCRIBED linear interface flux F(z) = gamma z (F[kn] = gamma ze[kn], gamma = 0.3, so F[1] = 0 at the surface and F[NLEV+1] = gamma at the top), discretized on the quadratic-stretch column by grids/column_nonuniform_1d/rules/varcoeff_face_flux_laplacian_lev. Manufactured solution u(z,t) = exp(-t) cos(pi z) as in problems/heat_column_varcoeff_forced: the forcing that makes it exact is that problem's S plus dF/dz = gamma, i.e. S(z,t) = exp(-t) [ -cos(pi z) + pi sin(pi z) + pi^2 (1+z) cos(pi z) ] + gamma, evaluated at the layer centres zc. K u_z vanishes at both ends (sin(0) = sin(pi) = 0), so the rule's boundary treatment -- total domain-face flux = -F alone -- is exact for this solution. Because F is linear in z its discrete divergence (F[k+1]-F[k])/dz[k] = gamma is exact on every layer, so the recorded errors must reproduce heat_column_varcoeff_forced's golden to round-off: the sweep pins both the second order of the K-part on a stretched mesh and the exact telescoping of the F-part through the two boundary layers (F[1] and F[NLEV+1] enter with opposite signs, and a wrong sign or a dropped face would show as a first-order error). The mesh follows the grid's edge-array contract (ze supplied, zc/dz grid-derived).",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:column_nonuniform_1d",
+      "equation:heat",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/column_nonuniform_1d/rules/varcoeff_face_flux_laplacian_lev.esm"
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": [
+            "lev"
+          ],
+          "description": "Temperature over the lev (layer) axis."
+        },
+        "K": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface diffusivity K = 1 + z evaluated on the interfaces, K[kn] = 1 + ze[kn]."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "K m/s",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Prescribed interface flux F = gamma z on the interfaces, F[kn] = gamma ze[kn] with gamma = 0.3 (F[1] = 0 at the surface, F[NLEV+1] = gamma at the top); positive upward, differentiated together with the diffusive flux by the rule."
+        },
+        "S": {
+          "type": "unknown",
+          "units": "K/s",
+          "shape": [
+            "lev"
+          ],
+          "description": "Manufactured forcing S(zc, t) = exp(-t) [ -cos(pi zc) + pi sin(pi zc) + pi^2 (1 + zc) cos(pi zc) ] + gamma."
+        },
+        "gamma": {
+          "type": "parameter",
+          "units": "K/s",
+          "default": 0.3,
+          "description": "Slope of the prescribed interface flux F = gamma z, hence the constant dF/dz the forcing must cancel."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rules by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rules by bare name."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "cos",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  3.141592653589793,
+                  {
+                    "op": "aggregate",
+                    "output_idx": [
+                      "i"
+                    ],
+                    "args": [],
+                    "ranges": {
+                      "i": {
+                        "from": "lev"
+                      }
+                    },
+                    "expr": {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.6,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    0.4,
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        "i",
+                                        "NLEV"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          "K",
+                          {
+                            "op": "D",
+                            "args": [
+                              "u"
+                            ],
+                            "wrt": "lev"
+                          }
+                        ]
+                      },
+                      "F"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              },
+              "S"
+            ]
+          }
+        },
+        {
+          "lhs": "K",
+          "rhs": {
+            "op": "+",
+            "args": [
+              1.0,
+              "ze"
+            ]
+          }
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "gamma",
+              "ze"
+            ]
+          }
+        },
+        {
+          "lhs": "S",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "exp",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          "t"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "op": "cos",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  3.141592653589793,
+                                  "zc"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "op": "sin",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  3.141592653589793,
+                                  "zc"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          9.869604401089358,
+                          {
+                            "op": "+",
+                            "args": [
+                              1.0,
+                              "zc"
+                            ]
+                          },
+                          {
+                            "op": "cos",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  3.141592653589793,
+                                  "zc"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "gamma"
+            ]
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        "NLEV"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_column_variable_k_faceflux_forced",
+          "description": "Manufactured solution u(z,t) = exp(-t) cos(pi z) with K = 1 + z and the prescribed linear interface flux F = 0.3 z, the matching forcing S (heat_column_varcoeff_forced's plus 0.3), quadratic-stretch column. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the L2 error at the default NLEV = 64 (second-order, and equal to heat_column_varcoeff_forced's to round-off because the linear F is discretely exact; per-resolution values pinned in tests/conformance/convergence/heat_column_varcoeff_faceflux_forced/golden/errors.json).",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.1
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  1.0,
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "lev"
+                              }
+                            },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.0002
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "*",
+                "args": [
+                  0.9048374180359595,
+                  {
+                    "op": "cos",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          3.141592653589793,
+                          {
+                            "op": "aggregate",
+                            "output_idx": [
+                              "i"
+                            ],
+                            "args": [],
+                            "ranges": {
+                              "i": {
+                                "from": "lev"
+                              }
+                            },
+                            "expr": {
+                              "op": "*",
+                              "args": [
+                                0.5,
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ]
+                                                },
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "+",
+                                      "args": [
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "*",
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            },
+                                            {
+                                              "op": "/",
+                                              "args": [
+                                                "i",
+                                                "NLEV"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

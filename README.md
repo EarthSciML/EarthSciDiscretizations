@@ -191,7 +191,10 @@ array `ze`; its `zc`/`dz` templates are the cartesian ones imported under a
 §9.7.7 rename onto `lev`; a face-flux divergence `D(F, lev)` on an interface
 field, a conservative diffusion `D(K·D(u, lev), lev)` whose coefficient lives on
 the interfaces as PBL schemes define it, with prescribed surface/top fluxes and
-one interface-flux template behind every flux, a first-order donor-cell
+one interface-flux template behind every flux, its free-name-free flux-form
+twin `D(K·D(u, lev) − F, lev)` that carries every prescribed flux — surface
+exchange, counter-gradient, entrainment, rigid lid — inside one interface field
+`F`, a first-order donor-cell
 **sedimentation** divergence `D(W·q, lev)` for a layer-centred fall velocity
 (downward only, no inflow at the top, the surface outflow being layer 1's own
 flux, one donor-flux template behind every face — the method-of-lines form of

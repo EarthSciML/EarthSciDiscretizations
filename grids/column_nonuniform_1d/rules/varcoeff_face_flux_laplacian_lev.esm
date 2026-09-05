@@ -1,0 +1,332 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "varcoeff_face_flux_laplacian_lev",
+    "description": "Conservative finite-volume lowering of the flux-form column diffusion operator d/dz( K du/dz - F ) on column_nonuniform_1d, with the diffusivity K and a PRESCRIBED interface flux F both supplied on the NLEV+1 interfaces (shape [lev_nodes]) and NO free names. The consumer writes the compound D( {op:-, args:[ {op:*, args:[K, D(u, wrt: lev)]}, F ]}, wrt: lev ) -- diffusive term on the LEFT, coefficient on the LEFT of its product (matching is structural and non-commutative) -- which is the natural spelling of a column conservation law du/dt = d/dz(K du/dz - F): the same one closed-form flux, diffusive minus prescribed, differentiated once. The rule fires on the whole compound at priority 10 (esm-spec 9.6.3 outermost-first compound precedence) and is match-scoped with where {u: {shape: [lev]}, K: {shape: [lev_nodes]}, F: {shape: [lev_nodes]}} (esm-spec 9.6.1), so it fires only on a bare layer field, a bare interface coefficient and a bare interface flux of THIS grid. Interior [2, NLEV-1]: the imported total-flux difference stencil. Boundary layers: the DIFFUSIVE part K du/dz of the flux through a DOMAIN face is not computed from a ghost value; it is dropped, and the total flux through the surface interface (node 1) and the top interface (node NLEV+1) is the prescribed value alone, -F[1] and -F[NLEV+1], exactly as rules/varcoeff_face_laplacian_lev_flux_bc reads its free names kdudz_bot / kdudz_top, so L u[1] = ( K[2] (u[2]-u[1])/(zc[2]-zc[1]) - F[2] + F[1] ) / dz[1] and L u[NLEV] = ( -F[NLEV+1] - K[NLEV] (u[NLEV]-u[NLEV-1])/(zc[NLEV]-zc[NLEV-1]) + F[NLEV] ) / dz[NLEV]. F is positive in the +lev (upward) direction, so a WRF surface sensible-heat flux hfx (W m^-2) into a potential-temperature equation is F[1] = hfx / (rho cp), a moisture flux qfx is F[1] = qfx / rho, a surface stress on a wind component is F[1] = (u_*^2) u/|U|, a rigid model top is F[NLEV+1] = 0, and a PBL scheme's nonlocal (counter-gradient) and entrainment fluxes are the interior entries of F -- which is why a model with several diffused fields (theta, u, v, qv, ...) needs no per-field free names: each field carries its own F, and the one rule serves them all. This rule therefore supersedes the pair varcoeff_face_laplacian_lev_flux_bc + face_flux_D_lev_supplied_faces for any model that would otherwise have to route every prescribed flux through the free-name pair; both remain for the K-only and F-only forms. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). The operator telescopes exactly: sum_k dz[k] L u[k] = F[1] - F[NLEV+1], so the column integral of u changes only through the two prescribed domain-face fluxes. Second-order in L2 on a smoothly stretched column (supraconvergent); MMS convergence is pinned by problems/heat_column_varcoeff_faceflux_forced, whose errors reproduce problems/heat_column_varcoeff_forced's to round-off because a linear-in-z prescribed flux is discretely exact. A model imports exactly one variable-coefficient second-derivative rule for lev.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:supplied_flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Hong, S.-Y., Noh, Y., and Dudhia, J. (2006). A new vertical diffusion package with an explicit treatment of entrainment processes. Mon. Wea. Rev. 134, 2318-2341. (Surface, counter-gradient and entrainment fluxes of the YSU scheme as interface fluxes.)",
+        "doi": "10.1175/MWR3199.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/varcoeff_face_flux_laplacian_lev_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_face_flux_laplacian_lev": {
+      "params": [
+        "u",
+        "K",
+        "F"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "K",
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lev"
+                  }
+                ]
+              },
+              "F"
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "lev"
+          ]
+        },
+        "K": {
+          "shape": [
+            "lev_nodes"
+          ]
+        },
+        "F": {
+          "shape": [
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_flux_laplacian_lev_interior",
+            "bindings": {
+              "u": "u",
+              "K": "K",
+              "F": "F"
+            }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "index",
+                            "args": [
+                              "K",
+                              2
+                            ]
+                          },
+                          {
+                            "op": "/",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "u",
+                                      2
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "u",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "zc",
+                                      2
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "zc",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "index",
+                        "args": [
+                          "F",
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "F",
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "index",
+                "args": [
+                  "dz",
+                  1
+                ]
+              }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "index",
+                        "args": [
+                          "F",
+                          {
+                            "op": "+",
+                            "args": [
+                              "NLEV",
+                              1
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "index",
+                            "args": [
+                              "K",
+                              "NLEV"
+                            ]
+                          },
+                          {
+                            "op": "/",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "u",
+                                      "NLEV"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "u",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "NLEV",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "zc",
+                                      "NLEV"
+                                    ]
+                                  },
+                                  {
+                                    "op": "index",
+                                    "args": [
+                                      "zc",
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "NLEV",
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "index",
+                        "args": [
+                          "F",
+                          "NLEV"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "index",
+                "args": [
+                  "dz",
+                  "NLEV"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
