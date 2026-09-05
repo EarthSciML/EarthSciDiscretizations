@@ -185,7 +185,14 @@ cartesian (a smoothly-stretched mesh from a single consumer-supplied edge array,
 the grid deriving cell centers and widths through its own `nonuniform_cell_center`/
 `nonuniform_cell_width` templates over an `N+1`-node axis, feeding a conservative
 finite-volume Laplacian with exact zero-flux walls, second-order in L2 by
-supraconvergence), the lat-lon
+supraconvergence), its vertical twin `column_nonuniform_1d` (a single
+atmospheric column, surface layer first, from one consumer-supplied interface
+array `ze` with grid-derived `zc`/`dz`; a face-flux divergence `D(F, lev)` on an
+interface field, a conservative diffusion `D(K·D(u, lev), lev)` whose coefficient
+lives on the interfaces as PBL schemes define it, with prescribed surface/top
+fluxes, and the first `integral` lowerings in the library — whole-column and
+cumulative-from-surface / cumulative-to-top forms to layer centres or interfaces
+as dz-weighted midpoint sums — all second order on a stretched column), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
 rules; global and regional recipes), its 3-D `latlon3d` extension for
 GEOS-Chem-Classic-style tracer transport (importing the lat-lon horizontal
