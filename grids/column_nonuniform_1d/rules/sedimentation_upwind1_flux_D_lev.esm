@@ -1,0 +1,119 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_upwind1_flux_D_lev",
+    "description": "Conservative first-order DONOR-CELL lowering of the flux divergence D(W*q, wrt: lev) of a DOWNWARD-falling quantity on column_nonuniform_1d -- the sedimentation (fallout) operator of a microphysics scheme. The consuming model writes its continuity law as dq/dt = -D(W*q, wrt: lev)/rho + ... with q the layer-centred falling density (rho times the hydrometeor mixing ratio, shape [lev]) and W the layer-centred signed velocity along +lev, W = -v_t <= 0 for a terminal fall speed v_t (shape [lev]); the rule lowers the whole compound to the two-region makearray [1, NLEV-1] (interior donor-cell difference) and [NLEV, NLEV] (no inflow through the model top). THE VELOCITY IS INSIDE THE OPERATOR AND LAYER-CENTRED: unlike the face-staggered wind of an advection scheme, a terminal velocity is a property of the falling particles in a layer, so the mass leaving layer k through its lower face falls at layer k's own speed, F_k = W[k] q[k] -- which is also the upwind (donor-cell) choice for a downward flow, since the upstream cell of the lower face of layer k is layer k. The two coincide only because the flow direction is fixed; the rule is therefore valid ONLY for W <= 0 everywhere and a consumer must not feed it a sign-changing velocity (use latlon3d's face-velocity upwind rule for that). No inflow at the top (face NLEV+1 absent); the surface outflow F_1 = W[1] q[1] is an ordinary donor flux that the consumer exposes as its precipitation rate -- no free names, no boundary values to supply. Exactly telescoping: sum_k dz[k] D[k] = -F_1, so the column loses exactly what precipitates. COMPOUND MATCH: pattern D(W*q, wrt: lev) at priority 10 with where {q: [lev], W: [lev]}; the velocity is written on the LEFT of the product (structural, non-commutative matching). It cannot fire on this grid's diffusion compounds D(K*D(u)) (K is [lev_nodes] and D(u) is not a bare variable, so both shape constraints fail, esm-spec 9.6.1) nor on a bare interface flux D(F) (F is [lev_nodes], plain-D rule at priority 0). ACCURACY AND SCOPE: O(dz), monotone, positivity-preserving; it is the METHOD-OF-LINES (instantaneous derivative) form of fallout. Operational schemes such as WSM6's forward semi-Lagrangian piecewise-linear fallout (nislfv_rain_plm, Juang & Hong 2010) are FULLY DISCRETE in time -- the Courant number v_t dt/dz lives inside the operator -- and their per-step increment does not equal dt times this derivative at a finite step; at t = 0 the exact divergence d(rho v_t q)/dz is scheme-independent, which is what derivative tests need. A higher-order (PLM/PPM) reconstruction of the donor value is a possible later rule on the same face-flux structure. Requires NLEV >= 2.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:advection",
+      "axes:lev",
+      "order:1",
+      "stencil_width:2",
+      "scheme:upwind",
+      "bc:no-inflow",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux)."
+      },
+      {
+        "citation": "Hong, S.-Y., & Lim, J.-O. J. (2006). The WRF single-moment 6-class microphysics scheme (WSM6). Journal of the Korean Meteorological Society, 42(2), 129-151."
+      },
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/sedimentation_upwind1_flux_D_lev_interior.esm"
+    },
+    {
+      "ref": "../stencils/sedimentation_upwind1_flux_D_lev_top.esm"
+    }
+  ],
+  "expression_templates": {
+    "sedimentation_upwind1_flux_D_lev": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "W",
+              "q"
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "q": {
+          "shape": [
+            "lev"
+          ]
+        },
+        "W": {
+          "shape": [
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              "NLEV",
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sedimentation_upwind1_flux_D_lev_interior",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sedimentation_upwind1_flux_D_lev_top",
+            "bindings": {
+              "q": "q",
+              "W": "W"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
