@@ -192,7 +192,7 @@ interface field, a conservative diffusion `D(K·D(u, lev), lev)` whose coefficie
 lives on the interfaces as PBL schemes define it, with prescribed surface/top
 fluxes, its free-name-free flux-form twin `D(K·D(u, lev) − F, lev)` that carries
 every prescribed flux — surface exchange, counter-gradient, entrainment, rigid
-lid — inside one interface field `F`, and the first `integral` lowerings in the library — whole-column and
+lid — inside one interface field `F`, a first-order donor-cell **sedimentation** divergence `D(W·q, lev)` for a layer-centred fall velocity (downward only, no inflow at the top, the surface outflow being layer 1's own flux — the method-of-lines form of a microphysics fallout term), and the first `integral` lowerings in the library — whole-column and
 cumulative-from-surface / cumulative-to-top forms to layer centres or interfaces
 as dz-weighted midpoint sums — all second order on a stretched column), the lat-lon
 production kit (coordinate/metric templates; periodic-lon and zero-gradient-lat
