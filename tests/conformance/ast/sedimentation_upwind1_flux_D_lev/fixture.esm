@@ -1,0 +1,232 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_upwind1_flux_D_lev_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev: a minimal consuming model binding NLEV=8 at the import edge, writing dq/dt = -D(W*q, wrt: lev) with the falling density q and the layer-centred downward velocity W both declared over [lev]. The compound match must fire through the fixpoint (priority 10, where q: [lev], W: [lev]) and lower to the rule's two-region makearray -- interior [1,7] holding the imported donor-cell difference stencil aggregate, layer 8 holding the no-inflow top stencil. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:sedimentation_upwind1_flux_D_lev"
+    ]
+  },
+  "models": {
+    "SedimentationUpwind1FluxDLevAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        }
+      ],
+      "variables": {
+        "q": {
+          "type": "unknown",
+          "units": "kg/m^3",
+          "shape": [
+            "lev"
+          ],
+          "description": "Falling density over the lev index set."
+        },
+        "W": {
+          "type": "unknown",
+          "units": "m/s",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer-centred downward velocity -(1 + zc)."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8)."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "q"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "q"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "W",
+                      "q"
+                    ]
+                  }
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "W",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "index",
+                      "args": [
+                        "zc",
+                        "i"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "args": [],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    0.6,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    0.4,
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "kn",
+                            1
+                          ]
+                        },
+                        8
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_upwind1_flux_D_lev_top",
+    "description": "TOP layer k = NLEV of the donor-cell sedimentation divergence on column_nonuniform_1d, closed with NO INFLOW through the model top: (d/dz (W q))[NLEV] = (0 - W[NLEV] q[NLEV]) / dz[NLEV]. Nothing falls in from above the domain, so the flux through face NLEV+1 is LITERALLY ABSENT rather than formed from a value beyond the column; the outflow through face NLEV is layer NLEV's own donor flux, as in the interior stencil. The surface (face 1) needs no boundary stencil at all: the layer-1 outflow F_1 = W[1] q[1] is an ordinary donor flux and is what the consuming model reads back as its surface precipitation rate. Same free names, face indexing and validity condition (W <= 0) as sedimentation_upwind1_flux_D_lev_interior.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:advection",
+      "order:1",
+      "stencil_width:2",
+      "scheme:upwind",
+      "bc:no-inflow"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux)."
+      },
+      {
+        "citation": "Hong, S.-Y., & Lim, J.-O. J. (2006). The WRF single-moment 6-class microphysics scheme (WSM6). Journal of the Korean Meteorological Society, 42(2), 129-151."
+      },
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "sedimentation_upwind1_flux_D_lev_top": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "k": [
+            "NLEV",
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "k"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

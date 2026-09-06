@@ -1,0 +1,574 @@
+{
+  "esm": "1.0.0",
+  "index_sets": {
+    "lev": {
+      "kind": "interval",
+      "size": 8
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 9
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev: a minimal consuming model binding NLEV=8 at the import edge, writing dq/dt = -D(W*q, wrt: lev) with the falling density q and the layer-centred downward velocity W both declared over [lev]. The compound match must fire through the fixpoint (priority 10, where q: [lev], W: [lev]) and lower to the rule's two-region makearray -- interior [1,7] holding the imported donor-cell difference stencil aggregate, layer 8 holding the no-inflow top stencil. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "name": "sedimentation_upwind1_flux_D_lev_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:sedimentation_upwind1_flux_D_lev"
+    ]
+  },
+  "models": {
+    "SedimentationUpwind1FluxDLevAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "q"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "q"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      1,
+                      7
+                    ]
+                  ],
+                  [
+                    [
+                      8,
+                      8
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "W": "W",
+                      "q": "q"
+                    },
+                    "name": "sedimentation_upwind1_flux_D_lev_interior",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [],
+                    "bindings": {
+                      "W": "W",
+                      "q": "q"
+                    },
+                    "name": "sedimentation_upwind1_flux_D_lev_top",
+                    "op": "apply_expression_template"
+                  }
+                ]
+              }
+            ],
+            "op": "-"
+          }
+        },
+        {
+          "lhs": "W",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    1,
+                    {
+                      "args": [
+                        "zc",
+                        "i"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    0.6,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    0.4,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_thickness",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "ze",
+                        "gk"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "ze",
+                        {
+                          "args": [
+                            "gk",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer mid-points from the interface array: zc[gk] = (ze[gk] + ze[gk+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gk` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [
+              "ze"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "ze",
+                    {
+                      "args": [
+                        "gk",
+                        1
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "ze",
+                    "gk"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "gk"
+            ],
+            "ranges": {
+              "gk": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Layer thicknesses from the interface array: dz[gk] = ze[gk+1] - ze[gk] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid. Aggregation index `gk` for the same hygiene reason as column_cell_center.",
+          "params": [
+            "ze"
+          ]
+        },
+        "sedimentation_upwind1_flux_D_lev": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  7
+                ]
+              ],
+              [
+                [
+                  8,
+                  8
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "W": "W",
+                  "q": "q"
+                },
+                "name": "sedimentation_upwind1_flux_D_lev_interior",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [],
+                "bindings": {
+                  "W": "W",
+                  "q": "q"
+                },
+                "name": "sedimentation_upwind1_flux_D_lev_top",
+                "op": "apply_expression_template"
+              }
+            ]
+          },
+          "match": {
+            "args": [
+              {
+                "args": [
+                  "W",
+                  "q"
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "D",
+            "wrt": "lev"
+          },
+          "params": [
+            "q",
+            "W"
+          ],
+          "priority": 10,
+          "where": {
+            "W": {
+              "shape": [
+                "lev"
+              ]
+            },
+            "q": {
+              "shape": [
+                "lev"
+              ]
+            }
+          }
+        },
+        "sedimentation_upwind1_flux_D_lev_interior": {
+          "body": {
+            "args": [
+              "q",
+              "W"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "W",
+                            {
+                              "args": [
+                                "k",
+                                1
+                              ],
+                              "op": "+"
+                            }
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "q",
+                            {
+                              "args": [
+                                "k",
+                                1
+                              ],
+                              "op": "+"
+                            }
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "W",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "q",
+                            "k"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    }
+                  ],
+                  "op": "-"
+                },
+                {
+                  "args": [
+                    "dz",
+                    "k"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "k": [
+                1,
+                7
+              ]
+            }
+          },
+          "params": [
+            "q",
+            "W"
+          ]
+        },
+        "sedimentation_upwind1_flux_D_lev_top": {
+          "body": {
+            "args": [
+              "q",
+              "W"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "W",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "q",
+                            "k"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    }
+                  ],
+                  "op": "-"
+                },
+                {
+                  "args": [
+                    "dz",
+                    "k"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "/"
+            },
+            "op": "aggregate",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "k": [
+                8,
+                8
+              ]
+            }
+          },
+          "params": [
+            "q",
+            "W"
+          ]
+        }
+      },
+      "variables": {
+        "W": {
+          "description": "Layer-centred downward velocity -(1 + zc).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m/s"
+        },
+        "dz": {
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "q": {
+          "description": "Falling density over the lev index set.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "kg/m^3"
+        },
+        "zc": {
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "ze": {
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8).",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "m"
+        }
+      }
+    }
+  }
+}

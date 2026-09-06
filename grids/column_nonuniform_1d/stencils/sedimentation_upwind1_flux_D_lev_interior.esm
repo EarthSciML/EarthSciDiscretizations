@@ -1,0 +1,131 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_upwind1_flux_D_lev_interior",
+    "description": "INTERIOR layers k = 1 .. NLEV-1 of the conservative first-order DONOR-CELL divergence of a downward hydrometeor flux on column_nonuniform_1d: (d/dz (W q))[k] = (W[k+1] q[k+1] - W[k] q[k]) / dz[k]. Both the transported density q (rho times a mixing ratio, or any layer quantity) and the velocity W are LAYER-centred ([lev]); W is the signed velocity along +lev (upward), so a fall speed v_t enters as W = -v_t <= 0. Because the flow is downward everywhere, the upstream (donor) cell of face k -- the lower edge of layer k -- is layer k itself, so the flux through face k is F_k = W[k] q[k], carried at the falling layer's OWN speed: exactly the structure of a sedimentation scheme, in which the mass leaving a layer falls at that layer's mass-weighted terminal velocity. Adjacent layers reuse the identical face expression, so the divergence TELESCOPES: sum_k dz[k] (d/dz (W q))[k] = F_{NLEV+1} - F_1 = -F_1, the surface outflow, and the column mass budget closes to round-off (the surface precipitation rate is -F_1 = v_t[1] q[1]). Valid only for W <= 0: for a velocity that changes sign the donor cell changes side and a face-velocity upwind rule (latlon3d upwind1_flux_D_lev_noflux_bc) is needed instead. `dz` is the free-name layer thickness of grids/column_nonuniform_1d/grid.esm. First order (O(dz)), monotone and positivity-preserving.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:advection",
+      "order:1",
+      "stencil_width:2",
+      "scheme:upwind"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux)."
+      },
+      {
+        "citation": "Hong, S.-Y., & Lim, J.-O. J. (2006). The WRF single-moment 6-class microphysics scheme (WSM6). Journal of the Korean Meteorological Society, 42(2), 129-151."
+      },
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "sedimentation_upwind1_flux_D_lev_interior": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "k": [
+            1,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "W",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "q",
+                        "k"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
