@@ -1,0 +1,322 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "godunov_upwind_D1x_extrapolate_bc",
+    "description": "Godunov-upwind per-axis quantity max(D-_x u, 0) - min(D+_x u, 0) on cartesian_uniform_2d with the linear-extrapolation halo closure -- the diff2x of NCAR fire_behavior's classical Godunov level-set option (fire_upwinding = 4), from which it builds the front normal nvx = diff2x/sqrt(|grad psi|^2 + eps) while taking |grad psi| itself from the Rouy-Tourin Hamiltonian (rules/godunov_norm_D2_*). Match D(u, wrt: x) at priority 10, scoped with where {u: {shape: [x, y]}}. THE SCHEME: three regions -- the interior [2, NX-1] x [1, NY] is a single apply of stencils/godunov_upwind_D1x_interior; the two wall lines evaluate the same three-point combination with the out-of-range neighbour replaced by the guarded linear-extrapolation ghost. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the two edge ghosts of their walls (the reference code's diagonal corner ghost is never read by ENO1). SIGN CAVEAT (fire_behavior note N44): for a field decreasing along x this quantity is -D+ > 0, a magnitude, not the signed derivative; a consumer building a signed normal must carry the sign separately. Exact on a linear field with positive slope along x; first order otherwise. Requires NX >= 3 (respectively NY >= 3). dx, dy are free names (grid geometry contract).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:3",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/godunov_upwind_D1x_interior.esm"
+    },
+    {
+      "ref": "../stencils/godunov_upwind_D1.esm"
+    },
+    {
+      "ref": "../stencils/extrapolate_linear_ghost.esm"
+    }
+  ],
+  "expression_templates": {
+    "godunov_upwind_D1x_extrapolate_bc": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "u"
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "godunov_upwind_D1x_interior",
+            "bindings": {
+              "u": "u"
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "godunov_upwind_D1",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            1,
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                "j"
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                2,
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "+",
+                              "args": [
+                                1,
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            1,
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "godunov_upwind_D1",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "NX",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "NX",
+                                "j"
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "NX",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "NX",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,582 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "godunov_upwind_D1_2d_paraboloid_mms",
+    "description": "Method-of-manufactured-solutions order-of-accuracy driver for the per-axis rules grids/cartesian_uniform_2d/rules/godunov_upwind_D1x_extrapolate_bc and godunov_upwind_D1y_extrapolate_bc (NCAR fire_behavior's classical Godunov option, fire_upwinding = 4: diff2 = max(D-,0) - min(D+,0) per axis) with the linear-extrapolation halo closure. The norm is spelled as the compound sqrt((D(u,x))^2 + (D(u,y))^2) but NO compound rule is imported, so the two inner D's lower per axis to Gx = max(D-x u, 0) - min(D+x u, 0) and Gy likewise, and the norm evaluated is sqrt(Gx^2 + Gy^2) = sqrt(max(D-x,0)^2 + min(D+x,0)^2 - 2 max(D-x,0) min(D+x,0) + ...) -- the Rouy-Tourin Hamiltonian plus a non-negative cross term that vanishes on monotone data; both are first-order consistent with |grad u|. Forced-steady eikonal u_t = S (|grad g| - sqrt(Gx^2 + Gy^2)) with the smooth manufactured paraboloid g = (x-1/2)^2 + (y-1/2)^2 - 0.09 (zero level set: the circle r = 0.3) and forcing |grad g| = 2 r; g is exact for all t and the discrete imbalance is the first-order truncation, so the L2 error is O(h) (expected order 1). The signed distance r - 0.3 is deliberately NOT used: its convex centre kink is not a steady viscosity solution and fills in (see problems/levelset_weno5_eno1_2d_paraboloid_mms.esm). Wall cells: g increases toward every wall, so the guarded extrapolation ghost is the plain linear one and the wall error is the same first-order one-sided truncation as the interior. The reference's small L2 norm (~0.09) inflates the RELATIVE L2 error about tenfold; the cap is set from the measured value. Geometry: x0 = y0 = 0, dx = 1/NX, dy = 1/NY; coordinates inline from literals and NX, NY. Per-resolution errors in tests/conformance/convergence/godunov_upwind_D1_2d_paraboloid_mms/golden/errors.json.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:hamilton_jacobi",
+      "mms",
+      "level_set"
+    ],
+    "references": [
+      {
+        "citation": "Rouy, E., & Tourin, A. (1992). A viscosity solutions approach to shape-from-shading. SIAM J. Numer. Anal. 29, 867-884.",
+        "doi": "10.1137/0729053"
+      }
+    ]
+  },
+  "metaparameters": {
+    "NX": {
+      "type": "integer",
+      "default": 64,
+      "description": "Cells along x (default resolution of the inline test; rebound by the convergence runner)."
+    },
+    "NY": {
+      "type": "integer",
+      "default": 64,
+      "description": "Cells along y."
+    }
+  },
+  "models": {
+    "GodunovUpwindD1ParaboloidMMS": {
+      "expression_template_imports": [
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/godunov_upwind_D1x_extrapolate_bc.esm",
+          "bindings": {
+            "NX": "NX",
+            "NY": "NY"
+          }
+        },
+        {
+          "ref": "../grids/cartesian_uniform_2d/rules/godunov_upwind_D1y_extrapolate_bc.esm",
+          "bindings": {
+            "NX": "NX",
+            "NY": "NY"
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Level-set field integrated under the forced eikonal u_t = S (|grad g| - sqrt(Gx^2 + Gy^2)) with Gx, Gy the per-axis Godunov-upwind quantities; starts at and stays near the paraboloid g = r^2 - 0.09."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi front speed."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge (grid free name)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (grid free name)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX: the grid dx free name, NX substituted at load (esm-spec 9.7.6)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY: the grid dy free name, NY substituted at load."
+        },
+        "forcing": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "The manufactured |grad g| = 2 r (coordinates spelled inline)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NX"
+                                  ]
+                                }
+                              ]
+                            },
+                            0.5
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "op": "^",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    0.5
+                                  ]
+                                },
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    1,
+                                    "NY"
+                                  ]
+                                }
+                              ]
+                            },
+                            0.5
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                },
+                0.09
+              ]
+            }
+          }
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              "S",
+              {
+                "op": "-",
+                "args": [
+                  "forcing",
+                  {
+                    "op": "sqrt",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "x"
+                              },
+                              2
+                            ]
+                          },
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "D",
+                                "args": [
+                                  "u"
+                                ],
+                                "wrt": "y"
+                              },
+                              2
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "forcing",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                2,
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NX"
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              "NY"
+            ]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "paraboloid_godunov_upwind",
+          "description": "Manufactured paraboloid g = r^2 - 0.09, forcing |grad g| = 2 r, S = 1; per-axis Godunov-upwind quantities combined as sqrt(Gx^2 + Gy^2). ||u(T) - g|| = T S ||2 r - sqrt(Gx^2 + Gy^2)|| = O(h). The t=0 assertion pins ic wiring; the t=0.2 assertion bounds the first-order RELATIVE L2 error under the measured cap. Exact per-resolution errors in tests/conformance/convergence/godunov_upwind_D1_2d_paraboloid_mms/golden/errors.json.",
+          "time_span": {
+            "start": 0.0,
+            "end": 0.2
+          },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 1e-09
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    0.09
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.2,
+              "expected": 0.0,
+              "tolerance": {
+                "abs": 0.05
+              },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "aggregate",
+                "output_idx": [
+                  "i",
+                  "j"
+                ],
+                "args": [],
+                "ranges": {
+                  "i": {
+                    "from": "x"
+                  },
+                  "j": {
+                    "from": "y"
+                  }
+                },
+                "expr": {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        1,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                0.5
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    0.09
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

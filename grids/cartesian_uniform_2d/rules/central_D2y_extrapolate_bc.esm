@@ -1,0 +1,291 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "central_D2y_extrapolate_bc",
+    "description": "Second-order centred second derivative d2u/dy2 over the full 2-D field u[x, y] on cartesian_uniform_2d with the linear-extrapolation halo closure of NCAR fire_behavior's level-set solver -- the closure its artificial-viscosity term nu |R| ((diffry - diffly) + ...) sees at the walls. Interior [1, NX] x [2, NY-1]: the imported three-point stencil stencils/central_D2y_interior, (u[i+1,j] - 2 u[i,j] + u[i-1,j])/dx^2 (respectively along y). Wall lines: the same three-point second difference with the out-of-range neighbour replaced by the one-cell guarded linear-extrapolation ghost of stencils/extrapolate_linear_ghost, g = max(2 a - b, a, b) with a the wall cell and b its inward neighbour (fire_behavior's Extrapol_var_at_bdys, BIAS = 1). CONSEQUENCE, stated plainly: with the guard inactive (a >= b, the field increasing toward the wall) the ghost is exactly 2a - b and the wall-cell second difference is (b - 2a + 2a - b)/dx^2 = 0 -- the closure imposes ZERO curvature on the wall cells, which is what the reference code computes and what makes its wall viscosity vanish; it is not a consistent approximation of d2u/dy2 there for a curved field. When the guard is active (a < b) the ghost is b and the wall cell reads (b - 2a + b)/dx^2 = 2 (b - a)/dx^2. This rule is therefore tagged order:2 for its interior and makes no convergence claim for the wall cells (no convergence case is shipped: a whole-field error would be dominated by the wall cells' zeroth-order closure by construction). Match D(D(u, wrt: y), wrt: y) at priority 10, scoped with where {u: {shape: [x, y]}}, exactly like central_D2y_dirichlet_bc; consumers pick the closure by importing this rule instead of the Dirichlet/Neumann/periodic siblings. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the two edge ghosts of their walls (the reference code's diagonal corner ghost is never read by ENO1). dx, dy are free names (grid geometry contract). Requires NX >= 3 (respectively NY >= 3).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D2",
+      "axes:x,y",
+      "order:2",
+      "stencil_width:3",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      },
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/central_D2y_interior.esm"
+    },
+    {
+      "ref": "../stencils/extrapolate_linear_ghost.esm"
+    }
+  ],
+  "expression_templates": {
+    "central_D2y_extrapolate_bc": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "y"
+          }
+        ],
+        "wrt": "y"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              "NY",
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "central_D2y_interior",
+            "bindings": {
+              "f": "u"
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        2
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        -2,
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "extrapolate_linear_ghost",
+                      "bindings": {
+                        "a": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        },
+                        "b": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            2
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    "dy",
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                "NY",
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        {
+                          "op": "-",
+                          "args": [
+                            "NY",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        -2,
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "NY"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "extrapolate_linear_ghost",
+                      "bindings": {
+                        "a": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "NY"
+                          ]
+                        },
+                        "b": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "^",
+                  "args": [
+                    "dy",
+                    2
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno5_js_upwind_D1",
+    "description": "Pointwise fifth-order upwind first derivative along one axis from the seven cell values m3, m2, m1 (three cells before), c (the cell), p1, p2, p3 (three cells after) and the spacing h, as the difference of two Jiang-Shu WENO5 face reconstructions: for a non-negative selector sgn the left-biased form (R(m2,m1,c,p1,p2) - R(m3,m2,m1,c,p1))/h (faces i+1/2 and i-1/2 reconstructed from the upwind side), for sgn < 0 the mirror image (R(p3,p2,p1,c,m1) - R(p2,p1,c,m1,m2))/h -- exactly fire_behavior's Select_weno5 with its uf argument as the selector: the code swaps the window (im1<->ip1, im2<->ip2, im3<-ip3) and returns (flux_m - flux_p)/dx, which is the same expression. The selector is the caller's business: fire_behavior's level set passes signo = (grad4 psi . U) (d4 psi/dx), the product of the fourth-order central advection term with the fourth-order central derivative along this axis, so the upwind side is chosen by the wind-relative propagation direction rather than by the sign of the derivative alone. Match-less helper of weno5_eno1_D1x_interior / weno5_eno1_D1y_interior.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x",
+      "order:5",
+      "stencil_width:7"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO5 smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "weno5_js_face_recon.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno5_js_upwind_D1": {
+      "params": [
+        "h",
+        "m3",
+        "m2",
+        "m1",
+        "c",
+        "p1",
+        "p2",
+        "p3",
+        "sgn"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": ">=",
+            "args": [
+              "sgn",
+              0
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_js_face_recon",
+                    "bindings": {
+                      "v0": "m2",
+                      "v1": "m1",
+                      "v2": "c",
+                      "v3": "p1",
+                      "v4": "p2"
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_js_face_recon",
+                    "bindings": {
+                      "v0": "m3",
+                      "v1": "m2",
+                      "v2": "m1",
+                      "v3": "c",
+                      "v4": "p1"
+                    }
+                  }
+                ]
+              },
+              "h"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_js_face_recon",
+                    "bindings": {
+                      "v0": "p3",
+                      "v1": "p2",
+                      "v2": "p1",
+                      "v3": "c",
+                      "v4": "m1"
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_js_face_recon",
+                    "bindings": {
+                      "v0": "p2",
+                      "v1": "p1",
+                      "v2": "c",
+                      "v3": "m1",
+                      "v4": "m2"
+                    }
+                  }
+                ]
+              },
+              "h"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
