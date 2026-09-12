@@ -1,0 +1,75 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "heat_column_varcoeff_flux_bc",
+  "description": "Observed-order-of-accuracy sweep for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc driven by problems/heat_column_varcoeff_flux_bc.esm (constant interface coefficient alpha, prescribed nonzero K du/dz at both interfaces). The problem file is loaded once per resolution with the loader-API metaparameter binding (esm-spec 9.7.6 binding site 4). The manufactured solution z + exp(-alpha pi^2 t) cos(pi z) is exact for the continuous PDE; the ramp is discretely exact, so the recorded L2 errors at t=0.1 are the cosine mode's spatial error and are expected to reproduce tests/conformance/convergence/heat_1d_nonuniform_neumann's golden to round-off (cross-grid consistency of the column rule with the cartesian one), falling as O(dz^2).",
+  "problem": "../../../../problems/heat_column_varcoeff_flux_bc.esm",
+  "model": "Heat",
+  "rule": "../../../../grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc.esm",
+  "grid": "column_nonuniform_1d",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NLEV": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NLEV": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NLEV": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NLEV": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

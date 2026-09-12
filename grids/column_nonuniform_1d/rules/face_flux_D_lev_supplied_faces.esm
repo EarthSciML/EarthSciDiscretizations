@@ -1,0 +1,73 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "face_flux_D_lev_supplied_faces",
+    "description": "Vertical flux divergence D(F, wrt: lev) of an INTERFACE flux field F (shape [lev_nodes]) on column_nonuniform_1d, lowered to the conservative finite-volume difference (F[k+1] - F[k]) / dz[k] over all NLEV layers. This is the primitive that every flux-form column process reduces to: a consuming model writes its conservation law as du/dt = -D(F, wrt: lev) + ... with F its upward (+lev) flux at the NLEV+1 interfaces -- turbulent flux, sedimentation flux, radiative net flux, precipitation flux -- and supplies the two domain-face values inside F itself (F[1] the surface exchange, F[NLEV+1] = 0 for a rigid model top), so the rule carries no boundary regions of its own (bc:supplied_flux). Match-scoped with where {F: {shape: [lev_nodes]}} (esm-spec 9.6.1) so it fires only on a bare interface-shaped field of THIS grid and never on a layer-shaped field or a compound: a consumer differentiating a compound flux (e.g. w*q, K*D(u)) first binds it to a declared [lev_nodes] observed, or uses a compound-matching rule such as varcoeff_face_laplacian_lev_flux_bc. Priority 0 (a plain-D rule); compound rules on this grid fire first at priority 10 under esm-spec 9.6.3 outermost-first precedence. `dz` is the consumer's free-name geometry observed. Exactly telescoping, second-order on a smoothly stretched column.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:D",
+      "axes:lev",
+      "order:2",
+      "stencil_width:2",
+      "bc:supplied_flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/face_flux_D_lev_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "face_flux_D_lev_supplied_faces": {
+      "params": [
+        "F"
+      ],
+      "priority": 0,
+      "match": {
+        "op": "D",
+        "args": [
+          "F"
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "F": {
+          "shape": [
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "face_flux_D_lev_interior",
+            "bindings": {
+              "F": "F"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

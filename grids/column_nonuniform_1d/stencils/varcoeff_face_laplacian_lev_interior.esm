@@ -1,0 +1,213 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_interior",
+    "description": "Interior-only conservative finite-volume variable-coefficient Laplacian d/dz(K du/dz) on column_nonuniform_1d with the coefficient K supplied AT THE INTERFACES (shape [lev_nodes]): L u[k] = ( K[k+1] (u[k+1]-u[k])/(zc[k+1]-zc[k]) - K[k] (u[k]-u[k-1])/(zc[k]-zc[k-1]) ) / dz[k] over k in [2, NLEV-1]. Interface numbering: K[k] lives on the interface BELOW layer k (node 1 is the surface, node k separates layers k-1 and k, node NLEV+1 is the model top), so the flux through the interface above layer k uses K[k+1]. This is exactly how atmospheric PBL schemes define their exchange coefficients -- e.g. WRF/CCPP YSU's xkzh(k), 'at the interface between k and k+1', is K[k+1] here -- so no face averaging is performed or needed (contrast grids/cartesian_uniform_1d/stencils/varcoeff_laplacian_interior, which averages a CELL-centred coefficient to the faces). Match-less named template; rules/varcoeff_face_laplacian_lev_flux_bc wraps it with the two boundary-flux layers. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). Second-order in L2 on a smoothly stretched column (supraconvergent); reduces to the classical three-point form on a uniform column with uniform K.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_interior": {
+      "params": [
+        "u",
+        "K"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "u",
+          "K"
+        ],
+        "ranges": {
+          "k": [
+            2,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "K",
+                        {
+                          "op": "+",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "k",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "k"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "k",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                "k"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "K",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "k"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "k",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                "k"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "k",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
