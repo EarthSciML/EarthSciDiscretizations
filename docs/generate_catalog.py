@@ -31,7 +31,7 @@ Pretty-printing policy (AGENTS.md "single pathway"):
     regardless of which renderer handled an expression. Presentation-layer
     only — full precision always lives in the .esm sources the pages link.
   * Math display prefers the OFFICIAL ESS display path
-    (earthsci_ast.display.to_unicode), used in-process when the toolkit is
+    (`earthsci_ast.to_unicode`), used in-process when the toolkit is
     importable (the CI docs job pip-installs it) or through
     docs/_render_bridge.py in the EarthSciAST toolkit venv when a
     local checkout is available.
@@ -158,10 +158,15 @@ class OfficialDisplay:
         self._proc = None
         self._inproc = None
         try:
-            from earthsci_ast.display import to_unicode  # type: ignore
-            from earthsci_ast.parse import _parse_expression  # type: ignore
+            # PUBLIC surface only (api-surface.json: `to_unicode` is stable in
+            # all five bindings), from the package namespace rather than the
+            # module that defines it. `to_unicode` takes an `Expr`, and in the
+            # Python binding an `Expr` IS the wire dict — so the raw .esm JSON
+            # goes in directly and the private `parse._parse_expression`
+            # wire->typed step this used to import is not needed at all.
+            from earthsci_ast import to_unicode  # type: ignore
 
-            self._inproc = (to_unicode, _parse_expression)
+            self._inproc = to_unicode
             self.mode = "in-process"
             return
         except Exception:
@@ -205,9 +210,8 @@ class OfficialDisplay:
 
     def render(self, expr) -> str | None:
         if self._inproc is not None:
-            to_unicode, parse = self._inproc
             try:
-                return to_unicode(parse(expr))
+                return self._inproc(expr)
             except Exception:
                 return None
         if self._proc is not None:
