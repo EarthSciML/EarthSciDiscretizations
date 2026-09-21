@@ -145,6 +145,35 @@ def md_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def md_prose(text: str) -> str:
+    """Author prose from a `.esm` `metadata.description`, made safe to emit as Markdown.
+
+    These descriptions are mathematics, not markup, and they are full of index
+    subscripts. A subscript immediately followed by a parenthesised group —
+    `kf[3/2](u[2]-u[1])/dx^2` — is *exactly* CommonMark inline-link syntax, so
+    the renderer emits `<a href="u[2]-u[1]">3/2</a>` and the docs job's link
+    checker then fails on a file that was never meant to be a link. Thirteen
+    such phrases across three grid pages did precisely that.
+
+    Escaping the closing bracket stops the link from forming and renders as the
+    literal `]` the author wrote. Text inside a backtick code span is left
+    alone: no link forms there, so escaping would only show a stray backslash.
+    Nothing here can break a real link — citations live in
+    `metadata.references`, and no `.esm` description in the library contains
+    Markdown link syntax.
+    """
+    return _MD_CODE_OR_LINKISH.sub(
+        lambda m: m.group("code") if m.group("code") else "\\](", text)
+
+
+# Scanned left to right, alternation first: a backtick code span is consumed
+# whole (so a `](` inside one is passed over), and only a `](` reached outside
+# any code span is escaped. Splitting on code spans instead would mis-pair the
+# backticks these descriptions already use around field names (`u`, `k`, `gi`)
+# and escape the wrong halves.
+_MD_CODE_OR_LINKISH = re.compile(r"(?P<code>`+[^`]*`+)|(?P<linkish>\]\()")
+
+
 # ---------------------------------------------------------------------------
 # Official ESS display path (in-process or via the toolkit venv bridge).
 # ---------------------------------------------------------------------------
@@ -990,7 +1019,7 @@ def rule_section(
 
     description = metadata.get("description")
     if description:
-        out.append(description)
+        out.append(md_prose(description))
         out.append("")
 
     out += references_md(metadata)
@@ -1070,7 +1099,7 @@ def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> li
     out.append("")
     description = metadata.get("description")
     if description:
-        out.append(description)
+        out.append(md_prose(description))
         out.append("")
     out += references_md(metadata)
     return out
@@ -1134,7 +1163,7 @@ def grid_page(
         "",
     ]
     if metadata.get("description"):
-        lines.append(metadata["description"])
+        lines.append(md_prose(metadata["description"]))
         lines.append("")
 
     metaparameters = doc.get("metaparameters") or {}
@@ -1143,7 +1172,7 @@ def grid_page(
         for pname, spec in metaparameters.items():
             default = spec.get("default", "—")
             lines.append(
-                f"| `{pname}` | {spec.get('type', '')} | `{default}` | {md_cell(spec.get('description', ''))} |"
+                f"| `{pname}` | {spec.get('type', '')} | `{default}` | {md_cell(md_prose(spec.get('description', '')))} |"
             )
         lines += [
             "",
@@ -1223,7 +1252,7 @@ def grid_page(
                 definition = f"`{tname}[{idx_s}] = {expr}` for `{ranges}`"
             else:
                 definition = f"`{tname} = {renderer.render_top(body)}`"
-            lines.append(f"| `{tname}` | {md_cell(definition)} | {md_cell(tmpl.get('description', ''))} |")
+            lines.append(f"| `{tname}` | {md_cell(definition)} | {md_cell(md_prose(tmpl.get('description', '')))} |")
         lines.append("")
 
     if stencil_docs:
@@ -1338,7 +1367,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
         lines.append(f"Source: [`{rel(path)}`]({blob(path)})")
         lines.append("")
         if metadata.get("description"):
-            lines.append(metadata["description"])
+            lines.append(md_prose(metadata["description"]))
             lines.append("")
         templates = doc.get("expression_templates") or {}
         if templates:
@@ -1350,7 +1379,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
                 lines.append(f"**`{call}`**")
                 if tmpl.get("description"):
                     lines.append("")
-                    lines.append(tmpl["description"])
+                    lines.append(md_prose(tmpl["description"]))
                 lines.append("")
                 body = tmpl.get("body")
                 if isinstance(body, dict) and body.get("op") == "makearray":
