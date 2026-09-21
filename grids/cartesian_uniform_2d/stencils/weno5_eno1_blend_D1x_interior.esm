@@ -1,0 +1,715 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno5_eno1_blend_D1x_interior",
+    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dx of NCAR fire_behavior's fire_upwinding = 10 -- the same scheme as fire_upwinding = 9 but with a BLENDING ZONE instead of a hard band edge -- on cartesian_uniform_2d over the block [4, NX-3] x [3, NY-2]. It is stencils/weno5_eno1_D1x_interior with the band switch replaced by a smooth partition of unity and nothing else. The reference writes it as three branches on a = |u[i,j]| with band_width = 2 B and transition_width = B, B = weno_band_cells dx: mask = 1 for a <= B, mask = 0.5 (1 + cos(pi (a - B)/B)) for B < a <= 2B, and mask = 0 for a > 2B; then diff2 = mask diff2_weno + (1 - mask) diff2_eno (stencils/weno5_eno1_cosine_blend). Here that is one closed expression, mask = 0.5 (1 + cos(pi min(max((a - B)/B, 0), 1))), which is EXACTLY equivalent because the clamp saturates the cosine's argument at 0 and pi at the two ends -- no branching, per AGENTS.md 1. The wall test is unchanged and still hard: a cell within bdy_eno1_cells of any wall takes ENO1 outright, because case 10 sits inside the same wall `else` as cases 8 and 9. Unlike the reference, which skips the WENO5 evaluation where mask = 0, this evaluates it and multiplies by zero; that is safe because the Jiang-Shu weights are eps-regularised and finite everywhere. Upwind side and free names are as in the fire_upwinding = 9 sibling: the wind-relative propagation sign from wind_u, wind_v. Free names: wind_u, wind_v, bdy_eno1_cells, weno_band_cells, pi_blend, dx, dy. pi_blend is pi; it is a free name rather than a literal so the consumer supplies it from its own constants library.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:7"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO5 smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Harten, A., Engquist, B., Osher, S., & Chakravarthy, S. R. (1987). Uniformly high order accurate essentially non-oscillatory schemes, III. Journal of Computational Physics, 71(2), 231-303. ENO stencil selection by smallest divided difference (first-order form: the minmod limiter).",
+        "doi": "10.1016/0021-9991(87)90031-3"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "eno1_minmod.esm"
+    },
+    {
+      "ref": "weno5_js_upwind_D1.esm"
+    },
+    {
+      "ref": "central_D1_4_point.esm"
+    },
+    {
+      "ref": "weno5_eno1_cosine_blend.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno5_eno1_blend_D1x_interior": {
+      "params": [
+        "u"
+      ],
+      "body": {
+        "op": "aggregate",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "args": [
+          "u"
+        ],
+        "ranges": {
+          "i": [
+            4,
+            {
+              "op": "-",
+              "args": [
+                "NX",
+                3
+              ]
+            }
+          ],
+          "j": [
+            3,
+            {
+              "op": "-",
+              "args": [
+                "NY",
+                2
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "ifelse",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "<",
+                          "args": [
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                1,
+                                "bdy_eno1_cells"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": ">",
+                          "args": [
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                "bdy_eno1_cells"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "<",
+                      "args": [
+                        "j",
+                        {
+                          "op": "+",
+                          "args": [
+                            1,
+                            "bdy_eno1_cells"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": ">",
+                  "args": [
+                    "j",
+                    {
+                      "op": "-",
+                      "args": [
+                        "NY",
+                        "bdy_eno1_cells"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              }
+            },
+            {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "weno5_eno1_cosine_blend",
+              "bindings": {
+                "m": {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "+",
+                      "args": [
+                        1.0,
+                        {
+                          "op": "cos",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                "pi_blend",
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    {
+                                      "op": "max",
+                                      "args": [
+                                        {
+                                          "op": "/",
+                                          "args": [
+                                            {
+                                              "op": "-",
+                                              "args": [
+                                                {
+                                                  "op": "abs",
+                                                  "args": [
+                                                    {
+                                                      "op": "index",
+                                                      "args": [
+                                                        "u",
+                                                        "i",
+                                                        "j"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "op": "*",
+                                                  "args": [
+                                                    "weno_band_cells",
+                                                    "dx"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "*",
+                                              "args": [
+                                                "weno_band_cells",
+                                                "dx"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        0.0
+                                      ]
+                                    },
+                                    1.0
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "w": {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "weno5_js_upwind_D1",
+                  "bindings": {
+                    "h": "dx",
+                    "m3": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            3
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "m2": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            2
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "m1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "-",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "c": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        "i",
+                        "j"
+                      ]
+                    },
+                    "p1": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            1
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "p2": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            2
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "p3": {
+                      "op": "index",
+                      "args": [
+                        "u",
+                        {
+                          "op": "+",
+                          "args": [
+                            "i",
+                            3
+                          ]
+                        },
+                        "j"
+                      ]
+                    },
+                    "sgn": {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "apply_expression_template",
+                                  "args": [],
+                                  "name": "central_D1_4_point",
+                                  "bindings": {
+                                    "h": "dx",
+                                    "m2": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            2
+                                          ]
+                                        },
+                                        "j"
+                                      ]
+                                    },
+                                    "m1": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "j"
+                                      ]
+                                    },
+                                    "p1": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "i",
+                                            1
+                                          ]
+                                        },
+                                        "j"
+                                      ]
+                                    },
+                                    "p2": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "i",
+                                            2
+                                          ]
+                                        },
+                                        "j"
+                                      ]
+                                    }
+                                  }
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "wind_u",
+                                    "i",
+                                    "j"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "apply_expression_template",
+                                  "args": [],
+                                  "name": "central_D1_4_point",
+                                  "bindings": {
+                                    "h": "dy",
+                                    "m2": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        "i",
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            2
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "m1": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        "i",
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "j",
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "p1": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        "i",
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "j",
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "p2": {
+                                      "op": "index",
+                                      "args": [
+                                        "u",
+                                        "i",
+                                        {
+                                          "op": "+",
+                                          "args": [
+                                            "j",
+                                            2
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "wind_v",
+                                    "i",
+                                    "j"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "central_D1_4_point",
+                          "bindings": {
+                            "h": "dx",
+                            "m2": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "m1": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "p1": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "p2": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    2
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                "e": {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "eno1_minmod",
+                  "bindings": {
+                    "dl": {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "j"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          ]
+                        },
+                        "dx"
+                      ]
+                    },
+                    "dr": {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "j"
+                              ]
+                            }
+                          ]
+                        },
+                        "dx"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
