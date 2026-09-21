@@ -40,7 +40,7 @@ A consuming model needs one import and one `D`:
 ]
 ```
 
-Boundary conditions live **inside** the rule (interior region = the stencil aggregate,
+Boundary conditions live **inside** the rule (interior region = the stencil `faq`,
 boundary-face regions = the BC); there is no separate boundary-condition declaration
 anywhere (esm-spec §9.6.8). Rebinding the metaparameters at the import edge is the whole
 convergence story — the same files serve every resolution.
@@ -123,8 +123,8 @@ and Go** — including the end-to-end consuming-model gate at N=64 and the two
 newest spec mechanisms the library now leans on: §9.7.7 import
 renaming/rebinding plus §9.6.1 `where` scoping (`two_cartesian_grids_coexist` —
 one grid+rule imported twice, each instance rewritten to its own renamed axis
-and shape) and §9.6.2 aggregate-mapped template expansion (`lcc_grid_roundtrip`
-— reprojection templates inlined inside an `aggregate`).
+and shape) and §9.6.2 faq-mapped template expansion (`lcc_grid_roundtrip`
+— reprojection templates inlined inside a `faq` node).
 
 Julia (reference), Python, and Rust run the numeric categories — MMS
 simulation, convergence sweeps (error norms within rtol 1e-4 of the committed

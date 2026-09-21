@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "godunov_norm_1d_eikonal_mms",
     "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_1d/rules/godunov_norm_D1_periodic on the periodic unit interval [0,1]. Forced-steady eikonal / Hamilton-Jacobi equation u_t = -S|u_x| + S|g'(x)| with the manufactured solution g(x) = sin(2 pi x): because u_t = -S|g'| + S|g'| = 0, g is the EXACT solution of the continuous forced PDE for all t (both the initial condition and the steady state), so the analytic reference at every time is g itself. The forcing S|g'(x)| = 2 pi S |cos(2 pi x)| is the constant-in-time source that balances the operator. Discretely u_t = S*(|g'| - godunov(u)); starting from u(0) = g the imbalance is exactly the first-order truncation error S*(|g'| - godunov(g)) = O(dx), so the discrete solution drifts from g at rate O(dx) and the L2 / Linf error at the assert time falls as O(dx) — expected order 1. THE KINKS ARE NOT A PROBLEM: |g'| = 2 pi |cos(2 pi x)| has slope-sign kinks at x = 1/4, 3/4 (where u_x changes sign), yet the Godunov / Rouy-Tourin entropy fix sqrt(max(D-,0)^2 + min(D+,0)^2) selects the correct one-sided branch through the kink, so the scheme retains clean first-order accuracy in L2 AND Linf uniformly (numerically verified: pairwise orders 0.98 -> 1.00 across N = 16..256, Linf likewise). This is the property that distinguishes the Godunov norm from a naive centered |u_x| and the reason a periodic sin MMS — whose |g'| necessarily changes sign — still converges at order 1. Both g and |g'| are periodic (g(0) = g(1) = 0, |cos| has period 1/2), so the periodic wrap is fully consistent (no seam artifact), unlike a non-periodic ramp; the two wrap faces converge at the same order-1 rate as the interior, so the state L2/Linf reduction over the whole field is a clean order-1 gate with nothing to exempt. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6, so the loader-API rebinding of N for the convergence sweep keeps dx consistent). The ic, the forcing observed, and the test reference spell the cell-center coordinate x_i = (i - 1/2)/N inline from literals and the metaparameter N (the 6.6.5/ic build-time cellwise evaluation is scope-free; build-time coordinate expressions fold from literals and N alone, never the free-name x_coord template). Per-resolution error norms are pinned in tests/conformance/convergence/godunov_norm_1d_eikonal_mms/golden/errors.json.",
@@ -79,7 +79,7 @@
                 "args": [
                   6.283185307179586,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -166,7 +166,7 @@
         {
           "lhs": "forcing",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -245,7 +245,7 @@
                     "args": [
                       6.283185307179586,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],
@@ -296,7 +296,7 @@
                     "args": [
                       6.283185307179586,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],

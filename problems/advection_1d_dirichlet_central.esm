@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "advection_1d_dirichlet_central",
     "description": "MMS driver: 1-D linear advection-diffusion u_t = -c D(u,x) + nu D(D(u,x),x) on the unit interval [0, 1] with fixed-value (DIRICHLET) walls, whose advective gradient term D(u,x) is discretized by grids/cartesian_uniform_1d/rules/central_D1_dirichlet_bc (2nd-order centered interior, mirror-ghost fixed-value faces) — the RULE UNDER TEST — and whose diffusive term D(D(u,x),x) is discretized by grids/cartesian_uniform_1d/rules/central_D2_dirichlet_bc (both closures share the same wall values gL, gR). WHY ADVECTION-DIFFUSION, NOT PURE ADVECTION: a fixed-value mirror-ghost closure PINS the field at a wall, which is well posed and dissipative only where the flow is INTO the domain or where a genuine second-derivative (diffusion) operator makes Dirichlet its natural condition. A pure first-order advection with fixed values at BOTH walls is ill posed: at an outflow wall the pinned value REFLECTS (a Kreiss/GKS-unstable mode whose error grows as the grid refines), and a convergent both-inflow speed instead seeds an undamped interior stagnation mode — so no constant- or variable-speed pure-advection driver converges (unlike the zero-gradient sibling, whose extrapolation-like one-sided faces are non-reflecting and so DO admit a pure inflow/outflow advection driver). Adding a physical diffusion nu D(D(u,x),x) supplies the dissipation that renders the two-sided fixed-value problem well posed and the semi-discrete operator stable, while the advective gradient term is still genuinely exercised: a broken/first-order central_D1_dirichlet_bc would degrade the observed order below 2, so the sweep is a real order test of the rule. EXACT UNFORCED SOLUTION (no manufactured forcing needed — mirrors the DECAY structure of problems/heat_1d_dirichlet, whose parabolic smoothing keeps boundary truncation at global O(dx^2)): u*(x,t) = e^{2x} + e^{-lambda t} e^{x} sin(pi x) with c = 1, nu = 1/2 and lambda = nu pi^2 + c^2/(4 nu) = 5.434802200544679. Both terms solve u_t = -c u_x + nu u_xx exactly: (i) the STEADY part u_s(x) = e^{2x} = e^{(c/nu) x} satisfies -c u_s' + nu u_s'' = e^{2x}(-c(c/nu) + nu(c/nu)^2) = 0 (the homogeneous advection-diffusion steady mode), carrying the NONZERO wall values gL = u_s(0) = 1 and gR = u_s(1) = e^2 = 7.38905609893065 — so this problem exercises the inhomogeneous mirror-ghost face term 2*g at BOTH walls, not merely the homogeneous default; (ii) the DECAY part e^{-lambda t} phi(x) with phi(x) = e^{c x/(2 nu)} sin(pi x) = e^{x} sin(pi x) is the first Dirichlet eigenfunction of the advection-diffusion operator (phi(0)=phi(1)=0, so it leaves the wall values unchanged), giving u_t = -lambda u* and driving the time evolution through which the operators are exercised. The discrete field then differs from u* only by the spatial truncation of the two operators, dominated by the advective central_D1_dirichlet_bc term. OBSERVATION WINDOW t=0.05: the diffusion is dissipative so no short-window trick is needed; t is kept modest so the decay part (e^{-lambda t} = 0.76 at t=0.05) is still O(1), keeping the dynamics — and hence the operator test — active. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). The ic and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). The gL/gR wall values, by contrast, survive only in the runtime rule bodies. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_dirichlet_central/golden/errors.json.",
@@ -88,7 +88,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -292,7 +292,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],
@@ -425,7 +425,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],

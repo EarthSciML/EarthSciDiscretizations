@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_transport_cwc_mms",
     "description": "Method-of-manufactured-solutions driver for the CONSISTENT-WITH-CONTINUITY (CWC) vertical tracer transport pair on latlon3d -- the continuity rule grids/latlon3d/rules/face_flux_divergence_lev_noflux_bc and the flux-form upwind rule grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc, coupled through the observed mixing ratio q = mq / m. Its companion problems/latlon3d_transport_cwc_freestream pins that a CONSTANT tracer is preserved bitwise; this one pins that a NON-CONSTANT tracer still converges at the donor-cell rate, i.e. that consistency with continuity was bought with a modelling fix and not with a loss of accuracy. \n\nTHE SYSTEM. \n    d(m)/dt  = -D(M, wrt: lev)   + src_m \n    d(mq)/dt = -D(M*q, wrt: lev) + src_mq,   q = mq / m \nwith m the air mass per unit area, mq the tracer mass, and M the face air-mass flux. The tracer operator never sees a velocity or a mixing-ratio field supplied from outside: it sees the mass flux and the ratio of the two states it is integrating, which is the entire point. \n\nFORCED-STEADY (TRUNCATION) IDIOM, following the sibling latlon3d_advection_vertical_upwind_flux. The manufactured solution is m*(z) = 2 - z and q*(z) = 1 + z^2, hence a tracer mass mq*(z) = (2 - z)(1 + z^2); the states are initialised to the EXACT CELL MEANS of m* and mq* (a finite-volume state is a cell mean, and seeding point values would inject an O(dz^2) error of its own -- the cell means are available in closed form because both profiles are polynomials). src_m and src_mq are the EXACT cell-mean flux divergences, which for a finite-volume cell are just differences of the exact face fluxes over the thickness, (M q*|_{k+1} - M q*|_k)/dz[k] -- no quadrature needed. In exact arithmetic the manufactured state is then a steady state of the forced system, so the drift measured at t = 0.1 IS the operator's truncation error and the observed convergence rate is the truncation order: 1, for donor-cell upwinding. \n\nTHE MASS EQUATION IS FROZEN, AND EXACTLY SO -- WHICH IS ITSELF A PIN. Because the discrete continuity operator is EXACT on cell means (the finite-volume divergence of exact face fluxes is the exact cell-mean divergence, identically), src_m -- written as the same difference of the same two face fluxes over the same dz -- cancels it BITWISE, term for term, including at the two walls where the wall flux is absent from the operator and where M vanishes exactly from the forcing. d(m)/dt is therefore exactly zero and m holds its initial cell means to the last bit. So the m-error assertion at t = 0.1 has a 1e-12 tolerance rather than a discretization-sized one: any drift at all in m would mean the continuity rule and the forcing disagree about which faces, which thicknesses, or which wall closure -- exactly the disagreement that destroys free-stream preservation in the companion problem. The tracer, by contrast, drifts at O(dz), because the donor-cell face value is a first-order reconstruction of q at the face while the forcing uses the exact one. \n\nWHY M VANISHES AT BOTH WALLS. The no-flux closure substitutes the exact wall flux (zero) instead of a reconstructed one, so a nonzero wall mass flux would leave an O(1) truncation error in the boundary cell that never vanishes under refinement (dividing a lone uncancelled O(dz) flux error by dz[1]). M = 4 z (1 - z)(1 - 2z) a(i) b(j) vanishes LINEARLY at each wall, so the flux at the first interior face is itself O(dz), the boundary flux error is O(dz^2), and the boundary cell stays O(dz) like the interior: the scheme is uniformly first order. It is also the only physically admissible wind -- air does not flow through the ground or the model lid. \n\nNLON and NLAT are pinned at both rule import edges; NLEV is left LIVE for the convergence harness to bind per resolution (and so the build-time ic/reference expressions, which cannot read observeds, can fold z from literals plus NLEV). The horizontal extents therefore appear as the literals 8 and 5 inside the runtime expressions.",
@@ -134,7 +134,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -309,7 +309,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -1895,7 +1895,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -1977,7 +1977,7 @@
         {
           "lhs": "M",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iw",
               "jw",
@@ -2124,7 +2124,7 @@
         {
           "lhs": "q",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iq",
               "jq",
@@ -2173,7 +2173,7 @@
         {
           "lhs": "src_m",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ia",
               "ja",
@@ -2240,7 +2240,7 @@
         {
           "lhs": "src_mq",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ib",
               "jb",
@@ -2396,7 +2396,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -3928,7 +3928,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -5460,7 +5460,7 @@
               },
               "reduce": "Linf_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",

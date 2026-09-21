@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_diffusion_vertical_robin_surface",
     "description": "MMS driver: variable-coefficient VERTICAL TURBULENT DIFFUSION coupled to a ROBIN SURFACE-EXCHANGE boundary -- dry deposition out, prescribed emission in -- on the 3-D latlon3d grid, u_t = D(kz * D(u,lev), lev) + S, discretized by grids/latlon3d/rules/varcoeff_laplacian_lev_robin_surface_bc (zero-flux model top, resistance-in-series ground). This is the operator that couples a chemical transport model to its surface: it carries emitted tracer up out of the bottom layer and delivers depositing tracer back down to it. The sibling of problems/latlon3d_diffusion_vertical_noflux -- identical mesh, identical diffusivity, identical interior and lid -- differing ONLY in the surface boundary condition, so the two convergence goldens isolate exactly what the surface exchange costs (answer: nothing; both are 2.00). PASSIVE lon (NLON = 8) and lat (NLAT = 5). MANUFACTURED SOLUTION u*(z,t) = phi(z) + exp(-pi^2 t) psi(z), a transient decaying onto an emission/deposition STEADY STATE, with phi(z) = 1 - 0.5 sin(pi z/2) and psi(z) = cos(pi z) - 1. The split is what makes a Robin condition with a STATIC emission field admissible at every t: phi carries the inhomogeneous part (it fixes emis = vdep*phi(0) - kz(0) phi'(0)), while psi satisfies the HOMOGENEOUS Robin condition (psi(0) = psi'(0) = 0, so kz(0) psi'(0) = vdep psi(0) trivially); both have zero derivative at z = 1, matching the no-flux lid. Forcing S = u*_t - d/dz(kz du*/dz) splits into a STEADY part -d/dz(kz phi') and a TRANSIENT part exp(-pi^2 t)[-pi^2 psi - d/dz(kz psi')], spelled below as two aggregates over cell centres. WHY THE SURFACE CLOSURE IS NOT THE OBVIOUS ONE. The rule closes the ground flux by RESISTANCE IN SERIES, G_1/2 = (vdep*u[1] - emis) * a/(a + vdep) with a = 2 kz[1]/dz[1], rather than applying the deposition velocity directly to the first-cell value. The naive form is INCONSISTENT -- it commits an O(dz) error in the ground flux, which the divergence divides by dz[1], leaving an O(1) truncation error. Measured on THIS manufactured solution the naive closure looks healthy at coarse resolution and then unravels (Linf order 1.98 -> 1.52 -> 1.16 as NLEV goes 32 -> 64 -> 128); the series form holds 2.00. See grids/latlon3d/stencils/varcoeff_D_lev_robin_k1.esm for the derivation. MASS: the column budget closes to exactly the physical surface exchange -- mass is not conserved here, by design. VERTICAL MESH: as the no-flux sibling (quadratic stretch, thin cells at the ground). HYGIENE: pe over kn, kz over (ik,jk,kk), forcings over (ia,ja,ka)/(ib,jb,kb), vdep over (iv,jv), emis over (ie,je), dz/zc via gk -- all distinct from the operator's (i,j,k). ic/references spell z inline from the stretch formula and the NLEV name (build-time scope caveat).",
@@ -110,7 +110,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -488,7 +488,7 @@
                 "wrt": "lev"
               },
               {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "ia",
                   "ja",
@@ -641,7 +641,7 @@
                     ]
                   },
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "ib",
                       "jb",
@@ -821,7 +821,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -914,7 +914,7 @@
         {
           "lhs": "kz",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ik",
               "jk",
@@ -977,7 +977,7 @@
         {
           "lhs": "vdep",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iv",
               "jv"
@@ -997,7 +997,7 @@
         {
           "lhs": "emis",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ie",
               "je"
@@ -1033,7 +1033,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -1389,7 +1389,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",

@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_advection_vertical_ppm_flux_mono",
     "description": "Method-of-manufactured-solutions driver for the UPWIND-BIASED, MONOTONE flux-form vertical advection operator grids/latlon3d/rules/ppm_flux_D_lev_mono_noflux_bc -- d/dz(w q) with the wind INSIDE the operator, a CW84 eq (1.6)/(1.8)/(1.10) limited parabola on each side of every face, and the donor picked by the sign of the face velocity. The transport equation is du/dt = -D(W*u, wrt: lev) + src, and the rule's compound match D(W*q, wrt: lev) lowers the whole product.\n\nWHAT THIS DRIVER EXISTS TO PIN. Two things at once, which no pre-existing driver on this grid pins together. (a) HIGH ORDER: the reconstruction must actually buy accuracy over the first-order donor cell of the sibling driver latlon3d_advection_vertical_upwind_flux, at matched resolution on an identical MMS. (b) UPWIND BIAS THROUGH A REVERSAL: the wind changes sign in the middle of every column, so a scheme that hard-coded a single donor direction -- as every pre-existing high-order vertical operator on this grid does, ppm_D_lev_noflux_bc and ppm_D_lev_mono_noflux_bc included, since they read a one-signed 1-D column profile from the free name w_edge -- would be reconstructing from the wrong side over half the domain.\n\nEXPECTED ORDER IS SET BY THE LIMITER, NOT BY THE PARABOLA. The eq (1.8)/(1.10) limiter pair cannot distinguish a genuine smooth extremum from an oscillation and clips it to a flat parabola. u*(z) = cos(pi z) has a smooth extremum at the surface wall (its derivative vanishes at z = 0), so the limiter fires there on every mesh and the formal fourth order of the underlying reconstruction is NOT what this driver measures. The MEASURED orders are L2 2.49 and Linf 1.98 (the unlimited sibling driver latlon3d_advection_vertical_ppm_flux measures 3.99 / 3.94 on the identical MMS, so the shortfall is caused by the limiter and by nothing else). The convergence manifest asserts what was measured rather than what the parabola promises. The boundedness bought with those two orders is real and was verified: on a sharp top-hat plume under this same reversing wind the tracer minimum stays at exactly +0.0 under this rule, while the unlimited sibling reaches -7.16 and the pre-existing one-signed ppm_D_lev_mono_noflux_bc diverges to -1.6e3.\n\nTHE MMS IS BYTE-FOR-BYTE THE ONE IN problems/latlon3d_advection_vertical_upwind_flux, AND DELIBERATELY SO. Same stretched mesh pe = 0.6 s + 0.4 s^2, same exact steady state u*(z) = cos(pi z), same three-dimensional face-staggered wind W = sin(2 pi z) a(i) b(j), same exact cell-averaged forcing. The only difference between the two drivers is which rule they import. That is what licenses the head-to-head accuracy comparison against the first-order donor-cell scheme at matched NLEV: any difference in the measured error is attributable to the reconstruction and to nothing else.\n\nFORCED-STEADY (TRUNCATION) IDIOM. u*(z) = cos(pi z) is an exact steady state of the forced equation and `src` is the EXACT cell-averaged flux divergence -- which for a finite-volume cell is simply the difference of the exact fluxes at its two faces, (W u*|_{k+1} - W u*|_k)/dz[k], with no quadrature needed. In exact arithmetic du/dt vanishes identically, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. The state is initialised to the exact CELL AVERAGE of cos(pi z), not to its point value at the cell centre, because a finite-volume state variable is a cell mean; seeding point values would inject an O(dz^2) initial error of its own.\n\nTHE WIND REVERSES SIGN, AND VANISHES AT BOTH WALLS. W = sin(2 pi z) a(i) b(j) is positive below z = 1/2 and negative above it (a convergent flow), with a(i) b(j) strictly positive, so the sign of W is set by z alone and BOTH donor branches fire in every column. The vanishing at the walls is required, not cosmetic: the no-flux closure substitutes the exact wall flux (zero), so were W(0) nonzero that exactly-substituted flux would sit beside a face flux carrying a truncation error, and dividing the lone uncancelled error by dz[1] would leave an O(1) boundary error that never converges. Because sin(2 pi z) vanishes LINEARLY at each wall the velocity at the first interior face is itself O(dz), the boundary flux error is one order higher than the interior's, and the scheme stays uniformly consistent.\n\nNLON and NLAT are pinned at the rule's import edge; NLEV is left LIVE so the convergence harness can bind it per resolution (and so this file's own build-time ic/reference expressions, which cannot read observeds, can fold z from literals plus NLEV). The horizontal extents therefore appear as the literals 8 and 5 inside the runtime expressions.",
@@ -97,7 +97,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -456,7 +456,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -538,7 +538,7 @@
         {
           "lhs": "W",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iw",
               "jw",
@@ -658,7 +658,7 @@
         {
           "lhs": "src",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ia",
               "ja",
@@ -955,7 +955,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -1287,7 +1287,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",

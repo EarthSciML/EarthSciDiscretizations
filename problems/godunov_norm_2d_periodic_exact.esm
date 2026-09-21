@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "godunov_norm_2d_periodic_exact",
     "description": "Exactness driver for grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic on the doubly-periodic unit box [0,1]x[0,1] at NX=NY=64: the first-order Godunov (Rouy-Tourin / Osher-Sethian) gradient magnitude ANNIHILATES a spatially constant field EXACTLY, the null-space mimetic property |grad(const)| = 0 (the low-order 2-D cartesian analogue of the grad(const) = 0 gate in problems/gradient_mpas.esm, and the 2-D companion of problems/godunov_norm_1d_periodic_exact.esm). The state holds a constant field u(x,y) = 3, evolved under the Hamilton-Jacobi step u_t = -S|grad u| discretized as u_t = -S*godunov(u); with u constant every backward and forward difference along BOTH axes is a subtraction of equal floats (u[i,j]-u[i-1,j] = 3-3 = 0.0 to the bit, at the doubly-interior block AND at every periodic-wrap edge strip and corner), so sqrt(max(0,0)^2 + min(0,0)^2 + max(0,0)^2 + min(0,0)^2) = 0 EXACTLY at every cell, du/dt = 0.0 to the bit, and u(t) = u(0) = 3 for all time with NO rounding drift (a constant difference is an exact zero, not an O(eps) residual). The gate asserts the preserved state directly: L2_error of u versus the constant reference 3 is 0 at t=0 and t=1 (within 1e-13), and mean(u) = 3 (within 1e-13). Because this is a STATE assertion (the binding evaluates reductions of the state solution, and analytic build-time references, but cannot evaluate an observed that reads the state), it is the sim-expressible exactness deliverable. The stronger interior property that the Godunov norm reproduces |grad u| = sqrt(a^2+b^2) EXACTLY for a NON-constant affine field u = a x + b y + c (interior D-_x = D+_x = a, D-_y = D+_y = b, so sqrt(max(a,0)^2 + min(a,0)^2 + max(b,0)^2 + min(b,0)^2) = sqrt(a^2+b^2) with no truncation error) is NOT expressible as a doubly-periodic simulation gate: a non-constant ramp cannot be periodic, so its wrap faces are seam artifacts that a state reduction cannot exempt, and the binding cannot assert a face-masking observed of the state. That interior exactness is pinned instead by the AST golden (tests/conformance/ast/godunov_norm_D2_periodic, the correct 5-point max/min stencil structure) and is exercised on nontrivial data by the order-1 convergence sweep problems/godunov_norm_2d_eikonal_mms.esm, whose clean first-order error confirms the entropy fix selects the exact one-sided branch per axis. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_2d/grid.esm) is fulfilled for the unit box: x0=y0=0 and dx=1/NX, dy=1/NY (observeds dividing the extent by the metaparameter names NX,NY, esm-spec 9.7.6). The constant field needs no coordinate geometry, so the ic and reference evaluations stay build-time scope-free.",
@@ -72,7 +72,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -184,7 +184,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
@@ -210,7 +210,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"

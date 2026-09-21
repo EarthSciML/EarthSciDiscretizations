@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "advection_1d_inflow_ppm",
     "description": "MMS driver: forced-steady 1-D linear advection u_t = -c D(u,x) + c dGdx on the unit interval [0, 1] with OPEN boundaries -- a prescribed inflow at the upstream (left) wall and a non-reflecting extrapolation outflow at the downstream (right) wall -- discretized by grids/cartesian_uniform_1d/rules/ppm_D_inflow_bc (Piecewise Parabolic Method, Colella-Woodward 1984; conservative finite-volume semi-discrete method-of-lines flux, one-sided PPM reconstruction using the inflow ghost gL at the left wall and zeroth-order extrapolation at the right wall). This is the open-boundary PPM companion of problems/advection_1d_ppm_periodic.esm and the PPM analogue of problems/advection_1d_inflow_lax_friedrichs.esm / advection_1d_inflow_upwind.esm. SMOOTH-MONOTONE MMS (why cos(pi x), not the periodic sine): the manufactured STEADY solution u*(x) = cos(pi x) is MONOTONE on [0,1] with NO interior extrema, so the CW84 monotonicity limiter (which clips smooth extrema to first order -- the sub-nominal-order mechanism documented for the periodic PPM case) stays INACTIVE in the interior and the interior runs near its formal high order; the global observed order is therefore set by the ONE-SIDED boundary reconstruction, which is exactly what this open-boundary case is meant to measure. The exactly matching steady forcing is c dGdx with dGdx = g'(x) = -pi sin(pi x) (the analytic derivative of u*), so the continuous balance is u_t = -c u*_x + c u*_x = 0 and u(t) = u* for all t; the discrete field drifts only by the operator truncation error (forced-steady MMS: observed order = operator order at t=0.1). INFLOW/OUTFLOW COMPATIBILITY (why cos(pi x) with c = 1, gL = 1): flow is in +x (c = 1 > 0), so the inflow is the left wall and the inflow value must equal the exact wall value gL = u*(0) = cos(0) = 1; the profile must have g'(0) = 0 at the inflow wall so the constant-gL upstream ghost matches the wall datum to O(dx^2) and the boundary-cell residual stays consistent with the interior (a nonzero wall gradient would pollute the order). The outflow (right) wall carries no external data -- the zeroth-order extrapolation ghost u[N+1]=u[N] is O(dx^2) accurate there because u*_x(1) = 0, and the reconstruction reaches only interior/self data (non-reflecting), so it needs no compatibility condition. cos(pi x) has u*_x = -pi sin(pi x) with u*_x(0) = 0 and u*_x(1) = 0, so both walls are clean and the global error is dominated by the one-sided reconstruction order (pinned honestly in tests/conformance/convergence/advection_1d_inflow_ppm/golden/errors.json). CONSERVATION: the interior PPM flux-difference telescopes (neighbouring cells share the identical float face flux), but the domain is OPEN (mass enters through F_{1/2}=gL and leaves through the outflow), so unlike the periodic PPM case sum(u) is NOT globally invariant and there is NO mean-conservation assertion here. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing the extent by the metaparameter name N, esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). gL is the rule's inflow free name, declared here as a parameter equal to the wall value; it lives only in the runtime rule body, never in a build-time ic/reference. The ic, the dGdx forcing, and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic/observed cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and the metaparameter name N alone (never the free-name x_coord template).",
@@ -88,7 +88,7 @@
                 "args": [
                   3.141592653589793,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -181,7 +181,7 @@
         {
           "lhs": "dGdx",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -261,7 +261,7 @@
                     "args": [
                       3.141592653589793,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],
@@ -318,7 +318,7 @@
                     "args": [
                       3.141592653589793,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],

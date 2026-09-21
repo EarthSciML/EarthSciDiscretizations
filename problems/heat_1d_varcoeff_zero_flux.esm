@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "heat_1d_varcoeff_zero_flux",
     "description": "MMS driver: 1-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit interval [0, 1] with zero-flux (homogeneous Neumann) boundaries, discretized by the conservative finite-volume rule grids/cartesian_uniform_1d/rules/varcoeff_laplacian_zero_flux_bc. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil. The coefficient k(x) = 1 + 0.5 cos(2 pi x) is a consumer-supplied observed of shape [x] (positive on [0,1], range [0.5,1.5]); it is read by the rule body at the faces via kf[i+1/2]=(k[i]+k[i+1])/2. Manufactured solution u(x,t) = exp(-pi^2 t) cos(pi x): cos(pi x) has zero gradient at x=0 and x=1, so the physical flux k u_x vanishes at both walls and matches the zero-flux closure. Because cos(pi x) is NOT an eigenfunction of the variable-coefficient operator, a forcing term S(x,t) = u_t - div(k grad u) is added so u is exact for the continuous PDE. With this u and k, div(k grad u) = exp(-pi^2 t)[-pi k'(x) sin(pi x) - pi^2 k(x) cos(pi x)] and u_t = -pi^2 exp(-pi^2 t) cos(pi x); the algebra (product-to-sum with k'=-pi sin 2pi x) collapses to the closed form S(x,t) = exp(-pi^2 t) * 0.25 pi^2 (3 cos(3 pi x) - cos(pi x)), spelled below as a time factor exp(-pi^2 t) times an aggregate over cell centers. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent) resolve the rule body's free dx at evaluation. Initial condition, coefficient, forcing, and test references all spell the cell-center coordinate x_i = (i - 1/2)/N inline with load-foldable scalars (0 + (i - 1/2)(1/N)) rather than invoking the free-name x_coord template: the official 6.6.5/ic build-time cellwise evaluation is scope-free (model parameters/observeds are not in scope there), and spelling k and S the same way keeps them algebraically identical to what the runtime rule reads. The SAME rule also serves the nonlinear case (a consumer declaring k as an observed k=f(u)); this driver exercises the variable-coefficient dual.",
@@ -72,7 +72,7 @@
                 "args": [
                   3.141592653589793,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -159,7 +159,7 @@
                     ]
                   },
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -265,7 +265,7 @@
         {
           "lhs": "k",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "gi"
             ],
@@ -345,7 +345,7 @@
                     "args": [
                       3.141592653589793,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],
@@ -417,7 +417,7 @@
                         "args": [
                           3.141592653589793,
                           {
-                            "op": "aggregate",
+                            "op": "faq",
                             "output_idx": [
                               "i"
                             ],
