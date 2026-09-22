@@ -1,0 +1,107 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "sedimentation_upwind1_flux_D_lev_interior",
+    "description": "INTERIOR layers k = 1 .. NLEV-1 of the conservative first-order DONOR-CELL divergence of a downward hydrometeor flux on column_nonuniform_1d: (d/dz (W q))[k] = ( F[k+1] - F[k] ) / dz[k], where F[n] = W[n] q[n] is the donor flux of stencils/sedimentation_donor_flux_lev through the lower face of layer n, applied here at the face above (n = k+1) and below (n = k) layer k. Both the transported density q (rho times a mixing ratio, or any layer quantity) and the velocity W are LAYER-centred ([lev]); W is the signed velocity along +lev (upward), so a fall speed v_t enters as W = -v_t <= 0. Because the flow is downward everywhere, the upstream (donor) cell of face k -- the lower edge of layer k -- is layer k itself, so the mass leaving a layer falls at that layer's OWN speed: exactly the structure of a sedimentation scheme, in which the mass leaving a layer falls at its mass-weighted terminal velocity. Adjacent layers reuse the identical face expression, so the divergence TELESCOPES: sum_k dz[k] (d/dz (W q))[k] = F[NLEV+1] - F[1] = -F[1], the surface outflow, and the column mass budget closes to round-off (the surface precipitation rate is -F[1] = v_t[1] q[1]). Layer NLEV, whose upper face NLEV+1 carries no flux, is closed by rules/sedimentation_upwind1_flux_D_lev itself. Valid only for W <= 0: for a velocity that changes sign the donor cell changes side and a face-velocity upwind rule (latlon3d upwind1_flux_D_lev_noflux_bc) is needed instead. `dz` is the free-name layer thickness of grids/column_nonuniform_1d/grid.esm. First order (O(dz)), monotone and positivity-preserving.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:advection",
+      "order:1",
+      "stencil_width:2",
+      "scheme:upwind"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2002). Finite Volume Methods for Hyperbolic Problems. Cambridge University Press. Section 4.1 (the upwind / donor-cell flux)."
+      },
+      {
+        "citation": "Hong, S.-Y., & Lim, J.-O. J. (2006). The WRF single-moment 6-class microphysics scheme (WSM6). Journal of the Korean Meteorological Society, 42(2), 129-151."
+      },
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "./sedimentation_donor_flux_lev.esm"
+    }
+  ],
+  "expression_templates": {
+    "sedimentation_upwind1_flux_D_lev_interior": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "faq",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "k": [
+            1,
+            {
+              "op": "-",
+              "args": [
+                "NLEV",
+                1
+              ]
+            }
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sedimentation_donor_flux_lev",
+                  "bindings": {
+                    "q": "q",
+                    "W": "W",
+                    "n": {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    }
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sedimentation_donor_flux_lev",
+                  "bindings": {
+                    "q": "q",
+                    "W": "W",
+                    "n": "k"
+                  }
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "dz",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
