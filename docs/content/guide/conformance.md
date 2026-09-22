@@ -91,8 +91,8 @@ bug; never "refreshed to green").
 `.github/workflows/conformance.yml` runs the always-on **validate** job with
 no bindings installed: JSON-schema validation of every library file, the
 policy lint (tags contract L001–L008, with fixtures under
-`tests/invalid/lint/`), the lint-fixture expectations, the convergence-order
-check, and spellcheck. The per-binding matrix and the cross-binding compare
+`tests/invalid/lint/`), the lint-fixture expectations, and the
+convergence-order check. The per-binding matrix and the cross-binding compare
 job attach as the runner work packages land. The docs workflow
 (`.github/workflows/docs.yml`) is independent: it regenerates this site's
 catalog pages from the library files on every change.
