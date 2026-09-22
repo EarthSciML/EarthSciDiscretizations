@@ -1,0 +1,131 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "central_D2y_extrapolate_bc_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/central_D2y_extrapolate_bc: a minimal consuming model binding NX=NY=8 at the import edge (the smallest even size on which every region of the rule is non-empty). The match on the centred second derivative D(D(u, wrt: y), wrt: y) with the guarded linear-extrapolation ghost at the two y walls (priority 10) fires through the section-9.6.3 fixpoint and lowers to the rule's body -- three regions: interior [1,8]x[2,7] and the two ghost wall lines j=1, j=8 -- with the imported stencils inlined, the free names dx, dy left symbolic, all metaparameters folded, zero apply_expression_template nodes, zero unlowered rewrite-target ops. x0=y0=0, dx=dy=1/8 spelled with the literal 8 (grids/cartesian_uniform_2d/grid.esm contract). The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_2d",
+      "rule:central_D2y_extrapolate_bc"
+    ]
+  },
+  "models": {
+    "CentralD2yExtrapolateBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/central_D2y_extrapolate_bc.esm",
+          "bindings": {
+            "NX": 8,
+            "NY": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Level-set / eikonal field over the [x, y] index sets (a signed distance, in metres, so |grad u| is dimensionless)."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi front speed."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge (grid free name)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (grid free name)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX = 1/8, spelled with the literal (import edge binds NX)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY = 1/8, spelled with the literal (import edge binds NY)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
+              "dx",
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "y"
+                  }
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

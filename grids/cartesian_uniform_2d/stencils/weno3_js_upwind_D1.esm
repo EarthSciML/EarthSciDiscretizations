@@ -1,0 +1,122 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno3_js_upwind_D1",
+    "description": "Pointwise third-order upwind first derivative along one axis from the five cell values m2, m1 (two cells before), c (the cell), p1, p2 (two cells after) and the spacing h, as the difference of two classical Jiang-Shu WENO3 face reconstructions (stencils/weno3_js_face_recon): for a non-negative selector sgn the left-biased form (R(m1,c,p1) - R(m2,m1,c))/h (faces i+1/2 and i-1/2 reconstructed from the upwind side), for sgn < 0 the mirror image (R(p2,p1,c) - R(p1,c,m1))/h -- exactly fire_behavior's Select_weno3 with its uf argument as the selector: that code swaps the window (im1 <-> ip1, im2 <- ip2) and returns (flux_m - flux_p)/dx, which is the same expression. Each branch reads only four of the five values -- the non-negative branch never reads p2, the negative branch never reads m2 -- so the reach is two cells on the upwind side and one on the downwind side; the five-wide parameter list and the stencil_width:5 tag bound the two branches together. The selector is the caller's business: fire_behavior's level set passes signo = (grad4 psi . U) (d4 psi/dx), the product of the fourth-order central advection term with the fourth-order central derivative along this axis, so the upwind side is chosen by the wind-relative propagation direction rather than by the sign of the derivative alone. This is the third-order sibling of stencils/weno5_js_upwind_D1, identical in orientation and in the selector convention. Match-less helper of weno3_eno1_D1x_interior / weno3_eno1_D1y_interior.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x",
+      "order:3",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO smoothness indicators and nonlinear weights of the reconstruction this differences.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO/ENO1 level-set schemes of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Select_weno3, Select_4th, Calc_tend_ls cases 6 and 8. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "weno3_js_face_recon.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno3_js_upwind_D1": {
+      "params": [
+        "h",
+        "m2",
+        "m1",
+        "c",
+        "p1",
+        "p2",
+        "sgn"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": ">=",
+            "args": [
+              "sgn",
+              0
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno3_js_face_recon",
+                    "bindings": {
+                      "v0": "m1",
+                      "v1": "c",
+                      "v2": "p1"
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno3_js_face_recon",
+                    "bindings": {
+                      "v0": "m2",
+                      "v1": "m1",
+                      "v2": "c"
+                    }
+                  }
+                ]
+              },
+              "h"
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno3_js_face_recon",
+                    "bindings": {
+                      "v0": "p2",
+                      "v1": "p1",
+                      "v2": "c"
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno3_js_face_recon",
+                    "bindings": {
+                      "v0": "p1",
+                      "v1": "c",
+                      "v2": "m1"
+                    }
+                  }
+                ]
+              },
+              "h"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

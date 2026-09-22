@@ -1,0 +1,194 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno3_eno1_D1y_extrapolate_bc_ast_fixture",
+    "description": "Post-lowering AST conformance for grids/cartesian_uniform_2d/rules/weno3_eno1_D1y_extrapolate_bc (added by PR #41). Every binding loads fixture.esm (NX=NY=8 bound at the import edge), runs the section-9.6.3 rewrite fixpoint, and must emit a byte-identical expanded AST: the per-axis hybrid WENO3/ENO1 upwind y-derivative D(u, wrt: y) (priority 10) replaced by the rule's body (seven regions: hybrid interior block [3,6]x[3,6], the ENO1 strips, and the two guarded-extrapolation ghost wall lines y=1, y=8) carrying the free names dx, dy, wind_u, wind_v, bdy_eno1_cells, weno_band_cells, with zero unlowered rewrite-target ops in EVALUATION position (the model's equations) and zero surviving metaparameter names. Surviving apply_expression_template nodes in the equations are expected and are NOT a violation: since the Option B reference-preserving switch (ESS 0.9.0, EarthSciAST aff96f29) the loader does not inline match-less template bodies -- a reference denotes its expansion and the engine treats it as a leaf (esm-spec 9.6.4) -- so each surviving apply is a resolved match-less leaf (eno1_minmod, the WENO reconstruction, the ghost closure), not an un-fired rule. The spatial D nodes that survive live in the retained expression_templates registry, in the rule's own match PATTERN, which reaches neither evaluation nor compilation; the equations themselves carry none. Measured on this fixture, not assumed. The interior block is one cell wider on each side of y than the WENO5 sibling's, because the WENO3 stencil reaches two cells rather than three; that widening is the structural difference this case exists to pin. No golden is committed with this fixture: the case is marked \"status\": \"pending-golden\", which scripts/compare-outputs.py reports as SKIP for the golden gate while STILL running the runner-output gate (every binding must lower the rule without erroring) and the cross-binding-bytes gate (all five bindings must produce identical canonical bytes). The golden is installed by scripts/regenerate-goldens.sh, which flips this status to \"active\"; see the PR body for why it is deferred to the repo-wide regeneration rather than pinned here.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cartesian_uniform_2d",
+      "rule:weno3_eno1_D1y_extrapolate_bc"
+    ]
+  },
+  "models": {
+    "Weno3Eno1D1YExtrapolateBcAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/weno3_eno1_D1y_extrapolate_bc.esm",
+          "bindings": {
+            "NX": 8,
+            "NY": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Level-set / eikonal field over the [x, y] index sets (a signed distance, in metres, so |grad u| is dimensionless)."
+        },
+        "S": {
+          "type": "parameter",
+          "units": "m/s",
+          "default": 1.0,
+          "description": "Non-negative Hamilton-Jacobi front speed."
+        },
+        "x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Left x domain edge (grid free name)."
+        },
+        "y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0,
+          "description": "Bottom y domain edge (grid free name)."
+        },
+        "dx": {
+          "type": "unknown",
+          "units": "m",
+          "description": "x-spacing 1/NX = 1/8, spelled with the literal (import edge binds NX)."
+        },
+        "dy": {
+          "type": "unknown",
+          "units": "m",
+          "description": "y-spacing 1/NY = 1/8, spelled with the literal (import edge binds NY)."
+        },
+        "wind_u": {
+          "type": "unknown",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "x-component of the advecting wind that biases the WENO stencil (rule free name wind_u; fire_behavior uf). Constant field here."
+        },
+        "wind_v": {
+          "type": "unknown",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "y-component of the advecting wind (rule free name wind_v; fire_behavior vf). Constant field here."
+        },
+        "bdy_eno1_cells": {
+          "type": "parameter",
+          "units": "1",
+          "default": 2,
+          "description": "ENO1 wall band in cells (rule free name; fire_behavior BDY_ENO1 = 10). The rule's documented minimum 2 is used so the WENO band exists at every sampled resolution."
+        },
+        "weno_band_cells": {
+          "type": "parameter",
+          "units": "1",
+          "default": 4,
+          "description": "WENO band half-width in cells around the zero level set (rule free name; fire_behavior fire_lsm_band_ngp = 4)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "S"
+                ]
+              },
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dx",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "lhs": "dy",
+          "rhs": {
+            "op": "/",
+            "args": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "lhs": "wind_u",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 1.0
+          }
+        },
+        {
+          "lhs": "wind_v",
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": 0.5
+          }
+        }
+      ]
+    }
+  }
+}

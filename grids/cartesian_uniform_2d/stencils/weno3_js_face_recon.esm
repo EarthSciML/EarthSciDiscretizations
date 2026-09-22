@@ -1,0 +1,246 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno3_js_face_recon",
+    "description": "Pointwise classical (Jiang-Shu 1996) WENO3 reconstruction of a cell-averaged/point field at the face between the second and third cells of a three-cell window v0, v1, v2 (cells i-1, i, i+1 for the face i+1/2, upwind-biased to the left): the two second-order candidate stencils p0 = (-v0 + 3 v1)/2 on {i-1, i} and p1 = (v1 + v2)/2 on {i, i+1}, linear weights gamma0 = 1/3 and gamma1 = 2/3 (whose linear combination is the third-order upwind-biased reconstruction (-v0 + 5 v1 + 2 v2)/6), smoothness indicators beta0 = (v1 - v0)^2, beta1 = (v2 - v1)^2, and the CLASSICAL nonlinear weights w_k = gamma_k/(beta_k + eps)^2 with eps = 1e-6 and power 2. It is the third-order sibling of stencils/weno5_js_face_recon on this grid, with the same weight construction, the same eps and the same orientation, and it is NOT the same scheme as grids/cartesian_uniform_1d/stencils/weno3_recon: that one is WENO-Z (Borges 2008), whose weights are alpha_k = gamma_k (1 + (tau3/(eps + beta_k))^2) with the global smoothness measure tau3 = |beta0 - beta1|. The two agree only where the field is smooth; across a kink they weight the sub-stencils differently, so they must not be substituted for one another. eps = 1e-6 is the literal fire_behavior uses (TOL in Select_weno3), on the field's own value scale; it is not dimensionally scaled. Third order in smooth regions, degrading to the non-oscillatory single-stencil value across a discontinuity. Match-less helper of the weno3_eno1_* stencils of this grid; the mirrored (right-biased) face is obtained by binding the window in reverse order.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:reconstruct",
+      "axes:x",
+      "order:3",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2, specialised here to the two-stencil third-order window.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Select_weno3 (and Calc_tend_ls cases 6 and 8). The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_templates": {
+    "weno3_js_face_recon": {
+      "params": [
+        "v0",
+        "v1",
+        "v2"
+      ],
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          1,
+                          3
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "^",
+                                "args": [
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "v1",
+                                      "v0"
+                                    ]
+                                  },
+                                  2
+                                ]
+                              },
+                              1e-06
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              -1,
+                              "v0"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              3,
+                              "v1"
+                            ]
+                          }
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          2,
+                          3
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "^",
+                                "args": [
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "v2",
+                                      "v1"
+                                    ]
+                                  },
+                                  2
+                                ]
+                              },
+                              1e-06
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          "v1",
+                          "v2"
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      1,
+                      3
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  "v1",
+                                  "v0"
+                                ]
+                              },
+                              2
+                            ]
+                          },
+                          1e-06
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      2,
+                      3
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "^",
+                            "args": [
+                              {
+                                "op": "-",
+                                "args": [
+                                  "v2",
+                                  "v1"
+                                ]
+                              },
+                              2
+                            ]
+                          },
+                          1e-06
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

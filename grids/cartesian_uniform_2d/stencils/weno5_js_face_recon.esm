@@ -1,0 +1,732 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno5_js_face_recon",
+    "description": "Pointwise classical (Jiang-Shu 1996) WENO5 reconstruction of a cell-averaged/point field at the face between the third and fourth cells of a five-cell window v0..v4 (cells i-2, i-1, i, i+1, i+2 for the face i+1/2, upwind-biased to the left): the three third-order candidate stencils f1 = (2 v0 - 7 v1 + 11 v2)/6, f2 = (-v1 + 5 v2 + 2 v3)/6, f3 = (2 v2 + 5 v3 - v4)/6 with linear weights 1/10, 3/5, 3/10, smoothness indicators beta_k = 13/12 (second difference)^2 + 1/4 (first-difference combination)^2, and the classical nonlinear weights w_k = gamma_k/(beta_k + eps)^2 with eps = 1e-6 and power 2 -- NOT the WENO-Z weights of stencils/weno5_recon.esm on cartesian_uniform_1d, and NOT the Hamilton-Jacobi divided-difference form of hjweno_recon_*. eps = 1e-6 is the literal fire_behavior uses (TOL in Select_weno5), on the field's own value scale; it is not dimensionally scaled. Fifth order in smooth regions away from critical points, degrading to third order where a first derivative vanishes (the known Jiang-Shu limitation that WENO-Z repairs). Match-less helper of the weno5_eno1_* stencils of this grid; the mirrored (right-biased) face is obtained by binding the window in reverse order.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:reconstruct",
+      "axes:x",
+      "order:5",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO5 smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [],
+  "expression_templates": {
+    "weno5_js_face_recon": {
+      "params": [
+        "v0",
+        "v1",
+        "v2",
+        "v3",
+        "v4"
+      ],
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          1,
+                          10
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "+",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          13,
+                                          12
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "+",
+                                            "args": [
+                                              "v0",
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  -2,
+                                                  "v1"
+                                                ]
+                                              },
+                                              "v2"
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          1,
+                                          4
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "+",
+                                            "args": [
+                                              "v0",
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  -4,
+                                                  "v1"
+                                                ]
+                                              },
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  3,
+                                                  "v2"
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              1e-06
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              2,
+                              "v0"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              -7,
+                              "v1"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              11,
+                              "v2"
+                            ]
+                          }
+                        ]
+                      },
+                      6
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          3,
+                          5
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "+",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          13,
+                                          12
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "+",
+                                            "args": [
+                                              "v1",
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  -2,
+                                                  "v2"
+                                                ]
+                                              },
+                                              "v3"
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          1,
+                                          4
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "-",
+                                            "args": [
+                                              "v1",
+                                              "v3"
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              1e-06
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              -1,
+                              "v1"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              5,
+                              "v2"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              2,
+                              "v3"
+                            ]
+                          }
+                        ]
+                      },
+                      6
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "/",
+                        "args": [
+                          3,
+                          10
+                        ]
+                      },
+                      {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "+",
+                                "args": [
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          13,
+                                          12
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "+",
+                                            "args": [
+                                              "v2",
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  -2,
+                                                  "v3"
+                                                ]
+                                              },
+                                              "v4"
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "*",
+                                    "args": [
+                                      {
+                                        "op": "/",
+                                        "args": [
+                                          1,
+                                          4
+                                        ]
+                                      },
+                                      {
+                                        "op": "^",
+                                        "args": [
+                                          {
+                                            "op": "+",
+                                            "args": [
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  3,
+                                                  "v2"
+                                                ]
+                                              },
+                                              {
+                                                "op": "*",
+                                                "args": [
+                                                  -4,
+                                                  "v3"
+                                                ]
+                                              },
+                                              "v4"
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              1e-06
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              2,
+                              "v2"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              5,
+                              "v3"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              -1,
+                              "v4"
+                            ]
+                          }
+                        ]
+                      },
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      1,
+                      10
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      13,
+                                      12
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          "v0",
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              -2,
+                                              "v1"
+                                            ]
+                                          },
+                                          "v2"
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      1,
+                                      4
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          "v0",
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              -4,
+                                              "v1"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              3,
+                                              "v2"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          1e-06
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3,
+                      5
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      13,
+                                      12
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          "v1",
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              -2,
+                                              "v2"
+                                            ]
+                                          },
+                                          "v3"
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      1,
+                                      4
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "-",
+                                        "args": [
+                                          "v1",
+                                          "v3"
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          1e-06
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "/",
+                    "args": [
+                      3,
+                      10
+                    ]
+                  },
+                  {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      13,
+                                      12
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          "v2",
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              -2,
+                                              "v3"
+                                            ]
+                                          },
+                                          "v4"
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      1,
+                                      4
+                                    ]
+                                  },
+                                  {
+                                    "op": "^",
+                                    "args": [
+                                      {
+                                        "op": "+",
+                                        "args": [
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              3,
+                                              "v2"
+                                            ]
+                                          },
+                                          {
+                                            "op": "*",
+                                            "args": [
+                                              -4,
+                                              "v3"
+                                            ]
+                                          },
+                                          "v4"
+                                        ]
+                                      },
+                                      2
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          1e-06
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
