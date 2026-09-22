@@ -1,0 +1,806 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "weno3_eno1_D1y_extrapolate_bc",
+    "description": "Hybrid WENO3/ENO1 upwind first derivative d u/dy on cartesian_uniform_2d with the linear-extrapolation halo closure -- the per-axis derivative diff2y of NCAR fire_behavior's level-set scheme fire_upwinding = 8 (physics/level_set_mod.F90 Calc_tend_ls case 8; Munoz-Esparza et al. 2018): third-order Jiang-Shu WENO3 in a band of weno_band_cells cells around the zero level set, first-order ENO1 (minmod) elsewhere and within bdy_eno1_cells of the walls, upwind side of the WENO reconstruction chosen by the wind-relative propagation sign signo = (grad4 u . (wind_u, wind_v)) d4 u/dy. It is rules/weno5_eno1_D1y_extrapolate_bc with Select_weno5 replaced by Select_weno3 -- case (8)'s in-band branch is case (9)'s with that one substitution, and the band test, the wall test and the selector are byte-for-byte the same. This is the quantity fire_behavior feeds both to |grad psi| = sqrt(diff2x^2 + diff2y^2) and to the front normal nvy = diff2y/sqrt(|grad psi|^2 + eps); rules/weno3_eno1_norm_D2_extrapolate_bc packages the norm as a compound match so a consumer may write the norm as sqrt((D(u,x))^2 + (D(u,y))^2) and the normal's ingredients as bare D(u, wrt: x) / D(u, wrt: y) with the same scheme. Match D(u, wrt: y) at priority 10 (before the priority-less centered central_D1y_* rules if a document imports both), scoped with where {{u: {{shape: [x, y]}}}} (esm-spec 9.6.1). A document must import this rule OR its WENO5 sibling, never both: they match the same pattern at the same priority. THE SCHEME: the makearray tiles [x, y] into 7 regions, the same seven the WENO5 sibling uses, with the doubly-interior block one cell wider on each side of y because the WENO3 stencil reaches two cells rather than three -- [3, NX-2] x [3, NY-2] is a single apply of the imported stencils/weno3_eno1_D1y_interior (the hybrid switch on the field and the index, see that stencil); the strips where the fourth-order selector or the five-point WENO stencil would leave the domain are plain ENO1 minmod; and the two outermost lines along y are ENO1 against a one-cell guarded linear-extrapolation ghost, stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). FREE NAMES: wind_u, wind_v ([x, y] fields), bdy_eno1_cells (>= 2), weno_band_cells, and the grid's dx, dy. Requires NX, NY >= 5. ORDER: formally first; third in the smooth WENO band. EXACT on a linear field.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:5",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO/ENO1 level-set schemes (fire_upwinding = 8 and 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Harten, A., Engquist, B., Osher, S., & Chakravarthy, S. R. (1987). Uniformly high order accurate essentially non-oscillatory schemes, III. Journal of Computational Physics, 71(2), 231-303. ENO stencil selection by smallest divided difference (first-order form: the minmod limiter).",
+        "doi": "10.1016/0021-9991(87)90031-3"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno3, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/weno3_eno1_D1y_interior.esm"
+    },
+    {
+      "ref": "../stencils/eno1_minmod.esm"
+    },
+    {
+      "ref": "../stencils/extrapolate_linear_ghost.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno3_eno1_D1y_extrapolate_bc": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "u"
+        ],
+        "wrt": "y"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  2
+                ]
+              }
+            ],
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              },
+              "NX"
+            ],
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NX"
+            ],
+            [
+              "NY",
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "weno3_eno1_D1y_interior",
+            "bindings": {
+              "u": "u"
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                2
+              ],
+              "j": [
+                3,
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    2
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                },
+                "NX"
+              ],
+              "j": [
+                3,
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    2
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                2,
+                2
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    1
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    1
+                  ]
+                }
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                1
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                2
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                1,
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": [
+                "NY",
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "NY"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NY",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                "NY"
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "NY",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "NY"
+                          ]
+                        }
+                      ]
+                    },
+                    "dy"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
