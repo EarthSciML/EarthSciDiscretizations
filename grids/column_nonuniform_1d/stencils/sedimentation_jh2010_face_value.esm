@@ -1,0 +1,47 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_face_value",
+    "description": "LOWER-FACE VALUE of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d, in its dt -> 0 limit: the value at the LOWER face of a layer of falling density q0, reconstructed from the layer and its two neighbours (qm1 below, qp1 above) on a non-uniform column (thicknesses dzm1, dz0, dzp1). It is q0 - h with h the limited half-jump sedimentation_jh2010_half_jump (the average of the two one-sided slopes carried half a layer, zeroed at an extremum and dropped where a face value would go negative), exactly WRF's qmi(k) = 2 qa(k) - qpi(k). For downward flow the lower face of a layer is fed by that layer, so this is the DONOR value of the face below it, and it is the value every face flux uses whenever the face speed is downward (sedimentation_jh2010_face_flux, sedimentation_jh2010_end_face_flux). Its twin sedimentation_jh2010_top_face_value = q0 + h is the upper-face value (WRF's qpi).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:reconstruct",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: qmi(k) = 2.0*qa(k) - qpi(k)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"},
+    {"ref": "sedimentation_jh2010_half_jump.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_face_value": {
+      "params": ["qm1", "q0", "qp1", "dzm1", "dz0", "dzp1"],
+      "body": {
+        "op": "-",
+        "args": [
+          "q0",
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sedimentation_jh2010_half_jump",
+            "bindings": {"qm1": "qm1", "q0": "q0", "qp1": "qp1", "dzm1": "dzm1", "dz0": "dz0", "dzp1": "dzp1"}
+          }
+        ]
+      }
+    }
+  }
+}

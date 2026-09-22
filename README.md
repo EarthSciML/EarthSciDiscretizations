@@ -195,7 +195,11 @@ one interface-flux template behind every flux, a first-order donor-cell
 **sedimentation** divergence `D(W·q, lev)` for a layer-centred fall velocity
 (downward only, no inflow at the top, the surface outflow being layer 1's own
 flux, one donor-flux template behind every face — the method-of-lines form of
-a microphysics fallout term), and the first `integral`
+a microphysics fallout term), a drop-in alternative to it that reproduces the
+dt → 0 limit of WRF WSM6's forward semi-Lagrangian fallout (Juang & Hong 2010:
+a third-order interface velocity, the scheme's own average-slope monotone face
+value, and the upwind side of every interior face, each ingredient one
+template), and the first `integral`
 lowerings in the library — whole-column and cumulative-from-surface /
 cumulative-to-top forms to layer centres or interfaces as dz-weighted midpoint
 sums in the §4.3.1 scan shape, selected by ground bounds (`z_sfc`/`z_top` the
