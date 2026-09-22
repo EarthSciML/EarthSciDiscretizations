@@ -1,0 +1,43 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "integral_lev_total",
+    "description": "Whole-column composite midpoint sum of a layer field on column_nonuniform_1d: sum over j in lev of f[j] dz[j], a SCALAR (a full reduction, output_idx []). The one definition of the column total in the library: rules/integral_lev_whole wraps it as the whole-column `integral` lowering, and rules/integral_lev_nodes_cumulative_from_bottom places it at the top interface (node NLEV+1) of the surface-to-interface cumulative integral. Match-less named template. `dz` is the consumer's free-name layer-thickness observed (grids/column_nonuniform_1d/grid.esm); because the layer values are midpoint samples the sum is second-order accurate on a smoothly stretched column.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:integral",
+      "order:2",
+      "stencil_width:1"
+    ],
+    "references": [
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "integral_lev_total": {
+      "params": ["f"],
+      "body": {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "args": ["f"],
+        "ranges": { "j": { "from": "lev" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "index", "args": ["f", "j"] },
+            { "op": "index", "args": ["dz", "j"] }
+          ]
+        }
+      }
+    }
+  }
+}

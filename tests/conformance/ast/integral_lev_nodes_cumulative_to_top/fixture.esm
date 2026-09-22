@@ -1,0 +1,180 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "integral_lev_nodes_cumulative_to_top_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top: a minimal consuming model binding NLEV=8 at the import edge, declaring a layer integrand f (shape [lev]) and the observed F = integral(f, var: lev, lower: lev_nodes, upper: z_top), i.e. the cumulative integral from each interface to the top. The integral match must fire through the fixpoint (where f: [lev]; the GROUND bounds select the form -- the domain-face observeds z_sfc = ze[1] / z_top = ze[9] and the axis names lev / lev_nodes for the current layer centre / interface -- so exactly one of the grid's five integral rules matches and no priority is involved) and lower to the rule's two-region makearray over the 9 interfaces: the measure-weighted (dz) esm-spec 4.3.1 scan over lev on nodes 1..8 and the column total (from-bottom) or the literal 0 (to-top) at node 9. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:integral_lev_nodes_cumulative_to_top"
+    ]
+  },
+  "models": {
+    "IntegralLevNodesCumToTopAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        },
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/mesh/mms_column.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        }
+      ],
+      "variables": {
+        "w": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Accumulator state, dw/dt = F."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "The integral (shape follows the form)."
+        },
+        "f": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Integrand, here the layer centre coordinate."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1] = 0: the ground LOWER-bound name the grid's integral rules match literally, an observed of the interface array."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[9] = 1: the ground UPPER-bound name the grid's integral rules match literally, an observed of the interface array."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "w"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "w"
+            ],
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": "zc"
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "op": "integral",
+            "args": [
+              "f"
+            ],
+            "var": "lev",
+            "lower": "lev_nodes",
+            "upper": "z_top"
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              9
+            ]
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

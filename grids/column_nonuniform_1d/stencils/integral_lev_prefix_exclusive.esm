@@ -1,0 +1,44 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "integral_lev_prefix_exclusive",
+    "description": "EXCLUSIVE prefix (surface-upward) Riemann sum of a layer field on column_nonuniform_1d: P[k] = sum over j < k of f[j] dz[j], a lev-shaped field with P[1] = 0 (the empty prefix). P[k] is the midpoint-rule integral from the surface ze[1] to the interface ze[k] BELOW layer k -- whole layers only, so it is exact for the layer sum. It is spelled in the esm-spec 4.3.1 prefix-reduction shape -- both ranges drawn from the ONE index set lev, monotone filter j < k -- which is the form the spec licenses a binding to evaluate as a single O(NLEV) running accumulator (a forward scan is bit-identical to the triangular double loop). rules/integral_lev_cumulative_from_bottom adds the half-layer f[k] dz[k]/2 to reach the layer centre; rules/integral_lev_nodes_cumulative_from_bottom places P at interfaces 1..NLEV and the column total at node NLEV+1. Match-less named template. `dz` is the consumer's free-name layer-thickness observed (grids/column_nonuniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:integral",
+      "order:2",
+      "stencil_width:1"
+    ],
+    "references": [
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "integral_lev_prefix_exclusive": {
+      "params": ["f"],
+      "body": {
+        "op": "faq",
+        "output_idx": ["k"],
+        "reduce": "+",
+        "args": ["f"],
+        "ranges": { "k": { "from": "lev" }, "j": { "from": "lev" } },
+        "filter": { "op": "<", "args": ["j", "k"] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "index", "args": ["f", "j"] },
+            { "op": "index", "args": ["dz", "j"] }
+          ]
+        }
+      }
+    }
+  }
+}

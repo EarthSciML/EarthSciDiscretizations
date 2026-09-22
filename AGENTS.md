@@ -101,7 +101,9 @@ fixpoint → official runner`.
   that directory (L005).
 - Rule `makearray` regions tile the axes named by `axes:` exactly, verified by folding
   metaparameter bounds at sampled sizes (L006). `axes:` lists the output dimensions in
-  order, comma-separated (e.g. `axes:lon,lat`).
+  order, comma-separated (e.g. `axes:lon,lat`). A rule whose output is rank-0 (a full
+  reduction, e.g. a whole-column `integral`) declares `axes:none` — never the axis it
+  reduces over — and L006 then requires that its body is not a `makearray`.
 - Library entries are pure template-library files; problems carry models (L007). All
   files declare the `esm` version the ESS schema's `$id` names — currently `1.2.0`
   (L008). The expected version is *derived* from `$ESS_ROOT/esm-schema.json`, never

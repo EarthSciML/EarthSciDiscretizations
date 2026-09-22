@@ -933,8 +933,9 @@ def rule_section(
     name, template = entry
 
     axes_tag = tag_value(tags, "axes:")
-    axes = axes_tag.split(",") if axes_tag else []
-    if not axes:
+    # `axes:none` is the rank-0 form (a full reduction): no output axes to label.
+    axes = axes_tag.split(",") if axes_tag and axes_tag != "none" else []
+    if not axes and axes_tag != "none":
         warn(f"{rel(rule_path)}: no axes: tag — using generic axis labels")
 
     out = [f"### `{name}`", ""]

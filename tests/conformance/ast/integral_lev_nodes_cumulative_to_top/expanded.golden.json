@@ -1,0 +1,537 @@
+{
+  "esm": "1.2.0",
+  "index_sets": {
+    "lev": {
+      "kind": "interval",
+      "size": 8
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 9
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top: a minimal consuming model binding NLEV=8 at the import edge, declaring a layer integrand f (shape [lev]) and the observed F = integral(f, var: lev, lower: lev_nodes, upper: z_top), i.e. the cumulative integral from each interface to the top. The integral match must fire through the fixpoint (where f: [lev]; the GROUND bounds select the form -- the domain-face observeds z_sfc = ze[1] / z_top = ze[9] and the axis names lev / lev_nodes for the current layer centre / interface -- so exactly one of the grid's five integral rules matches and no priority is involved) and lower to the rule's two-region makearray over the 9 interfaces: the measure-weighted (dz) esm-spec 4.3.1 scan over lev on nodes 1..8 and the column total (from-bottom) or the literal 0 (to-top) at node 9. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "name": "integral_lev_nodes_cumulative_to_top_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:integral_lev_nodes_cumulative_to_top"
+    ]
+  },
+  "models": {
+    "IntegralLevNodesCumToTopAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "w"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "w"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": "F"
+        },
+        {
+          "lhs": "f",
+          "rhs": "zc"
+        },
+        {
+          "lhs": "F",
+          "rhs": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  8
+                ]
+              ],
+              [
+                [
+                  9,
+                  9
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "f": "f"
+                },
+                "name": "integral_lev_suffix_inclusive",
+                "op": "apply_expression_template"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "args": [],
+            "bindings": {},
+            "name": "mms_column_ze",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "args": [
+              "ze",
+              1
+            ],
+            "op": "index"
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "args": [
+              "ze",
+              9
+            ],
+            "op": "index"
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_thickness",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_center",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer mid-points from the interface array: zc[gi] = (ze[gi] + ze[gi+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). The cartesian_nonuniform_1d `nonuniform_cell_center` template applied on the renamed lev axis -- one definition in the library. A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gi` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_width",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer thicknesses from the interface array: dz[gi] = ze[gi+1] - ze[gi] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). The cartesian_nonuniform_1d `nonuniform_cell_width` template applied on the renamed lev axis. A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid.",
+          "params": [
+            "ze"
+          ]
+        },
+        "integral_lev_nodes_cumulative_to_top": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  8
+                ]
+              ],
+              [
+                [
+                  9,
+                  9
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "f": "f"
+                },
+                "name": "integral_lev_suffix_inclusive",
+                "op": "apply_expression_template"
+              },
+              0
+            ]
+          },
+          "match": {
+            "args": [
+              "f"
+            ],
+            "lower": "lev_nodes",
+            "op": "integral",
+            "upper": "z_top",
+            "var": "lev"
+          },
+          "params": [
+            "f"
+          ],
+          "where": {
+            "f": {
+              "shape": [
+                "lev"
+              ]
+            }
+          }
+        },
+        "integral_lev_suffix_inclusive": {
+          "body": {
+            "args": [
+              "f"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "f",
+                    "j"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "dz",
+                    "j"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "filter": {
+              "args": [
+                "j",
+                "k"
+              ],
+              "op": ">="
+            },
+            "op": "faq",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "j": {
+                "from": "lev"
+              },
+              "k": {
+                "from": "lev"
+              }
+            },
+            "reduce": "+"
+          },
+          "params": [
+            "f"
+          ]
+        },
+        "mms_column_integrand": {
+          "body": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [
+                1,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "args": [
+                            "zc",
+                            "i"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    }
+                  ],
+                  "op": "cos"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "The MMS integrand 1 + cos(pi z) sampled at the layer centres zc (shape [lev]), as an explicit gather over lev.",
+          "params": [
+            "zc"
+          ]
+        },
+        "mms_column_ze": {
+          "body": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    0.6,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    0.4,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        8
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "faq",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            }
+          },
+          "description": "Interface coordinates of the quadratic-stretch unit column: ze[kn] = 0.6 xi + 0.4 xi^2, xi = (kn - 1)/NLEV, over kn in lev_nodes.",
+          "params": []
+        },
+        "nonuniform_cell_center": {
+          "body": {
+            "args": [
+              "xe"
+            ],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "xe",
+                        "gi"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "xe",
+                        {
+                          "args": [
+                            "gi",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "faq",
+            "output_idx": [
+              "gi"
+            ],
+            "ranges": {
+              "gi": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Cell centers from the node array: xc[gi] = (xe[gi] + xe[gi+1]) / 2 over the x (cell) axis, gathering the N+1-node edge array xe (shape [x_nodes]). A consuming model applies this to its `xe` to define its `xc` observed. The aggregation index is named `gi`, NOT `i`, so the derived observed does not capture a consuming finite-volume rule's own aggregate index `i` when it is inlined into the rule body (the rule reads xc by variable index xc[i-1], xc[i], xc[i+1]).",
+          "params": [
+            "xe"
+          ]
+        },
+        "nonuniform_cell_width": {
+          "body": {
+            "args": [
+              "xe"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "xe",
+                    {
+                      "args": [
+                        "gi",
+                        1
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "xe",
+                    "gi"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "faq",
+            "output_idx": [
+              "gi"
+            ],
+            "ranges": {
+              "gi": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Finite-volume control widths from the node array: dxw[gi] = xe[gi+1] - xe[gi] over the x (cell) axis. A consuming model applies this to its `xe` to define its `dxw` observed. Aggregation index `gi` (distinct from a rule's `i`) for the same hygiene reason as nonuniform_cell_center.",
+          "params": [
+            "xe"
+          ]
+        }
+      },
+      "variables": {
+        "F": {
+          "description": "The integral (shape follows the form).",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "dz": {
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "f": {
+          "description": "Integrand, here the layer centre coordinate.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1/m"
+        },
+        "w": {
+          "description": "Accumulator state, dw/dt = F.",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "z_sfc": {
+          "description": "Surface coordinate ze[1] = 0: the ground LOWER-bound name the grid's integral rules match literally, an observed of the interface array.",
+          "type": "unknown",
+          "units": "m"
+        },
+        "z_top": {
+          "description": "Top coordinate ze[9] = 1: the ground UPPER-bound name the grid's integral rules match literally, an observed of the interface array.",
+          "type": "unknown",
+          "units": "m"
+        },
+        "zc": {
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "ze": {
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge.",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "m"
+        }
+      }
+    }
+  }
+}

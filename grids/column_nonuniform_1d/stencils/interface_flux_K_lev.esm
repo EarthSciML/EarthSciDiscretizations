@@ -1,0 +1,54 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "interface_flux_K_lev",
+    "description": "Diffusive flux K du/dz through ONE interior interface n (2 <= n <= NLEV) of column_nonuniform_1d: K[n] (u[n] - u[n-1]) / (zc[n] - zc[n-1]), the interface-coefficient gradient between the two layers the interface separates (node n lies between layers n-1 and n; node 1 is the surface and node NLEV+1 the model top, neither of which has a computable gradient). The interface index `n` is a template PARAMETER bound to an index expression at each call site -- the enclosing aggregate's loop symbol k or k+1 in stencils/varcoeff_face_laplacian_lev_interior, the literal 2 and the metaparameter NLEV in the two face closures of rules/varcoeff_face_laplacian_lev_flux_bc -- so the flux formula has ONE definition in the library and the telescoping identity sum_k dz[k] L u[k] = kdudz_top - kdudz_bot is structural: every interior flux enters the column sum exactly once with each sign. Positive in the +lev (upward) direction. Match-less named template. `zc` is the consumer's free-name layer-centre observed (grids/column_nonuniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:interface_flux",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "interface_flux_K_lev": {
+      "params": ["u", "K", "n"],
+      "body": {
+        "op": "*",
+        "args": [
+          { "op": "index", "args": ["K", "n"] },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  { "op": "index", "args": ["u", "n"] },
+                  { "op": "index", "args": ["u", { "op": "-", "args": ["n", 1] }] }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  { "op": "index", "args": ["zc", "n"] },
+                  { "op": "index", "args": ["zc", { "op": "-", "args": ["n", 1] }] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
