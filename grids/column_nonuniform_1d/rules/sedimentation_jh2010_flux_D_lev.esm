@@ -1,0 +1,304 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_flux_D_lev",
+    "description": "Conservative lowering of the sedimentation (fallout) flux divergence D(W*q, wrt: lev) of a DOWNWARD-falling quantity on column_nonuniform_1d that reproduces the dt -> 0 LIMIT of the Juang & Hong (2010) forward semi-Lagrangian scheme -- the fallout WRF's WSM6 microphysics applies to cloud ice (nislfv_rain_plm), rain (nislfv_rain_plm) and snow and graupel (nislfv_rain_plm6, the same code run once per species with a shared velocity). Same contract as sedimentation_upwind1_flux_D_lev, and MUTUALLY EXCLUSIVE with it (identical match, identical priority): a consumer imports one. q is the layer-centred falling density (rho times a mixing ratio, shape [lev]), W = -v_t <= 0 the layer-centred signed velocity along +lev (shape [lev]), and the consumer writes dq/dt = -D(W*q, wrt: lev)/rho + ... . The divergence is (F[k+1] - F[k])/dz[k] with F[j] = W_face[j] q_face[j] the flux through the lower face of layer j and F[NLEV+1] = 0 (no inflow through the model top). WHY NOT DONOR-CELL. WSM6's fallout increment converges as dt -> 0, but not to the donor-cell divergence of sedimentation_upwind1_flux_D_lev: on a WRF column (em_scm_xy cirrus, WRF step 60, real64 kernel replay at dtcld = 0.01/0.02/0.04 s) the two differ by 58 % Linf layer by layer, with ratios from 0.26 to 2.07. The converged operator has two ingredients donor-cell lacks, both transcribed here from nislfv_rain_plm: (1) a THIRD-ORDER interface velocity, W_face[j] = 9/16 (W[j] + W[j-1]) - 1/16 (W[j+1] + W[j-2]) on interior faces 3 <= j <= NLEV-1 (sedimentation_jh2010_face_velocity), two-point averages on faces 2 and NLEV, W[1] on face 1, and WRF's override W_face[j] = W[j-1] wherever W[j] == 0 ('terminate of top of raingroup'); (2) a monotone piecewise-linear DONOR FACE VALUE whose slope is the AVERAGE of the two one-sided differences over the non-uniform thicknesses, zeroed at extrema and dropped if either face value would go negative (sedimentation_jh2010_face_value), with no reconstruction in the bottom layer (WRF's qmi(1) = qa(1)) and, in the top layer, q = 0 and zero thickness beyond the lid (WRF's qa(km+1) = 0, dza(km+1) = wi(km+1) dt -> 0). THIS IS NOT A GENERIC PLM OR PPM LIMITER. On the WRF column a textbook minmod reconstruction in place of (2) leaves 31.6 % Linf of the difference to WRF, and the interface velocity alone leaves 37.2 %; only the scheme's own slope rule closes it. Do not 'simplify' the face value to a library limiter or the velocity to a donor value. EXCLUDED, deliberately: WRF's finite-dt velocity clamp ('diffusivity of wi', decfl = (wi[k+1] - wi[k]) dt/dz[k] > 0.05) is a property of the time step, vanishes as dt -> 0, and is not part of this operator; likewise the mean departure/arrival velocity iteration (iter >= 1), whose limit is the departure velocity used here. MEASURED. Transcribed in float64 and evaluated against WRF's own nislfv_rain_plm, extracted verbatim from mp_wsm6.F90 and Richardson-extrapolated to dt -> 0 on five stretched 12-layer columns (an ice-like bump aloft, a rain-like profile reaching the surface, a top-loaded profile, a random profile with many extrema, and a layer with W == 0 but q > 0 that exercises the override): relative Linf 2.4e-9, 3.8e-10, 9.4e-9, 7.8e-10 and 1.1e-7 against 42 %, 37 %, 19 %, 49 % and 278 % for donor-cell, the last case limited by the extrapolation itself (7e-7), not the formula. On the WRF cirrus column the transcription matches the kernel at every layer below the top two to five significant figures. WHERE WRF IS NOT A REFERENCE: the kernel empties the TOP TWO LAYERS of the column on every call, by an amount independent of dt, and the mass does not reach the surface (EqWeFiC FORTRAN_BUGS B16); this rule keeps those layers conservative, so do not assert against a WSM6 fallout increment in the top two layers. SCOPE. Valid only for W <= 0 everywhere (a sign-changing velocity needs latlon3d's face-velocity upwind rule), and only for NLEV >= 5, so that the five layer regions below are distinct. Exactly telescoping: sum_k dz[k] D[k] = -F[1] = -W[1] q[1], the surface precipitation flux, which a consumer reads back as for the donor-cell rule. Guaranteed order 1 (the extremum and positivity switches and the two first-order end faces), second order at smooth monotone interior points; no convergence claim beyond the donor-cell rule's is made here. The regions: [1,1] bottom layer (face 1 donor, face 2 two-point velocity), [2,2] (face 2 two-point, face 3 interior), [3, NLEV-2] the interior stencil, [NLEV-1, NLEV-1] (face NLEV-1 interior, face NLEV two-point with the lid closure), [NLEV, NLEV] top layer (outflow through face NLEV only).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:advection",
+      "axes:lev",
+      "order:1",
+      "stencil_width:5",
+      "scheme:semi_lagrangian_plm_limit",
+      "bc:no-inflow",
+      "form:flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "Hong, S.-Y., & Lim, J.-O. J. (2006). The WRF single-moment 6-class microphysics scheme (WSM6). Journal of the Korean Meteorological Society, 42(2), 129-151."
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutines nislfv_rain_plm (lines 1879-2122) and nislfv_rain_plm6 (2125-2400)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"},
+    {"ref": "../stencils/sedimentation_jh2010_face_velocity.esm"},
+    {"ref": "../stencils/sedimentation_jh2010_face_value.esm"},
+    {"ref": "../stencils/sedimentation_jh2010_flux_D_lev_interior.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_flux_D_lev": {
+      "params": ["q", "W"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [{"op": "*", "args": ["W", "q"]}],
+        "wrt": "lev"
+      },
+      "where": {
+        "q": {"shape": ["lev"]},
+        "W": {"shape": ["lev"]}
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, 1]],
+          [[2, 2]],
+          [[3, {"op": "-", "args": ["NLEV", 2]}]],
+          [[{"op": "-", "args": ["NLEV", 1]}, {"op": "-", "args": ["NLEV", 1]}]],
+          [["NLEV", "NLEV"]]
+        ],
+        "values": [
+          {
+            "op": "aggregate",
+            "output_idx": ["k"],
+            "args": ["q", "W"],
+            "ranges": {"k": [1, 1]},
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {"op": "==", "args": [{"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]}, 0]},
+                            {"op": "index", "args": ["W", "k"]},
+                            {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]}, {"op": "index", "args": ["W", "k"]}]}]}
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", "k"]},
+                            "q0": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 1]}]},
+                            "qp1": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 2]}]},
+                            "dzm1": {"op": "index", "args": ["dz", "k"]},
+                            "dz0": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 1]}]},
+                            "dzp1": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 2]}]}
+                          }
+                        }
+                      ]
+                    },
+                    {"op": "*", "args": [{"op": "index", "args": ["W", "k"]}, {"op": "index", "args": ["q", "k"]}]}
+                  ]
+                },
+                {"op": "index", "args": ["dz", "k"]}
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["k"],
+            "args": ["q", "W"],
+            "ranges": {"k": [2, 2]},
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_velocity",
+                          "bindings": {
+                            "Wm2": {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]},
+                            "Wm1": {"op": "index", "args": ["W", "k"]},
+                            "W0": {"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]},
+                            "Wp1": {"op": "index", "args": ["W", {"op": "+", "args": ["k", 2]}]}
+                          }
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", "k"]},
+                            "q0": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 1]}]},
+                            "qp1": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 2]}]},
+                            "dzm1": {"op": "index", "args": ["dz", "k"]},
+                            "dz0": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 1]}]},
+                            "dzp1": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 2]}]}
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {"op": "==", "args": [{"op": "index", "args": ["W", "k"]}, 0]},
+                            {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]},
+                            {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "index", "args": ["W", "k"]}, {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]}]}]}
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", {"op": "-", "args": ["k", 1]}]},
+                            "q0": {"op": "index", "args": ["q", "k"]},
+                            "qp1": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 1]}]},
+                            "dzm1": {"op": "index", "args": ["dz", {"op": "-", "args": ["k", 1]}]},
+                            "dz0": {"op": "index", "args": ["dz", "k"]},
+                            "dzp1": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 1]}]}
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {"op": "index", "args": ["dz", "k"]}
+              ]
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sedimentation_jh2010_flux_D_lev_interior",
+            "bindings": {"q": "q", "W": "W"}
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["k"],
+            "args": ["q", "W"],
+            "ranges": {"k": [{"op": "-", "args": ["NLEV", 1]}, {"op": "-", "args": ["NLEV", 1]}]},
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {"op": "==", "args": [{"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]}, 0]},
+                            {"op": "index", "args": ["W", "k"]},
+                            {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]}, {"op": "index", "args": ["W", "k"]}]}]}
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", "k"]},
+                            "q0": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 1]}]},
+                            "qp1": 0,
+                            "dzm1": {"op": "index", "args": ["dz", "k"]},
+                            "dz0": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 1]}]},
+                            "dzp1": 0
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_velocity",
+                          "bindings": {
+                            "Wm2": {"op": "index", "args": ["W", {"op": "-", "args": ["k", 2]}]},
+                            "Wm1": {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]},
+                            "W0": {"op": "index", "args": ["W", "k"]},
+                            "Wp1": {"op": "index", "args": ["W", {"op": "+", "args": ["k", 1]}]}
+                          }
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", {"op": "-", "args": ["k", 1]}]},
+                            "q0": {"op": "index", "args": ["q", "k"]},
+                            "qp1": {"op": "index", "args": ["q", {"op": "+", "args": ["k", 1]}]},
+                            "dzm1": {"op": "index", "args": ["dz", {"op": "-", "args": ["k", 1]}]},
+                            "dz0": {"op": "index", "args": ["dz", "k"]},
+                            "dzp1": {"op": "index", "args": ["dz", {"op": "+", "args": ["k", 1]}]}
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {"op": "index", "args": ["dz", "k"]}
+              ]
+            }
+          },
+          {
+            "op": "aggregate",
+            "output_idx": ["k"],
+            "args": ["q", "W"],
+            "ranges": {"k": ["NLEV", "NLEV"]},
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "ifelse",
+                          "args": [
+                            {"op": "==", "args": [{"op": "index", "args": ["W", "k"]}, 0]},
+                            {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]},
+                            {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "index", "args": ["W", "k"]}, {"op": "index", "args": ["W", {"op": "-", "args": ["k", 1]}]}]}]}
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "sedimentation_jh2010_face_value",
+                          "bindings": {
+                            "qm1": {"op": "index", "args": ["q", {"op": "-", "args": ["k", 1]}]},
+                            "q0": {"op": "index", "args": ["q", "k"]},
+                            "qp1": 0,
+                            "dzm1": {"op": "index", "args": ["dz", {"op": "-", "args": ["k", 1]}]},
+                            "dz0": {"op": "index", "args": ["dz", "k"]},
+                            "dzp1": 0
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {"op": "index", "args": ["dz", "k"]}
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

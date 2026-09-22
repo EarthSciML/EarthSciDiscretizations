@@ -1,0 +1,103 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_face_value",
+    "description": "DONOR FACE VALUE of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d, in its dt -> 0 limit: the value at the LOWER face of a layer of falling density q0, reconstructed from the layer and its two neighbours (qm1 below, qp1 above) on a non-uniform column (thicknesses dzm1, dz0, dzp1). For downward flow the lower face of a layer is fed by that layer, so this is the upwind value of the face below it. WRF forms the two one-sided differences over SUMS of adjacent thicknesses, dip = (qp1 - q0)/(dzp1 + dz0) and dim = (q0 - qm1)/(dzm1 + dz0), and sets the face value to q0 - h with h = (dip + dim) dz0 / 2 -- the AVERAGE of the two one-sided slopes, carried half a layer down. Two branches, both kept as branches because they ARE the scheme: (1) at an extremum of q, dip dim <= 0, the slope is zeroed and the face value is q0; (2) if either face value q0 - h or q0 + h would be negative the slope is also dropped. Branch (2) is written as |h| <= q0, which is the same test exactly (q0 + h and q0 - h are both >= 0 iff |h| <= q0, and the subtraction is exact near the boundary by Sterbenz's lemma). THIS IS NOT A TEXTBOOK LIMITER: the slope is the average of the one-sided differences, not their minmod and not the monotonized-central limit, and on a measured WRF column a minmod reconstruction in its place leaves 31.6 % of the difference to WRF that this closes. Do not 'simplify' it to a library limiter. WRF's finite-dt arrival cells dza reduce to the layer thicknesses as dt -> 0, which is the form here; at the MODEL TOP the rule binds qp1 = 0 and dzp1 = 0, because WRF's qa(km+1) = 0 and dza(km+1) = wi(km+1) dt -> 0. The bottom layer (face 1) takes no reconstruction in WRF (qmi(1) = qa(1)) and is written in the rule's boundary region.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:reconstruct",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: 'estimate values at arrival cell interface with monotone' (dip, dim, qpi, qmi)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_face_value": {
+      "params": ["qm1", "q0", "qp1", "dzm1", "dz0", "dzp1"],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": ">",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {"op": "/", "args": [{"op": "-", "args": ["qp1", "q0"]}, {"op": "+", "args": ["dzp1", "dz0"]}]},
+                      {"op": "/", "args": [{"op": "-", "args": ["q0", "qm1"]}, {"op": "+", "args": ["dzm1", "dz0"]}]}
+                    ]
+                  },
+                  0
+                ]
+              },
+              {
+                "op": "<=",
+                "args": [
+                  {
+                    "op": "abs",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          "dz0",
+                          {
+                            "op": "+",
+                            "args": [
+                              {"op": "/", "args": [{"op": "-", "args": ["qp1", "q0"]}, {"op": "+", "args": ["dzp1", "dz0"]}]},
+                              {"op": "/", "args": [{"op": "-", "args": ["q0", "qm1"]}, {"op": "+", "args": ["dzm1", "dz0"]}]}
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "q0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "-",
+            "args": [
+              "q0",
+              {
+                "op": "*",
+                "args": [
+                  0.5,
+                  "dz0",
+                  {
+                    "op": "+",
+                    "args": [
+                      {"op": "/", "args": [{"op": "-", "args": ["qp1", "q0"]}, {"op": "+", "args": ["dzp1", "dz0"]}]},
+                      {"op": "/", "args": [{"op": "-", "args": ["q0", "qm1"]}, {"op": "+", "args": ["dzm1", "dz0"]}]}
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "q0"
+        ]
+      }
+    }
+  }
+}
