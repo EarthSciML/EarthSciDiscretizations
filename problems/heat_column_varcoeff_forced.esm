@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "heat_column_varcoeff_forced",
-    "description": "MMS driver with a GENUINELY VARIABLE interface coefficient: u_t = d/dz(K du/dz) + S(z,t) on the unit column [0, 1], K(z) = 1 + z supplied on the NLEV+1 interfaces (K[kn] = 1 + ze[kn]) and discretized on the quadratic-stretch column by grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc. Manufactured solution u(z,t) = exp(-t) cos(pi z): u_z = -pi exp(-t) sin(pi z), so K u_z = -pi (1+z) exp(-t) sin(pi z), whose z-derivative is -pi exp(-t) [ sin(pi z) + pi (1+z) cos(pi z) ], and u_t = -exp(-t) cos(pi z); the forcing that makes u exact is therefore S(z,t) = exp(-t) [ -cos(pi z) + pi sin(pi z) + pi^2 (1+z) cos(pi z) ], evaluated in the model at the layer centres zc (a RUNTIME position, so the grid-derived observed zc is in scope) and the ODE time t. K u_z vanishes at both ends (sin(0) = sin(pi) = 0), so the prescribed interface fluxes are kdudz_bot = kdudz_top = 0. Unlike problems/heat_column_varcoeff_flux_bc nothing is discretely exact here: the error at t = 0.1 is the full second-order spatial error of the interface-coefficient flux-difference stencil on a stretched mesh with a non-constant coefficient, which is what the convergence sweep pins. The mesh follows the grid's edge-array contract (ze supplied, zc/dz grid-derived); build-time ic/reference positions spell the layer centre from literals and NLEV.",
+    "description": "MMS driver with a GENUINELY VARIABLE interface coefficient: u_t = d/dz(K du/dz) + S(z,t) on the unit column [0, 1], K(z) = 1 + z supplied on the NLEV+1 interfaces (K[kn] = 1 + ze[kn]) and discretized on the quadratic-stretch column by grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc. Manufactured solution u(z,t) = exp(-t) cos(pi z): u_z = -pi exp(-t) sin(pi z), so K u_z = -pi (1+z) exp(-t) sin(pi z), whose z-derivative is -pi exp(-t) [ sin(pi z) + pi (1+z) cos(pi z) ], and u_t = -exp(-t) cos(pi z); the forcing that makes u exact is therefore S(z,t) = exp(-t) [ -cos(pi z) + pi sin(pi z) + pi^2 (1+z) cos(pi z) ], evaluated in the model at the layer centres zc (a RUNTIME position, so the grid-derived observed zc is in scope) and the ODE time t. K u_z vanishes at both ends (sin(0) = sin(pi) = 0), so the prescribed interface fluxes are kdudz_bot = kdudz_top = 0. Unlike problems/heat_column_varcoeff_flux_bc nothing is discretely exact here: the error at t = 0.1 is the full second-order spatial error of the interface-coefficient flux-difference stencil on a stretched mesh with a non-constant coefficient, which is what the convergence sweep pins. The mesh follows the grid's edge-array contract (ze taken from the grid's shared MMS test column mms_column_ze in grids/column_nonuniform_1d/mesh/mms_column.esm; zc/dz grid-derived); build-time ic/reference positions spell the layer centre from literals and NLEV.",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -22,6 +22,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -67,7 +70,7 @@
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
         },
         "zc": {
           "type": "unknown",
@@ -102,7 +105,7 @@
                 "args": [
                   3.141592653589793,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -354,72 +357,10 @@
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            "name": "mms_column_ze",
+            "bindings": {}
           }
         },
         {
@@ -474,7 +415,7 @@
                         "args": [
                           3.141592653589793,
                           {
-                            "op": "aggregate",
+                            "op": "faq",
                             "output_idx": [
                               "i"
                             ],
@@ -617,7 +558,7 @@
                         "args": [
                           3.141592653589793,
                           {
-                            "op": "aggregate",
+                            "op": "faq",
                             "output_idx": [
                               "i"
                             ],

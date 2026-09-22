@@ -16,6 +16,7 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
     L004  every `grid:` tag resolves to grids/<name>/grid.esm with matching metadata.name
     L005  stencils/rules live under the grid directory their `grid:` tag names
     L006  a rule's makearray regions tile the axes named by its `axes:` tag exactly
+          (`axes:none` declares a rank-0 output, which must not be a makearray)
           (checked by folding metaparameter bounds at sampled sizes — no evaluation
           of any model math)
     L007  kind/payload agreement: grid|stencil|rule|regrid|reproject are pure
@@ -265,6 +266,16 @@ def lint_rule_regions(path: Path, doc: dict, tags, lib: Library, findings: Findi
     axes_decl = tags.get("axes", [])
     if not grid_names or not axes_decl:
         return  # L002 already fired
+    if axes_decl[0] == "none":
+        # A rank-0 rule (a full reduction such as a whole-column integral) has
+        # no output axes to tile, so it declares `axes:none` instead of
+        # misnaming the reduced axis. It must then not assemble a makearray.
+        for tmpl_name, _ in find_makearray_bodies(doc):
+            findings.add(
+                path, "L006",
+                f"{tmpl_name}: axes:none (rank-0 output) but the body is a makearray",
+            )
+        return
     grid_path = lib.grids.get(grid_names[0])
     if grid_path is None:
         return  # L004 already fired

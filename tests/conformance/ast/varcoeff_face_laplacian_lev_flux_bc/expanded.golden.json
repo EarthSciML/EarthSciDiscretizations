@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "index_sets": {
     "lev": {
       "kind": "interval",
@@ -11,7 +11,7 @@
     }
   },
   "metadata": {
-    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two prescribed-flux free names kdudz_bot / kdudz_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's three-region makearray -- interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 holding the prescribed-flux faces. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two prescribed-flux free names kdudz_bot / kdudz_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's three-region makearray -- interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 holding the prescribed-flux faces; every K du/dz flux in all three regions is a reference to the one interface_flux_K_lev template, bound at n = k+1, k, 2 and 8. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
     "license": "MIT",
     "name": "varcoeff_face_laplacian_lev_flux_bc_ast_fixture",
     "tags": [
@@ -79,59 +79,14 @@
                   {
                     "args": [
                       {
-                        "args": [
-                          {
-                            "args": [
-                              "K",
-                              2
-                            ],
-                            "op": "index"
-                          },
-                          {
-                            "args": [
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "u",
-                                      2
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "u",
-                                      1
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              },
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "zc",
-                                      2
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "zc",
-                                      1
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              }
-                            ],
-                            "op": "/"
-                          }
-                        ],
-                        "op": "*"
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 2,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
                       },
                       "kdudz_bot"
                     ],
@@ -153,71 +108,14 @@
                     "args": [
                       "kdudz_top",
                       {
-                        "args": [
-                          {
-                            "args": [
-                              "K",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          {
-                            "args": [
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "u",
-                                      8
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "u",
-                                      {
-                                        "args": [
-                                          8,
-                                          1
-                                        ],
-                                        "op": "-"
-                                      }
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              },
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "zc",
-                                      8
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "zc",
-                                      {
-                                        "args": [
-                                          8,
-                                          1
-                                        ],
-                                        "op": "-"
-                                      }
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              }
-                            ],
-                            "op": "/"
-                          }
-                        ],
-                        "op": "*"
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 8,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
                       }
                     ],
                     "op": "-"
@@ -248,6 +146,184 @@
         {
           "lhs": "ze",
           "rhs": {
+            "args": [],
+            "bindings": {},
+            "name": "mms_column_ze",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_thickness",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_center",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer mid-points from the interface array: zc[gi] = (ze[gi] + ze[gi+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). The cartesian_nonuniform_1d `nonuniform_cell_center` template applied on the renamed lev axis -- one definition in the library. A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gi` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_width",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer thicknesses from the interface array: dz[gi] = ze[gi+1] - ze[gi] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). The cartesian_nonuniform_1d `nonuniform_cell_width` template applied on the renamed lev axis. A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid.",
+          "params": [
+            "ze"
+          ]
+        },
+        "interface_flux_K_lev": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  "K",
+                  "n"
+                ],
+                "op": "index"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          "u",
+                          "n"
+                        ],
+                        "op": "index"
+                      },
+                      {
+                        "args": [
+                          "u",
+                          {
+                            "args": [
+                              "n",
+                              1
+                            ],
+                            "op": "-"
+                          }
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": "-"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          "zc",
+                          "n"
+                        ],
+                        "op": "index"
+                      },
+                      {
+                        "args": [
+                          "zc",
+                          {
+                            "args": [
+                              "n",
+                              1
+                            ],
+                            "op": "-"
+                          }
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "/"
+              }
+            ],
+            "op": "*"
+          },
+          "params": [
+            "u",
+            "K",
+            "n"
+          ]
+        },
+        "mms_column_integrand": {
+          "body": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [
+                1,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "args": [
+                            "zc",
+                            "i"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    }
+                  ],
+                  "op": "cos"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "The MMS integrand 1 + cos(pi z) sampled at the layer centres zc (shape [lev]), as an explicit gather over lev.",
+          "params": [
+            "zc"
+          ]
+        },
+        "mms_column_ze": {
+          "body": {
             "args": [],
             "expr": {
               "args": [
@@ -305,7 +381,7 @@
               ],
               "op": "+"
             },
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -314,36 +390,14 @@
                 "from": "lev_nodes"
               }
             }
-          }
+          },
+          "description": "Interface coordinates of the quadratic-stretch unit column: ze[kn] = 0.6 xi + 0.4 xi^2, xi = (kn - 1)/NLEV, over kn in lev_nodes.",
+          "params": []
         },
-        {
-          "lhs": "zc",
-          "rhs": {
-            "args": [],
-            "bindings": {
-              "ze": "ze"
-            },
-            "name": "column_cell_center",
-            "op": "apply_expression_template"
-          }
-        },
-        {
-          "lhs": "dz",
-          "rhs": {
-            "args": [],
-            "bindings": {
-              "ze": "ze"
-            },
-            "name": "column_cell_thickness",
-            "op": "apply_expression_template"
-          }
-        }
-      ],
-      "expression_templates": {
-        "column_cell_center": {
+        "nonuniform_cell_center": {
           "body": {
             "args": [
-              "ze"
+              "xe"
             ],
             "expr": {
               "args": [
@@ -352,17 +406,17 @@
                   "args": [
                     {
                       "args": [
-                        "ze",
-                        "gk"
+                        "xe",
+                        "gi"
                       ],
                       "op": "index"
                     },
                     {
                       "args": [
-                        "ze",
+                        "xe",
                         {
                           "args": [
-                            "gk",
+                            "gi",
                             1
                           ],
                           "op": "+"
@@ -376,34 +430,34 @@
               ],
               "op": "*"
             },
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
-              "gk"
+              "gi"
             ],
             "ranges": {
-              "gk": {
+              "gi": {
                 "from": "lev"
               }
             }
           },
-          "description": "Layer mid-points from the interface array: zc[gk] = (ze[gk] + ze[gk+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gk` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "description": "Cell centers from the node array: xc[gi] = (xe[gi] + xe[gi+1]) / 2 over the x (cell) axis, gathering the N+1-node edge array xe (shape [x_nodes]). A consuming model applies this to its `xe` to define its `xc` observed. The aggregation index is named `gi`, NOT `i`, so the derived observed does not capture a consuming finite-volume rule's own aggregate index `i` when it is inlined into the rule body (the rule reads xc by variable index xc[i-1], xc[i], xc[i+1]).",
           "params": [
-            "ze"
+            "xe"
           ]
         },
-        "column_cell_thickness": {
+        "nonuniform_cell_width": {
           "body": {
             "args": [
-              "ze"
+              "xe"
             ],
             "expr": {
               "args": [
                 {
                   "args": [
-                    "ze",
+                    "xe",
                     {
                       "args": [
-                        "gk",
+                        "gi",
                         1
                       ],
                       "op": "+"
@@ -413,27 +467,27 @@
                 },
                 {
                   "args": [
-                    "ze",
-                    "gk"
+                    "xe",
+                    "gi"
                   ],
                   "op": "index"
                 }
               ],
               "op": "-"
             },
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
-              "gk"
+              "gi"
             ],
             "ranges": {
-              "gk": {
+              "gi": {
                 "from": "lev"
               }
             }
           },
-          "description": "Layer thicknesses from the interface array: dz[gk] = ze[gk+1] - ze[gk] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid. Aggregation index `gk` for the same hygiene reason as column_cell_center.",
+          "description": "Finite-volume control widths from the node array: dxw[gi] = xe[gi+1] - xe[gi] over the x (cell) axis. A consuming model applies this to its `xe` to define its `dxw` observed. Aggregation index `gi` (distinct from a rule's `i`) for the same hygiene reason as nonuniform_cell_center.",
           "params": [
-            "ze"
+            "xe"
           ]
         },
         "varcoeff_face_laplacian_lev_flux_bc": {
@@ -475,59 +529,14 @@
                   {
                     "args": [
                       {
-                        "args": [
-                          {
-                            "args": [
-                              "K",
-                              2
-                            ],
-                            "op": "index"
-                          },
-                          {
-                            "args": [
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "u",
-                                      2
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "u",
-                                      1
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              },
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "zc",
-                                      2
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "zc",
-                                      1
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              }
-                            ],
-                            "op": "/"
-                          }
-                        ],
-                        "op": "*"
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 2,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
                       },
                       "kdudz_bot"
                     ],
@@ -549,71 +558,14 @@
                     "args": [
                       "kdudz_top",
                       {
-                        "args": [
-                          {
-                            "args": [
-                              "K",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          {
-                            "args": [
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "u",
-                                      8
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "u",
-                                      {
-                                        "args": [
-                                          8,
-                                          1
-                                        ],
-                                        "op": "-"
-                                      }
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              },
-                              {
-                                "args": [
-                                  {
-                                    "args": [
-                                      "zc",
-                                      8
-                                    ],
-                                    "op": "index"
-                                  },
-                                  {
-                                    "args": [
-                                      "zc",
-                                      {
-                                        "args": [
-                                          8,
-                                          1
-                                        ],
-                                        "op": "-"
-                                      }
-                                    ],
-                                    "op": "index"
-                                  }
-                                ],
-                                "op": "-"
-                              }
-                            ],
-                            "op": "/"
-                          }
-                        ],
-                        "op": "*"
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 8,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
                       }
                     ],
                     "op": "-"
@@ -678,144 +630,30 @@
                 {
                   "args": [
                     {
-                      "args": [
-                        {
+                      "args": [],
+                      "bindings": {
+                        "K": "K",
+                        "n": {
                           "args": [
-                            "K",
-                            {
-                              "args": [
-                                "k",
-                                1
-                              ],
-                              "op": "+"
-                            }
+                            "k",
+                            1
                           ],
-                          "op": "index"
+                          "op": "+"
                         },
-                        {
-                          "args": [
-                            {
-                              "args": [
-                                {
-                                  "args": [
-                                    "u",
-                                    {
-                                      "args": [
-                                        "k",
-                                        1
-                                      ],
-                                      "op": "+"
-                                    }
-                                  ],
-                                  "op": "index"
-                                },
-                                {
-                                  "args": [
-                                    "u",
-                                    "k"
-                                  ],
-                                  "op": "index"
-                                }
-                              ],
-                              "op": "-"
-                            },
-                            {
-                              "args": [
-                                {
-                                  "args": [
-                                    "zc",
-                                    {
-                                      "args": [
-                                        "k",
-                                        1
-                                      ],
-                                      "op": "+"
-                                    }
-                                  ],
-                                  "op": "index"
-                                },
-                                {
-                                  "args": [
-                                    "zc",
-                                    "k"
-                                  ],
-                                  "op": "index"
-                                }
-                              ],
-                              "op": "-"
-                            }
-                          ],
-                          "op": "/"
-                        }
-                      ],
-                      "op": "*"
+                        "u": "u"
+                      },
+                      "name": "interface_flux_K_lev",
+                      "op": "apply_expression_template"
                     },
                     {
-                      "args": [
-                        {
-                          "args": [
-                            "K",
-                            "k"
-                          ],
-                          "op": "index"
-                        },
-                        {
-                          "args": [
-                            {
-                              "args": [
-                                {
-                                  "args": [
-                                    "u",
-                                    "k"
-                                  ],
-                                  "op": "index"
-                                },
-                                {
-                                  "args": [
-                                    "u",
-                                    {
-                                      "args": [
-                                        "k",
-                                        1
-                                      ],
-                                      "op": "-"
-                                    }
-                                  ],
-                                  "op": "index"
-                                }
-                              ],
-                              "op": "-"
-                            },
-                            {
-                              "args": [
-                                {
-                                  "args": [
-                                    "zc",
-                                    "k"
-                                  ],
-                                  "op": "index"
-                                },
-                                {
-                                  "args": [
-                                    "zc",
-                                    {
-                                      "args": [
-                                        "k",
-                                        1
-                                      ],
-                                      "op": "-"
-                                    }
-                                  ],
-                                  "op": "index"
-                                }
-                              ],
-                              "op": "-"
-                            }
-                          ],
-                          "op": "/"
-                        }
-                      ],
-                      "op": "*"
+                      "args": [],
+                      "bindings": {
+                        "K": "K",
+                        "n": "k",
+                        "u": "u"
+                      },
+                      "name": "interface_flux_K_lev",
+                      "op": "apply_expression_template"
                     }
                   ],
                   "op": "-"
@@ -830,7 +668,7 @@
               ],
               "op": "/"
             },
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "k"
             ],
@@ -893,7 +731,7 @@
           "units": "m"
         },
         "ze": {
-          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8).",
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge.",
           "shape": [
             "lev_nodes"
           ],

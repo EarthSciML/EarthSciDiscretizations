@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "integral_column_midpoint",
-    "description": "MMS driver for the five `integral` lowerings on grids/column_nonuniform_1d, one model per form (the convergence runner takes one L2_error assertion per model): FromBottomCenter (integral_lev_cumulative_from_bottom, upper bound `lev`), ToTopCenter (integral_lev_cumulative_to_top, lower bound `lev`), FromBottomNodes (integral_lev_nodes_cumulative_from_bottom, upper bound `lev_nodes`), ToTopNodes (integral_lev_nodes_cumulative_to_top, lower bound `lev_nodes`) and Whole (integral_lev_whole, both bounds constants). The integrand is the state-free layer field f = 1 + cos(pi z) sampled at the layer centres of the quadratic-stretch column z(xi) = 0.6 xi + 0.4 xi^2, whose antiderivative z + sin(pi z)/pi gives every form in closed form (whole column = 1). Each model carries an accumulator state (w_fbc, w_ttc, w_fbn, w_ttn, w_whole -- one distinct name per model, so sibling models never share a state name) with ic 0 and d/dt = F, so its value at t = 1 equals the lowered integral F exactly whatever the integrator does (the right-hand side is constant in time), and the L2 error of w against the analytic integral -- evaluated at the layer centres for the centre forms and at the interfaces for the node forms -- isolates the midpoint-rule error, which is second order on the smoothly stretched mesh. The mesh follows the grid's edge-array contract (ze supplied; zc, dz grid-derived); the references spell the layer centre or interface coordinate from literals and NLEV (build-time scope caveat).",
+    "description": "MMS driver for the five `integral` lowerings on grids/column_nonuniform_1d, one model per form (the convergence runner takes one L2_error assertion per model): FromBottomCenter (integral_lev_cumulative_from_bottom, bounds z_sfc -> lev), ToTopCenter (integral_lev_cumulative_to_top, lev -> z_top), FromBottomNodes (integral_lev_nodes_cumulative_from_bottom, z_sfc -> lev_nodes), ToTopNodes (integral_lev_nodes_cumulative_to_top, lev_nodes -> z_top) and Whole (integral_lev_whole, z_sfc -> z_top). The bounds are the GROUND names the rules match: z_sfc and z_top are each model's observeds ze[1] and ze[NLEV+1] (the domain faces), lev / lev_nodes the current layer centre / interface. The mesh and the integrand are written ONCE, in the grid's fixture library grids/column_nonuniform_1d/mesh/mms_column.esm, and applied by every model: the integrand is the state-free layer field f = 1 + cos(pi z) sampled at the layer centres of the quadratic-stretch column z(xi) = 0.6 xi + 0.4 xi^2, whose antiderivative z + sin(pi z)/pi gives every form in closed form (whole column = 1). Each model carries an accumulator state (w_fbc, w_ttc, w_fbn, w_ttn, w_whole -- one distinct name per model, so sibling models never share a state name) with ic 0 and d/dt = F, so its value at t = 1 equals the lowered integral F exactly whatever the integrator does (the right-hand side is constant in time), and the L2 error of w against the analytic integral -- evaluated at the layer centres for the centre forms and at the interfaces for the node forms -- isolates the midpoint-rule error, which is second order on the smoothly stretched mesh. The mesh follows the grid's edge-array contract (ze supplied; zc, dz grid-derived); the references spell the layer centre or interface coordinate from literals and NLEV (build-time scope caveat).",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -25,6 +25,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/integral_lev_cumulative_from_bottom.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -34,7 +37,7 @@
           "shape": [
             "lev"
           ],
-          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free): the shared mms_column_integrand template (grids/column_nonuniform_1d/mesh/mms_column.esm), an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
         },
         "F": {
           "type": "unknown",
@@ -44,25 +47,23 @@
           ],
           "description": "The lowered integral: cumulative integral from the surface to the layer centre, z + sin(pi z)/pi at z = zc."
         },
-        "zbot": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
-        },
-        "ztop": {
-          "type": "parameter",
-          "units": "m",
-          "default": 1.0,
-          "description": "Top coordinate, the constant upper bound of the integral."
-        },
         "ze": {
           "type": "unknown",
           "units": "m",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1]: the ground LOWER-bound name of the grid's integral rules (integral_lev_whole and the from-bottom forms match `lower: z_sfc` literally), an observed of the interface array so the bound can never disagree with the mesh."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[NLEV+1]: the ground UPPER-bound name of the grid's integral rules (integral_lev_whole and the to-top forms match `upper: z_top` literally), an observed of the interface array."
         },
         "zc": {
           "type": "unknown",
@@ -112,41 +113,11 @@
         {
           "lhs": "f",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "i"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_integrand",
+            "bindings": {
+              "zc": "zc"
             }
           }
         },
@@ -158,79 +129,43 @@
               "f"
             ],
             "var": "lev",
-            "lower": "zbot",
+            "lower": "z_sfc",
             "upper": "lev"
           }
         },
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              {
+                "op": "+",
+                "args": [
+                  "NLEV",
+                  1
+                ]
               }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            ]
           }
         },
         {
@@ -277,7 +212,7 @@
                 "op": "+",
                 "args": [
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -404,7 +339,7 @@
                             "args": [
                               3.141592653589793,
                               {
-                                "op": "aggregate",
+                                "op": "faq",
                                 "output_idx": [
                                   "i"
                                 ],
@@ -538,6 +473,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/integral_lev_cumulative_to_top.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -547,7 +485,7 @@
           "shape": [
             "lev"
           ],
-          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free): the shared mms_column_integrand template (grids/column_nonuniform_1d/mesh/mms_column.esm), an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
         },
         "F": {
           "type": "unknown",
@@ -557,25 +495,23 @@
           ],
           "description": "The lowered integral: cumulative integral from the layer centre to the top, (1 - z) - sin(pi z)/pi at z = zc."
         },
-        "zbot": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
-        },
-        "ztop": {
-          "type": "parameter",
-          "units": "m",
-          "default": 1.0,
-          "description": "Top coordinate, the constant upper bound of the integral."
-        },
         "ze": {
           "type": "unknown",
           "units": "m",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1]: the ground LOWER-bound name of the grid's integral rules (integral_lev_whole and the from-bottom forms match `lower: z_sfc` literally), an observed of the interface array so the bound can never disagree with the mesh."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[NLEV+1]: the ground UPPER-bound name of the grid's integral rules (integral_lev_whole and the to-top forms match `upper: z_top` literally), an observed of the interface array."
         },
         "zc": {
           "type": "unknown",
@@ -625,41 +561,11 @@
         {
           "lhs": "f",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "i"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_integrand",
+            "bindings": {
+              "zc": "zc"
             }
           }
         },
@@ -672,78 +578,42 @@
             ],
             "var": "lev",
             "lower": "lev",
-            "upper": "ztop"
+            "upper": "z_top"
           }
         },
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              {
+                "op": "+",
+                "args": [
+                  "NLEV",
+                  1
+                ]
               }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            ]
           }
         },
         {
@@ -794,7 +664,7 @@
                     "args": [
                       1.0,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],
@@ -923,7 +793,7 @@
                             "args": [
                               3.141592653589793,
                               {
-                                "op": "aggregate",
+                                "op": "faq",
                                 "output_idx": [
                                   "i"
                                 ],
@@ -1057,6 +927,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -1066,7 +939,7 @@
           "shape": [
             "lev"
           ],
-          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free): the shared mms_column_integrand template (grids/column_nonuniform_1d/mesh/mms_column.esm), an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
         },
         "F": {
           "type": "unknown",
@@ -1076,25 +949,23 @@
           ],
           "description": "The lowered integral: cumulative integral from the surface to each interface, z + sin(pi z)/pi at z = ze."
         },
-        "zbot": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
-        },
-        "ztop": {
-          "type": "parameter",
-          "units": "m",
-          "default": 1.0,
-          "description": "Top coordinate, the constant upper bound of the integral."
-        },
         "ze": {
           "type": "unknown",
           "units": "m",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1]: the ground LOWER-bound name of the grid's integral rules (integral_lev_whole and the from-bottom forms match `lower: z_sfc` literally), an observed of the interface array so the bound can never disagree with the mesh."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[NLEV+1]: the ground UPPER-bound name of the grid's integral rules (integral_lev_whole and the to-top forms match `upper: z_top` literally), an observed of the interface array."
         },
         "zc": {
           "type": "unknown",
@@ -1144,41 +1015,11 @@
         {
           "lhs": "f",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "i"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_integrand",
+            "bindings": {
+              "zc": "zc"
             }
           }
         },
@@ -1190,79 +1031,43 @@
               "f"
             ],
             "var": "lev",
-            "lower": "zbot",
+            "lower": "z_sfc",
             "upper": "lev_nodes"
           }
         },
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              {
+                "op": "+",
+                "args": [
+                  "NLEV",
+                  1
+                ]
               }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            ]
           }
         },
         {
@@ -1309,7 +1114,7 @@
                 "op": "+",
                 "args": [
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "kn"
                     ],
@@ -1387,7 +1192,7 @@
                             "args": [
                               3.141592653589793,
                               {
-                                "op": "aggregate",
+                                "op": "faq",
                                 "output_idx": [
                                   "kn"
                                 ],
@@ -1472,6 +1277,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -1481,7 +1289,7 @@
           "shape": [
             "lev"
           ],
-          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free): the shared mms_column_integrand template (grids/column_nonuniform_1d/mesh/mms_column.esm), an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
         },
         "F": {
           "type": "unknown",
@@ -1491,25 +1299,23 @@
           ],
           "description": "The lowered integral: cumulative integral from each interface to the top, (1 - z) - sin(pi z)/pi at z = ze."
         },
-        "zbot": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "Surface coordinate, the constant lower bound of the integral (measure-free documentation per esm-spec 4.2)."
-        },
-        "ztop": {
-          "type": "parameter",
-          "units": "m",
-          "default": 1.0,
-          "description": "Top coordinate, the constant upper bound of the integral."
-        },
         "ze": {
           "type": "unknown",
           "units": "m",
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1]: the ground LOWER-bound name of the grid's integral rules (integral_lev_whole and the from-bottom forms match `lower: z_sfc` literally), an observed of the interface array so the bound can never disagree with the mesh."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[NLEV+1]: the ground UPPER-bound name of the grid's integral rules (integral_lev_whole and the to-top forms match `upper: z_top` literally), an observed of the interface array."
         },
         "zc": {
           "type": "unknown",
@@ -1559,41 +1365,11 @@
         {
           "lhs": "f",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "i"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_integrand",
+            "bindings": {
+              "zc": "zc"
             }
           }
         },
@@ -1606,78 +1382,42 @@
             ],
             "var": "lev",
             "lower": "lev_nodes",
-            "upper": "ztop"
+            "upper": "z_top"
           }
         },
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              {
+                "op": "+",
+                "args": [
+                  "NLEV",
+                  1
+                ]
               }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            ]
           }
         },
         {
@@ -1728,7 +1468,7 @@
                     "args": [
                       1.0,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "kn"
                         ],
@@ -1808,7 +1548,7 @@
                             "args": [
                               3.141592653589793,
                               {
-                                "op": "aggregate",
+                                "op": "faq",
                                 "output_idx": [
                                   "kn"
                                 ],
@@ -1893,6 +1633,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/integral_lev_whole.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -1902,24 +1645,12 @@
           "shape": [
             "lev"
           ],
-          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free), spelled as an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
+          "description": "Integrand 1 + cos(pi zc[i]) sampled at the layer centres (state-free): the shared mms_column_integrand template (grids/column_nonuniform_1d/mesh/mms_column.esm), an explicit gather over lev so every binding's evaluator binds the layer-centre array inside the aggregate scope."
         },
         "Itot": {
           "type": "unknown",
           "units": "1",
           "description": "Whole-column integral of f, analytically exactly 1."
-        },
-        "zbot": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "Surface coordinate (lower bound)."
-        },
-        "ztop": {
-          "type": "parameter",
-          "units": "m",
-          "default": 1.0,
-          "description": "Top coordinate (upper bound)."
         },
         "ze": {
           "type": "unknown",
@@ -1927,7 +1658,17 @@
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top), the single geometry input of the grid's edge-array contract, spelled in the library from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+        },
+        "z_sfc": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Surface coordinate ze[1]: the ground LOWER-bound name of the grid's integral rules (integral_lev_whole and the from-bottom forms match `lower: z_sfc` literally), an observed of the interface array so the bound can never disagree with the mesh."
+        },
+        "z_top": {
+          "type": "unknown",
+          "units": "m",
+          "description": "Top coordinate ze[NLEV+1]: the ground UPPER-bound name of the grid's integral rules (integral_lev_whole and the to-top forms match `upper: z_top` literally), an observed of the interface array."
         },
         "zc": {
           "type": "unknown",
@@ -1974,41 +1715,11 @@
         {
           "lhs": "f",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "i"
-            ],
-            "args": [
-              "zc"
-            ],
-            "ranges": {
-              "i": {
-                "from": "lev"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "cos",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        3.141592653589793,
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "i"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_integrand",
+            "bindings": {
+              "zc": "zc"
             }
           }
         },
@@ -2020,79 +1731,43 @@
               "f"
             ],
             "var": "lev",
-            "lower": "zbot",
-            "upper": "ztop"
+            "lower": "z_sfc",
+            "upper": "z_top"
           }
         },
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "z_sfc",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              1
+            ]
+          }
+        },
+        {
+          "lhs": "z_top",
+          "rhs": {
+            "op": "index",
+            "args": [
+              "ze",
+              {
+                "op": "+",
+                "args": [
+                  "NLEV",
+                  1
+                ]
               }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            ]
           }
         },
         {

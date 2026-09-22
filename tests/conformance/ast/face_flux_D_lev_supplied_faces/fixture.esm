@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "face_flux_D_lev_supplied_faces_ast_fixture",
-    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = -D(F, wrt: lev) for a declared interface flux F (shape [lev_nodes]). The plain-D match must fire through the fixpoint (priority 0, where F: [lev_nodes]) and lower to the rule's single-region makearray over [1,8] holding the imported flux-difference aggregate (F[k+1]-F[k])/dz[k]. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it supplies the 9-interface (lev_nodes) quadratic-stretch array ze and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze), all spelled with the literal 8 because the edge binding closes NLEV. The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = -D(F, wrt: lev) for a declared interface flux F (shape [lev_nodes]). The plain-D match must fire through the fixpoint (priority 0, where F: [lev_nodes]) and lower to the rule's single-region makearray over [1,8] holding the imported flux-difference aggregate (F[k+1]-F[k])/dz[k]. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
     "license": "MIT",
     "tags": [
       "conformance",
@@ -16,6 +16,12 @@
       "expression_template_imports": [
         {
           "ref": "../../../../grids/column_nonuniform_1d/rules/face_flux_D_lev_supplied_faces.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        },
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/mesh/mms_column.esm",
           "bindings": {
             "NLEV": 8
           }
@@ -44,7 +50,7 @@
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9 (the single geometry input; the edge binding closes NLEV so spelled with the literal 8)."
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge."
         },
         "zc": {
           "type": "unknown",
@@ -101,72 +107,10 @@
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        8
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        8
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        8
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            "name": "mms_column_ze",
+            "bindings": {}
           }
         },
         {

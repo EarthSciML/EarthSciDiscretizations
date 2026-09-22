@@ -1,0 +1,66 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "mms_column",
+    "description": "The ONE test column shared by every MMS problem and AST fixture of grids/column_nonuniform_1d -- a fixture template library (not a lintable library entry; grids/*/mesh/ holds fixture geometry, schema-validated only), so the stretch map is written once instead of once per consuming model. `mms_column_ze` is the quadratic-stretch interface array on the unit column, ze[kn] = z((kn-1)/NLEV) with z(xi) = 0.6 xi + 0.4 xi^2 for kn = 1..NLEV+1 (ze[1] = 0 at the surface, ze[NLEV+1] = 1 at the top, layers thinning toward the surface), spelled against the grid's metaparameter name NLEV so a loader-API or import-edge rebinding of NLEV re-derives the whole mesh consistently; a consuming model defines its interface observed as ze = mms_column_ze() and derives zc / dz through the grid's two geometry templates. `mms_column_integrand` is the state-free layer field 1 + cos(pi z) sampled at the layer centres, whose antiderivative z + sin(pi z)/pi gives every form of the column integral in closed form (whole column = 1); it is spelled as an explicit gather over the layer centres (see EarthSciML/EarthSciAST#175). Build-time positions (ic, 6.6.5 references) cannot apply these templates -- they fold the coordinate from literals and NLEV inline (AGENTS.md build-time scope caveat).",
+    "license": "MIT",
+    "tags": ["esd:mesh-data", "family:column", "grid:column_nonuniform_1d", "mesh:quadratic_stretch"]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "mms_column_ze": {
+      "params": [],
+      "description": "Interface coordinates of the quadratic-stretch unit column: ze[kn] = 0.6 xi + 0.4 xi^2, xi = (kn - 1)/NLEV, over kn in lev_nodes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["kn"],
+        "args": [],
+        "ranges": { "kn": { "from": "lev_nodes" } },
+        "expr": {
+          "op": "+",
+          "args": [
+            {
+              "op": "*",
+              "args": [
+                0.6,
+                { "op": "/", "args": [{ "op": "-", "args": ["kn", 1] }, "NLEV"] }
+              ]
+            },
+            {
+              "op": "*",
+              "args": [
+                0.4,
+                { "op": "/", "args": [{ "op": "-", "args": ["kn", 1] }, "NLEV"] },
+                { "op": "/", "args": [{ "op": "-", "args": ["kn", 1] }, "NLEV"] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "mms_column_integrand": {
+      "params": ["zc"],
+      "description": "The MMS integrand 1 + cos(pi z) sampled at the layer centres zc (shape [lev]), as an explicit gather over lev.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["i"],
+        "args": ["zc"],
+        "ranges": { "i": { "from": "lev" } },
+        "expr": {
+          "op": "+",
+          "args": [
+            1.0,
+            {
+              "op": "cos",
+              "args": [
+                { "op": "*", "args": [3.141592653589793, { "op": "index", "args": ["zc", "i"] }] }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

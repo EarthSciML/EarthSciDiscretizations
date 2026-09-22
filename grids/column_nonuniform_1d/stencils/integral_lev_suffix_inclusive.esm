@@ -1,0 +1,44 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "integral_lev_suffix_inclusive",
+    "description": "INCLUSIVE suffix (top-downward) Riemann sum of a layer field on column_nonuniform_1d: S[k] = sum over j >= k of f[j] dz[j], a lev-shaped field with S[NLEV] = f[NLEV] dz[NLEV]. S[k] is the midpoint-rule integral from the interface ze[k] BELOW layer k to the model top ze[NLEV+1] -- whole layers only, exact for the layer sum; this is the optical depth measured down from the top of the atmosphere to the base of layer k. Spelled in the esm-spec 4.3.1 prefix-reduction shape (both ranges from the one index set lev, monotone filter j >= k); note that 4.3.1 licenses the O(N) running-accumulator evaluation for FORWARD scans only, so a binding evaluates this reverse scan as the triangular double loop (each suffix folded from its own low end, which is what keeps the result bit-identical across bindings). rules/integral_lev_cumulative_to_top adds the half-layer f[k] dz[k]/2 to start from the layer centre; rules/integral_lev_nodes_cumulative_to_top places S at interfaces 1..NLEV and 0 at the top node NLEV+1. Match-less named template. `dz` is the consumer's free-name layer-thickness observed (grids/column_nonuniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:integral",
+      "order:2",
+      "stencil_width:1"
+    ],
+    "references": [
+      {
+        "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "integral_lev_suffix_inclusive": {
+      "params": ["f"],
+      "body": {
+        "op": "faq",
+        "output_idx": ["k"],
+        "reduce": "+",
+        "args": ["f"],
+        "ranges": { "k": { "from": "lev" }, "j": { "from": "lev" } },
+        "filter": { "op": ">=", "args": ["j", "k"] },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "index", "args": ["f", "j"] },
+            { "op": "index", "args": ["dz", "j"] }
+          ]
+        }
+      }
+    }
+  }
+}
