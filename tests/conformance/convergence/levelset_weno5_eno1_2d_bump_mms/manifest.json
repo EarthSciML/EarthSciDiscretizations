@@ -1,0 +1,79 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "levelset_weno5_eno1_2d_bump_mms",
+  "description": "Observed-order sweep for grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc driven by problems/levelset_weno5_eno1_2d_bump_mms.esm, binding NX=NY together at N = 16, 32, 64, 128 (the operator is evaluated on a frozen field and accumulated linearly in w, so the sweep needs only a few right-hand-side evaluations per resolution). Accumulator form: u frozen at the smooth manufactured g = r^2 - 0.09 + 0.05 (max(0, 1 - r^2/0.28^2))^8 (increasing toward every wall so the guarded extrapolation ghost is linear; weno_band_cells = 1e9 so the WENO5 branch covers the whole interior block), w(0) = g, w_t = S (|grad g| - |grad u|_h), gated on w. The interior WENO5 error is high order; the three-cell ENO1 wall band is first order on the curved field, and its share of the L2 norm scales as sqrt(12/N) x h, so the expected L2 order is 1.5 (derived in the problem description; the Linf error is the wall band's first-order one and is not gated).",
+  "problem": "../../../../problems/levelset_weno5_eno1_2d_bump_mms.esm",
+  "model": "LevelSetWENO5ENO1BumpMMS",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "resolutions": [
+    {
+      "n": 16,
+      "bindings": {
+        "NX": 16,
+        "NY": 16
+      }
+    },
+    {
+      "n": 32,
+      "bindings": {
+        "NX": 32,
+        "NY": 32
+      }
+    },
+    {
+      "n": 64,
+      "bindings": {
+        "NX": 64,
+        "NY": 64
+      }
+    },
+    {
+      "n": 128,
+      "bindings": {
+        "NX": 128,
+        "NY": 128
+      }
+    }
+  ],
+  "norms": [
+    "L2_error"
+  ],
+  "assert_time": 0.2,
+  "expected_order": 1.5,
+  "order_tolerance": 0.35,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {
+      "algorithm": "Tsit5",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
+    "python": {
+      "method": "LSODA",
+      "rtol": 1e-12,
+      "atol": 1e-14
+    },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    }
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}
