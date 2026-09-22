@@ -130,6 +130,6 @@ build renders the observed-order table and convergence plot from the same file.
 ## 7. Done
 
 Open the PR with a conventional-commit title (`feat(rules): …`). CI runs the
-validate job (schema + lint + convergence-order check + spellcheck), the
+validate job (schema + lint + convergence-order check), the
 per-binding conformance matrix as runners land, and the docs build — your rule
 appears on its grid's page automatically.
