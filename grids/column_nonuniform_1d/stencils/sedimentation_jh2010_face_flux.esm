@@ -1,0 +1,76 @@
+{
+  "esm": "1.0.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_face_flux",
+    "description": "FLUX through an INTERIOR face of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d, in its dt -> 0 limit: F = W_face q_face through the lower face of layer k, for 3 <= k <= NLEV-1, the faces whose velocity is sedimentation_jh2010_face_velocity. The face value is taken from the UPWIND side of the face. For W_face <= 0 (downward, the normal case) that is the LOWER-face value of layer k, sedimentation_jh2010_face_value(q[k-1], q[k], q[k+1]); for W_face > 0 it is the UPPER-face value of layer k-1, sedimentation_jh2010_top_face_value(q[k-2], q[k-1], q[k]). The second branch is not hypothetical: although every layer-centred speed is downward (W <= 0), the third-order interpolation 9/16 (W0 + Wm1) - 1/16 (Wp1 + Wm2) overshoots to an UPWARD face speed wherever a slow layer sits under a fast one -- at the edge of a falling layer, 3-12 faces per column in EqWeFiC's WSM6 ice columns. In WRF the departure point of such a face, za(k) = zi(k) - wi(k) dt, lies ABOVE the face, so the remap draws the mass crossing it from the top of the layer below (qpi(k-1)), and the dt -> 0 flux is wi(k) qpi(k-1). Written without this switch the rule leaves 5.2e-4 of the peak tendency against WRF on a synthetic column with such a face (4.4e-10 with it), and 5.6e-7 to 6.4e-6 of the peak ice tendency on the four EqWeFiC WSM6 sedimentation columns (1.0e-8 to 3.9e-8 with it). The other interior-face ingredients -- the velocity's W0 == 0 override and the face value's two limiter branches -- live in the stencils this one applies. Only interior faces need it: face 1 carries W[1] <= 0, and faces 2 and NLEV are two-point averages of non-positive speeds, which cannot turn upward. q[k-2] exists because k >= 3.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:flux",
+      "axes:lev",
+      "order:2",
+      "stencil_width:4"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: the departure points za(k) = zi(k) - wi(k) dt and the 'interpolation to regular point' remap."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"},
+    {"ref": "sedimentation_jh2010_face_velocity.esm"},
+    {"ref": "sedimentation_jh2010_face_value.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_face_flux": {
+      "params": ["Wm2", "Wm1", "W0", "Wp1", "qm2", "qm1", "q0", "qp1", "dzm2", "dzm1", "dz0", "dzp1"],
+      "body": {
+        "op": "*",
+        "args": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sedimentation_jh2010_face_velocity",
+            "bindings": {"Wm2": "Wm2", "Wm1": "Wm1", "W0": "W0", "Wp1": "Wp1"}
+          },
+          {
+            "op": "ifelse",
+            "args": [
+              {
+                "op": ">",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "sedimentation_jh2010_face_velocity",
+                    "bindings": {"Wm2": "Wm2", "Wm1": "Wm1", "W0": "W0", "Wp1": "Wp1"}
+                  },
+                  0
+                ]
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sedimentation_jh2010_top_face_value",
+                "bindings": {"qm1": "qm2", "q0": "qm1", "qp1": "q0", "dzm1": "dzm2", "dz0": "dzm1", "dzp1": "dz0"}
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sedimentation_jh2010_face_value",
+                "bindings": {"qm1": "qm1", "q0": "q0", "qp1": "qp1", "dzm1": "dzm1", "dz0": "dz0", "dzp1": "dzp1"}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
