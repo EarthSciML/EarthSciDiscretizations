@@ -1,0 +1,24 @@
+{
+  "category": "ast",
+  "version": "1.0",
+  "case": "weno5_eno1_blend_norm_D2_extrapolate_bc",
+  "description": "Post-lowering AST conformance for grids/cartesian_uniform_2d/rules/weno5_eno1_blend_norm_D2_extrapolate_bc (added by PR #40, fire_upwinding = 10). Every binding loads fixture.esm (NX=NY=8 bound at the import edge), runs the section-9.6.3 rewrite fixpoint, and must emit a byte-identical expanded AST: the COMPOUND gradient magnitude sqrt((D(u,x))^2 + (D(u,y))^2) (priority 20) replaced by the rule's body, carrying the free names dx, dy, wind_u, wind_v, bdy_eno1_cells, weno_band_cells and pi_blend, with zero unlowered rewrite-target ops in EVALUATION position (the model's equations) and zero surviving metaparameter names. Surviving apply_expression_template nodes in the equations are expected and are NOT a violation: since the Option B reference-preserving switch (ESS 0.9.0, EarthSciAST aff96f29) the loader does not inline match-less template bodies -- a reference denotes its expansion and the engine treats it as a leaf (esm-spec 9.6.4) -- so each surviving apply is a resolved match-less leaf (eno1_minmod, the WENO reconstruction, the ghost closure), not an un-fired rule. The spatial D nodes that survive live in the retained expression_templates registry, in the rule's own match PATTERN, which reaches neither evaluation nor compilation; the equations themselves carry none. Measured on this fixture, not assumed. This is the library's first smooth partition-of-unity operator, so the case also pins the inlining of the clamped closed-form mask 0.5(1 + cos(pi min(max((a-B)/B, 0), 1))) -- in particular that pi_blend survives as a free name and is not folded to a literal. No golden is committed with this fixture: the case is marked \"status\": \"pending-golden\", which scripts/compare-outputs.py reports as SKIP for the golden gate while STILL running the runner-output gate (every binding must lower the rule without erroring) and the cross-binding-bytes gate (all five bindings must produce identical canonical bytes). The golden is installed by scripts/regenerate-goldens.sh, which flips this status to \"active\"; see the PR body for why it is deferred to the repo-wide regeneration rather than pinned here.",
+  "rule": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_blend_norm_D2_extrapolate_bc.esm",
+  "grid": "cartesian_uniform_2d",
+  "fixture": "fixture.esm",
+  "model": "Weno5Eno1BlendNormD2ExtrapolateBcAst",
+  "bindings": {
+    "NX": 8,
+    "NY": 8
+  },
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "python",
+    "rust",
+    "go",
+    "typescript"
+  ],
+  "golden": "expanded.golden.json",
+  "status": "pending-golden"
+}
