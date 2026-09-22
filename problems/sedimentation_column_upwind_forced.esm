@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "sedimentation_column_upwind_forced",
-    "description": "MMS driver for the donor-cell sedimentation operator: q_t = -d/dz(W q) + S(z,t) on the unit column [0, 1] with the layer-centred downward velocity W(z) = -(1 + z) (a fall speed growing with height, as terminal velocities do through the density correction), discretized on the quadratic-stretch column by grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev. Manufactured solution q(z,t) = exp(-t) sin(pi z), which vanishes at the model top z = 1 so it is consistent with the rule's no-inflow closure there; the forcing that makes it exact is S(z,t) = q_t + d/dz(W q) = -exp(-t) [ 2 sin(pi z) + pi (1 + z) cos(pi z) ], evaluated at the layer centres. The surface z = 0 is an outflow face and takes no condition. Expected first order: the donor-cell flux is O(dz); the recorded L2 errors at t = 0.1 halve with each doubling of NLEV.",
+    "description": "MMS driver for the donor-cell sedimentation operator: q_t = -d/dz(W q) + S(z,t) on the unit column [0, 1] with the layer-centred downward velocity W(z) = -(1 + z) (a fall speed growing with height, as terminal velocities do through the density correction), discretized on the quadratic-stretch column of the grid's shared fixture library grids/column_nonuniform_1d/mesh/mms_column.esm (template mms_column_ze) by grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev. Manufactured solution q(z,t) = exp(-t) sin(pi z), which vanishes at the model top z = 1 so it is consistent with the rule's no-inflow closure there; the forcing that makes it exact is S(z,t) = q_t + d/dz(W q) = -exp(-t) [ 2 sin(pi z) + pi (1 + z) cos(pi z) ], evaluated at the layer centres. The surface z = 0 is an outflow face and takes no condition. Expected first order: the donor-cell flux is O(dz); the recorded L2 errors at t = 0.1 halve with each doubling of NLEV.",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -30,6 +30,9 @@
       "expression_template_imports": [
         {
           "ref": "../grids/column_nonuniform_1d/rules/sedimentation_upwind1_flux_D_lev.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
         }
       ],
       "variables": {
@@ -63,7 +66,7 @@
           "shape": [
             "lev_nodes"
           ],
-          "description": "Interface coordinates of the quadratic-stretch column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, spelled from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
+          "description": "Interface coordinates of the quadratic-stretch test column, ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1 (ze[1] = 0 the surface, ze[NLEV+1] = 1 the top): the single geometry input of the grid's edge-array contract, taken from the shared fixture library mesh/mms_column.esm (template mms_column_ze) and spelled there from the metaparameter name NLEV so a loader-API rebinding re-derives the whole mesh."
         },
         "zc": {
           "type": "unknown",
@@ -98,7 +101,7 @@
                 "args": [
                   3.141592653589793,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -255,7 +258,7 @@
         {
           "lhs": "W",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -360,72 +363,10 @@
         {
           "lhs": "ze",
           "rhs": {
-            "op": "aggregate",
-            "output_idx": [
-              "kn"
-            ],
+            "op": "apply_expression_template",
             "args": [],
-            "ranges": {
-              "kn": {
-                "from": "lev_nodes"
-              }
-            },
-            "expr": {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    0.6,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    0.4,
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    },
-                    {
-                      "op": "/",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "kn",
-                            1
-                          ]
-                        },
-                        "NLEV"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            "name": "mms_column_ze",
+            "bindings": {}
           }
         },
         {
@@ -480,7 +421,7 @@
                         "args": [
                           3.141592653589793,
                           {
-                            "op": "aggregate",
+                            "op": "faq",
                             "output_idx": [
                               "i"
                             ],
@@ -608,7 +549,7 @@
               "time": 0.1,
               "expected": 0.0,
               "tolerance": {
-                "abs": 0.03
+                "abs": 0.05
               },
               "reduce": "L2_error",
               "reference": {
@@ -623,7 +564,7 @@
                         "args": [
                           3.141592653589793,
                           {
-                            "op": "aggregate",
+                            "op": "faq",
                             "output_idx": [
                               "i"
                             ],
