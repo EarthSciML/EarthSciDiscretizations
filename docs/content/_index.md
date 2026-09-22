@@ -33,7 +33,7 @@ grids/<grid>/grid.esm             index sets + geometry (metaparameters: N, NLON
 ```
 
 Boundary conditions live **inside** the rule (interior region = the stencil
-aggregate, boundary-face regions = the BC); there is no separate
+`faq`, boundary-face regions = the BC); there is no separate
 boundary-condition declaration anywhere (esm-spec §9.6.8). Rebinding the
 metaparameters at the import edge is the whole convergence story — the same
 files serve every resolution.
@@ -63,7 +63,7 @@ A consuming model needs one import and one `D`:
 
 Load the model through any official ESS binding: the import registers the rule,
 the §9.6.3 rewrite fixpoint lowers `D(D(u,x),x)` into the rule's
-`makearray` + `aggregate` stencil (boundary faces included), and the ordinary
+`makearray` + `faq` stencil (boundary faces included), and the ordinary
 simulation pathway takes it from there.
 
 ## Browse
@@ -75,7 +75,7 @@ simulation pathway takes it from there.
   end-to-end declarative: cell-ring constructors, an in-library broad phase, and
   candidate-gated overlap (gated == dense).
 - **[Reprojection](/reprojection/)** — coordinate-transform template fragments,
-  usable in-model over coordinate arrays via aggregates.
+  usable in-model over coordinate arrays via `faq` nodes.
 - **[Guide](/guide/)** — the layering, authoring a rule, MMS + convergence
   testing, and the conformance suite.
 - Facets: [families](/families/), [operators](/ops/),

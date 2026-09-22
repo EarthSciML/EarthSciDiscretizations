@@ -103,10 +103,13 @@ fixpoint → official runner`.
   metaparameter bounds at sampled sizes (L006). `axes:` lists the output dimensions in
   order, comma-separated (e.g. `axes:lon,lat`).
 - Library entries are pure template-library files; problems carry models (L007). All
-  files declare the `esm` version the ESS schema's `$id` names — currently `1.0.0`
+  files declare the `esm` version the ESS schema's `$id` names — currently `1.2.0`
   (L008). The expected version is *derived* from `$ESS_ROOT/esm-schema.json`, never
   hardcoded in the lint: an ESS version bump must land as a finding on the files, which
-  is exactly what a stale `0.8.0` constant hid across four spec revisions.
+  is exactly what a stale `0.8.0` constant hid across four spec revisions. The same
+  derivation applies to a runner-BUILT document (`esm_version()` in the Julia and
+  Python runners, for the reprojection wrapper) — a corpus migration that leaves a
+  hardcoded version behind in a runner is not finished.
 - Provenance goes in `metadata.references` (Fornberg, Snyder, Roache, …);
   human-readable derivations (incl. MMS solutions and BC-compatibility arguments) go in
   `metadata.description` / test descriptions.

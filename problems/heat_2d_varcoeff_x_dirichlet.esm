@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "heat_2d_varcoeff_x_dirichlet",
     "description": "MMS driver: 2-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit box [0,1]x[0,1] reduced to x-diffusion, with inhomogeneous DIRICHLET (fixed-value) conditions on the two x-walls, discretized by the conservative finite-volume rule grids/cartesian_uniform_2d/rules/varcoeff_laplacian_x_dirichlet_bc over the full 2-D field u[x,y]. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil plus the two x-edge faces. This is the exact 2-D per-axis lift of problems/heat_1d_varcoeff_dirichlet: the manufactured solution and the coefficient k(x) = 1 + 0.5 cos(2 pi x) depend only on x and are constant in the passive y axis, so the x-operator reproduces the 1-D behaviour on every y-row and the discretization error equals the 1-D case (relative L2 and absolute Linf are invariant under the passive-axis replication). The passive y axis is PASSIVE: u is constant in y, no y-operator appears, and NY is closed to 8 at the import edge; NX stays open (grid default 64, rebound by the convergence sweep via the loader API). k is a consumer-supplied [x,y]-shaped observed read by the rule at the x-faces; its aggregate loops over gi/gj (DISTINCT from the stencil's interior i/j) per the keyed-factor capture-avoidance contract (see the rule). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the wall free names gL/gR live only in the runtime rule body; the ic, coefficient, forcing, and test references spell the cell-center coordinate (i-1/2)/NX inline from literals and the metaparameter NX (the build-time cellwise evaluator is scope-free), never invoking the grid's x_coord free-name template. The SAME rule also serves the nonlinear case (a consumer declaring k=f(u)); this driver exercises the variable-coefficient dual.",
@@ -100,7 +100,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -204,7 +204,7 @@
                     ]
                   },
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i",
                       "j"
@@ -289,7 +289,7 @@
         {
           "lhs": "k",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "gi",
               "gj"
@@ -366,7 +366,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
@@ -433,7 +433,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"

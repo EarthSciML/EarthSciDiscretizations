@@ -23,10 +23,12 @@ Category → official earthsci_ast pathway:
                the Julia reference writer (sorted keys, 2-space indent, JSON3
                numeric normalization: integral floats → integers, Ryu-shortest
                float tokens)
-  simulation   pde_inline_tests.run_pde_tests (§6.6/§6.6.5 inline tests over
-               simulation.simulate, scipy method pinned by the manifest)
-  convergence  parse.load_path(problem, metaparameters=…) per manifest resolution →
-               simulate → evaluate_cellwise(reference) → field_reduce norms
+  simulation   inline_tests.run_inline_tests (§6.6/§6.6.5 inline tests over
+               the official solve pathway, scipy method pinned by the
+               manifest)
+  convergence  load_path(problem, metaparameters=…) per manifest resolution →
+               simulate_states → evaluate_cellwise(reference) → field_reduce
+               norms
 
 Environment: the earthsci_ast venv ($ESS_ROOT/pkg/earthsci-ast-py/
 .venv) or any interpreter with numpy+scipy; the package is imported from the
@@ -55,12 +57,43 @@ if not (ESS_ROOT / "esm-schema.json").is_file():
 # upstream; the old spelling had gone dead, so this insert did nothing.)
 sys.path.insert(0, str(ESS_ROOT / "pkg" / "earthsci-ast-py" / "src"))
 
-from earthsci_ast.lower_expression_templates import lower_expression_templates
-from earthsci_ast.template_imports import resolve_template_machinery
+# PUBLIC SURFACE ONLY (api-surface.json): every EarthSciAST name this runner
+# calls is imported from the package namespace `earthsci_ast`, which is the
+# binding's declared export set -- never from the module that happens to define
+# it today. Reaching into `earthsci_ast.<module>` pins this runner to upstream's
+# internal file layout, and that is exactly how the simulation and convergence
+# categories came to import a module (`earthsci_ast.pde_inline_tests`) that no
+# longer exists. The ONE exception is the inline-test surface, imported below
+# from `earthsci_ast.inline_tests` with a note on why.
+from earthsci_ast import (
+    BuildInspection,
+    evaluate,
+    load_path,
+    load_string,
+    lower_expression_templates,
+    observed_definitions,
+    resolve_template_machinery,
+)
 
 CONF = ESD_ROOT / "tests" / "conformance"
 ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
 INT64_MIN, INT64_MAX = -(2**63), 2**63 - 1
+
+
+def esm_version() -> str:
+    """The `esm` version a runner-BUILT document declares.
+
+    Derived from the ESS schema's `$id`, never hardcoded -- the same rule
+    scripts/validate-library.py's L008 applies to the corpus. A runner-built
+    wrapper (the reprojection invocation document) is part of the corpus for
+    version purposes: a hardcoded constant here outlives the schema silently,
+    and then the wrapper is the one document in the run declaring a version the
+    library no longer uses.
+    """
+    schema_id = json.loads((ESS_ROOT / "esm-schema.json").read_text())["$id"]
+    # https://earthsciml.org/schemas/esm/<version>/esm.schema.json
+    return schema_id.rstrip("/").split("/")[-2]
+
 
 # ---------------------------------------------------------------------------
 # Canonical golden writer — byte-for-byte the scheme the Julia reference runner
@@ -323,7 +356,7 @@ def run_ast(output_dir: Path, files, verbose):
 
 
 # ---------------------------------------------------------------------------
-# simulation — the problems' inline §6.6/§6.6.5 tests via run_pde_tests.
+# simulation — the problems' inline §6.6/§6.6.5 tests via run_inline_tests.
 # ---------------------------------------------------------------------------
 
 
@@ -378,16 +411,25 @@ def _map_cases(case_fn, work, verbose, label):
     return cases
 
 
+# The §6.6/§6.6.5 inline-test surface -- `run_inline_tests`, `evaluate_cellwise`,
+# `field_reduce`, `simulate_states`, `state_cells` -- is the one EarthSciAST
+# capability this runner cannot reach through the `earthsci_ast` namespace.
+# Julia and Rust export it (api-surface.json: `run_inline_tests`,
+# `evaluate_cellwise` and `field_reduce` are STABLE there, `state_cells` a Rust
+# extension); the Python binding defines the same functions but re-exports none
+# of them, so a module import is the only way in. Per AGENTS.md §2 the gap is
+# upstream's to close -- re-deriving any of these here would be a shadow
+# evaluator. Import them from the module, never reimplement them.
 def _simulation_case(case_dir: str, manifest: dict) -> dict:
-    from earthsci_ast.pde_inline_tests import run_pde_tests
+    from earthsci_ast.inline_tests import run_inline_tests
 
     case = manifest["case"]
     rec = {"case": case, "status": "ok"}
     try:
         problem = (Path(case_dir) / manifest["problem"]).resolve()
         method, rtol, atol = integrator_opts(manifest)
-        results = run_pde_tests(str(problem), model_name=manifest["model"],
-                                method=method, rtol=rtol, atol=atol)
+        results = run_inline_tests(str(problem), model_name=manifest["model"],
+                                   method=method, rtol=rtol, atol=atol)
         wanted = set(manifest["tests"])
         results = [r for r in results if r.test_id in wanted]
         if not results:
@@ -429,8 +471,7 @@ def _convergence_resolution(case_dir: str, manifest: dict, res_idx: int) -> dict
     tagged with its position so the caller can reassemble the manifest-ordered
     ``errors`` list — the emitted JSON is identical to the former serial
     per-case loop's."""
-    from earthsci_ast.parse import load_path
-    from earthsci_ast.pde_inline_tests import (
+    from earthsci_ast.inline_tests import (
         evaluate_cellwise, field_reduce, simulate_states, state_cells)
 
     res = manifest["resolutions"][res_idx]
@@ -577,10 +618,8 @@ def _rows(m):
 
 
 def run_regridding(output_dir: Path, files, verbose):
-    from earthsci_ast.parse import load_path
-    from earthsci_ast.pde_inline_tests import (
-        run_pde_tests, simulate_states, state_cells)
-    from earthsci_ast.simulation import BuildInspection
+    from earthsci_ast.inline_tests import (
+        run_inline_tests, simulate_states, state_cells)
 
     cases = {}
     for case_dir, manifest in discover_manifests("regridding", files):
@@ -597,8 +636,8 @@ def run_regridding(output_dir: Path, files, verbose):
         try:
             fixture = (case_dir / manifest["fixture"]).resolve()
             model = manifest["model"]
-            results = run_pde_tests(str(fixture), model_name=model,
-                                    method="LSODA", rtol=1e-12, atol=1e-14)
+            results = run_inline_tests(str(fixture), model_name=model,
+                                       method="LSODA", rtol=1e-12, atol=1e-14)
             rec["assertions"] = assertion_dicts(results)
             rec["passed"] = bool(results) and all(r.passed for r in results)
             # regrid_state integrates the constant regridded field from 0 over
@@ -646,12 +685,12 @@ def _reproj_wrapper_doc(params):
         return {"op": "apply_expression_template", "args": [], "name": tpl,
                 "bindings": {**{a: a for a in args}, **crs}}
 
-    # esm 1.0.0 declares exactly two variable types. The four projection
-    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
-    # the template invocations; there is no `expression` field on a variable and
-    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
-    # run_reprojection reads them back — the binding's classification API, not a
-    # local re-derivation.
+    # From esm 1.0.0 a document declares exactly two variable types. The four
+    # projection quantities are UNKNOWNS whose defining equations (bare-variable
+    # LHS) carry the template invocations; there is no `expression` field on a
+    # variable and no `observed` type any more (esm-spec §6.3.1).
+    # `observed_definitions` in run_reprojection reads them back — the binding's
+    # classification API, not a local re-derivation.
     observed = (
         ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
         ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
@@ -667,7 +706,7 @@ def _reproj_wrapper_doc(params):
     for name, units, _expr in observed:
         variables[name] = {"type": "unknown", "units": units}
     equations = [{"lhs": name, "rhs": expr} for name, _units, expr in observed]
-    return {"esm": "1.0.0",
+    return {"esm": esm_version(),
             "metadata": {"name": "lambert_conformal_eval",
                          "description": "Runner-built template invocation "
                                         "(manifest fixture: null)."},
@@ -677,10 +716,6 @@ def _reproj_wrapper_doc(params):
 
 
 def run_reprojection(output_dir: Path, files, verbose):
-    from earthsci_ast.classification import observed_definitions
-    from earthsci_ast.numpy_interpreter import evaluate
-    from earthsci_ast.parse import load_string
-
     cases = {}
     for case_dir, manifest in discover_manifests("reprojection", files):
         case = manifest["case"]

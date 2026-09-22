@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "advection_1d_inflow_superbee",
     "description": "MMS driver: forced-steady 1-D linear advection u_t = -c D(u,x) + c dGdx on the unit interval [0, 1] with OPEN boundaries -- a prescribed inflow at the upstream (left) wall and a non-reflecting extrapolation outflow at the downstream (right) wall -- discretized by grids/cartesian_uniform_1d/rules/flux_limiter_superbee_D_inflow_bc (second-order TVD superbee flux-limited flux-difference; inflow face G_{1/2}=gL with u[0] ghost = gL, outflow face G_{N+1/2}=u[N] by zeroth-order extrapolation). This is the open-boundary companion of problems/advection_1d_periodic_superbee.esm and the superbee-limiter analogue of problems/advection_1d_inflow_lax_friedrichs.esm. Manufactured STEADY solution u*(x) = cos(pi x) with the exactly matching steady forcing c dGdx, dGdx = g'(x) = -pi sin(pi x) (the analytic derivative of u*), so the continuous balance is u_t = -c u*_x + c u*_x = 0 and u(t) = u* for all t; the discrete field drifts only by the operator truncation error (forced-steady MMS: observed order = operator order in this configuration). WHY cos(pi x) FOR A LIMITER: cos(pi x) is smooth and strictly MONOTONE DECREASING on [0, 1] (no interior extremum), so the superbee limiter never clips in the interior -- r_i = (u_i - u_{i-1})/(u_{i+1} - u_i) > 0 with r_i -> 1 as dx -> 0, phi -> 1 -- and the interior scheme runs at its formal second order (the limited flux reduces to the centred face value, whose flux-difference is the 2nd-order central derivative). The boundary faces (the prescribed inflow wall flux gL, the non-reflecting extrapolation outflow) are a FORMALLY first-order closure, but for this compatible MMS -- exact inflow value gL = u*(0) and zero wall gradient u*_x = 0 at both walls -- their residual is higher order, so the OBSERVED global order stays close to the second-order interior: median ~2.19 in L2 (the compressive superbee limiter mildly EXCEEDS 2 on smooth data) and ~1.92 in Linf over N=16..128, pinned HONESTLY (not forced) from the Julia sweep in tests/conformance/convergence/advection_1d_inflow_superbee. INFLOW/OUTFLOW COMPATIBILITY (why cos(pi x) with c = 1, gL = 1): flow is in +x (c = 1 > 0), so the inflow is the left wall and the inflow value must equal the exact wall value gL = u*(0) = cos(0) = 1; the profile has u*_x(0) = -pi sin(0) = 0 at the inflow wall so the boundary-cell residual is O(dx) (a nonzero wall gradient would pollute the order toward 1/2). The outflow (right) wall carries no external data (the limited flux there collapses to u[N] regardless of the extrapolated ghost -- non-reflecting), so it needs no compatibility condition; u*_x(1) = -pi sin(pi) = 0 there as well. GRID CONTRACT WIRING (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0, 1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, esm-spec 9.7.6, so the convergence sweep's loader-API rebinding of N keeps dx consistent). gL is the rule's inflow free name, declared here as a parameter equal to the wall value; it lives only in the runtime rule body, never in a build-time ic/reference. The ic, the dGdx forcing, and the test references spell x_i = x0 + (i - 1/2) dx inline with load-foldable scalars (0 + (i - 1/2)(1/N)); the build-time 6.6.5/ic/observed cellwise evaluation is scope-free, so build-time coordinate expressions fold from literals and metaparameters alone (never the free-name x_coord template). Exact per-resolution errors are pinned in tests/conformance/convergence/advection_1d_inflow_superbee/golden/errors.json.",
@@ -88,7 +88,7 @@
                 "args": [
                   3.141592653589793,
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -181,7 +181,7 @@
         {
           "lhs": "dGdx",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -261,7 +261,7 @@
                     "args": [
                       3.141592653589793,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],
@@ -318,7 +318,7 @@
                     "args": [
                       3.141592653589793,
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i"
                         ],

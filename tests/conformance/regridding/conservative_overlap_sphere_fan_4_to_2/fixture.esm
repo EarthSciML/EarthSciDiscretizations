@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "conservative_overlap_sphere_fan_4_to_2",
     "description": "Conformance fixture: a 4 -> 2 SPHERICAL conservative coarsening driven through the SAME regridding/conservative_overlap.esm template library as the planar 3x3 -> 2x2 exemplar, differing only in the manifold binding ('spherical', an esm-spec 9.6.1 scalar-field template parameter of conservative_overlap_A_ij) and the cell geometry. GEOMETRY (hand-exact by Girard, unit sphere, steradians): a meridian fan on the octant patch. Apex E = (0E, 0N); base vertices on the meridian lon = 90E at latitudes 0, 15, 30, 45, 60 degrees. E is a POLE of the great circle lon = +-90 (every point of that circle is at 90 degrees angular distance from E = the unit vector x-hat, since that circle is the x = 0 great circle), so every fan arc E -> (90E, phi) meets the meridian at a RIGHT angle -- exactly as meridians from the north pole meet the equator. Each spherical triangle (E, (90E, phi_a), (90E, phi_b)) therefore has angles (delta_phi, 90, 90) and by Girard's theorem area = spherical excess = delta_phi in radians: ITS BASE'S LATITUDE SPAN. Every edge in both grids is a great-circle arc (fan arcs by construction; base segments lie ON the lon = 90E meridian), so the source triangles tile each target triangle EXACTLY -- no parallel-edge (small-circle) modelling error anywhere, which is what makes every quantity below hand-derivable. Source: four triangles S_k = (E, (90E, 15(k-1)), (90E, 15k)), k = 1..4, each of area pi/12 = 0.2617993877991494 sr. Target: two triangles T_1 = (E, (90E, 0), (90E, 30)) and T_2 = (E, (90E, 30), (90E, 60)), each of area pi/6. EXPECTED (non-golden, manifest reference_weights): A_ij = pi/12 for the four nested pairs (S1,S2 in T1; S3,S4 in T2), exactly 0 elsewhere (S2/S3 touch the opposite target only along the shared arc E -> (90E, 30), a measure-zero overlap dropped by the sliver filter); A_j = pi/6 for both targets; W_ij = (pi/12)/(pi/6) = 1/2 EXACTLY for the four surviving pairs; total patch area sum_j A_j = pi/3 = 1.0471975511965976 sr (the fan triangle (E, (90E,0), (90E,60)), excess 60 degrees). With F_src = [1,2,3,4]: F_tgt = [(1+2)/2, (3+4)/2] = [1.5, 3.5]; both mass sums equal (pi/12)*(1+2+3+4) = 5*pi/6 = 2.6179938779914944. These are documentation for eyeball checking ONLY -- the committed golden (golden/weights.json) is produced by the official Julia runner via scripts/regenerate-goldens.sh, per the repo's single-pathway doctrine. Inline tests assert only the two EXACT invariants (CONFORMANCE_SPEC 5.8.3): partition-of-unity (exact by construction: the apply divides by the row-sum of the SAME computed areas under the SAME filter, regardless of manifold or backend) and conservation (exact because the targets tile the source patch with shared great-circle seams; src_area carries the true areas pi/12, so the residual is pure FP noise, gated at 1e-9). Per-pair spherical areas are tolerance-gated cross-binding (5.8.2): Julia clips via the GeometryOps spherical backend, Rust via s2geometry -- different kernels, same manifold declaration (5.8.4), agreement inherited from the exact-tiling geometry.",
@@ -411,7 +411,7 @@
         {
           "lhs": "mass_tgt",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "semiring": "sum_product",
             "output_idx": [],
             "ranges": {
@@ -535,7 +535,7 @@
       "from": "Src.F",
       "to": "Regrid.mass_src",
       "transform": {
-        "op": "aggregate",
+        "op": "faq",
         "semiring": "sum_product",
         "output_idx": [],
         "ranges": {

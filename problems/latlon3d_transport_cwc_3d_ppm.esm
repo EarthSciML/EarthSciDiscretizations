@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_transport_cwc_3d_ppm",
     "description": "Three-dimensional consistency with continuity (CWC) for the MONOTONE PPM scheme on the latlon3d grid at 12x7x9 -- the free-stream-preservation gate for the PRODUCTION reconstruction, as opposed to its donor-cell sibling latlon3d_transport_cwc_3d (the same model with upwind1_flux rules). Carries the AIR MASS (m) alongside the TRACER MASS (mq) and derives q = mq/m, so six rules fire in one model: three bare-D face-flux-divergence rules closing continuity (lon periodic, lat polar, lev no-flux) and three compound MONOTONE PPM flux-form advection rules carrying the tracer. The winds are shape-disjoint (Mx over [lon_nodes,lat,lev], My over [lon,lat_nodes,lev], Mz over [lon,lat,lev_nodes]) against q over [lon,lat,lev], so the esm-spec 9.6.1 shape constraints select each rule unambiguously.\n\nTHE PROPERTY UNDER TEST (MEASURED). At q == 1 every CW84 slope is a difference of equal values and is therefore EXACTLY 0.0 in IEEE; the edge value collapses to 0.5*(1+1) + (1/6)*(0 - 0) = 1 exactly; the monotone limiter leaves aL = aR = 1, so the parabola is the constant 1 and its integrated donor-region average is exactly 1. The face flux is then F = max(w,0)*1 + min(w,0)*1 = M bitwise, so each compound divergence collapses onto its bare-D continuity twin to the last bit, dmq/dt equals dm/dt exactly, and q stays EXACTLY 1. Measured 2026-07-16: dev = 0.0 exactly at t=0 and t=0.1 (Linf, atol 1e-12). NOTE this is a DIFFERENT argument from the donor case's (F = 0.5*(M*(1+1) - |M|*(1-1)) = M); the donor's proof does NOT carry over to PPM and must not be cited here.\n\nNON-VACUITY. The assertion reference is the CONSTANT ZERO, so a 0.0 result would pass even if dev were dead. problems/_falsifier_ppm3d.esm is this problem with ic(mq) multiplied by 1.000001 (q = 1+1e-6); it drives dev to 1.08e-6 at t=0.1 and correctly FAILS, which is what makes this gate meaningful. It is regenerated from this file plus the perturbation -- if you change this problem, re-run the falsifier. Only the t=0.1 assertion discriminates: dev is a state integrated from dev(0)=0, so its t=0 value is 0.0 by construction even under perturbation.\n\nMESH. NLAT=7 is the FLOOR for the monotone lat rule (three cap rows at each pole plus a non-empty interior). NLON=12 and NLEV=9 give those axes a genuine mid-domain interior rather than the all-boundary degenerate case N=7 produces. The property is bitwise exactness and is resolution-independent; build cost tracks stencil width, not cell count, so 12x7x9 (756 cells) builds no slower than 7x7x7 (343). Costs ~370 s / ~3.5 GB, dominated by the monotone PPM build (esm-spec 9.7.3 inlines template bodies and the Expression AST has no let/sharing node, so the reconstruction chain re-inlines each stage into the next), not the solve.",
@@ -234,7 +234,7 @@
               },
               "reduce": "Linf_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -264,7 +264,7 @@
               },
               "reduce": "Linf_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -297,7 +297,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -409,7 +409,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -521,7 +521,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -757,7 +757,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -849,7 +849,7 @@
         {
           "lhs": "Mx",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ci",
               "cj",
@@ -984,7 +984,7 @@
         {
           "lhs": "My",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ci",
               "cj",
@@ -1089,7 +1089,7 @@
         {
           "lhs": "Mz",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ci",
               "cj",
@@ -1262,7 +1262,7 @@
         {
           "lhs": "q",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iq",
               "jq",

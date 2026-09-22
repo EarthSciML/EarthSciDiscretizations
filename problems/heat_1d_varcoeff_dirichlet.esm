@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "heat_1d_varcoeff_dirichlet",
     "description": "MMS driver: 1-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit interval [0, 1] with inhomogeneous DIRICHLET (fixed-value) boundaries, discretized by the conservative finite-volume rule grids/cartesian_uniform_1d/rules/varcoeff_laplacian_dirichlet_bc. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil with mirror-ghost fixed-value faces. The coefficient k(x) = 1 + 0.5 cos(2 pi x) is a consumer-supplied observed of shape [x] (positive on [0,1], range [0.5,1.5]); it is read by the rule body at the interior faces via kf[i+1/2]=(k[i]+k[i+1])/2, and the boundary faces use the wall conductivities k[1], k[N]. Manufactured solution u(x,t) = exp(-4 pi^2 t) sin^2(pi x) + gL with gL = gR = 0.5: the decaying sin^2(pi x) = 0.5 - 0.5 cos(2 pi x) vanishes AND has zero gradient at both walls, so the wall values are the constant offset 0.5 at both x=0 and x=1 (constant in time), matched by the rule's free names gL = gR = 0.5. Choosing a mode with ZERO wall gradient is deliberate: the cell-centered mirror-ghost boundary flux 2 k[1] (u[1]-gL)/dx uses the wall conductivity k[1], whose O(dx) offset from k(x0) would multiply a nonzero wall gradient into a variable-coefficient-specific O(dx) boundary term and cause fine-grid error cancellation (a non-asymptotic super-2 order); with u_x=0 at the walls that cross term vanishes, leaving the SAME benign boundary error as the constant-coefficient central_D2_dirichlet_bc, so both L2 and Linf converge cleanly at order 2. The constant offset 0.5 is discretely exact (interior flux difference and both mirror-ghost face residuals vanish identically), so the discretization error comes solely from the sin^2 mode. Because sin^2(pi x) is NOT an eigenfunction of the variable-coefficient operator, a forcing term S(x,t) = u_t - div(k grad u) is added so u is exact for the continuous PDE. Derivation: with k' = -pi sin(2 pi x), div(k grad(exp(-4 pi^2 t) sin^2 pi x)) = exp(-4 pi^2 t)[2 pi^2 cos(2 pi x) + pi^2 cos(4 pi x)] and u_t = -4 pi^2 exp(-4 pi^2 t) sin^2(pi x) = exp(-4 pi^2 t)[-2 pi^2 + 2 pi^2 cos(2 pi x)]; choosing lambda = 4 pi^2 cancels the cos(2 pi x) terms, leaving the closed form S(x,t) = exp(-4 pi^2 t)(-2 pi^2 - pi^2 cos(4 pi x)), spelled below as a time factor exp(-4 pi^2 t) times an aggregate over cell centers. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6). gL/gR appear only in the runtime rule body; initial condition, coefficient, forcing, and test references all spell the cell-center coordinate x_i = (i - 1/2)/N inline with load-foldable scalars (AGENTS.md build-time scope caveat), with the wall constant 0.5 matching the gL/gR parameter values and the ic written in the identity form sin^2(pi x)+0.5 = 1 - 0.5 cos(2 pi x). The SAME rule also serves the nonlinear case (a consumer declaring k as an observed k=f(u)); this driver exercises the variable-coefficient dual.",
@@ -77,7 +77,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -177,7 +177,7 @@
                     ]
                   },
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -248,7 +248,7 @@
         {
           "lhs": "k",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "gi"
             ],
@@ -321,7 +321,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],
@@ -384,7 +384,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],

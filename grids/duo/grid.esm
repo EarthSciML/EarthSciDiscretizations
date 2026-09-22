@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "duo",
     "description": "Generic gnomonic cubed-sphere grid with the duo-grid halo system of Chen (2021): six N-by-N tiles interlocked in the 'staircase' arrangement, 6 N^2 cells, unstaggered (A-grid) so every prognostic variable is collocated at cell centres. The name is the paper's: 'duo' denotes the TWO coexisting halo point sets at each tile edge -- the KINKED grid (the neighbour tile's own cell centres, copied verbatim, which is what FV3 does) and the EXTENDED grid (the analytic continuation of the RECEIVING tile's coordinate lines into its ghost region). Field values are remapped kinked -> extended by 1-D interpolation along the shared great circle, so halo operations are a literal continuation of the interior stencils and no one-sided boundary stencil appears anywhere in the solver; that is what removes cubed-sphere grid imprinting at the seams. KEY CONSEQUENCE FOR THIS FILE: the extended grid is just the reference-line formula evaluated at out-of-range indices, so all halo GEOMETRY is closed-form and local -- only halo FIELD VALUES need the cross-tile remap. Every geometry array here therefore spans the interior plus 3 ghost layers with no boundary region and no seam gather. UNIFIED PROJECTIONS: the orthogonality and symmetry of a gnomonic tile mean one reference COLUMN determines the whole grid, so equidistance, equiangular (FV3 grid_type 2) and equi-edge (FV3 grid_type 0) differ ONLY in duo_ref_x/duo_ref_y; everything downstream reads duo_node_cart and is projection-agnostic. RESOLUTION-GENERIC: unlike an icosahedral mesh, whose 20*4^level sizing would need a `^` metaparameter op and a build-time subdivision fold, every size here is N plus a literal, inside the esm-spec 9.7.6 closure of + - * / -- so NO companion mesh-data file is needed at any resolution and duo_tile_map is a fixed 6x3x3 topology constant. Real-valued quantities are consumer-supplied free names per the AGENTS.md extent convention: R_sphere, and alpha_ref/R_ref (the projection pair; unused by the equidistant templates). AXES. `tile` is a literal-6 interval, NOT a metaparameter: scripts/validate-library.py binds every metaparameter to its sample size when it checks that a rule's makearray regions tile the axes (L006), so a metaparameter NTILE would fold to 16 and every rule would fail the tiling check. Prognostic fields are shaped [tile, x, y] and face fluxes [tile, x_nodes, y] or [tile, x, y_nodes]. Geometry uses three EXTENDED axes per direction, all sharing the convention 'extended index k <-> tile-local index k - 3', so k = 4 is the first interior entry: x_nodes_ext (N+8) for corner nodes, x_cell_ext (N+6) for cell centres and areas, and x_metric (N+6) for cos(alpha). cos(alpha) is built by a forward difference that consumes a +1 neighbour, so the node halo is kept one layer WIDER than the cell-centre array and duo_cos_alpha is SOURCED FROM NODES (raw corner sums, scale-invariant) rather than from the collocated cell-centre array -- that is what lets the metric span the full N+6 cell halo including the outermost ghost cell that the 5-point (Ng=3) flux reconstruction reaches. x_cell_ext stays N+6 (the prognostic axis duo_extend fills, capped at 3 remappable ghost layers). SEAM TOPOLOGY (needed by every rule's boundary regions; derived and verified pointwise on node coordinates, not read off the figure): odd tiles n in {1,3,5} have E=n+1, N=n+2, W=n+4, S=n+5; even tiles n in {2,4,6} have N=n+1, E=n+2, W=n+5, S=n+4; wrap n+l-6 when n+l>6. The neighbour edge is traversed in FORWARD index order across the unrotated seams (odd E and S, even N and W) and in REVERSED order across the +-90-degree ones (odd N and W, even E and S) -- the discrete statement of the Fig. 2c/2d rotation table, derived independently of it and in agreement with it.",
@@ -142,7 +142,7 @@
       "params": [],
       "description": "Gnomonic reference-line node positions along x for the ANGULAR projections (Chen 2021 B16-B17, B23), on the EXTENDED node axis x_nodes_ext: x_ref(jn) = R_ref tan(-alpha_ref + (jn-1) 2 alpha_ref / N), evaluated at jn = k - 3 so that k = 4 is the tile's first interior node. alpha_ref and R_ref are consumer-supplied FREE NAMES (real-valued, hence not metaparameters -- the reprojection/lambert_conformal.esm convention): (pi/4, 1) gives the EQUIANGULAR grid (FV3 grid_type 2), (asin(1/sqrt(3)), sqrt(2)) the EQUI-EDGE grid (FV3 grid_type 0); both send jn=1 to -1 and jn=N+1 to +1 exactly. Evaluating outside jn in [1, N+1] gives the DIRECT analytic continuation of the tile's own coordinate lines into the ghost region. Two things follow. (1) Halo GEOMETRY is closed-form and LOCAL -- no cross-tile gather is needed to build it; only halo FIELD VALUES need the duo-grid remap. On the overlap jn in [1, N+1] the extended nodes equal the un-extended construction bitwise. (2) SCOPE LIMIT, read this before using the halo for a non-equiangular grid: Chen (2021) section 2.3 states that direct extension of this kind 'does not produce the duo-grid 1D alignment' for the equidistance or equi-edge projections -- only the equiangular grid has its halo points automatically co-circular with the donor tile's, which is what makes the remap 1-D. For the other two the paper builds the halo instead by its section 2.3 steps 2-4: identify the points on the SPHERE TILE CENTRE lines, mirror the outermost three into the ghost region, and populate the halo from those mirrored points. That construction is NOT yet implemented here. So the halo nodes this template produces are exact for equiangular and PROVISIONAL for equidistance and equi-edge; interior nodes (jn in [1, N+1]) are exact for all three, and every interior-cell quantity downstream is unaffected.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gi"
         ],
@@ -211,7 +211,7 @@
       "params": [],
       "description": "Gnomonic reference-line node positions along y for the ANGULAR projections (Chen 2021 B16-B17, B23), on the EXTENDED node axis y_nodes_ext: y_ref(jn) = R_ref tan(-alpha_ref + (jn-1) 2 alpha_ref / N), evaluated at jn = k - 3 so that k = 4 is the tile's first interior node. alpha_ref and R_ref are consumer-supplied FREE NAMES (real-valued, hence not metaparameters -- the reprojection/lambert_conformal.esm convention): (pi/4, 1) gives the EQUIANGULAR grid (FV3 grid_type 2), (asin(1/sqrt(3)), sqrt(2)) the EQUI-EDGE grid (FV3 grid_type 0); both send jn=1 to -1 and jn=N+1 to +1 exactly. Evaluating outside jn in [1, N+1] gives the DIRECT analytic continuation of the tile's own coordinate lines into the ghost region. Two things follow. (1) Halo GEOMETRY is closed-form and LOCAL -- no cross-tile gather is needed to build it; only halo FIELD VALUES need the duo-grid remap. On the overlap jn in [1, N+1] the extended nodes equal the un-extended construction bitwise. (2) SCOPE LIMIT, read this before using the halo for a non-equiangular grid: Chen (2021) section 2.3 states that direct extension of this kind 'does not produce the duo-grid 1D alignment' for the equidistance or equi-edge projections -- only the equiangular grid has its halo points automatically co-circular with the donor tile's, which is what makes the remap 1-D. For the other two the paper builds the halo instead by its section 2.3 steps 2-4: identify the points on the SPHERE TILE CENTRE lines, mirror the outermost three into the ghost region, and populate the halo from those mirrored points. That construction is NOT yet implemented here. So the halo nodes this template produces are exact for equiangular and PROVISIONAL for equidistance and equi-edge; interior nodes (jn in [1, N+1]) are exact for all three, and every interior-cell quantity downstream is unaffected.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gj"
         ],
@@ -280,7 +280,7 @@
       "params": [],
       "description": "Gnomonic reference-line node positions along x for the EQUIDISTANCE projection (Chen 2021 B12), on the EXTENDED node axis x_nodes_ext: x_ref(jn) = -1 + (jn-1) 2/N at jn = k - 3. Uniform in the cube-face coordinate, which is why it gives the LEAST uniform cell areas on the sphere (measured C48 max/min area ratio 4.97, against 1.39 equiangular and 2.27 equi-edge). Linear rather than a tangent, so it is a separate template rather than an (alpha_ref, R_ref) choice, and it carries no free names at all: the cube face is [-1,1] by construction (B11). Outside jn in [1, N+1] this is the DIRECT extension, which per Chen (2021) section 2.3 does NOT give the duo-grid 1D alignment for equidistance -- see the scope limit in duo_ref_x; the section 2.3 mirrored construction is not yet implemented.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gi"
         ],
@@ -327,7 +327,7 @@
       "params": [],
       "description": "Gnomonic reference-line node positions along y for the EQUIDISTANCE projection (Chen 2021 B12), on the EXTENDED node axis y_nodes_ext: y_ref(jn) = -1 + (jn-1) 2/N at jn = k - 3. Uniform in the cube-face coordinate, which is why it gives the LEAST uniform cell areas on the sphere (measured C48 max/min area ratio 4.97, against 1.39 equiangular and 2.27 equi-edge). Linear rather than a tangent, so it is a separate template rather than an (alpha_ref, R_ref) choice, and it carries no free names at all: the cube face is [-1,1] by construction (B11). Outside jn in [1, N+1] this is the DIRECT extension, which per Chen (2021) section 2.3 does NOT give the duo-grid 1D alignment for equidistance -- see the scope limit in duo_ref_x; the section 2.3 mirrored construction is not yet implemented.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gj"
         ],
@@ -489,7 +489,7 @@
       ],
       "description": "Cell-CORNER (node) positions on the sphere, shaped [tile, x_nodes_ext, y_nodes_ext, space] -- the gnomonic projection proper, over the interior AND the 3-layer halo. The cube-face point p = M[t,:,1] + M[t,:,2] refx[i] + M[t,:,3] refy[j] (duo_tile_map) is carried to the sphere of radius R_sphere by normalisation, which IS the gnomonic map: the ray from the sphere centre through the cube point (Chen 2021 B11 and Fig. 3). Bind refx/refy to duo_ref_x/duo_ref_y for an angular projection or to the _equidistant pair for equidistance -- every template downstream reads only this array and is projection-agnostic, which is the paper's unified reference-line formulation. R_sphere is a consumer-supplied free name, so one grid file serves any sphere (AGENTS.md extent convention). Because each row and column of nodes shares one cube-face coordinate, the projected grid lines are great circles -- the property the duo-grid halo remap relies on.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gt",
           "gi",
@@ -845,7 +845,7 @@
       ],
       "description": "Cell-CENTRE positions on the sphere, shaped [tile, x_cell_ext, y_cell_ext, space]: the mean of the cell's four corner nodes, renormalised back onto the R_sphere sphere. This is the unstaggered (A-grid) collocation point at which EVERY prognostic variable lives in Chen (2021) -- the depth h and both covariant wind components share it, which is what makes the solver unstaggered. Renormalising after averaging matters: the chord midpoint of four points on a sphere lies strictly inside it, and skipping the projection would put the collocation point off the manifold by O(h^2). Index convention: cell index k on x_cell_ext takes its corners from node indices k and k+1 on x_nodes_ext, so the halo offset cancels and no index arithmetic beyond +1 appears. Bind `node` to duo_node_cart.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gt",
           "gi",
@@ -1192,7 +1192,7 @@
       ],
       "description": "Cell areas on the sphere, shaped [tile, x_cell_ext, y_cell_ext], by the SPHERICAL EXCESS of the geodesic quadrilateral through the cell's four corner nodes (Chen 2021 B8): area = R^2 (a412 + a123 + a234 + a341 - 2 pi), each interior angle supplied by the imported scalar atom ../stencils/duo_spherical_angle.esm. ORIENTATION NOTE: B9 as printed sets a_ijk = acos( (p_i x p_j).(p_j x p_k) / ... ), whose first factor is the arc normal p_i x p_j; combined with B8 that returns the NEGATIVE of the area, under either corner traversal (measured -4 pi R^2 exactly). The angle B8 needs is the polygon's INTERIOR angle at p_j, which is what B9's own prose asks for -- 'the angle between three points with right-hand rule FROM p_j', i.e. both arc normals taken outward from p_j, (p_j x p_i) and (p_j x p_k). The atom implements that reading and the areas come out positive and sum to 4 pi R^2. Traversal order of the four corners is then immaterial (verified: clockwise and counter-clockwise agree bitwise), since reversing it maps each interior angle to itself. This is exact, not an approximation, and it is the natural conformance gate for the whole geometry chain: summed over all 6 N^2 interior cells it reproduces 4 pi R_sphere^2 to 2e-14 at every resolution and projection tested. Bind `node` to duo_node_cart.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gt",
           "gi",
@@ -1853,7 +1853,7 @@
       ],
       "description": "cos(alpha) per cell, shaped [tile, x_metric, y_metric], where alpha is the angle between the two local curvilinear coordinate directions (Chen 2021 C17). This single scalar IS the entire metric on this grid: g_ij = [[1, cos a],[cos a, 1]], g^ij = (1/sin^2 a)[[1,-cos a],[-cos a,1]], sqrt(g)=sin(alpha) (C18-C20). Built as the C13-C14 TANGENT directions e1 ~ (k x k_i+1) x k, e2 ~ (k x k_j+1) x k via duo_tangent_cos. SOURCED FROM NODES: k(i,j) is taken as the RAW SUM of the four corner nodes of cell (i,j) (an unnormalised cell-centre direction); duo_tangent_cos is scale-invariant in each of its three point arguments, so the omitted 1/4 and the omitted renormalisation onto the sphere both cancel and the cos(alpha) is identical (to machine precision) to the duo_cell_center-based form. Sourcing from `node` rather than `center` lets the metric span x_metric = N+6 (interior + 3 ghost layers) using the node halo x_nodes_ext = N+8, one layer wider than the collocated cell-centre array x_cell_ext = N+6 -- which the 5-point (Ng=3) flux reconstruction requires at the outermost ghost cell, where a centre-based metric would need a non-existent forward centre. cos(alpha) is 0 at a tile centre and about -+0.45 at the cube corners. Bind `node` to duo_node_cart.",
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "gt",
           "gi",

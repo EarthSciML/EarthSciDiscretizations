@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "mpas_l0_to_octants_sphere",
     "description": "SMOKE conformance fixture: MPAS cell rings DERIVED IN-DOCUMENT feeding the conservative regridder on the SPHERE -- the unstructured half of the end-to-end declarative regridding story. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem; the mesh file is the library's one allowed precomputation, with derivation provenance in its own _doc). The source rings are NOT authored here: src_poly comes from the grid's mpas_cell_rings_deg template over the widened mesh contract (latVertex/lonVertex/verticesOnCell aliased bare-name from the subsystem), which gathers each cell's CCW vertex ring and converts radians to the degrees the geometry kernels take; at level 0 every cell has exactly MAXEDGES = 5 vertices, so the template's min(k, nEdgesOnCell) pad clamp never fires (padding tolerance of the kernels is pinned separately -- see the grid _doc). Target: the 8 spherical OCTANTS as an inline const ring stack (NVERT = 3; every edge a 90-degree great-circle arc; all octants share the pole and equator vertices under IDENTICAL coordinate spellings, so seams are exact and the octants tile the sphere: sum A_j = 4*pi). MIXED VERTEX COUNTS, deliberately: the narrow phase slices whole rings per cell (index(src_poly, i) / index(tgt_poly, j)), so a pentagon source and a triangle target compose without a shared vertex-count axis -- the production MPAS-to-latlon shape. DENSE narrow phase at manifold 'spherical' (great-circle-edge clipping, areas in steradians): the candidate-gated broad phase rides the planar gated cases; lon-lat floor-binning is the wrong broad phase near poles and the level-0 mesh has only 96 pairs. Exact gates (CONFORMANCE_SPEC 5.8.3): partition-of-unity is exact by construction (the A_j denominator row-sums the SAME computed areas under the SAME sliver filter); conservation is gated at 1e-9 sr -- the octants tile the sphere and the seams are shared arcs, so the residual sum_j A_j*F_tgt[j] - sum_i areaCell[i]*F_src[i] is pure clip noise (mass_src uses the mesh file's committed areaCell as the true source areas; with F_src = [1..12] and areaCell = pi/3 each, mass_src = 26*pi = 81.68140899333463). Several dodecahedron vertices lie EXACTLY on octant boundary great circles (the x = 0 and z = 0 coordinate planes pass through (0, +/-1/phi, +/-phi)-family vertices), so boundary-degenerate clips are part of what this case smokes out -- the sliver filter (atol 1e-12 sr against true overlaps of order 0.1 sr) is the 5.8.2 mechanism that absorbs them identically in numerator and denominator. Golden per-pair A_ij/A_j/W_ij from the official Julia runner (GeometryOps spherical backend) via scripts/regenerate-goldens.sh; rust gates the same arrays through s2geometry (5.8.4: different kernels, same manifold declaration).",
@@ -549,7 +549,7 @@
         {
           "lhs": "mass_src",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "semiring": "sum_product",
             "output_idx": [],
             "ranges": {
@@ -585,7 +585,7 @@
         {
           "lhs": "mass_tgt",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "semiring": "sum_product",
             "output_idx": [],
             "ranges": {

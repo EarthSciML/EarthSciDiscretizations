@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_advection_vertical_ppm_flux",
     "description": "Method-of-manufactured-solutions driver for the UNLIMITED (centred) fourth-order CW84 flux-form vertical advection operator grids/latlon3d/rules/ppm_flux_D_lev_noflux_bc -- d/dz(w q) with the wind INSIDE the operator as a genuine three-dimensional face-staggered matched operand. The transport equation is du/dt = -D(W*u, wrt: lev) + src, and the rule's compound match D(W*q, wrt: lev) lowers the whole product.\n\nWHAT THIS DRIVER EXISTS TO PIN. It is the ACCURACY CEILING of the ppm_flux family: the same MMS, the same mesh and the same reversing wind as its monotone sibling driver latlon3d_advection_vertical_ppm_flux_mono, but with the limiter switched off, so the measured order shows what the CW84 reconstruction delivers before the limiter clips it at the smooth extremum of u*(z) = cos(pi z). The gap between the two measured orders IS the documented cost of boundedness, and the gap between either of them and the first-order sibling latlon3d_advection_vertical_upwind_flux is the accuracy win of reconstructing at all.\n\nNOTE THAT THIS OPERATOR IS CENTRED, NOT UPWIND-BIASED, AND THAT THIS IS A THEOREM RATHER THAN AN OMISSION: for the UNLIMITED reconstruction the parabola of the cell below a face and the parabola of the cell above it pass through exactly the same value at that face, so the two one-sided donor values coincide identically and the sign of w cannot influence the flux. Upwind bias acquires content only once the eq (1.10) limiter has pulled the two cells' endpoints apart. The reversing wind is therefore not exercising a donor branch here -- there is none -- but it IS still exercising the operator's ability to accept a spatially varying, sign-changing 3-D wind as a matched operand and still conserve mass, which is what separates this rule from the pre-existing ppm_D_lev_noflux_bc.\n\nTHE MMS IS BYTE-FOR-BYTE THE ONE IN problems/latlon3d_advection_vertical_upwind_flux, AND DELIBERATELY SO. Same stretched mesh pe = 0.6 s + 0.4 s^2, same exact steady state u*(z) = cos(pi z), same three-dimensional face-staggered wind W = sin(2 pi z) a(i) b(j), same exact cell-averaged forcing. The only difference between the two drivers is which rule they import. That is what licenses the head-to-head accuracy comparison against the first-order donor-cell scheme at matched NLEV: any difference in the measured error is attributable to the reconstruction and to nothing else.\n\nFORCED-STEADY (TRUNCATION) IDIOM. u*(z) = cos(pi z) is an exact steady state of the forced equation and `src` is the EXACT cell-averaged flux divergence -- which for a finite-volume cell is simply the difference of the exact fluxes at its two faces, (W u*|_{k+1} - W u*|_k)/dz[k], with no quadrature needed. In exact arithmetic du/dt vanishes identically, so the drift measured at t = 0.1 IS the operator's truncation error and the observed rate is the truncation order. The state is initialised to the exact CELL AVERAGE of cos(pi z), not to its point value at the cell centre, because a finite-volume state variable is a cell mean; seeding point values would inject an O(dz^2) initial error of its own.\n\nTHE WIND REVERSES SIGN, AND VANISHES AT BOTH WALLS. W = sin(2 pi z) a(i) b(j) is positive below z = 1/2 and negative above it (a convergent flow), with a(i) b(j) strictly positive, so the sign of W is set by z alone and BOTH donor branches fire in every column. The vanishing at the walls is required, not cosmetic: the no-flux closure substitutes the exact wall flux (zero), so were W(0) nonzero that exactly-substituted flux would sit beside a face flux carrying a truncation error, and dividing the lone uncancelled error by dz[1] would leave an O(1) boundary error that never converges. Because sin(2 pi z) vanishes LINEARLY at each wall the velocity at the first interior face is itself O(dz), the boundary flux error is one order higher than the interior's, and the scheme stays uniformly consistent.\n\nNLON and NLAT are pinned at the rule's import edge; NLEV is left LIVE so the convergence harness can bind it per resolution (and so this file's own build-time ic/reference expressions, which cannot read observeds, can fold z from literals plus NLEV). The horizontal extents therefore appear as the literals 8 and 5 inside the runtime expressions.",
@@ -97,7 +97,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -456,7 +456,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -538,7 +538,7 @@
         {
           "lhs": "W",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iw",
               "jw",
@@ -658,7 +658,7 @@
         {
           "lhs": "src",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ia",
               "ja",
@@ -955,7 +955,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -1287,7 +1287,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",

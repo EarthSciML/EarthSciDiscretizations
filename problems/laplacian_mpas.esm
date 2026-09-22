@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "laplacian_mpas",
     "description": "Exactness driver for grids/mpas/rules/fv_laplacian_cell on the icosahedral level-0 mesh (12 cells, 30 edges, 20 vertices; grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem). The TRiSK discrete Laplacian lap = div(grad) is gated by TWO exact mimetic properties, mirroring how divergence_mpas (div(curl) = 0) and gradient_mpas (grad(const) = 0) are gated. (1) NULL-SPACE / annihilation of constants: u_t = -laplacian(phi_const) with phi_const(i) = 3 a spatially CONSTANT cell field, so every edge's inlined gradient (phi_const(c2) - phi_const(c1)) / dcEdge(e) = (3 - 3)/dcEdge = 0 to the bit and every summand edgeSignOnCell*dvEdge*0/dcEdge = 0, hence lap_const = 0 at all 12 cells regardless of geometry and u(t) = u(0) to rounding. The constant field is the honest exact property: it needs NO coordinate geometry, so the ic/reference evaluations stay build-time scope-free (cell coordinates never enter; a floating-point 3.0 - 3.0 is exactly 0.0). (2) CONSERVATION / discrete divergence-theorem closure: for the NON-constant cell field phi_lat(i) = latCell(i) the per-cell Laplacian lap_lat is nonzero, but the area-weighted global integral sum_i areaCell(i)*lap_lat(i) = 0 to rounding, because every interior edge appears in its two flanking cells cellsOnEdge(e,1)/cellsOnEdge(e,2) with opposite edgeSignOnCell and identical dvEdge*(edge-normal gradient), so the two cells' contributions cancel edge-by-edge -- the discrete Gauss theorem the Laplacian inherits from fv_divergence_cell. It is asserted as mean over cells of the integrand areaCell*lap_lat (= (1/NCELLS) sum_i areaCell(i)*lap_lat(i)), which vanishes iff the weighted sum does, and genuinely exercises cancellation because lap_lat is not per-cell zero. The problem also demonstrates the MPAS keyed-factor wiring contract: the mesh subsystem's const arrays are re-exposed as bare-name observed aliases (nEdgesOnCell, edgesOnCell, edgeSignOnCell, dvEdge, cellsOnEdge, dcEdge, areaCell, latCell := mesh.*) -- the union of fv_divergence_cell's cell-boundary factors and fv_gradient_edge's flanking-cell gather, since the composed Laplacian stencil needs both -- where the grid's ragged edges_of_cell offsets/values factors and the rule body's free geometry names resolve in the model scope (esm-spec 4.6 dot notation; grids/mpas/grid.esm). Import bindings close the grid metaparameters at the level-0 sizes; rebinding {NCELLS: 42, NEDGES: 120, NVERTICES: 80, MAXEDGES: 6} with mesh/level1.esm is the refinement step of a (deferred, out-of-scope-here) convergence sweep -- a smooth phi with a known analytic Laplacian (e.g. a spherical harmonic, whose Laplace-Beltrami eigenvalue is exact) would drive that order study; the constant-annihilation and conservation gates are the exactness deliverable here.",
@@ -149,7 +149,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [],
             "output_idx": [
               "i"
@@ -217,7 +217,7 @@
         {
           "lhs": "phi_const",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [],
             "output_idx": [
               "i"
@@ -251,7 +251,7 @@
         {
           "lhs": "conservation_integrand",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [
               "areaCell",
               "lap_lat"
@@ -331,7 +331,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "args": [],
                 "output_idx": [
                   "i"
@@ -353,7 +353,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "args": [],
                 "output_idx": [
                   "i"

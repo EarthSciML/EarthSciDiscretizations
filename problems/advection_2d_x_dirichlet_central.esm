@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "advection_2d_x_dirichlet_central",
     "description": "MMS driver: linear advection-diffusion along x, u_t = -c D(u,x) + nu D(D(u,x),x), on the unit box [0,1]x[0,1] with fixed-value (DIRICHLET) x-walls, over the full 2-D field u[x,y]. The advective x-gradient term D(u,x) is discretized by grids/cartesian_uniform_2d/rules/central_D1x_dirichlet_bc (2nd-order centered interior, mirror-ghost fixed-value face columns) — the RULE UNDER TEST — and the diffusive term D(D(u,x),x) by grids/cartesian_uniform_2d/rules/central_D2x_dirichlet_bc (both closures share the same x-wall values gL, gR). The 2-D analog of problems/advection_1d_dirichlet_central. WHY ADVECTION-DIFFUSION, NOT PURE ADVECTION: a fixed-value mirror-ghost gradient closure pins the field at a wall, which reflects at an outflow wall in pure first-order advection (a Kreiss/GKS-unstable boundary mode whose error grows under refinement), so a two-sided fixed-value gradient is well posed only where a physical diffusion supplies the boundary dissipation (Dirichlet being the diffusion's natural condition); the advective term is still genuinely exercised and dominates the truncation, so the observed order is a real order test of central_D1x_dirichlet_bc. EXACT UNFORCED SOLUTION (decay structure, parabolic boundary smoothing keeps truncation at global O(dx^2)): u*(x,t) = e^{2x} + e^{-lambda t} e^{x} sin(pi x), constant in y, with c = 1, nu = 1/2, lambda = nu pi^2 + c^2/(4 nu) = 5.434802200544679. Both terms solve u_t = -c u_x + nu u_xx exactly: (i) the STEADY mode e^{2x} = e^{(c/nu) x} carries the NONZERO x-wall values gL = 1 and gR = e^2 = 7.38905609893065, exercising the inhomogeneous mirror-ghost face term 2*g at BOTH x-walls; (ii) the DECAY part e^{-lambda t} e^{x} sin(pi x) is the first Dirichlet eigenfunction (zero on both x-walls), driving the time evolution. The x-operator truncation dominates the drift. The y axis is PASSIVE: u* is constant in y, no y-operator appears, and NY is closed to 8 at the import edge; NX stays open (grid default 64, rebound by the convergence sweep). OBSERVATION WINDOW t=0.05: the x-diffusion is dissipative, so no short-window trick is needed; t is kept modest so the decay part (e^{-lambda t} = 0.76 at t=0.05) is still O(1), keeping the operator test active. Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX (an observed dividing by the metaparameter name NX per esm-spec 9.7.6 so the sweep keeps dx consistent), dy=1/NY. BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free-name dx survives only in the runtime rule bodies; the ic and test references spell x_i = 0 + (i-1/2)(1/NX) inline from literals and NX, never invoking the grid's x_coord free-name template; the gL/gR wall values likewise survive only in the runtime rule bodies. Exact per-resolution errors are pinned in tests/conformance/convergence/advection_2d_x_dirichlet_central/golden/errors.json.",
@@ -113,7 +113,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -331,7 +331,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
@@ -468,7 +468,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"

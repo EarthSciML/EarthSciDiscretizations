@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "heat_1d_varcoeff_neumann",
     "description": "MMS driver: 1-D VARIABLE-COEFFICIENT heat equation u_t = div(k(x) grad u) + S(x,t) on the unit interval [0, 1] with inhomogeneous NEUMANN (fixed-flux) boundaries, discretized by the conservative finite-volume rule grids/cartesian_uniform_1d/rules/varcoeff_laplacian_neumann_bc. The consumer writes the operator as the conservative compound D(k*D(u,x),x) (coefficient on the LEFT), which that rule matches at priority 10 and lowers to the arithmetic-mean flux-difference stencil with the domain-boundary face flux prescribed directly. The coefficient k(x) = 1 + 0.5 cos(2 pi x) is a consumer-supplied observed of shape [x] (positive on [0,1], range [0.5,1.5]); it is read by the rule body at the interior faces via kf[i+1/2]=(k[i]+k[i+1])/2. Manufactured solution u(x,t) = exp(-0.75 pi^2 t) cos(pi x) + x: the decaying cosine has u_x = -pi exp(...) sin(pi x) vanishing at both walls, while the steady ramp x contributes a constant unit gradient u_x = 1 at x=0 and x=1. Since k(0) = k(1) = 1 + 0.5 cos(0) = 1 + 0.5 cos(2 pi) = 1.5, the physical wall FLUX k u_x = 1.5 * 1 = 1.5 is constant in time at both walls, prescribed to the rule's free names qL = qR = 1.5 (the flux, not the gradient; the rule reduces to varcoeff_laplacian_zero_flux_bc at qL=qR=0). Because neither mode is an eigenfunction of the variable-coefficient operator, a forcing term S(x,t) = u_t - div(k grad u) is added so u is exact for the continuous PDE. Derivation: with k' = -pi sin(2 pi x), div(k grad u) = exp(-0.75 pi^2 t)[-0.75 pi^2 cos(pi x) - 0.75 pi^2 cos(3 pi x)] + k' (the ramp contributes div(k grad x) = k'); u_t = -0.75 pi^2 exp(-0.75 pi^2 t) cos(pi x); choosing lambda = 0.75 pi^2 cancels the cos(pi x) terms, leaving the closed form S(x,t) = exp(-0.75 pi^2 t) 0.75 pi^2 cos(3 pi x) + pi sin(2 pi x) (the steady term pi sin(2 pi x) = -k' cancels the ramp's div contribution), spelled below as a time factor exp(-0.75 pi^2 t) times a cos(3 pi x) aggregate plus a steady sin(2 pi x) aggregate. The grid's consumer-supplied geometry contract (grids/cartesian_uniform_1d/grid.esm) is fulfilled for [0,1]: x0 = 0 (parameter) and dx = 1/N (an observed dividing by the metaparameter name N, substituted at load per esm-spec 9.7.6). qL/qR appear only in the runtime rule body; initial condition, coefficient, forcing, and test references all spell the cell-center coordinate x_i = (i - 1/2)/N inline with load-foldable scalars (AGENTS.md build-time scope caveat), with the ramp coefficient 1.0 and the flux 1.5 matching what the runtime rule reads. The SAME rule also serves the nonlinear case (a consumer declaring k as an observed k=f(u)); this driver exercises the variable-coefficient dual.",
@@ -77,7 +77,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i"
             ],
@@ -195,7 +195,7 @@
                     ]
                   },
                   {
-                    "op": "aggregate",
+                    "op": "faq",
                     "output_idx": [
                       "i"
                     ],
@@ -245,7 +245,7 @@
                 ]
               },
               {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],
@@ -308,7 +308,7 @@
         {
           "lhs": "k",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "gi"
             ],
@@ -381,7 +381,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],
@@ -462,7 +462,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i"
                 ],

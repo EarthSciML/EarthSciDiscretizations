@@ -19,8 +19,12 @@ import sys
 
 def main() -> int:
     try:
-        from earthsci_ast.display import to_unicode
-        from earthsci_ast.parse import _parse_expression
+        # Public surface only: `to_unicode` is stable in every binding and is
+        # exported from the package namespace. It takes an `Expr`, which in the
+        # Python binding IS the wire dict, so a JSON line goes straight in --
+        # the private `parse._parse_expression` this used to import was never
+        # needed.
+        from earthsci_ast import to_unicode
     except Exception as exc:  # toolkit not importable in this interpreter
         sys.stdout.write(json.dumps({"ok": False, "error": f"import: {exc}"}) + "\n")
         sys.stdout.flush()
@@ -36,7 +40,7 @@ def main() -> int:
             continue
         try:
             expr = json.loads(line)
-            out = {"ok": True, "text": to_unicode(_parse_expression(expr))}
+            out = {"ok": True, "text": to_unicode(expr)}
         except Exception as exc:  # any parse/display failure -> structural fallback
             out = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         sys.stdout.write(json.dumps(out) + "\n")

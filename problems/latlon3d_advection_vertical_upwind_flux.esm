@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_advection_vertical_upwind_flux",
     "description": "Method-of-manufactured-solutions driver for the FLUX-FORM first-order-upwind vertical advection operator grids/latlon3d/rules/upwind1_flux_D_lev_noflux_bc, i.e. d/dz(w q) with the velocity INSIDE the operator. The transport equation is written du/dt = -D(W*u, wrt: lev) + src, and the rule's compound match D(W*q, wrt: lev) lowers the whole product. \n\nWHAT THIS PINS THAT THE PRE-EXISTING ADVECTION DRIVERS CANNOT. The other latlon3d advection problems (latlon3d_advection_vertical_ppm, _zonal_upwind, _3d, ...) multiply a velocity in from OUTSIDE a bare derivative D(q, wrt: axis), and their velocities are either scalar parameters or a 1-D, k-only, time-static free name w_edge. Here W is a declared variable of shape [lon, lat, lev_nodes]: a genuine THREE-DIMENSIONAL, FACE-STAGGERED wind of the kind a meteorological field supplies. It is modulated in both horizontal directions (by strictly positive factors a(i) b(j)) precisely so that a stencil which mis-indexed W -- reading a column profile where it should read W[i,j,.] -- would be caught rather than silently agreeing. \n\nTHE VELOCITY REVERSES SIGN. W = sin(2 pi z) a(i) b(j) is POSITIVE below z = 1/2 and NEGATIVE above it (a convergent flow), so both branches of the donor-cell selection are exercised in every column. This is the case the pre-existing operators are structurally incapable of representing: upwind1_D_lon_interior is literally (f[i] - f[i-1])/dlon_deg, a hard-coded backward difference with no velocity argument at all, so it cannot switch donor when the wind turns around. \n\nFORCED-STEADY (TRUNCATION) IDIOM, following the sibling latlon3d_advection_vertical_ppm. The exact solution u*(z) = cos(pi z) is STEADY and src is set to the exact cell-averaged flux divergence, which for a finite-volume cell is just the difference of the exact fluxes at its two faces, ( W u* |_{k+1} - W u* |_k ) / dz[k] -- no quadrature is needed. In exact arithmetic du/dt vanishes identically, so the drift measured at t = 0.1 IS the operator's truncation error and the observed convergence rate is the truncation order (1 for donor-cell upwind). The state is initialised to the exact CELL AVERAGE of cos(pi z), not its point value at the cell centre, because a finite-volume state variable is a cell mean; seeding point values would inject an O(dz^2) initial error of its own. \n\nWHY W VANISHES AT BOTH WALLS. The no-flux closure substitutes the exact wall flux (zero) instead of a reconstructed one. Were W(0) nonzero, the exactly-substituted wall flux would sit next to a face flux carrying an O(dz) error, and dividing that lone uncancelled error by dz[1] would leave an O(1) truncation error in the boundary cell which never vanishes under refinement -- the same failure mode that an inconsistent dry-deposition closure exhibits in varcoeff_laplacian_lev_robin_surface_bc. Because sin(2 pi z) vanishes LINEARLY at each wall, the velocity at the first interior face is itself O(dz), the boundary flux error is therefore O(dz^2), and the boundary cell stays O(dz) like the interior. The scheme is uniformly first order, which is what the convergence manifest asserts. This is also the physically correct configuration: air does not flow through the ground or the model lid. \n\nNLON and NLAT are pinned at the rule's import edge; NLEV is left LIVE so the convergence harness can bind it per resolution (and so this file's own build-time ic/reference expressions, which cannot read observeds, can fold z from literals plus NLEV).",
@@ -96,7 +96,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j",
@@ -455,7 +455,7 @@
         {
           "lhs": "pe",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "kn"
             ],
@@ -537,7 +537,7 @@
         {
           "lhs": "W",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "iw",
               "jw",
@@ -657,7 +657,7 @@
         {
           "lhs": "src",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "ia",
               "ja",
@@ -954,7 +954,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",
@@ -1286,7 +1286,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j",

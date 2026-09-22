@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "anisotropic_diffusion_2d_periodic",
     "description": "MMS driver: forced-steady anisotropic diffusion on the doubly-periodic unit box [0,1]x[0,1], the vehicle that exercises grids/cartesian_uniform_2d/rules/central_Dxy_periodic (the mixed second derivative d^2u/dx dy) inside a well-posed evolution. WHY NOT A BARE CROSS DERIVATIVE: the isolated discrete cross operator is symmetric INDEFINITE (its periodic eigenvalues span -N^2..+N^2), so u_t = c D(D(u,x),y) + forcing is exponentially unstable (roundoff-seeded modes grow at rate ~c N^2 and blow up long before t=0.1) — unlike the skew-symmetric first-derivative advection cases, a bare cross derivative is not a stable time-evolution operator. It IS, however, the off-diagonal term of a full anisotropic diffusion tensor K = [[Kxx, Kxy], [Kxy, Kyy]], and for a positive-definite K (|Kxy| < sqrt(Kxx Kyy)) the combined operator L = Kxx d^2/dx^2 + 2 Kxy d^2/dx dy + Kyy d^2/dy^2 is negative-(semi)definite and dissipative — a stable parabolic evolution. This problem takes Kxx = Kyy = 1, Kxy = 1/2 (so 2 Kxy = 1; K positive definite), discretizing L as D(D(u,x),x) + D(D(u,x),y) + D(D(u,y),y) via central_D2x_periodic + central_Dxy_periodic + central_D2y_periodic (the three priority-10 compound rules fire on their distinct wrt patterns and superpose). MANUFACTURED STEADY SOLUTION u*(x,y) = sin(2 pi x) sin(2 pi y) — doubly periodic — held steady by the exactly matching analytic forcing c*S with S = -L[u*] = 2 (2 pi)^2 sin(2 pi x) sin(2 pi y) - (2 pi)^2 cos(2 pi x) cos(2 pi y): the continuous balance is u_t = c L u* + c S = c (L u* - L u*) = 0, so u(t) = u* for all t and the discrete field drifts only by the O(dx^2 + dy^2) truncation of L, whose cross-derivative half is central_Dxy_periodic — a bug in the cross stencil corrupts the drift, so the convergence sweep gates the mixed-derivative rule. Because L is negative definite (dissipative), the drift relaxes to a bounded O(h^2) steady offset (the (1,1) transient decays as exp(-2(2pi)^2 c t), ~4e-4 by t=0.1), giving a clean order-2 measurement. The single scalar c multiplies both the operator and the forcing, so the steady balance holds for any c > 0 (default 1). Geometry contract (grids/cartesian_uniform_2d/grid.esm) fulfilled for the unit box: x0=y0=0, dx=1/NX, dy=1/NY (observeds dividing by the metaparameter names, substituted as integer literals at load per esm-spec 9.7.6 so the sweep rebinding NX=NY keeps dx,dy consistent). BUILD-TIME SCOPE CAVEAT (AGENTS.md): the free names dx,dy survive only in the runtime rule bodies; the ic, forcing observed S, and test references spell the cell-center coordinates x_i = (i-1/2)/NX, y_j = (j-1/2)/NY inline from literals and the metaparameters NX,NY (the build-time cellwise evaluator is scope-free), never invoking the grid's x_coord/y_coord free-name templates.",
@@ -90,7 +90,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -265,7 +265,7 @@
         {
           "lhs": "S",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -437,7 +437,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
@@ -527,7 +527,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"

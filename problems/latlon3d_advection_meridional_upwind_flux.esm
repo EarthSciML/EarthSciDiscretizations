@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "latlon3d_advection_meridional_upwind_flux",
     "description": "Method-of-manufactured-solutions driver for the FLUX-FORM first-order-upwind MERIDIONAL advection operator grids/latlon3d/rules/upwind1_flux_D_lat_polar, i.e. the spherical flux divergence (1/(a cos phi)) d/dphi ( cos(phi) v q ) with the wind INSIDE the operator. The transport equation is du/dt = -D(V*u, wrt: lat) + src, and the rule's compound match D(V*q, wrt: lat) lowers the whole product. This is the meridional sibling of problems/latlon3d_advection_vertical_upwind_flux, and the FIRST consumer anywhere in the library of the grids/latlon half-polar face geometry: it declares the observed phie = lat_edge() over [lat_nodes] and feeds it to coslat_edge and latcell_area to build the two free names the rule reads -- coslat_e (face length) and dS_lat (exact spherical cell area) -- exactly as the vertical drivers build dz from lev_thickness. \n\nWHY THE WIND VANISHES AT THE POLES, AND WHY THAT IS NOT A DODGE. The operator's truncation error scales as O(dphi / cos(phi)): the donor-cell face reconstruction is O(dphi) and row j divides it by a cell area of O(cos(phi_j) dphi) (at the half-polar caps, by O(dphi^2)). The measured consequences are set out in full in the rule's ACCURACY AT THE POLES section -- at any FIXED latitude the scheme is cleanly first order; the AREA-WEIGHTED error is first order, because the O(cos phi) mass weight cancels the 1/cos(phi) exactly; but the UNWEIGHTED Linf over the WHOLE SPHERE cannot converge for a general 2-D wind, because the pole-adjacent row always sits at cos(phi) ~ dphi and so carries O(1) error at EVERY resolution. That is the lat-lon coordinate singularity, not a defect of the discretization, and nothing local to the spatial operator removes it (a true polar cap and a higher-order reconstruction were both measured and both fail; the operational remedy is a runtime polar filter). \n\nThe conformance harness gates EVERY norm in its manifest and its L2/Linf are UNWEIGHTED, so this driver uses a wind whose meridional component VANISHES AT THE POLES like cos(phi): V(i,j,k) = coslat_e[j] a(i) b(k). Then the product V dq/dphi -> 0 like cos(phi), the 1/cos(phi) amplification is cancelled pointwise, and the raw Linf converges at order 1 over the whole sphere. MEASURED on the pure operator over NLAT = 17/33/65/129: Linf(all) 1.01/1.01/1.00, Linf(interior) 1.01/1.01/1.00, Linf(caps) 1.99/2.00/2.00 -- the caps converge at SECOND order, because there the cos(phi) wind is itself O(dphi). MEASURED on this driver at t = 0.1 (the gated sweep): L2 pairwise 0.98/0.99/0.99 and Linf pairwise 0.99/1.01/1.00. This is a legitimate verification case -- it verifies that the operator implements the intended discretization -- and it is the case a physical model actually runs, since a wind field that is smooth as a VECTOR on the sphere has v -> 0 at the poles unless it carries a first zonal harmonic there. What this driver deliberately does NOT do is dress the general-wind behaviour up as convergent by loosening the order tolerance; that behaviour is measured, documented in the rule, and left documented. \n\nTHE WIND REVERSES SIGN WITH HEIGHT. b(k) = cos(pi (k-1)/(NLEV-1)) is +1, +1/2, -1/2, -1 on the four levels, so the flow is NORTHWARD in the lower half of the column and SOUTHWARD in the upper half, and BOTH branches of the donor-cell selection are exercised in every column. Because the operator is purely meridional, level k is an independent 1-D problem whose wind is the same cos(phi) profile scaled by the constant a(i) b(k): reversing the sign swaps which neighbour donates but leaves the O(dphi) reconstruction error, and hence the order, unchanged -- which the sweep confirms rung by rung. The zonal modulation a(i) = 1 + 0.25 cos(2 pi (i-1/2)/NLON) is strictly positive and makes the rank-3 shape real: a stencil that mis-indexed V as a latitude profile rather than as a full [lon, lat_nodes, lev] field would be caught rather than silently agreeing. \n\nFORCED-STEADY (TRUNCATION) IDIOM, following the sibling latlon3d_advection_vertical_upwind_flux. The exact solution q*(phi) = 2 + sin(phi) is STEADY, u is seeded with its EXACT cos-weighted cell mean, and src is the EXACT flux divergence, so du/dt at t = 0 IS the truncation error and the drift at t = 0.1 measures it. Two closed forms make that spellable inside an `ic` -- which folds BUILD-TIME from literals plus metaparameter NAMES, with the model's own parameters and observeds OUT of scope, so neither dS_lat nor phie may be referenced there. (1) The exact cos-weighted cell mean of 2 + sin(phi), ( N(phi_e[j+1]) - N(phi_e[j]) ) / dS_lat[j] with N = 2 sin + sin^2/2, TELESCOPES to the cancellation-free 2 + (sin(phi_e[j]) + sin(phi_e[j+1]))/2 -- which is also what keeps the seed accurate at the caps, where the exact-integral form divides an O(dphi^2) numerator by an O(dphi^2) area weight. (2) The exact face flux Phi = V cos(phi) q* = (1 - s^2)(2 + s) a(i) b(k), s = sin(phi_e), is written as a POLYNOMIAL IN sin(phi_e) and is therefore EXACTLY 0.0 in IEEE at both poles -- sin(+/-pi/2) rounds to exactly +/-1.0, so 1 - s^2 is exactly 0.0 -- whereas cos(+/-pi/2) is 6.1e-17, NOT zero. src is thus a single aggregate that reproduces the rule's STRUCTURAL POLE-TERM OMISSION bitwise (x - 0.0 = x and 0.0 - x = -x are exact in IEEE) rather than merely to within 1e-33.",
@@ -114,7 +114,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [],
             "output_idx": [
               "i",
@@ -360,7 +360,7 @@
         {
           "lhs": "V",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [
               "coslat_e"
             ],
@@ -457,7 +457,7 @@
         {
           "lhs": "src",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "args": [
               "phie",
               "dS_lat"
@@ -842,7 +842,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "args": [],
                 "output_idx": [
                   "i",
@@ -1014,7 +1014,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "args": [],
                 "output_idx": [
                   "i",

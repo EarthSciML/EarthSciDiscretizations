@@ -31,12 +31,12 @@ Pretty-printing policy (AGENTS.md "single pathway"):
     regardless of which renderer handled an expression. Presentation-layer
     only — full precision always lives in the .esm sources the pages link.
   * Math display prefers the OFFICIAL ESS display path
-    (earthsci_ast.display.to_unicode), used in-process when the toolkit is
+    (`earthsci_ast.to_unicode`), used in-process when the toolkit is
     importable (the CI docs job pip-installs it) or through
     docs/_render_bridge.py in the EarthSciAST toolkit venv when a
     local checkout is available.
   * Node types the official renderer does not display usefully — index
-    arithmetic, aggregate, makearray, apply_expression_template, nested D — are
+    arithmetic, faq, makearray, apply_expression_template, nested D — are
     rendered structurally here (compact math-ish text such as
     "(f[i+1] − 2·f[i] + f[i−1]) / dx²"). That is presentation, not evaluation.
   * With no official display available at all, everything falls back to the
@@ -145,6 +145,35 @@ def md_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def md_prose(text: str) -> str:
+    """Author prose from a `.esm` `metadata.description`, made safe to emit as Markdown.
+
+    These descriptions are mathematics, not markup, and they are full of index
+    subscripts. A subscript immediately followed by a parenthesised group —
+    `kf[3/2](u[2]-u[1])/dx^2` — is *exactly* CommonMark inline-link syntax, so
+    the renderer emits `<a href="u[2]-u[1]">3/2</a>` and the docs job's link
+    checker then fails on a file that was never meant to be a link. Thirteen
+    such phrases across three grid pages did precisely that.
+
+    Escaping the closing bracket stops the link from forming and renders as the
+    literal `]` the author wrote. Text inside a backtick code span is left
+    alone: no link forms there, so escaping would only show a stray backslash.
+    Nothing here can break a real link — citations live in
+    `metadata.references`, and no `.esm` description in the library contains
+    Markdown link syntax.
+    """
+    return _MD_CODE_OR_LINKISH.sub(
+        lambda m: m.group("code") if m.group("code") else "\\](", text)
+
+
+# Scanned left to right, alternation first: a backtick code span is consumed
+# whole (so a `](` inside one is passed over), and only a `](` reached outside
+# any code span is escaped. Splitting on code spans instead would mis-pair the
+# backticks these descriptions already use around field names (`u`, `k`, `gi`)
+# and escape the wrong halves.
+_MD_CODE_OR_LINKISH = re.compile(r"(?P<code>`+[^`]*`+)|(?P<linkish>\]\()")
+
+
 # ---------------------------------------------------------------------------
 # Official ESS display path (in-process or via the toolkit venv bridge).
 # ---------------------------------------------------------------------------
@@ -158,10 +187,15 @@ class OfficialDisplay:
         self._proc = None
         self._inproc = None
         try:
-            from earthsci_ast.display import to_unicode  # type: ignore
-            from earthsci_ast.parse import _parse_expression  # type: ignore
+            # PUBLIC surface only (api-surface.json: `to_unicode` is stable in
+            # all five bindings), from the package namespace rather than the
+            # module that defines it. `to_unicode` takes an `Expr`, and in the
+            # Python binding an `Expr` IS the wire dict — so the raw .esm JSON
+            # goes in directly and the private `parse._parse_expression`
+            # wire->typed step this used to import is not needed at all.
+            from earthsci_ast import to_unicode  # type: ignore
 
-            self._inproc = (to_unicode, _parse_expression)
+            self._inproc = to_unicode
             self.mode = "in-process"
             return
         except Exception:
@@ -205,9 +239,8 @@ class OfficialDisplay:
 
     def render(self, expr) -> str | None:
         if self._inproc is not None:
-            to_unicode, parse = self._inproc
             try:
-                return to_unicode(parse(expr))
+                return self._inproc(expr)
             except Exception:
                 return None
         if self._proc is not None:
@@ -235,8 +268,8 @@ class OfficialDisplay:
 
 # Ops the official display path cannot render usefully for library files
 # (index(f, 2) instead of f[2]; apply_expression_template() losing the name;
-# aggregate(f) hiding the kernel). These always render structurally.
-STRUCTURAL_ONLY_OPS = {"index", "aggregate", "makearray", "apply_expression_template"}
+# faq(f) hiding the kernel). These always render structurally.
+STRUCTURAL_ONLY_OPS = {"index", "faq", "makearray", "apply_expression_template"}
 
 
 def official_safe(node) -> bool:
@@ -289,7 +322,7 @@ class MathRenderer:
         "max": "max",
     }
 
-    def render_aggregate(self, node) -> tuple[str, str, list[str]]:
+    def render_faq(self, node) -> tuple[str, str, list[str]]:
         """-> (kernel expression, range description, output indices).
 
         Indices in `ranges` but not in `output_idx` are contracted (reduced by
@@ -318,7 +351,15 @@ class MathRenderer:
         ranges_str = self.render_ranges(out_ranges)
         if cond:
             ranges_str += f" where {cond}"
-        return expr, ranges_str, output_idx
+        # An `output_idx` entry may be an integer LITERAL and not an index name
+        # — a singleton output axis, which `grids/duo/stencils/duo_extend_strip_*`
+        # spells as `[1, "gi", "gj"]`. Every caller joins these into a subscript,
+        # so stringify here rather than at four call sites (they used to raise
+        # `TypeError: sequence item 0: expected str instance, int found`, which
+        # took the whole docs build down). Membership above deliberately keeps
+        # the RAW values: a literal is never a `ranges` key, so it contracts
+        # nothing.
+        return expr, ranges_str, [str(i) for i in output_idx]
 
     def render_ranges(self, ranges: dict) -> str:
         parts = []
@@ -403,8 +444,8 @@ class MathRenderer:
                 return name
             rendered = ", ".join(self.render(v, 0, compact) for v in bindings.values())
             return f"{name}({rendered})"
-        if op == "aggregate":
-            expr, ranges, _ = self.render_aggregate(node)
+        if op == "faq":
+            expr, ranges, _ = self.render_faq(node)
             return f"[{expr} for {ranges}]"
         if op == "makearray":
             lines = []
@@ -441,8 +482,8 @@ class MathRenderer:
         values = node.get("values") or []
         for region, value in zip(regions, values):
             label, role = self.render_region(region, axes)
-            if isinstance(value, dict) and value.get("op") == "aggregate":
-                expr, ranges, _ = self.render_aggregate(value)
+            if isinstance(value, dict) and value.get("op") == "faq":
+                expr, ranges, _ = self.render_faq(value)
                 out.append((label, role, f"{expr}   for {ranges}"))
             else:
                 out.append((label, role, self.render_top(value)))
@@ -592,7 +633,7 @@ def _walk_name_refs(node, bound: set, out: set) -> None:
     if not isinstance(node, dict):
         return
     local = bound
-    if node.get("op") == "aggregate":
+    if node.get("op") == "faq":
         # output_idx + range keys bind loop variables in this subtree.
         loop = set(node.get("output_idx") or []) | set((node.get("ranges") or {}).keys())
         local = bound | loop
@@ -978,7 +1019,7 @@ def rule_section(
 
     description = metadata.get("description")
     if description:
-        out.append(description)
+        out.append(md_prose(description))
         out.append("")
 
     out += references_md(metadata)
@@ -1013,14 +1054,14 @@ def render_region_value(value, stencil_templates: dict, renderer: MathRenderer) 
         stencil = stencil_templates.get(name)
         if stencil is not None:
             body = stencil.get("body")
-            if isinstance(body, dict) and body.get("op") == "aggregate":
-                expr, ranges, idx = renderer.render_aggregate(body)
+            if isinstance(body, dict) and body.get("op") == "faq":
+                expr, ranges, idx = renderer.render_faq(body)
                 idx_s = ",".join(idx)
                 return f"`{applied}[{idx_s}] = {expr}`   for `{ranges}`"
             return f"`{applied} = {renderer.render_top(body)}`"
         return f"`{applied}`"
-    if isinstance(value, dict) and value.get("op") == "aggregate":
-        expr, ranges, _ = renderer.render_aggregate(value)
+    if isinstance(value, dict) and value.get("op") == "faq":
+        expr, ranges, _ = renderer.render_faq(value)
         return f"`{expr}`   for `{ranges}`"
     return f"`{renderer.render_top(value)}`"
 
@@ -1049,8 +1090,8 @@ def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> li
     body = template.get("body")
     params = template.get("params") or []
     call = f"{name}({', '.join(params)})" if params else name
-    if isinstance(body, dict) and body.get("op") == "aggregate":
-        expr, ranges, idx = renderer.render_aggregate(body)
+    if isinstance(body, dict) and body.get("op") == "faq":
+        expr, ranges, idx = renderer.render_faq(body)
         idx_s = ",".join(idx)
         out.append(math_block(f"{call}[{idx_s}] = {expr}    for {ranges}"))
     elif body is not None:
@@ -1058,7 +1099,7 @@ def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> li
     out.append("")
     description = metadata.get("description")
     if description:
-        out.append(description)
+        out.append(md_prose(description))
         out.append("")
     out += references_md(metadata)
     return out
@@ -1122,7 +1163,7 @@ def grid_page(
         "",
     ]
     if metadata.get("description"):
-        lines.append(metadata["description"])
+        lines.append(md_prose(metadata["description"]))
         lines.append("")
 
     metaparameters = doc.get("metaparameters") or {}
@@ -1131,7 +1172,7 @@ def grid_page(
         for pname, spec in metaparameters.items():
             default = spec.get("default", "—")
             lines.append(
-                f"| `{pname}` | {spec.get('type', '')} | `{default}` | {md_cell(spec.get('description', ''))} |"
+                f"| `{pname}` | {spec.get('type', '')} | `{default}` | {md_cell(md_prose(spec.get('description', '')))} |"
             )
         lines += [
             "",
@@ -1205,13 +1246,13 @@ def grid_page(
         lines += ["## Geometry templates", "", "| Template | Definition | Description |", "|---|---|---|"]
         for tname, tmpl in templates.items():
             body = tmpl.get("body")
-            if isinstance(body, dict) and body.get("op") == "aggregate":
-                expr, ranges, idx = renderer.render_aggregate(body)
+            if isinstance(body, dict) and body.get("op") == "faq":
+                expr, ranges, idx = renderer.render_faq(body)
                 idx_s = ",".join(idx)
                 definition = f"`{tname}[{idx_s}] = {expr}` for `{ranges}`"
             else:
                 definition = f"`{tname} = {renderer.render_top(body)}`"
-            lines.append(f"| `{tname}` | {md_cell(definition)} | {md_cell(tmpl.get('description', ''))} |")
+            lines.append(f"| `{tname}` | {md_cell(definition)} | {md_cell(md_prose(tmpl.get('description', '')))} |")
         lines.append("")
 
     if stencil_docs:
@@ -1283,11 +1324,11 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
         ],
         "reproject": [
             "These are forward/inverse **scalar** templates over the evaluable core — but they "
-            "also apply **in-model over coordinate arrays**: invoke them inside an `aggregate` "
+            "also apply **in-model over coordinate arrays**: invoke them inside a `faq` node "
             "whose bindings mix indexed reads, literals, and parameter references, and every "
             "`apply_expression_template` inlines (esm-spec §9.6.2 Option A) into a closed "
             "scalar AST at each cell. The `tests/conformance/reprojection/lcc_grid_roundtrip` "
-            "case pins exactly this aggregate-mapped lowering: byte-identical expanded AST "
+            "case pins exactly this faq-mapped lowering: byte-identical expanded AST "
             "across all five bindings, and a working round-trip simulation on Julia + Python "
             "+ Rust.",
         ],
@@ -1326,7 +1367,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
         lines.append(f"Source: [`{rel(path)}`]({blob(path)})")
         lines.append("")
         if metadata.get("description"):
-            lines.append(metadata["description"])
+            lines.append(md_prose(metadata["description"]))
             lines.append("")
         templates = doc.get("expression_templates") or {}
         if templates:
@@ -1338,7 +1379,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
                 lines.append(f"**`{call}`**")
                 if tmpl.get("description"):
                     lines.append("")
-                    lines.append(tmpl["description"])
+                    lines.append(md_prose(tmpl["description"]))
                 lines.append("")
                 body = tmpl.get("body")
                 if isinstance(body, dict) and body.get("op") == "makearray":
@@ -1346,8 +1387,8 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
                     rows = renderer.render_makearray(body, axes)
                     text = "\n".join(f"{label}  ({role}):\n    {value}" for label, role, value in rows)
                     lines.append(math_block(text))
-                elif isinstance(body, dict) and body.get("op") == "aggregate":
-                    expr, ranges, idx = renderer.render_aggregate(body)
+                elif isinstance(body, dict) and body.get("op") == "faq":
+                    expr, ranges, idx = renderer.render_faq(body)
                     idx_s = ",".join(idx)
                     lines.append(math_block(f"{call}[{idx_s}] = {expr}    for {ranges}"))
                 elif body is not None:

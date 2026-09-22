@@ -22,14 +22,16 @@
 #   ast          raw §9.7 pipeline (resolve_template_machinery →
 #                lower_expression_templates), canonical bytes exactly as
 #                $ESS_ROOT/scripts/generate-template-import-goldens.jl emits them
-#   simulation   run_pde_tests (§6.6/§6.6.5 inline tests over esm_problem+solve)
+#   simulation   run_inline_tests (§6.6/§6.6.5 inline tests over esm_problem+solve)
 #   convergence  load_path(problem; metaparameters=…) per manifest resolution →
-#                simulate → evaluate_cellwise(reference) → field_reduce norms
-#   regridding   run_pde_tests on the fixture (exact-invariant gates) +
+#                esm_problem+solve → evaluate_cellwise(reference) →
+#                field_reduce norms
+#   regridding   run_inline_tests on the fixture (exact-invariant gates) +
 #                the regrid_state(1) field + the per-pair A_ij/A_j/W_ij setup
 #                arrays via the BuildInspection observability surface
 #   reprojection load a runner-built template invocation (manifest fixture:
-#                null) → evaluate_expr at every golden point
+#                null) → expanded_model (the §9.6.4 "expand at your boundary"
+#                seam) → observed_definitions → evaluate_expr per golden point
 #
 # Environment: the dedicated ESS pde_sim_adapter project (pins the dev'd
 # EarthSciAST + OrdinaryDiffEqTsit5 + JSON3) — the same env the ESS
@@ -91,6 +93,23 @@ const ESS = EarthSciAST
 
 const ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
 const CONF = joinpath(ESD_ROOT, "tests", "conformance")
+
+"""
+    esm_version() -> String
+
+The `esm` version a runner-BUILT document declares, derived from the ESS
+schema's `\$id` rather than hardcoded — the same rule
+`scripts/validate-library.py`'s L008 applies to the corpus. A runner-built
+wrapper (the reprojection invocation document) is part of the corpus for
+version purposes: a hardcoded constant here outlives the schema silently, and
+then the wrapper is the one document in the run declaring a version the library
+no longer uses.
+"""
+function esm_version()
+    # https://earthsciml.org/schemas/esm/<version>/esm.schema.json
+    id = String(JSON3.read(read(joinpath(ESS_ROOT, "esm-schema.json"), String))["\$id"])
+    return String(split(rstrip(id, '/'), '/')[end-1])
+end
 
 # ---------------------------------------------------------------------------
 # CLI parsing (§4.2).
@@ -305,7 +324,7 @@ function run_ast(output_dir, files, verbose)
 end
 
 # ---------------------------------------------------------------------------
-# simulation — the problems' inline §6.6/§6.6.5 tests via run_pde_tests.
+# simulation — the problems' inline §6.6/§6.6.5 tests via run_inline_tests.
 # ---------------------------------------------------------------------------
 function run_simulation(output_dir, files, verbose)
     cases = Dict{String,Any}()
@@ -315,7 +334,7 @@ function run_simulation(output_dir, files, verbose)
         try
             problem = normpath(joinpath(case_dir, String(manifest["problem"])))
             alg, reltol, abstol = integrator_opts(manifest)
-            results = ESS.run_pde_tests(problem;
+            results = ESS.run_inline_tests(problem;
                 model_name=String(manifest["model"]),
                 alg=alg, reltol=reltol, abstol=abstol)
             wanted = Set(String.(manifest["tests"]))
@@ -379,6 +398,14 @@ function run_convergence(output_dir, files, verbose)
                                       saveat=[assert_time])
                 SciMLBase.successful_retcode(sim) ||
                     error("solver retcode $(sim.retcode) at n=$n")
+                # THE ONE PRIVATE ENTRY POINT IN THIS RUNNER. Reading an
+                # array state's (cell, slot) pairs off a problem's `var_map` is
+                # EarthSciAST's own machinery — Rust exports it as
+                # `state_cells` (api-surface.json, extension tier) and Python
+                # defines it under that name — but the Julia binding exports no
+                # spelling of it, so the underscore name is the only way in.
+                # AGENTS.md §2: the fix is upstream parity, never a local
+                # re-derivation of the "name[i,j]" cell-key encoding here.
                 cells = ESS._state_cells(prob.var_map, a.variable, model)
                 isempty(cells) && error("state '$(a.variable)' has no cells at n=$n")
                 state = sim.u[end]
@@ -435,8 +462,8 @@ function run_regridding(output_dir, files, verbose)
         try
             fixture = joinpath(case_dir, String(manifest["fixture"]))
             model = String(manifest["model"])
-            results = ESS.run_pde_tests(fixture; model_name=model,
-                                        alg=ODE.Tsit5(), reltol=1e-10, abstol=1e-12)
+            results = ESS.run_inline_tests(fixture; model_name=model,
+                                           alg=ODE.Tsit5(), reltol=1e-10, abstol=1e-12)
             rec["assertions"] = assertion_dicts(results)
             rec["passed"] = !isempty(results) && all(r.passed for r in results)
             # regrid_state integrates the constant regridded field from 0 over
@@ -451,6 +478,7 @@ function run_regridding(output_dir, files, verbose)
             SciMLBase.successful_retcode(sim) ||
                 error("solver retcode $(sim.retcode)")
             for var in ("regrid_state", "pou_state", "cons_state")
+                # Private; see the note in run_convergence.
                 cells = ESS._state_cells(prob.var_map, var, model)
                 rec[var * "_at_1"] = Float64[sim.u[end][slot] for (_, slot) in cells]
             end
@@ -484,12 +512,12 @@ function _reproj_wrapper_doc(params)
     mkapply(tpl, args...) = Dict{String,Any}(
         "op" => "apply_expression_template", "args" => Any[], "name" => tpl,
         "bindings" => Base.merge(Dict{String,Any}(a => a for a in args), crs))
-    # esm 1.0.0 declares exactly two variable types. The four projection
-    # quantities are UNKNOWNS whose defining equations (bare-variable LHS) carry
-    # the template invocations; there is no `expression` field on a variable and
-    # no `observed` type any more (esm-spec §6.3.1). `observed_definitions` in
-    # run_reprojection reads them back — the binding's classification API, not a
-    # local re-derivation.
+    # From esm 1.0.0 a document declares exactly two variable types. The four
+    # projection quantities are UNKNOWNS whose defining equations (bare-variable
+    # LHS) carry the template invocations; there is no `expression` field on a
+    # variable and no `observed` type any more (esm-spec §6.3.1).
+    # `observed_definitions` in run_reprojection reads them back — the binding's
+    # classification API, not a local re-derivation.
     observed = [
         ("fwd_x", "m", mkapply("lambert_conformal_forward_x", "lon", "lat")),
         ("fwd_y", "m", mkapply("lambert_conformal_forward_y", "lon", "lat")),
@@ -505,7 +533,7 @@ function _reproj_wrapper_doc(params)
     end
     eqs = Any[Dict{String,Any}("lhs" => name, "rhs" => expr)
               for (name, _units, expr) in observed]
-    return Dict{String,Any}("esm" => "1.0.0",
+    return Dict{String,Any}("esm" => esm_version(),
         "metadata" => Dict{String,Any}("name" => "lambert_conformal_eval",
             "description" => "Runner-built template invocation (manifest fixture: null)."),
         "models" => Dict{String,Any}("Reproject" => Dict{String,Any}(
@@ -527,15 +555,17 @@ function run_reprojection(output_dir, files, verbose)
                 # Under Option B lowering (esm 0.9.0, §9.6.4) the wrapper's
                 # non-eager applies survive as leaves, and `evaluate_expr`
                 # (registry-free, single expression) cannot resolve them — so
-                # run the official Expand (rule 2, `expand_document`) over the
-                # import-resolved document first, exactly the §9.7 pipeline the
-                # ast category drives, then read back the composed bodies.
-                raw = JSON3.read(JSON3.write(doc))
-                resolved = resolve_template_machinery(raw, dirname(lib))
-                lowered = lower_expression_templates(resolved === nothing ? raw : resolved)
-                expanded = ESS.expand_document(lowered)
-                file = ESS.load_string(JSON3.write(expanded); base_path=dirname(lib))
-                m = file.models["Reproject"]
+                # the composed bodies have to be read off an EXPANDED model.
+                # `expanded_model` is the binding's own public seam for exactly
+                # that ("expand at your boundary", RFC
+                # out-of-line-expression-templates §7.7): the typed model as
+                # `build_evaluator` sees it after apply-expansion, without
+                # compiling. It replaces a hand-assembled
+                # resolve → lower → expand_document → re-serialize → reload
+                # round trip through `expand_document`, which the Julia binding
+                # does not export.
+                file = ESS.load_string(JSON3.write(doc); base_path=dirname(lib))
+                m = ESS.expanded_model(file, "Reproject")
                 defs = ESS.observed_definitions(m)
                 exprs[String(setname)] = Dict{String,Any}(
                     k => defs[k]
