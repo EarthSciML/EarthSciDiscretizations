@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "weno5_eno1_norm_D2_extrapolate_bc",
-    "description": "Hybrid WENO5/ENO1 gradient magnitude |grad u| = sqrt(u_x^2 + u_y^2) for the level-set Hamilton-Jacobi term psi_t = -S|grad psi| on cartesian_uniform_2d with the linear-extrapolation halo closure -- NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018): grad = sqrt(diff2x^2 + diff2y^2) with diff2x, diff2y the per-axis hybrid upwind derivatives of rules/weno5_eno1_D1x_extrapolate_bc and rules/weno5_eno1_D1y_extrapolate_bc (fifth-order Jiang-Shu WENO5 within weno_band_cells cells of the zero level set with the upwind side chosen by the wind-relative propagation sign, first-order ENO1 minmod elsewhere and within bdy_eno1_cells of the walls, one-cell guarded linear-extrapolation ghosts at the walls). It is the fire_behavior-default sibling of rules/godunov_norm_D2_dirichlet_bc (fire_upwinding = 4): unlike the Godunov Hamiltonian, this norm is NOT a compound of max/min one-sided pieces -- it is exactly the root-sum-square of the two per-axis derivatives -- so the compound spelling and the per-axis spelling agree, and this rule exists so that a consumer who writes the norm as the compound sqrt((D(u, wrt: x))^2 + (D(u, wrt: y))^2) gets the scheme without importing the per-axis rules (and so that importing both cannot lower the compound differently). COMPOUND MATCH (esm-spec 9.6.3): the whole compound rooted at the outer sqrt at priority 20 -- above the per-axis rules' 10 -- so it fires first when a document imports both; scoped with where {u: {shape: [x, y]}}. The body is sqrt(Mx^2 + My^2) where Mx and My are the two per-axis rules' makearrays verbatim (seven regions each: the hybrid interior block, the ENO1 strips, the two ghost wall lines); it is therefore not itself a makearray-rooted body and the tiling lint (L006) does not apply to it -- the two constituent makearrays are lint-tiled in their own rule files. THE FRONT-DISTANCE SWITCH IS ON THE FIELD ITSELF: |u[i,j]| < weno_band_cells * dx selects WENO5, so a signed-distance level set is required for the band to mean 'near the front' (fire_behavior reinitialises for this reason). FREE NAMES: wind_u, wind_v ([x, y] fields), bdy_eno1_cells (>= 3), weno_band_cells, and the grid's dx, dy. Requires NX, NY >= 7. ORDER: formally first; fifth in the smooth WENO band. EXACT on a linear field (norm sqrt(a^2 + b^2)). BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the two edge ghosts of their walls (the reference code's diagonal corner ghost is never read by ENO1).",
+    "description": "Hybrid WENO5/ENO1 gradient magnitude |grad u| = sqrt(u_x^2 + u_y^2) for the level-set Hamilton-Jacobi term psi_t = -S|grad psi| on cartesian_uniform_2d with the linear-extrapolation halo closure -- NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018): grad = sqrt(diff2x^2 + diff2y^2) with diff2x, diff2y the per-axis hybrid upwind derivatives of rules/weno5_eno1_D1x_extrapolate_bc and rules/weno5_eno1_D1y_extrapolate_bc (fifth-order Jiang-Shu WENO5 within weno_band_cells cells of the zero level set with the upwind side chosen by the wind-relative propagation sign, first-order ENO1 minmod elsewhere and within bdy_eno1_cells of the walls, one-cell guarded linear-extrapolation ghosts at the walls). It is the fire_behavior-default sibling of rules/godunov_norm_D2_dirichlet_bc (fire_upwinding = 4): unlike the Godunov Hamiltonian, this norm is NOT a compound of max/min one-sided pieces -- it is exactly the root-sum-square of the two per-axis derivatives -- so the compound spelling and the per-axis spelling agree, and this rule exists so that a consumer who writes the norm as the compound sqrt((D(u, wrt: x))^2 + (D(u, wrt: y))^2) gets the scheme without importing the per-axis rules (and so that importing both cannot lower the compound differently). COMPOUND MATCH (esm-spec 9.6.3): the whole compound rooted at the outer sqrt at priority 20 -- above the per-axis rules' 10 -- so it fires first when a document imports both; scoped with where {u: {shape: [x, y]}}. The body is sqrt(Mx^2 + My^2) where Mx and My are the two per-axis rules' makearrays verbatim (seven regions each: the hybrid interior block, the ENO1 strips, the two ghost wall lines); it is therefore not itself a makearray-rooted body and the tiling lint (L006) does not apply to it -- the two constituent makearrays are lint-tiled in their own rule files. THE FRONT-DISTANCE SWITCH IS ON THE FIELD ITSELF: |u[i,j]| < weno_band_cells * dx selects WENO5, so a signed-distance level set is required for the band to mean 'near the front' (fire_behavior reinitialises for this reason). FREE NAMES: wind_u, wind_v ([x, y] fields), bdy_eno1_cells (>= 3), weno_band_cells, and the grid's dx, dy. Requires NX, NY >= 7. ORDER: formally first; fifth in the smooth WENO band. EXACT on a linear field u = a x + b y + c (norm sqrt(a^2 + b^2)) on every cell except the wall lines toward which the field decreases (i = 1 for a > 0, i = NX for a < 0, likewise j with b): there the guarded extrapolation clamps the ghost, the ENO1 minmod along that axis returns 0, and the norm is O(1) wrong -- fire_behavior's own wall behaviour, reproduced. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the two edge ghosts of their walls (the reference code's diagonal corner ghost is never read by ENO1).",
     "license": "MIT",
     "tags": [
       "esd:rule",
@@ -237,7 +237,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -336,7 +336,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -441,7 +441,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -533,7 +533,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -637,7 +637,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -738,7 +738,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -979,7 +979,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -1078,7 +1078,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -1183,7 +1183,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -1275,7 +1275,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -1379,7 +1379,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"
@@ -1480,7 +1480,7 @@
                         }
                       },
                       {
-                        "op": "aggregate",
+                        "op": "faq",
                         "output_idx": [
                           "i",
                           "j"

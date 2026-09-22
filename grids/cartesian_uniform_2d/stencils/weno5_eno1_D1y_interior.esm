@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "weno5_eno1_D1y_interior",
-    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dy of NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018) on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3], where the seven-point WENO stencil along y and the five-point fourth-order selector stencil along BOTH axes fit without reaching a wall. Per cell the SWITCH is written on the field itself and on the cell's distance from the walls, as the reference code does: the cell takes the first-order ENO1 minmod of its two one-sided differences (stencils/eno1_minmod) when it lies within bdy_eno1_cells of any wall (i < 1 + bdy_eno1_cells, i > NX - bdy_eno1_cells, likewise j) OR when |u[i,j]| >= weno_band_cells * dx (outside the band around the zero level set, the front); otherwise -- inside the band, away from the walls -- it takes the fifth-order Jiang-Shu WENO5 upwind derivative (stencils/weno5_js_upwind_D1) whose upwind side is selected by the sign of signo_y = (grad4 u . U) (d4 u/dy), the product of the fourth-order central advection term grad4 u . (wind_u, wind_v) with the fourth-order central derivative along this axis (stencils/central_D1_4_point) -- fire_behavior's a_valor * Select_4th. FREE NAMES (consumer-supplied, the same contract as the grid geometry dx, dy): wind_u and wind_v, the [x, y] fields of the advecting wind that biases the WENO stencil (fire_behavior's mid-flame wind uf, vf; a level set with no wind may bind zero fields, which selects the left-biased stencil everywhere); bdy_eno1_cells, the ENO1 wall band in cells (fire_behavior's BDY_ENO1 = 10, a compile-time constant there; it MUST be >= 3 so that the WENO7-point reach never crosses a wall, which this block guarantees structurally only for the outermost three cells -- the rule regions -- while the band itself is a value comparison on the index); weno_band_cells, the half-width of the WENO band in cells (fire_behavior's fire_lsm_band_ngp, namelist default 4). Both branches of the ifelse are evaluated on every cell (esm ifelse is not lazy), which is why this template is restricted to the block where the WENO stencil is in range; the boundary strips are ENO1-only aggregates in the rule. Order: fifth in smooth parts of the WENO band away from critical points (Jiang-Shu weights), first in the ENO1 regions -- the scheme is formally first order; the rule is tagged order:1. Exact on a linear field (every candidate reconstruction and the minmod reproduce the slope).",
+    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dy of NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018) on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3], where the seven-point WENO stencil along y and the five-point fourth-order selector stencil along BOTH axes fit without reaching a wall. Per cell the SWITCH is written on the field itself and on the cell's distance from the walls, as the reference code does: the cell takes the first-order ENO1 minmod of its two one-sided differences (stencils/eno1_minmod) when it lies within bdy_eno1_cells of any wall (stencils/eno1_wall_band: i < 1 + bdy_eno1_cells, i > NX - bdy_eno1_cells, likewise j) OR when |u[i,j]| >= weno_band_cells * dx (outside the band around the zero level set, the front); otherwise -- inside the band, away from the walls -- it takes the fifth-order Jiang-Shu WENO5 upwind derivative (stencils/weno5_js_upwind_D1) whose upwind side is selected by the sign of signo_y = (grad4 u . U) (d4 u/dy), the product of the fourth-order central advection term grad4 u . (wind_u, wind_v) with the fourth-order central derivative along this axis (stencils/central_D1_4_point) -- fire_behavior's a_valor * Select_4th. FREE NAMES (consumer-supplied, the same contract as the grid geometry dx, dy): wind_u and wind_v, the [x, y] fields of the advecting wind that biases the WENO stencil (fire_behavior's mid-flame wind uf, vf; a level set with no wind may bind zero fields, which selects the left-biased stencil everywhere); bdy_eno1_cells, the ENO1 wall band in cells (fire_behavior's BDY_ENO1 = 10, a compile-time constant there; it MUST be >= 3 so that the WENO7-point reach never crosses a wall, which this block guarantees structurally only for the outermost three cells -- the rule regions -- while the band itself is a value comparison on the index); weno_band_cells, the half-width of the WENO band in cells (fire_behavior's fire_lsm_band_ngp, namelist default 4). Both branches of the ifelse are evaluated on every cell (esm ifelse is not lazy), which is why this template is restricted to the block where the WENO stencil is in range; the boundary strips are ENO1-only aggregates in the rule. Order: fifth in smooth parts of the WENO band away from critical points (Jiang-Shu weights), first in the ENO1 regions -- the scheme is formally first order; the rule is tagged order:1. Exact on a linear field (every candidate reconstruction and the minmod reproduce the slope).",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -36,6 +36,9 @@
       "ref": "../grid.esm"
     },
     {
+      "ref": "eno1_wall_band.esm"
+    },
+    {
       "ref": "eno1_minmod.esm"
     },
     {
@@ -51,7 +54,7 @@
         "u"
       ],
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "i",
           "j"
@@ -88,71 +91,13 @@
               "op": "or",
               "args": [
                 {
-                  "op": "or",
-                  "args": [
-                    {
-                      "op": "or",
-                      "args": [
-                        {
-                          "op": "or",
-                          "args": [
-                            {
-                              "op": "<",
-                              "args": [
-                                "i",
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    1,
-                                    "bdy_eno1_cells"
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "op": ">",
-                              "args": [
-                                "i",
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "NX",
-                                    "bdy_eno1_cells"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "<",
-                          "args": [
-                            "j",
-                            {
-                              "op": "+",
-                              "args": [
-                                1,
-                                "bdy_eno1_cells"
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": ">",
-                      "args": [
-                        "j",
-                        {
-                          "op": "-",
-                          "args": [
-                            "NY",
-                            "bdy_eno1_cells"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "eno1_wall_band",
+                  "bindings": {
+                    "i": "i",
+                    "j": "j"
+                  }
                 },
                 {
                   "op": ">=",

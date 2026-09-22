@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "godunov_upwind_D1x_extrapolate_bc",
-    "description": "Godunov-upwind per-axis quantity max(D-_x u, 0) - min(D+_x u, 0) on cartesian_uniform_2d with the linear-extrapolation halo closure -- the diff2x of NCAR fire_behavior's classical Godunov level-set option (fire_upwinding = 4), from which it builds the front normal nvx = diff2x/sqrt(|grad psi|^2 + eps) while taking |grad psi| itself from the Rouy-Tourin Hamiltonian (rules/godunov_norm_D2_*). Match D(u, wrt: x) at priority 10, scoped with where {u: {shape: [x, y]}}. THE SCHEME: three regions -- the interior [2, NX-1] x [1, NY] is a single apply of stencils/godunov_upwind_D1x_interior; the two wall lines evaluate the same three-point combination with the out-of-range neighbour replaced by the guarded linear-extrapolation ghost. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the two edge ghosts of their walls (the reference code's diagonal corner ghost is never read by ENO1). SIGN CAVEAT (fire_behavior note N44): for a field decreasing along x this quantity is -D+ > 0, a magnitude, not the signed derivative; a consumer building a signed normal must carry the sign separately. Exact on a linear field with positive slope along x; first order otherwise. Requires NX >= 3 (respectively NY >= 3). dx, dy are free names (grid geometry contract).",
+    "description": "Per-axis quantity diff2x of NCAR fire_behavior's classical Godunov level-set option (fire_upwinding = 4) on cartesian_uniform_2d with the linear-extrapolation halo closure, from which fire_behavior builds the front normal nvx = diff2x/sqrt(|grad psi|^2 + eps) while taking |grad psi| itself from the Rouy-Tourin Hamiltonian (rules/godunov_norm_D2_*). Match D(u, wrt: x) at priority 10, scoped with where {u: {shape: [x, y]}}. THE SCHEME, as Calc_tend_ls computes it: within bdy_eno1_cells of ANY wall (either axis) the ENO1 minmod of the two one-sided differences (fire_behavior's BDY_ENO1 band, whose test precedes the `select case (fire_upwinding)` and so overrides case (4)), and the Godunov-upwind quantity max(D-_x u, 0) - min(D+_x u, 0) everywhere else. Three regions -- the interior [2, NX-1] x [1, NY] is a single apply of stencils/godunov_upwind_D1x_interior (the per-cell wall-band switch, stencils/godunov_eno1_D1); the two wall lines i=1 and i=NX lie in the band for every bdy_eno1_cells >= 1 and are ENO1-only (stencils/eno1_minmod), with the out-of-range neighbour replaced by the guarded linear-extrapolation ghost. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; instead each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j], u[i,0], u[i,NY+1]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the three-point ENO1 stencil is evaluated at a wall cell, so one ghost suffices, as in the reference code. SIGN CAVEAT (fire_behavior note N44): for a field decreasing along x the Godunov branch returns -D+ > 0, a magnitude, while the ENO1 branch in the wall band returns the signed (negative) derivative -- the reference code's own inconsistency, reproduced; a consumer building a signed normal must carry the sign separately. EXACTNESS: on a linear field with positive slope along x the result is the slope on every cell EXCEPT the i=1 wall, where the field decreases toward the wall, the guard clamps the ghost to the neighbour (u[0] = u[2]), and the ENO1 minmod of D- = -slope, D+ = +slope is 0; first order otherwise. FREE NAMES (consumer-supplied, resolved in the consuming model's scope like the grid geometry dx): bdy_eno1_cells, the ENO1 wall band in cells (>= 1; fire_behavior's BDY_ENO1 = 10). Requires NX >= 3.",
     "license": "MIT",
     "tags": [
       "esd:rule",
@@ -30,7 +30,7 @@
       "ref": "../stencils/godunov_upwind_D1x_interior.esm"
     },
     {
-      "ref": "../stencils/godunov_upwind_D1.esm"
+      "ref": "../stencils/eno1_minmod.esm"
     },
     {
       "ref": "../stencils/extrapolate_linear_ghost.esm"
@@ -108,7 +108,7 @@
             }
           },
           {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -128,7 +128,7 @@
             "expr": {
               "op": "apply_expression_template",
               "args": [],
-              "name": "godunov_upwind_D1",
+              "name": "eno1_minmod",
               "bindings": {
                 "dl": {
                   "op": "/",
@@ -209,7 +209,7 @@
             }
           },
           {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -229,7 +229,7 @@
             "expr": {
               "op": "apply_expression_template",
               "args": [],
-              "name": "godunov_upwind_D1",
+              "name": "eno1_minmod",
               "bindings": {
                 "dl": {
                   "op": "/",

@@ -1,8 +1,8 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "godunov_upwind_D1x_interior",
-    "description": "Interior-only Godunov-upwind per-axis quantity max(D-_x u, 0) - min(D+_x u, 0) of fire_behavior's classical Godunov level-set option (fire_upwinding = 4) on cartesian_uniform_2d over [2, NX-1] x [1, NY], where the three-point stencil along x fits: the backward difference D- = (u[i,j] - u[i-1,j])/dx (respectively along y) and the forward difference D+ = (u[i+1,j] - u[i,j])/dx combined by stencils/godunov_upwind_D1. It is the per-axis building block whose squares sum to the Godunov Hamiltonian only up to the cross term (max(D-,0) - min(D+,0))^2 = max(D-,0)^2 + min(D+,0)^2 - 2 max(D-,0) min(D+,0) >= the Rouy-Tourin Hamiltonian's per-axis term; fire_behavior uses it for the front NORMAL (nvx = diff2x / sqrt(grad^2 + eps)), while |grad psi| itself comes from godunov_norm_D2_*. First order; exact on a linear field with positive slope along x. See stencils/godunov_upwind_D1 for the sign caveat (a magnitude for negative slopes).",
+    "description": "Interior-only per-axis quantity diff2x of fire_behavior's classical Godunov level-set option (fire_upwinding = 4) on cartesian_uniform_2d over [2, NX-1] x [1, NY], where the three-point stencil along x fits: from the backward difference D- = (u[i,j] - u[i-1,j])/dx and the forward difference D+ = (u[i+1,j] - u[i,j])/dx (index shifted along x), each cell takes stencils/godunov_eno1_D1 -- the ENO1 minmod of D-, D+ within bdy_eno1_cells of any wall (fire_behavior's BDY_ENO1 band, which overrides every upwinding option), and the Godunov-upwind quantity max(D-, 0) - min(D+, 0) elsewhere. The Godunov quantity is the per-axis building block whose squares sum to the Godunov Hamiltonian only up to the cross term (max(D-,0) - min(D+,0))^2 = max(D-,0)^2 + min(D+,0)^2 - 2 max(D-,0) min(D+,0) >= the Rouy-Tourin Hamiltonian's per-axis term; fire_behavior uses it for the front NORMAL (nvx = diff2x / sqrt(grad^2 + eps)), while |grad psi| itself comes from godunov_norm_D2_*. First order; exact on a linear field with positive slope along x (both branches return the slope). See stencils/godunov_eno1_D1 for the sign caveat (outside the wall band, a magnitude for negative slopes). Free name bdy_eno1_cells (>= 1), resolved in the consuming model's scope like the grid geometry dx, dy.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -28,7 +28,7 @@
       "ref": "../grid.esm"
     },
     {
-      "ref": "godunov_upwind_D1.esm"
+      "ref": "godunov_eno1_D1.esm"
     }
   ],
   "expression_templates": {
@@ -37,7 +37,7 @@
         "u"
       ],
       "body": {
-        "op": "aggregate",
+        "op": "faq",
         "output_idx": [
           "i",
           "j"
@@ -63,7 +63,7 @@
         "expr": {
           "op": "apply_expression_template",
           "args": [],
-          "name": "godunov_upwind_D1",
+          "name": "godunov_eno1_D1",
           "bindings": {
             "dl": {
               "op": "/",
@@ -130,7 +130,9 @@
                 },
                 "dx"
               ]
-            }
+            },
+            "i": "i",
+            "j": "j"
           }
         }
       }

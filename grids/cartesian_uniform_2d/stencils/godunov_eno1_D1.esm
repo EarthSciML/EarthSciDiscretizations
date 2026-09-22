@@ -1,0 +1,75 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "godunov_eno1_D1",
+    "description": "Pointwise per-axis quantity diff2 of NCAR fire_behavior's classical Godunov level-set option (fire_upwinding = 4) at cell (i, j), from the backward difference dl = D- u and the forward difference dr = D+ u: inside the wall band (stencils/eno1_wall_band, bdy_eno1_cells of any wall) it is the ENO1 minmod of the two (stencils/eno1_minmod), elsewhere the Godunov-upwind quantity max(dl, 0) - min(dr, 0) (stencils/godunov_upwind_D1) -- Calc_tend_ls's `use eno1 near domain boundaries` test, which precedes and overrides case (4). Both ifelse branches are three-point and evaluated on every cell (esm ifelse is not lazy); the caller keeps dl, dr in range. SIGN: the two branches disagree for a field decreasing along the axis -- ENO1 returns the signed (negative) derivative, Godunov the magnitude -D+ > 0 (fire_behavior note N44) -- exactly as the reference code does; their squares agree wherever the data are monotone or convex along the axis. Match-less helper bound by the godunov_upwind_D1x/D1y_interior stencils of this grid.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "eno1_wall_band.esm"
+    },
+    {
+      "ref": "eno1_minmod.esm"
+    },
+    {
+      "ref": "godunov_upwind_D1.esm"
+    }
+  ],
+  "expression_templates": {
+    "godunov_eno1_D1": {
+      "params": [
+        "dl",
+        "dr",
+        "i",
+        "j"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "eno1_wall_band",
+            "bindings": {
+              "i": "i",
+              "j": "j"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "eno1_minmod",
+            "bindings": {
+              "dl": "dl",
+              "dr": "dr"
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "godunov_upwind_D1",
+            "bindings": {
+              "dl": "dl",
+              "dr": "dr"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

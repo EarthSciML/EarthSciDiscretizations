@@ -1,0 +1,100 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "eno1_wall_band",
+    "description": "Pointwise predicate: true when the cell (i, j) of cartesian_uniform_2d lies within bdy_eno1_cells cells of any wall, i < 1 + bdy_eno1_cells or i > NX - bdy_eno1_cells or j < 1 + bdy_eno1_cells or j > NY - bdy_eno1_cells. This is the wall band of NCAR fire_behavior's Calc_tend_ls, where the level-set gradient is ALWAYS the first-order ENO1 minmod (stencils/eno1_minmod), whatever the fire_upwinding option: the test precedes the `select case (fire_upwinding)`, so every upwinding scheme is only an interior scheme there. bdy_eno1_cells is a free name resolved in the consuming model's scope (fire_behavior's BDY_ENO1 = 10, a compile-time constant of level_set_mod.F90); i and j are the cell's indices, bound by the caller's faq. The wall band depends on BOTH axes, so a per-axis derivative along x switches to ENO1 near the y walls too. Match-less helper bound by the godunov_eno1_D1 and weno5_eno1_* stencils of this grid.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:selector",
+      "axes:x,y"
+    ],
+    "references": [
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls (the `i < ids + BDY_ENO1 .or. i > ide - BDY_ENO1 .or. j < jds + BDY_ENO1 .or. j > jde - BDY_ENO1` switch). The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "eno1_wall_band": {
+      "params": [
+        "i",
+        "j"
+      ],
+      "body": {
+        "op": "or",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "<",
+                    "args": [
+                      "i",
+                      {
+                        "op": "+",
+                        "args": [
+                          1,
+                          "bdy_eno1_cells"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": ">",
+                    "args": [
+                      "i",
+                      {
+                        "op": "-",
+                        "args": [
+                          "NX",
+                          "bdy_eno1_cells"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "<",
+                "args": [
+                  "j",
+                  {
+                    "op": "+",
+                    "args": [
+                      1,
+                      "bdy_eno1_cells"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": ">",
+            "args": [
+              "j",
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  "bdy_eno1_cells"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

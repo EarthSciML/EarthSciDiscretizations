@@ -1,5 +1,5 @@
 {
-  "esm": "1.0.0",
+  "esm": "1.2.0",
   "metadata": {
     "name": "levelset_weno5_eno1_2d_bump_mms",
     "description": "Method-of-manufactured-solutions order-of-accuracy driver for grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc (NCAR fire_behavior's default hybrid WENO5/ENO1 level-set gradient norm, fire_upwinding = 9) on the unit box with the linear-extrapolation halo closure. OPERATOR MMS in accumulator form: the smooth manufactured field g = (x-1/2)^2 + (y-1/2)^2 - 0.09 + eps b, b = (max(0, 1 - r^2/w^2))^8 (a C^7 bump of width w = 0.28 and amplitude eps = 0.05 on a paraboloid whose zero level set is the circle r = 0.3) is a constant observed u = g (not a state) and the single state w with w(0) = g integrates w_t = S (|grad g| - |grad u|_h), so w(T) - g = -T S (|grad g|_h - |grad g|) is EXACTLY T times the truncation error of the hybrid norm on g -- the same quantity the coupled forced-steady form u_t = S (|grad g| - |grad u|_h) measures to leading order, without its feedback. The coupled form is used by the Godunov siblings (rules/godunov_norm_D2_*, rules/godunov_upwind_D1*), whose Hamiltonians are monotone; it is NOT used here because the hybrid scheme's ENO1 branch (minmod of the two one-sided differences) is not an upwind discretisation for the transported error e_t = -S n . grad e: in the coupled form the wall-band error grows erratically instead of converging (Julia goldens 0.17, 0.19, 0.11, 0.16 at N = 12, 16, 24, 32) and the adaptive reference integrators stall (Tsit5 step limit). fire_behavior is unaffected in practice because ENO1 acts only far from the front and near the walls, where its level set barely moves and is periodically reinitialised. DESIGN CHOICES, each forced by the scheme: (1) g INCREASES TOWARD EVERY WALL, so fire_behavior's guarded extrapolation ghost max(2a - b, a, b) is the plain linear one; on a field that decreases toward a wall the guard clamps the ghost to the inner value and the wall cell's ENO1 derivative vanishes -- an O(1) error the reference code accepts because a fire's level set always grows toward the walls -- which rules out a plane (a manufactured x + y drifts by exactly T sqrt(2) at the corner). Any smooth field increasing toward all four walls has an interior critical point; the paraboloid's is at the centre, where |grad g| = 0 and the forcing has a cone, but the scheme differentiates the smooth COMPONENTS g_x, g_y, so the norm's cone costs no order. (2) weno_band_cells = 1e9: the WENO5 branch covers the whole interior block and the ENO1 branch only the bdy_eno1_cells = 3 wall band, so the WENO reconstruction is gated over the largest possible region (with a finite band on a frozen field the partition would also be static, but the gated region would shrink with h). The band switch itself is exercised value-by-value against fire_behavior's dumps in the EqWeFiC component test and structurally by the AST fixture. (3) The signed distance r - 0.3 is not used: its convex centre kink is not a steady viscosity solution of u_t + S|grad u| = S and fills in. ORDER: the wall band (three cells, plus the guarded-extrapolation wall cells) is first order on a curved field (one-sided minmod, error ~ h g''), the interior WENO5 error is high order once the bump is resolved (N >= 32; ~h^5 away from the bump's critical lines, ~h^3 on them with Jiang-Shu weights); the L2 norm over the box therefore scales as the wall band's share, sqrt(12 N / N^2) x O(h) = O(h^1.5), so the expected L2 order is 1.5 (a NumPy replica of the operator gives 1.43 from N = 16 to 32 and 1.51 from 32 to 64; the Linf error, set by the wall band, is first order and is not gated). The constant wind (1, 1) fixes the WENO upwind side where signo = (grad g . (1,1)) g_x > 0 and flips it in the quadrant where g_x < 0, so both reconstruction orientations are exercised. The reference's L2 norm over the box is ~0.09, so the RELATIVE L2 error (esm-spec 6.6.5) reads about ten times the absolute one; the cap is set from the measured value. COST: the hybrid body evaluates both ifelse branches (seven-point WENO along each axis plus the fourth-order selector) on every interior cell; the accumulator form needs only a handful of right-hand-side evaluations (w is linear in time), which is what makes the sweep affordable. Default resolution NX = NY = 32 (document metaparameters, rebound by the convergence runner). Geometry: x0 = y0 = 0, dx = 1/NX, dy = 1/NY; coordinates spelled inline (build-time scope-free). Per-resolution errors are pinned in tests/conformance/convergence/levelset_weno5_eno1_2d_bump_mms/golden/errors.json.",
@@ -140,7 +140,7 @@
         {
           "lhs": "u",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -339,7 +339,7 @@
             ]
           },
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -590,7 +590,7 @@
         {
           "lhs": "forcing",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -969,7 +969,7 @@
         {
           "lhs": "wind_u",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -989,7 +989,7 @@
         {
           "lhs": "wind_v",
           "rhs": {
-            "op": "aggregate",
+            "op": "faq",
             "output_idx": [
               "i",
               "j"
@@ -1025,7 +1025,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
@@ -1225,7 +1225,7 @@
               },
               "reduce": "L2_error",
               "reference": {
-                "op": "aggregate",
+                "op": "faq",
                 "output_idx": [
                   "i",
                   "j"
