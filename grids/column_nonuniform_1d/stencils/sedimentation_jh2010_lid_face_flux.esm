@@ -1,0 +1,41 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_lid_face_flux",
+    "description": "FLUX through face NLEV, the lower face of the TOP layer, of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d, in its dt -> 0 limit. It is the end-face flux sedimentation_jh2010_end_face_flux with the LID CLOSURE bound in one place: the layer above the donor (the top layer, q0 = q[NLEV], dz0 = dz[NLEV]) is the model lid, where WRF sets qa(km+1) = 0 and whose arrival thickness dza(km+1) = wi(km+1) dt vanishes as dt -> 0, so qp1 = 0 and dzp1 = 0. Wm1 = W[NLEV-1] and W0 = W[NLEV] give the two-point face velocity, qm1 = q[NLEV-1] and dzm1 = dz[NLEV-1] the layer below the face. The rule applies it twice, as the inflow of layer NLEV-1 and as the only flux of layer NLEV (there is no inflow through the lid, F[NLEV+1] = 0), so the two regions share one spelling of the closure.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:flux",
+      "axes:lev",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: qa(km+1) = 0.0 and dza(km+1) = zi(km+1) - za(km+1)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"},
+    {"ref": "sedimentation_jh2010_end_face_flux.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_lid_face_flux": {
+      "params": ["Wm1", "W0", "qm1", "q0", "dzm1", "dz0"],
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "sedimentation_jh2010_end_face_flux",
+        "bindings": {"Wm1": "Wm1", "W0": "W0", "qm1": "qm1", "q0": "q0", "qp1": 0, "dzm1": "dzm1", "dz0": "dz0", "dzp1": 0}
+      }
+    }
+  }
+}

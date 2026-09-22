@@ -1,0 +1,42 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_end_face_velocity",
+    "description": "END-FACE fall velocity of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d, at the two faces where the four-point interior interpolation (sedimentation_jh2010_face_velocity) has no room: face 2 (the lower face of layer 2) and face NLEV (the lower face of the top layer). There WRF uses the TWO-POINT average, wi(2) = 0.5 (ww(2) + ww(1)) and wi(km) = 0.5 (ww(km) + ww(km-1)), so W_face = 0.5 (W0 + Wm1) with W0 the layer above the face and Wm1 the layer below, for the layer-centred signed velocity W = -v_t <= 0 along +lev. WRF's 'terminate of top of raingroup' override applies here as at every face above the first: where the layer above the face carries no falling speed at all, W0 == 0, the face takes the speed of the layer below it, W_face = Wm1. That branch is part of the scheme and is kept as a branch. Because both branches are averages or copies of non-positive speeds this face velocity can never turn upward, so the end-face fluxes need no upwind-side switch (sedimentation_jh2010_end_face_flux). Face 1 takes the bottom layer's own velocity and is written in the rule with the donor-flux template.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:interpolate",
+      "axes:lev",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: wi(2) = 0.5*(ww(2)+ww(1)), wi(km) = 0.5*(ww(km)+ww(km-1)) and the 'terminate of top of raingroup' override."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_end_face_velocity": {
+      "params": ["Wm1", "W0"],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {"op": "==", "args": ["W0", 0]},
+          "Wm1",
+          {"op": "*", "args": [0.5, {"op": "+", "args": ["W0", "Wm1"]}]}
+        ]
+      }
+    }
+  }
+}

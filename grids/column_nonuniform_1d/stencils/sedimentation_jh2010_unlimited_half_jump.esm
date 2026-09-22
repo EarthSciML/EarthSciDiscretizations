@@ -1,0 +1,59 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "sedimentation_jh2010_unlimited_half_jump",
+    "description": "UNLIMITED half-jump of the Juang & Hong (2010) forward semi-Lagrangian fallout (WRF WSM6 nislfv_rain_plm / nislfv_rain_plm6) on column_nonuniform_1d: the rise of the piecewise-linear reconstruction from the centre of a layer of value q0 to either of its faces, before the scheme's two switches are applied. It is h = (dip + dim) dz0 / 2, the AVERAGE of the two one-sided slopes (sedimentation_jh2010_one_sided_slope, dip towards the layer above with value qp1 and thickness dzp1, dim towards the layer below with qm1 and dzm1) carried half a layer, exactly WRF's qpi(k) - qa(k) = 0.5 (dip + dim) dza(k). The scheme's switches (zero the slope at an extremum, drop it if either face value would go negative) are applied to this quantity by sedimentation_jh2010_half_jump; this template is the value they choose between and is not a limiter in itself. THIS IS NOT A TEXTBOOK SLOPE: the average of the one-sided differences over non-uniform thicknesses is neither the minmod nor the monotonized-central choice, and replacing it with either leaves a measurable difference to WRF (see sedimentation_jh2010_flux_D_lev).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:reconstruct",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Juang, H.-M. H., & Hong, S.-Y. (2010). Forward semi-Lagrangian advection with mass conservation and positive definiteness for falling hydrometeors. Monthly Weather Review, 138(5), 1778-1791.",
+        "doi": "10.1175/2009MWR3109.1"
+      },
+      {
+        "citation": "WRF v4.8.0 / NCAR MMM-physics 550b5b4, phys/physics_mmm/mp_wsm6.F90, subroutine nislfv_rain_plm: qpi(k) = qa(k) + 0.5 (dip + dim) dza(k)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {"ref": "../grid.esm"},
+    {"ref": "sedimentation_jh2010_one_sided_slope.esm"}
+  ],
+  "expression_templates": {
+    "sedimentation_jh2010_unlimited_half_jump": {
+      "params": ["qm1", "q0", "qp1", "dzm1", "dz0", "dzp1"],
+      "body": {
+        "op": "*",
+        "args": [
+          0.5,
+          "dz0",
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sedimentation_jh2010_one_sided_slope",
+                "bindings": {"qa": "qp1", "qb": "q0", "dza": "dzp1", "dzb": "dz0"}
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sedimentation_jh2010_one_sided_slope",
+                "bindings": {"qa": "q0", "qb": "qm1", "dza": "dz0", "dzb": "dzm1"}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
