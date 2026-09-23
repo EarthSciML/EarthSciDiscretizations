@@ -142,9 +142,14 @@ def fold(expr, bindings: dict[str, int]) -> int:
 
 
 def find_makearray_bodies(doc: dict):
-    """Yield (template_name, makearray_node) for every match rule whose body is a makearray."""
+    """Yield (template_name, makearray_node) for every rule template whose body is a makearray.
+
+    Match-less rule templates count too: a boundary frame shared by several
+    match rules (applied from their bodies, e.g. cartesian_uniform_2d's
+    weno5_eno1_D1x_extrapolate_frame) carries the regions those rules tile
+    with, so it is where the tiling must be checked."""
     for name, entry in (doc.get("expression_templates") or {}).items():
-        if "match" in entry and isinstance(entry.get("body"), dict):
+        if isinstance(entry.get("body"), dict):
             body = entry["body"]
             if body.get("op") == "makearray":
                 yield name, body

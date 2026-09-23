@@ -1,0 +1,94 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "grad4_dot_wind",
+    "description": "Pointwise advection term grad4 u . (wind_u, wind_v) at the cell (i, j) of cartesian_uniform_2d, with grad4 the fourth-order central gradient (stencils/central_D1x_4_point, stencils/central_D1y_4_point): fire_behavior's a_valor = Select_4th(dx, ...) uf(i, j) + Select_4th(dy, ...) vf(i, j) in Calc_tend_ls. Multiplied by the central derivative along an axis it gives that axis's WENO5 upwind selector signo = a_valor d4 u/d(axis), which is how the fire_upwinding = 9 and 10 schemes pick the upwind side from the wind. u is the field, i and j the cell indices, bound by the caller's faq. FREE NAMES (consumer-supplied, like the grid geometry dx, dy): wind_u and wind_v, the [x, y] fields of the advecting wind (fire_behavior's mid-flame wind uf, vf). It reaches two cells either side along both axes.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:selector",
+      "axes:x,y",
+      "order:4",
+      "stencil_width:5"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "central_D1x_4_point.esm"
+    },
+    {
+      "ref": "central_D1y_4_point.esm"
+    }
+  ],
+  "expression_templates": {
+    "grad4_dot_wind": {
+      "params": [
+        "u",
+        "i",
+        "j"
+      ],
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "central_D1x_4_point",
+                "bindings": {
+                  "u": "u",
+                  "i": "i",
+                  "j": "j"
+                }
+              },
+              {
+                "op": "index",
+                "args": [
+                  "wind_u",
+                  "i",
+                  "j"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "central_D1y_4_point",
+                "bindings": {
+                  "u": "u",
+                  "i": "i",
+                  "j": "j"
+                }
+              },
+              {
+                "op": "index",
+                "args": [
+                  "wind_v",
+                  "i",
+                  "j"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

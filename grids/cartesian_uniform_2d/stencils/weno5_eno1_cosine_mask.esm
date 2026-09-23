@@ -1,0 +1,99 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno5_eno1_cosine_mask",
+    "description": "Pointwise cosine blending mask of NCAR fire_behavior's fire_upwinding = 10 (physics/level_set_mod.F90 Calc_tend_ls case 10), the weight of the WENO5 derivative in the blend of stencils/weno5_eno1_masked_blend. With a = |u[i,j]| the cell's distance from the front and b the band half-width (threshold_hlu = weno_band_cells dx in the reference, where band_width = 2 b and transition_width = b), the mask is the reference's three branches written as they are: 1 for a <= b (inside the band: pure WENO5), 0.5 (1 + cos(p (a - b) / b)) for b < a <= 2 b (the transition: a cosine taper from 1 to 0), and 0 for a > 2 b (outside: pure ENO1). The two ends are therefore EXACTLY 1 and 0 whatever p is -- in particular with fire_behavior's truncated PI = 3.1415926, for which the taper itself only reaches 0.5 (1 + cos(3.1415926)) = 7e-16 at a = 2 b, as it does in the reference. The taper spells the reference's own operation order, PI * (a - (band_width - transition_width)) / transition_width, with band_width - transition_width = 2 b - b = b exactly in floating point. p is pi, bound by the caller (the blend stencils bind the free name pi_blend) so the consumer supplies the value its own constants use. Params: a (>= 0), b (> 0), p.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:selector",
+      "axes:x,y",
+      "stencil_width:1"
+    ],
+    "references": [
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls case (10) (band_width = 2 threshold_hlu, transition_width = threshold_hlu, the three-branch cosine mask and the `if (mask > 0.0)` blend), Select_eno, Select_weno5, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [],
+  "expression_templates": {
+    "weno5_eno1_cosine_mask": {
+      "params": [
+        "a",
+        "b",
+        "p"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": "<=",
+            "args": [
+              "a",
+              "b"
+            ]
+          },
+          1.0,
+          {
+            "op": "ifelse",
+            "args": [
+              {
+                "op": "<=",
+                "args": [
+                  "a",
+                  {
+                    "op": "*",
+                    "args": [
+                      2,
+                      "b"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  0.5,
+                  {
+                    "op": "+",
+                    "args": [
+                      1.0,
+                      {
+                        "op": "cos",
+                        "args": [
+                          {
+                            "op": "/",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  "p",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "a",
+                                      "b"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "b"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              0.0
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
