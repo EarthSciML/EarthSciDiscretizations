@@ -1,0 +1,160 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno5_eno1_blend_norm_D2_extrapolate_bc",
+    "description": "Hybrid WENO5/ENO1 gradient magnitude |grad u| = sqrt(u_x^2 + u_y^2) of NCAR fire_behavior's fire_upwinding = 10 (physics/level_set_mod.F90 Calc_tend_ls case 10), the blending-zone variant of the default fire_upwinding = 9 scheme, on cartesian_uniform_2d with the linear-extrapolation halo closure. It differs from rules/weno5_eno1_norm_D2_extrapolate_bc only in its interior stencils, stencils/weno5_eno1_blend_D1x_interior and stencils/weno5_eno1_blend_D1y_interior, which replace the hard band edge with the reference's cosine mask (stencils/weno5_eno1_cosine_mask): pure WENO5 for |u| <= B, a cosine taper over B < |u| <= 2B, pure ENO1 beyond (B = weno_band_cells dx), with the ENO1 value SELECTED wherever the mask is 0 (stencils/weno5_eno1_masked_blend), so the far field and the wall band are bitwise ENO1, as in the reference. COMPOUND MATCH (esm-spec 9.6.3): the whole compound sqrt((D(u, wrt: x))^2 + (D(u, wrt: y))^2) at priority 20, scoped with where {u: {shape: [x, y]}} -- the same pattern and priority as rules/weno5_eno1_norm_D2_extrapolate_bc, because it is another discretization of the same operator |grad u|. Which one lowers a component's norm is chosen by which rule that component imports (esm-spec 9.6.8: choosing a scheme = choosing a rule); a component imports one of them. Importing two is deterministic but pointless: the 9.6.3 declaration-order tie-break gives every match to the first declared, and the other never fires. Propagation and reinitialisation are separate components (a tendency model and a pseudo-time model), each importing its own. The body is sqrt(Mx^2 + My^2) with Mx, My the family's per-axis frames (rules/weno5_eno1_D1x_extrapolate_frame, rules/weno5_eno1_D1y_extrapolate_frame: the ENO1 strips and one-cell guarded linear-extrapolation ghosts of fire_behavior's Extrapol_var_at_bdys, lint-tiled in their own files) around this rule's own interior stencils. ORDER: tagged order:1 for the same reason as the sibling, and no convergence case is shipped. Free names: wind_u, wind_v, bdy_eno1_cells, weno_band_cells, pi_blend, dx, dy. Requires NX, NY >= 7.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:grad_norm",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:7",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO5 smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Harten, A., Engquist, B., Osher, S., & Chakravarthy, S. R. (1987). Uniformly high order accurate essentially non-oscillatory schemes, III. Journal of Computational Physics, 71(2), 231-303. ENO stencil selection by smallest divided difference (first-order form: the minmod limiter).",
+        "doi": "10.1016/0021-9991(87)90031-3"
+      },
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. Journal of Computational Physics, 79(1), 12-49.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls case (10) (band_width = 2 threshold_hlu, transition_width = threshold_hlu, the three-branch cosine mask and the `if (mask > 0.0)` blend), Select_eno, Select_weno5, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "weno5_eno1_D1x_extrapolate_frame.esm"
+    },
+    {
+      "ref": "weno5_eno1_D1y_extrapolate_frame.esm"
+    },
+    {
+      "ref": "../stencils/weno5_eno1_blend_D1x_interior.esm"
+    },
+    {
+      "ref": "../stencils/weno5_eno1_blend_D1y_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno5_eno1_blend_norm_D2_extrapolate_bc": {
+      "params": [
+        "u"
+      ],
+      "priority": 20,
+      "match": {
+        "op": "sqrt",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "x"
+                  },
+                  2
+                ]
+              },
+              {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "y"
+                  },
+                  2
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "sqrt",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_eno1_D1x_extrapolate_frame",
+                    "bindings": {
+                      "u": "u",
+                      "interior": {
+                        "op": "apply_expression_template",
+                        "args": [],
+                        "name": "weno5_eno1_blend_D1x_interior",
+                        "bindings": {
+                          "u": "u"
+                        }
+                      }
+                    }
+                  },
+                  2
+                ]
+              },
+              {
+                "op": "^",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno5_eno1_D1y_extrapolate_frame",
+                    "bindings": {
+                      "u": "u",
+                      "interior": {
+                        "op": "apply_expression_template",
+                        "args": [],
+                        "name": "weno5_eno1_blend_D1y_interior",
+                        "bindings": {
+                          "u": "u"
+                        }
+                      }
+                    }
+                  },
+                  2
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

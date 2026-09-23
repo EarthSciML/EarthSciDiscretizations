@@ -1,8 +1,8 @@
 {
   "esm": "1.2.0",
   "metadata": {
-    "name": "weno5_eno1_D1x_interior",
-    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dx of NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018) on cartesian_uniform_2d over the block [4, NX-3] x [3, NY-2], where the seven-point WENO stencil along x and the five-point fourth-order selector stencil along BOTH axes fit without reaching a wall. Per cell the SWITCH is written on the field itself and on the cell's distance from the walls, as the reference code does: the cell takes the first-order ENO1 minmod of its two one-sided differences (stencils/eno1_minmod_D1x) when it lies within bdy_eno1_cells of any wall (stencils/eno1_wall_band: i < 1 + bdy_eno1_cells, i > NX - bdy_eno1_cells, likewise j) OR when |u[i,j]| >= weno_band_cells * dx (outside the band around the zero level set, the front); otherwise -- inside the band, away from the walls -- it takes the fifth-order Jiang-Shu WENO5 upwind derivative (stencils/weno5_js_upwind_D1x) whose upwind side is selected by the sign of signo_x = (grad4 u . U) (d4 u/dx), the product of the fourth-order central advection term grad4 u . (wind_u, wind_v) with the fourth-order central derivative along this axis (stencils/grad4_dot_wind times stencils/central_D1x_4_point) -- fire_behavior's a_valor * Select_4th. FREE NAMES (consumer-supplied, the same contract as the grid geometry dx, dy): wind_u and wind_v, the [x, y] fields of the advecting wind that biases the WENO stencil (fire_behavior's mid-flame wind uf, vf; a level set with no wind may bind zero fields, which selects the left-biased stencil everywhere); bdy_eno1_cells, the ENO1 wall band in cells (fire_behavior's BDY_ENO1 = 10, a compile-time constant there; it MUST be >= 3 so that the WENO7-point reach never crosses a wall, which this block guarantees structurally only for the outermost three cells -- the rule regions -- while the band itself is a value comparison on the index); weno_band_cells, the half-width of the WENO band in cells (fire_behavior's fire_lsm_band_ngp, namelist default 4). Both branches of the ifelse are evaluated on every cell (esm ifelse is not lazy), which is why this template is restricted to the block where the WENO stencil is in range; the boundary strips are ENO1-only regions of the rule's frame (rules/weno5_eno1_D1x_extrapolate_frame). Order: fifth in smooth parts of the WENO band away from critical points (Jiang-Shu weights), first in the ENO1 regions -- the scheme is formally first order; the rule is tagged order:1. Exact on a linear field (every candidate reconstruction and the minmod reproduce the slope).",
+    "name": "weno5_eno1_blend_D1x_interior",
+    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dx of NCAR fire_behavior's fire_upwinding = 10 -- the same scheme as fire_upwinding = 9 (stencils/weno5_eno1_D1x_interior) but with a BLENDING ZONE instead of a hard band edge -- on cartesian_uniform_2d over the block [4, NX-3] x [3, NY-2]. Per cell it is stencils/weno5_eno1_masked_blend of the WENO5 derivative (stencils/weno5_js_upwind_D1x, upwind side by the wind-relative sign stencils/grad4_dot_wind times stencils/central_D1x_4_point, exactly as in the fire_upwinding = 9 sibling) and the ENO1 derivative (stencils/eno1_minmod_D1x), with mask m = stencils/weno5_eno1_cosine_mask(|u[i,j]|, weno_band_cells * dx, pi_blend) -- 1 in the band, a cosine taper over B < |u| <= 2B, 0 beyond -- forced to 0 on the ENO1 wall band (stencils/eno1_wall_band), because case 10 sits inside the same wall `else` as cases 8 and 9. Where m = 0 (the wall band and the far field) the blend SELECTS the ENO1 value, so the result there is bitwise the ENO1 derivative, as in the reference, which skips WENO5 when mask = 0; the WENO5 value is still evaluated there (esm ifelse is not lazy) but cannot leak in. ENO1 appears once: the wall band enters through the mask, not through a second ifelse. Free names: wind_u, wind_v, bdy_eno1_cells, weno_band_cells, pi_blend, dx, dy. pi_blend is pi as the consumer's constants spell it (fire_behavior's PI = 3.1415926); it is a free name rather than a literal so the consumer supplies it.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -27,7 +27,7 @@
         "doi": "10.1016/0021-9991(87)90031-3"
       },
       {
-        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls case (10) (band_width = 2 threshold_hlu, transition_width = threshold_hlu, the three-branch cosine mask and the `if (mask > 0.0)` blend), Select_eno, Select_weno5, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
       }
     ]
   },
@@ -37,6 +37,12 @@
     },
     {
       "ref": "eno1_wall_band.esm"
+    },
+    {
+      "ref": "weno5_eno1_cosine_mask.esm"
+    },
+    {
+      "ref": "weno5_eno1_masked_blend.esm"
     },
     {
       "ref": "eno1_minmod_D1x.esm"
@@ -52,7 +58,7 @@
     }
   ],
   "expression_templates": {
-    "weno5_eno1_D1x_interior": {
+    "weno5_eno1_blend_D1x_interior": {
       "params": [
         "u"
       ],
@@ -88,10 +94,12 @@
           ]
         },
         "expr": {
-          "op": "ifelse",
-          "args": [
-            {
-              "op": "or",
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "weno5_eno1_masked_blend",
+          "bindings": {
+            "m": {
+              "op": "ifelse",
               "args": [
                 {
                   "op": "apply_expression_template",
@@ -102,10 +110,13 @@
                     "j": "j"
                   }
                 },
+                0.0,
                 {
-                  "op": ">=",
-                  "args": [
-                    {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "weno5_eno1_cosine_mask",
+                  "bindings": {
+                    "a": {
                       "op": "abs",
                       "args": [
                         {
@@ -118,28 +129,19 @@
                         }
                       ]
                     },
-                    {
+                    "b": {
                       "op": "*",
                       "args": [
                         "weno_band_cells",
                         "dx"
                       ]
-                    }
-                  ]
+                    },
+                    "p": "pi_blend"
+                  }
                 }
               ]
             },
-            {
-              "op": "apply_expression_template",
-              "args": [],
-              "name": "eno1_minmod_D1x",
-              "bindings": {
-                "u": "u",
-                "i": "i",
-                "j": "j"
-              }
-            },
-            {
+            "w": {
               "op": "apply_expression_template",
               "args": [],
               "name": "weno5_js_upwind_D1x",
@@ -173,8 +175,18 @@
                   ]
                 }
               }
+            },
+            "e": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod_D1x",
+              "bindings": {
+                "u": "u",
+                "i": "i",
+                "j": "j"
+              }
             }
-          ]
+          }
         }
       }
     }

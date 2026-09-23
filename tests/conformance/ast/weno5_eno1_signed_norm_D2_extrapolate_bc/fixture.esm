@@ -1,21 +1,21 @@
 {
   "esm": "1.2.0",
   "metadata": {
-    "name": "weno5_eno1_norm_D2_extrapolate_bc_ast_fixture",
-    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc: a minimal consuming model binding NX=NY=8 at the import edge (the smallest even size on which every region of the rule is non-empty). The match on the COMPOUND hybrid WENO5/ENO1 gradient magnitude sqrt((D(u,x))^2 + (D(u,y))^2) (priority 20) fires through the section-9.6.3 fixpoint and lowers to the rule's body -- sqrt(Mx^2 + My^2) with Mx, My the two per-axis frames (rules/weno5_eno1_D1x_extrapolate_frame, rules/weno5_eno1_D1y_extrapolate_frame) around stencils/weno5_eno1_D1x_interior and stencils/weno5_eno1_D1y_interior -- with the free names dx, dy, wind_u, wind_v, bdy_eno1_cells, weno_band_cells left symbolic, all metaparameters folded, zero unlowered rewrite-target ops in the equations. The golden is the reference-preserving lowered form (esm-spec 9.6.4): match-less template references in the rule body (the frames, the interior and point stencils) survive as resolved apply_expression_template leaves and the imported template registry is part of the golden, so the golden pins the whole composition, not only the equations. wind_u = 1, wind_v = 0.5 constant fields; bdy_eno1_cells = 3, weno_band_cells = 4 (parameters). x0=y0=0, dx=dy=1/8 spelled with the literal 8 (grids/cartesian_uniform_2d/grid.esm contract). The golden pins the byte-identical post-lowering AST across bindings.",
+    "name": "weno5_eno1_signed_norm_D2_extrapolate_bc_ast_fixture",
+    "description": "Post-lowering AST conformance for grids/cartesian_uniform_2d/rules/weno5_eno1_signed_norm_D2_extrapolate_bc, the level-set REINITIALISATION gradient norm (fire_behavior Advance_ls_reinit, fire_upwinding_reinit = 4). Every binding loads fixture.esm (NX=NY=8 bound at the import edge, the smallest even size on which every region is non-empty), runs the section-9.6.3 rewrite fixpoint, and must emit byte-identical canonical bytes, which the golden pins: the COMPOUND gradient magnitude sqrt((D(u,x))^2 + (D(u,y))^2) (priority 20) replaced by the rule's body -- sqrt(Mx^2 + My^2) with Mx, My the family's per-axis frames (rules/weno5_eno1_D1x_extrapolate_frame, rules/weno5_eno1_D1y_extrapolate_frame) around stencils/weno5_eno1_signed_D1x_interior and stencils/weno5_eno1_signed_D1y_interior with their sign param s bound to the free name upwind_sign -- with all metaparameters folded and zero unlowered rewrite-target ops in the equations. The golden is the reference-preserving lowered form (esm-spec 9.6.4): match-less template references in the rule body (the frames, the interior and point stencils) survive as resolved apply_expression_template leaves and the imported template registry is part of the golden, so the golden pins the whole composition, not only the equations. Free names left symbolic: dx, dy, upwind_sign, bdy_eno1_cells, weno_band_cells. This fixture declares NO wind_u/wind_v: the reinitialisation picks its upwind side from the frozen sign field, and the golden records every name the lowered body reads, so a regression in which the rule read a wind would change the bytes (and leave an unresolved name). upwind_sign = 1 is a constant [x, y] field -- the ast category compares the lowered AST symbolically, so the value only has to resolve the name. The golden also pins the SIGNED band test u >= weno_band_cells * dx of the reinitialisation stencils (the reference's lfn_curr(i, j) < threshold_hlu, reproduced without the abs() that Calc_tend_ls has). bdy_eno1_cells = 3, weno_band_cells = 4 (parameters); x0=y0=0, dx=dy=1/8 spelled with the literal 8 (grids/cartesian_uniform_2d/grid.esm contract).",
     "license": "MIT",
     "tags": [
       "conformance",
       "ast",
       "grid:cartesian_uniform_2d",
-      "rule:weno5_eno1_norm_D2_extrapolate_bc"
+      "rule:weno5_eno1_signed_norm_D2_extrapolate_bc"
     ]
   },
   "models": {
-    "Weno5Eno1NormD2ExtrapolateBcAst": {
+    "Weno5Eno1SignedNormD2ExtrapolateBcAst": {
       "expression_template_imports": [
         {
-          "ref": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc.esm",
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_signed_norm_D2_extrapolate_bc.esm",
           "bindings": {
             "NX": 8,
             "NY": 8
@@ -60,35 +60,26 @@
           "units": "m",
           "description": "y-spacing 1/NY = 1/8, spelled with the literal (import edge binds NY)."
         },
-        "wind_u": {
+        "upwind_sign": {
           "type": "unknown",
-          "units": "m/s",
+          "units": "1",
           "shape": [
             "x",
             "y"
           ],
-          "description": "x-component of the advecting wind that biases the WENO5 stencil (rule free name wind_u; fire_behavior uf). Constant field here."
-        },
-        "wind_v": {
-          "type": "unknown",
-          "units": "m/s",
-          "shape": [
-            "x",
-            "y"
-          ],
-          "description": "y-component of the advecting wind (rule free name wind_v; fire_behavior vf). Constant field here."
+          "description": "Frozen smoothed sign S(psi_0) that picks each cell's upwind side (rule free name upwind_sign; fire_behavior lfn_s0). Constant field here -- the ast category compares the lowered AST symbolically, so the value only has to resolve the name."
         },
         "bdy_eno1_cells": {
           "type": "parameter",
           "units": "1",
           "default": 3,
-          "description": "ENO1 wall band in cells (rule free name; fire_behavior BDY_ENO1 = 10). The minimum 3 is used so the WENO band exists at every sampled resolution."
+          "description": "ENO1 wall band in cells (rule free name; fire_behavior BDY_ENO1 = 10). The rule's documented minimum 3 is used so the WENO band exists at every sampled resolution."
         },
         "weno_band_cells": {
           "type": "parameter",
           "units": "1",
           "default": 4,
-          "description": "WENO5 band half-width in cells around the zero level set (rule free name; fire_behavior fire_lsm_band_ngp = 4)."
+          "description": "WENO band half-width in cells around the zero level set (rule free name; fire_behavior fire_lsm_band_ngp = 4)."
         }
       },
       "equations": [
@@ -179,7 +170,7 @@
           }
         },
         {
-          "lhs": "wind_u",
+          "lhs": "upwind_sign",
           "rhs": {
             "op": "faq",
             "output_idx": [
@@ -196,26 +187,6 @@
               }
             },
             "expr": 1.0
-          }
-        },
-        {
-          "lhs": "wind_v",
-          "rhs": {
-            "op": "faq",
-            "output_idx": [
-              "i",
-              "j"
-            ],
-            "args": [],
-            "ranges": {
-              "i": {
-                "from": "x"
-              },
-              "j": {
-                "from": "y"
-              }
-            },
-            "expr": 0.5
           }
         }
       ]

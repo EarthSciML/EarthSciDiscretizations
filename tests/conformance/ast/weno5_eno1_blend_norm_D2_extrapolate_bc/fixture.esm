@@ -1,21 +1,21 @@
 {
   "esm": "1.2.0",
   "metadata": {
-    "name": "weno5_eno1_norm_D2_extrapolate_bc_ast_fixture",
-    "description": "AST-expansion conformance fixture for grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc: a minimal consuming model binding NX=NY=8 at the import edge (the smallest even size on which every region of the rule is non-empty). The match on the COMPOUND hybrid WENO5/ENO1 gradient magnitude sqrt((D(u,x))^2 + (D(u,y))^2) (priority 20) fires through the section-9.6.3 fixpoint and lowers to the rule's body -- sqrt(Mx^2 + My^2) with Mx, My the two per-axis frames (rules/weno5_eno1_D1x_extrapolate_frame, rules/weno5_eno1_D1y_extrapolate_frame) around stencils/weno5_eno1_D1x_interior and stencils/weno5_eno1_D1y_interior -- with the free names dx, dy, wind_u, wind_v, bdy_eno1_cells, weno_band_cells left symbolic, all metaparameters folded, zero unlowered rewrite-target ops in the equations. The golden is the reference-preserving lowered form (esm-spec 9.6.4): match-less template references in the rule body (the frames, the interior and point stencils) survive as resolved apply_expression_template leaves and the imported template registry is part of the golden, so the golden pins the whole composition, not only the equations. wind_u = 1, wind_v = 0.5 constant fields; bdy_eno1_cells = 3, weno_band_cells = 4 (parameters). x0=y0=0, dx=dy=1/8 spelled with the literal 8 (grids/cartesian_uniform_2d/grid.esm contract). The golden pins the byte-identical post-lowering AST across bindings.",
+    "name": "weno5_eno1_blend_norm_D2_extrapolate_bc_ast_fixture",
+    "description": "Post-lowering AST conformance for grids/cartesian_uniform_2d/rules/weno5_eno1_blend_norm_D2_extrapolate_bc, fire_behavior's fire_upwinding = 10 (Calc_tend_ls case 10). Every binding loads fixture.esm (NX=NY=8 bound at the import edge, the smallest even size on which every region is non-empty), runs the section-9.6.3 rewrite fixpoint, and must emit byte-identical canonical bytes, which the golden pins: the COMPOUND gradient magnitude sqrt((D(u,x))^2 + (D(u,y))^2) (priority 20) replaced by the rule's body -- sqrt(Mx^2 + My^2) with Mx, My the family's per-axis frames (rules/weno5_eno1_D1x_extrapolate_frame, rules/weno5_eno1_D1y_extrapolate_frame) around stencils/weno5_eno1_blend_D1x_interior and stencils/weno5_eno1_blend_D1y_interior -- with all metaparameters folded and zero unlowered rewrite-target ops in the equations. The golden is the reference-preserving lowered form (esm-spec 9.6.4): match-less template references in the rule body (the frames, the interior and point stencils) survive as resolved apply_expression_template leaves and the imported template registry is part of the golden, so the golden pins the whole composition, not only the equations. Free names left symbolic: dx, dy, wind_u, wind_v, bdy_eno1_cells, weno_band_cells, pi_blend. This is the library's first smooth partition-of-unity operator, so the golden pins its composition: the three-branch cosine mask stencils/weno5_eno1_cosine_mask (exactly 1 for |u| <= B, the taper for B < |u| <= 2B, exactly 0 beyond), forced to 0 on the wall band, feeding stencils/weno5_eno1_masked_blend, which selects the ENO1 value where the mask is 0 -- and that pi_blend survives as a free name instead of being folded to a literal. wind_u = 1, wind_v = 0.5 constant fields; pi_blend = 3.1415926 (fire_behavior's truncated PI); bdy_eno1_cells = 3, weno_band_cells = 4 (parameters); x0=y0=0, dx=dy=1/8 spelled with the literal 8 (grids/cartesian_uniform_2d/grid.esm contract).",
     "license": "MIT",
     "tags": [
       "conformance",
       "ast",
       "grid:cartesian_uniform_2d",
-      "rule:weno5_eno1_norm_D2_extrapolate_bc"
+      "rule:weno5_eno1_blend_norm_D2_extrapolate_bc"
     ]
   },
   "models": {
-    "Weno5Eno1NormD2ExtrapolateBcAst": {
+    "Weno5Eno1BlendNormD2ExtrapolateBcAst": {
       "expression_template_imports": [
         {
-          "ref": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_norm_D2_extrapolate_bc.esm",
+          "ref": "../../../../grids/cartesian_uniform_2d/rules/weno5_eno1_blend_norm_D2_extrapolate_bc.esm",
           "bindings": {
             "NX": 8,
             "NY": 8
@@ -67,7 +67,7 @@
             "x",
             "y"
           ],
-          "description": "x-component of the advecting wind that biases the WENO5 stencil (rule free name wind_u; fire_behavior uf). Constant field here."
+          "description": "x-component of the advecting wind that biases the WENO stencil (rule free name wind_u; fire_behavior uf). Constant field here."
         },
         "wind_v": {
           "type": "unknown",
@@ -82,13 +82,19 @@
           "type": "parameter",
           "units": "1",
           "default": 3,
-          "description": "ENO1 wall band in cells (rule free name; fire_behavior BDY_ENO1 = 10). The minimum 3 is used so the WENO band exists at every sampled resolution."
+          "description": "ENO1 wall band in cells (rule free name; fire_behavior BDY_ENO1 = 10). The rule's documented minimum 3 is used so the WENO band exists at every sampled resolution."
         },
         "weno_band_cells": {
           "type": "parameter",
           "units": "1",
           "default": 4,
-          "description": "WENO5 band half-width in cells around the zero level set (rule free name; fire_behavior fire_lsm_band_ngp = 4)."
+          "description": "WENO band half-width in cells around the zero level set (rule free name; fire_behavior fire_lsm_band_ngp = 4)."
+        },
+        "pi_blend": {
+          "type": "parameter",
+          "units": "1",
+          "default": 3.1415926,
+          "description": "Pi as the reference uses it in the cosine taper (rule free name pi_blend; fire_behavior's truncated PI = 3.1415926, share/constants_mod.F90). Left a free name by the rule rather than written as a literal, so the consumer's own constants supply it."
         }
       },
       "equations": [

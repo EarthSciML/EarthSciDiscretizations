@@ -1,8 +1,8 @@
 {
   "esm": "1.2.0",
   "metadata": {
-    "name": "weno5_eno1_D1y_interior",
-    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dy of NCAR fire_behavior's default level-set scheme (fire_upwinding = 9; Munoz-Esparza et al. 2018) on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3], where the seven-point WENO stencil along y and the five-point fourth-order selector stencil along BOTH axes fit without reaching a wall. Per cell the SWITCH is written on the field itself and on the cell's distance from the walls, as the reference code does: the cell takes the first-order ENO1 minmod of its two one-sided differences (stencils/eno1_minmod_D1y) when it lies within bdy_eno1_cells of any wall (stencils/eno1_wall_band: i < 1 + bdy_eno1_cells, i > NX - bdy_eno1_cells, likewise j) OR when |u[i,j]| >= weno_band_cells * dx (outside the band around the zero level set, the front); otherwise -- inside the band, away from the walls -- it takes the fifth-order Jiang-Shu WENO5 upwind derivative (stencils/weno5_js_upwind_D1y) whose upwind side is selected by the sign of signo_y = (grad4 u . U) (d4 u/dy), the product of the fourth-order central advection term grad4 u . (wind_u, wind_v) with the fourth-order central derivative along this axis (stencils/grad4_dot_wind times stencils/central_D1y_4_point) -- fire_behavior's a_valor * Select_4th. FREE NAMES (consumer-supplied, the same contract as the grid geometry dx, dy): wind_u and wind_v, the [x, y] fields of the advecting wind that biases the WENO stencil (fire_behavior's mid-flame wind uf, vf; a level set with no wind may bind zero fields, which selects the left-biased stencil everywhere); bdy_eno1_cells, the ENO1 wall band in cells (fire_behavior's BDY_ENO1 = 10, a compile-time constant there; it MUST be >= 3 so that the WENO7-point reach never crosses a wall, which this block guarantees structurally only for the outermost three cells -- the rule regions -- while the band itself is a value comparison on the index); weno_band_cells, the half-width of the WENO band in cells (fire_behavior's fire_lsm_band_ngp, namelist default 4). Both branches of the ifelse are evaluated on every cell (esm ifelse is not lazy), which is why this template is restricted to the block where the WENO stencil is in range; the boundary strips are ENO1-only regions of the rule's frame (rules/weno5_eno1_D1y_extrapolate_frame). Order: fifth in smooth parts of the WENO band away from critical points (Jiang-Shu weights), first in the ENO1 regions -- the scheme is formally first order; the rule is tagged order:1. Exact on a linear field (every candidate reconstruction and the minmod reproduce the slope).",
+    "name": "weno5_eno1_signed_D1y_interior",
+    "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dy for the level-set REINITIALISATION equation psi_tau = S(psi_0)(1 - |grad psi|) of NCAR fire_behavior (physics/level_set_mod.F90 Advance_ls_reinit, fire_upwinding_reinit = 4), on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3]. It is stencils/weno5_eno1_D1y_interior with the two changes the reinitialisation makes, and nothing else. (1) THE UPWIND SIDE IS CHOSEN BY A SUPPLIED SIGN FIELD, not by the wind: the propagation scheme selects WENO5's side by signo = a_valor (d4 u/dy) with a_valor = grad4 u . (wind_u, wind_v) (stencils/grad4_dot_wind); the reinitialisation by s[i,j] (d4 u/dy) (stencils/central_D1y_4_point), where s is the param bound to fire_behavior's lfn_s0 -- the smoothed sign S(psi_0) = psi_0 / sqrt(psi_0^2 + dx^2), frozen at the start of the pseudo-time iteration. This stencil reads no wind. (2) THE BAND TEST IS SIGNED, NOT ABSOLUTE: ENO1 is taken when u[i,j] >= weno_band_cells * dx, whereas the propagation stencil takes it when |u[i,j]| >= weno_band_cells * dx. That is faithful to the reference code, which writes `if (lfn_curr(i, j) < threshold_hlu)` in every WENO case of Advance_ls_reinit while Calc_tend_ls writes `if (abs (lfn(i, j)) < threshold_hlu)`. The missing abs is almost certainly an oversight -- it puts the whole BURNED INTERIOR, where the level set is large and negative, on the fifth-order branch meant for the band around the front -- but it is what the model computes, and a transcription that silently inserted the abs would not reproduce it. Everything else is the propagation sibling's own pieces: the wall band (stencils/eno1_wall_band), the ENO1 branch (stencils/eno1_minmod_D1y), the WENO5 branch (stencils/weno5_js_upwind_D1y), the block bounds. Params: u, the level set, and s, the [x, y] sign field (indexed at the cell). Free names: bdy_eno1_cells, weno_band_cells, dx, dy.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -14,6 +14,10 @@
       "stencil_width:7"
     ],
     "references": [
+      {
+        "citation": "Sussman, M., Smereka, P., & Osher, S. (1994). A level set approach for computing solutions to incompressible two-phase flow. Journal of Computational Physics, 114(1), 146-159. The reinitialisation equation psi_tau = S(psi_0)(1 - |grad psi|) with the smoothed sign S(psi_0) = psi_0/sqrt(psi_0^2 + dx^2).",
+        "doi": "10.1006/jcph.1994.1155"
+      },
       {
         "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
         "doi": "10.1002/2017MS001108"
@@ -27,7 +31,7 @@
         "doi": "10.1016/0021-9991(87)90031-3"
       },
       {
-        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Advance_ls_reinit (fire_upwinding_reinit = 4), Select_eno, Select_weno5, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
       }
     ]
   },
@@ -45,16 +49,14 @@
       "ref": "weno5_js_upwind_D1y.esm"
     },
     {
-      "ref": "grad4_dot_wind.esm"
-    },
-    {
       "ref": "central_D1y_4_point.esm"
     }
   ],
   "expression_templates": {
-    "weno5_eno1_D1y_interior": {
+    "weno5_eno1_signed_D1y_interior": {
       "params": [
-        "u"
+        "u",
+        "s"
       ],
       "body": {
         "op": "faq",
@@ -106,16 +108,11 @@
                   "op": ">=",
                   "args": [
                     {
-                      "op": "abs",
+                      "op": "index",
                       "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "u",
-                            "i",
-                            "j"
-                          ]
-                        }
+                        "u",
+                        "i",
+                        "j"
                       ]
                     },
                     {
@@ -151,14 +148,12 @@
                   "op": "*",
                   "args": [
                     {
-                      "op": "apply_expression_template",
-                      "args": [],
-                      "name": "grad4_dot_wind",
-                      "bindings": {
-                        "u": "u",
-                        "i": "i",
-                        "j": "j"
-                      }
+                      "op": "index",
+                      "args": [
+                        "s",
+                        "i",
+                        "j"
+                      ]
                     },
                     {
                       "op": "apply_expression_template",

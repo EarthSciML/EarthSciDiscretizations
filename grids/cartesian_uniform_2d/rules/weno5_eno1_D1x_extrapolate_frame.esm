@@ -1,0 +1,535 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno5_eno1_D1x_extrapolate_frame",
+    "description": "The boundary frame shared by every hybrid WENO5/ENO1 derivative d u/dx on cartesian_uniform_2d with the linear-extrapolation halo closure: a seven-region makearray tiling [x, y] whose doubly-interior block [4, NX-3] x [3, NY-2] is the caller-supplied `interior` (an interior-only stencil over exactly that block: stencils/weno5_eno1_D1x_interior for fire_upwinding = 9, stencils/weno5_eno1_blend_D1x_interior for 10, stencils/weno5_eno1_signed_D1x_interior for the reinitialisation), and whose other six regions are the same for all of them because they are ENO1 whatever the scheme -- the two-cell strips [4, NX-3] x [1, 2] and [4, NX-3] x [NY-1, NY] where the fourth-order selector along y would leave the domain, and the strips [2, 3] x [1, NY] and [NX-2, NX-1] x [1, NY] where the seven-point WENO stencil along x would (stencils/eno1_minmod_D1x; the reference code is ENO1 there by its bdy_eno1_cells rule, which must be >= 3 for the WENO stencil never to reach a wall), and the two wall lines i = 1 and i = NX. BOUNDARY CLOSURE bc:extrapolate_linear: the walls carry no prescribed value; each wall cell sees a one-cell halo ghost extrapolated from the two innermost cells, u[0,j] = max(2 u[1,j] - u[2,j], u[1,j], u[2,j]) (and symmetrically u[NX+1,j]) -- stencils/extrapolate_linear_ghost, fire_behavior's Extrapol_var_at_bdys (HALO = 1, BIAS = 1). Only the ENO1 (three-point) stencil is ever evaluated at a wall cell, so one ghost suffices, exactly as in the reference code, whose halo is one cell for the same reason. Corner cells use the edge ghost of their x wall (the reference code's diagonal corner ghost is never read by ENO1). At the wall the field decreases toward, the guarded extrapolation clamps the ghost to the inner neighbour, the two one-sided differences have opposite signs, and the ENO1 minmod returns 0 -- fire_behavior's own wall behaviour, reproduced. A match-less rule applied by the D1x and norm rules of this family (rules/weno5_eno1_D1x_extrapolate_bc, rules/weno5_eno1_norm_D2_extrapolate_bc, rules/weno5_eno1_blend_norm_D2_extrapolate_bc, rules/weno5_eno1_signed_norm_D2_extrapolate_bc), so the boundary treatment has one spelling. Params: u, the [x, y] field; interior, its interior-block derivative. Requires NX >= 7, NY >= 5.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:7",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO5/ENO1 level-set scheme (fire_upwinding = 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical WENO5 smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Harten, A., Engquist, B., Osher, S., & Chakravarthy, S. R. (1987). Uniformly high order accurate essentially non-oscillatory schemes, III. Journal of Computational Physics, 71(2), 231-303. ENO stencil selection by smallest divided difference (first-order form: the minmod limiter).",
+        "doi": "10.1016/0021-9991(87)90031-3"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls, Select_eno, Select_weno5, Select_4th, Select_godunov (case 4), Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "../stencils/eno1_minmod_D1x.esm"
+    },
+    {
+      "ref": "../stencils/eno1_minmod.esm"
+    },
+    {
+      "ref": "../stencils/extrapolate_linear_ghost.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno5_eno1_D1x_extrapolate_frame": {
+      "params": [
+        "u",
+        "interior"
+      ],
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  3
+                ]
+              }
+            ],
+            [
+              3,
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  2
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  3
+                ]
+              }
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          [
+            [
+              4,
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  3
+                ]
+              }
+            ],
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NY",
+                  1
+                ]
+              },
+              "NY"
+            ]
+          ],
+          [
+            [
+              2,
+              3
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  2
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  "NX",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ],
+          [
+            [
+              "NX",
+              "NX"
+            ],
+            [
+              1,
+              "NY"
+            ]
+          ]
+        ],
+        "values": [
+          "interior",
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                4,
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    3
+                  ]
+                }
+              ],
+              "j": [
+                1,
+                2
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod_D1x",
+              "bindings": {
+                "u": "u",
+                "i": "i",
+                "j": "j"
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                4,
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    3
+                  ]
+                }
+              ],
+              "j": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NY",
+                    1
+                  ]
+                },
+                "NY"
+              ]
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod_D1x",
+              "bindings": {
+                "u": "u",
+                "i": "i",
+                "j": "j"
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                3
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod_D1x",
+              "bindings": {
+                "u": "u",
+                "i": "i",
+                "j": "j"
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    2
+                  ]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    "NX",
+                    1
+                  ]
+                }
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod_D1x",
+              "bindings": {
+                "u": "u",
+                "i": "i",
+                "j": "j"
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            1,
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                "j"
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                2,
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "+",
+                              "args": [
+                                1,
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            1,
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j"
+            ],
+            "args": [
+              "u"
+            ],
+            "ranges": {
+              "i": [
+                "NX",
+                "NX"
+              ],
+              "j": {
+                "from": "y"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "eno1_minmod",
+              "bindings": {
+                "dl": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "NX",
+                            "j"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            {
+                              "op": "-",
+                              "args": [
+                                "NX",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                },
+                "dr": {
+                  "op": "/",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "extrapolate_linear_ghost",
+                          "bindings": {
+                            "a": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                "NX",
+                                "j"
+                              ]
+                            },
+                            "b": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "NX",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "NX",
+                            "j"
+                          ]
+                        }
+                      ]
+                    },
+                    "dx"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

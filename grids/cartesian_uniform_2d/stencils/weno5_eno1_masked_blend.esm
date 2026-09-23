@@ -1,0 +1,70 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno5_eno1_masked_blend",
+    "description": "Pointwise masked convex combination of a high-order and a low-order derivative, the blending step of NCAR fire_behavior's fire_upwinding = 10 (physics/level_set_mod.F90 Calc_tend_ls case 10): m w + (1 - m) e where the mask m > 0, and e itself where m = 0 -- the reference's `if (mask > 0.0) then diff2 = mask diff2_weno + (1 - mask) diff2_eno else diff2 = diff2_eno`. The else branch is SELECTED, not multiplied by zero, so where m = 0 the result is exactly e and w (the WENO5 value, which is still evaluated because esm ifelse is not lazy) cannot leak into it, even if it is non-finite. m is the caller's mask (stencils/weno5_eno1_cosine_mask, forced to 0 in the ENO1 wall band by the blend stencils), w the WENO5 derivative, e the ENO1 derivative. No grid dependence.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:blend",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:1"
+    ],
+    "references": [
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls case (10) (band_width = 2 threshold_hlu, transition_width = threshold_hlu, the three-branch cosine mask and the `if (mask > 0.0)` blend), Select_eno, Select_weno5, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [],
+  "expression_templates": {
+    "weno5_eno1_masked_blend": {
+      "params": [
+        "m",
+        "w",
+        "e"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": ">",
+            "args": [
+              "m",
+              0.0
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "m",
+                  "w"
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      1.0,
+                      "m"
+                    ]
+                  },
+                  "e"
+                ]
+              }
+            ]
+          },
+          "e"
+        ]
+      }
+    }
+  }
+}
