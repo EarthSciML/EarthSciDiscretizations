@@ -1,0 +1,41 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "interface_total_flux_lev",
+    "description": "Total flux K du/dz - F through ONE interior interface n (2 <= n <= NLEV) of column_nonuniform_1d: the diffusive flux of stencils/interface_flux_K_lev at n minus the prescribed interface flux F[n], with K and F both on the interfaces (shape [lev_nodes]; node n lies between layers n-1 and n, node 1 is the surface and node NLEV+1 the model top). The interface index `n` is a template PARAMETER bound to an index expression at each call site -- k+1 and k in stencils/varcoeff_face_flux_laplacian_lev_interior, the literal 2 and the metaparameter NLEV in the two face closures of rules/varcoeff_face_flux_laplacian_lev -- so the total-flux formula has ONE definition and the telescoping identity sum_k dz[k] L u[k] = F[1] - F[NLEV+1] is structural. F is the prescribed UPWARD (+lev) flux and -K du/dz the upward turbulent flux, so this quantity is minus the total upward flux through the interface. Match-less named template.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:interface_flux",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./interface_flux_K_lev.esm" }
+  ],
+  "expression_templates": {
+    "interface_total_flux_lev": {
+      "params": ["u", "K", "F", "n"],
+      "body": {
+        "op": "-",
+        "args": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "interface_flux_K_lev",
+            "bindings": { "u": "u", "K": "K", "n": "n" }
+          },
+          { "op": "index", "args": ["F", "n"] }
+        ]
+      }
+    }
+  }
+}

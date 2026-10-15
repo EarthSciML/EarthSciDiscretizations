@@ -1,0 +1,60 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "varcoeff_face_flux_laplacian_lev_interior",
+    "description": "Interior-only conservative finite-volume divergence of the TOTAL interface flux K du/dz - F on column_nonuniform_1d: L u[k] = ( H[k+1] - H[k] ) / dz[k] over k in [2, NLEV-1], where H[n] = K[n] (u[n]-u[n-1])/(zc[n]-zc[n-1]) - F[n] is the total flux of stencils/interface_total_flux_lev (itself stencils/interface_flux_K_lev minus F[n]), applied at the interface above (n = k+1) and below (n = k) each layer, with the coefficient K and the prescribed flux F both supplied AT THE INTERFACES (shape [lev_nodes]; node 1 is the surface, node k separates layers k-1 and k, node NLEV+1 is the model top). It is stencils/varcoeff_face_laplacian_lev_interior with F subtracted inside the same difference, so the diffusive and the prescribed parts of the flux telescope together. Match-less named template; rules/varcoeff_face_flux_laplacian_lev wraps it with the two boundary layers, which close the same total-flux template against the prescribed domain-face fluxes. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). Second-order in L2 on a smoothly stretched column (supraconvergent).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "order:2",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./interface_total_flux_lev.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_flux_laplacian_lev_interior": {
+      "params": ["u", "K", "F"],
+      "body": {
+        "op": "faq",
+        "output_idx": ["k"],
+        "args": ["u", "K", "F"],
+        "ranges": {
+          "k": [2, { "op": "-", "args": ["NLEV", 1] }]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "interface_total_flux_lev",
+                  "bindings": { "u": "u", "K": "K", "F": "F", "n": { "op": "+", "args": ["k", 1] } }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "interface_total_flux_lev",
+                  "bindings": { "u": "u", "K": "K", "F": "F", "n": "k" }
+                }
+              ]
+            },
+            { "op": "index", "args": ["dz", "k"] }
+          ]
+        }
+      }
+    }
+  }
+}

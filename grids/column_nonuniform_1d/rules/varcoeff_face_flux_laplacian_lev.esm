@@ -1,0 +1,112 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "varcoeff_face_flux_laplacian_lev",
+    "description": "Conservative finite-volume lowering of the flux-form column diffusion operator d/dz( K du/dz - F ) on column_nonuniform_1d, with the diffusivity K and a PRESCRIBED interface flux F both supplied on the NLEV+1 interfaces (shape [lev_nodes]) and NO free names. The consumer writes the compound D( {op:-, args:[ {op:*, args:[K, D(u, wrt: lev)]}, F ]}, wrt: lev ) -- diffusive term on the LEFT, coefficient on the LEFT of its product (matching is structural and non-commutative) -- which is the natural spelling of a column conservation law du/dt = d/dz(K du/dz - F): one closed-form flux, diffusive minus prescribed, differentiated once. The rule fires on the whole compound at priority 10 (esm-spec 9.6.3 outermost-first compound precedence) and is match-scoped with where {u: {shape: [lev]}, K: {shape: [lev_nodes]}, F: {shape: [lev_nodes]}} (esm-spec 9.6.1), so it fires only on a bare layer field, a bare interface coefficient and a bare interface flux of THIS grid. Every flux in the operator is the ONE total interface flux H[n] = K[n] (u[n]-u[n-1])/(zc[n]-zc[n-1]) - F[n] of stencils/interface_total_flux_lev (built on stencils/interface_flux_K_lev, the flux varcoeff_face_laplacian_lev_flux_bc uses). Interior [2, NLEV-1]: the imported stencil, (H[k+1] - H[k]) / dz[k]. Boundary layers: the DIFFUSIVE part of the flux through a DOMAIN face is not computed from a ghost value; it is dropped, and the total flux through the surface interface (node 1) and the top interface (node NLEV+1) is the prescribed part alone, -F[1] and -F[NLEV+1] -- the places varcoeff_face_laplacian_lev_flux_bc reads its free names kdudz_bot / kdudz_top -- so L u[1] = ( H[2] + F[1] ) / dz[1] and L u[NLEV] = ( -F[NLEV+1] - H[NLEV] ) / dz[NLEV]. F is the UPWARD (+lev) flux, the same sign convention as the upward turbulent flux -K du/dz. So a WRF surface sensible-heat flux hfx (W m^-2, positive upward) into a potential-temperature equation is F[1] = hfx / (rho cp), a moisture flux qfx is F[1] = qfx / rho, and a surface stress on a wind component -- a DOWNWARD momentum flux, drag removing momentum from the column -- is F[1] = -(u_*^2) u/|U| (all in the layer-1 air density); a rigid model top is F[NLEV+1] = 0, and a PBL scheme's nonlocal (counter-gradient) and entrainment fluxes are the interior entries of F. Each diffused field (theta, u, v, qv, ...) therefore carries its own F and the one rule serves them all with no per-field free names. The match is structurally disjoint from those of varcoeff_face_laplacian_lev_flux_bc (D(K*D(u, lev), lev), no '- F') and face_flux_D_lev_supplied_faces (D(F, lev) on a bare interface field), so a model may import this rule beside either or both of them: each compound is lowered by the one rule whose spelling it uses. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). The operator telescopes exactly: sum_k dz[k] L u[k] = F[1] - F[NLEV+1], so the column integral of u changes only through the two prescribed domain-face fluxes. Minimum extent NLEV = 2: the interior region folds to the empty [2, 1] and the two face closures, H[2] = H[NLEV], cover both layers; at NLEV = 1 the interior region folds to the inverted [2, 0] and the load is rejected with makearray_region_inverted (esm-spec 4.3.2) rather than reading u[0] or writing layer 1 twice. Second-order in L2 on a smoothly stretched column (supraconvergent); MMS convergence is pinned by problems/heat_column_varcoeff_faceflux_forced, whose prescribed flux is nonzero at the surface and curved, so both face closures and the interior F difference are exercised.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:supplied_flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Hong, S.-Y., Noh, Y., and Dudhia, J. (2006). A new vertical diffusion package with an explicit treatment of entrainment processes. Mon. Wea. Rev. 134, 2318-2341. (Surface, counter-gradient and entrainment fluxes of the YSU scheme as interface fluxes.)",
+        "doi": "10.1175/MWR3199.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/varcoeff_face_flux_laplacian_lev_interior.esm" },
+    { "ref": "../stencils/interface_total_flux_lev.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_flux_laplacian_lev": {
+      "params": ["u", "K", "F"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "*",
+                "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }]
+              },
+              "F"
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": { "shape": ["lev"] },
+        "K": { "shape": ["lev_nodes"] },
+        "F": { "shape": ["lev_nodes"] }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NLEV", 1] }]],
+          [[1, 1]],
+          [["NLEV", "NLEV"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_flux_laplacian_lev_interior",
+            "bindings": { "u": "u", "K": "K", "F": "F" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_total_flux_lev",
+                    "bindings": { "u": "u", "K": "K", "F": "F", "n": 2 }
+                  },
+                  { "op": "-", "args": [{ "op": "index", "args": ["F", 1] }] }
+                ]
+              },
+              { "op": "index", "args": ["dz", 1] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  { "op": "-", "args": [{ "op": "index", "args": ["F", { "op": "+", "args": ["NLEV", 1] }] }] },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_total_flux_lev",
+                    "bindings": { "u": "u", "K": "K", "F": "F", "n": "NLEV" }
+                  }
+                ]
+              },
+              { "op": "index", "args": ["dz", "NLEV"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

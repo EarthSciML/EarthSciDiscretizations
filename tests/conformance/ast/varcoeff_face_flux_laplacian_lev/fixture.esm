@@ -1,0 +1,114 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "varcoeff_face_flux_laplacian_lev_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_flux_laplacian_lev: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev) - F, wrt: lev) with the coefficient K and the prescribed upward flux F both declared on the interfaces (shape [lev_nodes]) and no free names. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes], F: [lev_nodes]) and lower to the rule's three-region makearray -- interior [2,7] holding the imported total-flux difference stencil aggregate, layer 1 and layer 8 holding the face closures whose domain-face flux is -F[1] and -F[9] alone; every interior flux in all three regions is a reference to the one interface_total_flux_lev template (itself a reference to interface_flux_K_lev), bound at n = k+1, k, 2 and 8. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze) (esm-spec 9.6.4 reference-preserving form: template bodies stay uninlined in the document's registry). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d",
+      "rule:varcoeff_face_flux_laplacian_lev"
+    ]
+  },
+  "models": {
+    "VarcoeffFaceFluxLaplacianLevAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/rules/varcoeff_face_flux_laplacian_lev.esm",
+          "bindings": { "NLEV": 8 }
+        },
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/mesh/mms_column.esm",
+          "bindings": { "NLEV": 8 }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": ["lev"],
+          "description": "Temperature field over the lev index set."
+        },
+        "K": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["lev_nodes"],
+          "description": "Interface diffusivity 1 + ze."
+        },
+        "F": {
+          "type": "unknown",
+          "units": "K m/s",
+          "shape": ["lev_nodes"],
+          "description": "Prescribed upward interface flux 0.3 exp(ze / zscale), nonzero at both domain faces."
+        },
+        "zscale": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Length scale keeping the flux exponent dimensionless."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev_nodes"],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev"],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev"],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": 0.0
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  { "op": "*", "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }] },
+                  "F"
+                ]
+              }
+            ],
+            "wrt": "lev"
+          }
+        },
+        {
+          "lhs": "K",
+          "rhs": { "op": "+", "args": [1.0, "ze"] }
+        },
+        {
+          "lhs": "F",
+          "rhs": { "op": "*", "args": [0.3, { "op": "exp", "args": [{ "op": "/", "args": ["ze", "zscale"] }] }] }
+        },
+        {
+          "lhs": "ze",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "mms_column_ze", "bindings": {} }
+        },
+        {
+          "lhs": "zc",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_center", "bindings": { "ze": "ze" } }
+        },
+        {
+          "lhs": "dz",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_thickness", "bindings": { "ze": "ze" } }
+        }
+      ]
+    }
+  }
+}
