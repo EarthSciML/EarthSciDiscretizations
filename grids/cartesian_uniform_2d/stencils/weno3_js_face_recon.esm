@@ -1,0 +1,210 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno3_js_face_recon",
+    "description": "Pointwise classical (Jiang-Shu 1996) WENO3 reconstruction of a point field at the face between the second and third cells of a three-cell window v0, v1, v2 (cells i-1, i, i+1 for the face i+1/2, upwind-biased to the left): the two second-order candidates p0 = (-v0 + 3 v1)/2 on {i-1, i} and p1 = (v1 + v2)/2 on {i, i+1}, linear weights gamma0 = 1/3 and gamma1 = 2/3 (whose linear combination is the third-order upwind-biased value (-v0 + 5 v1 + 2 v2)/6), smoothness indicators beta0 = (v1 - v0)^2 and beta1 = (v2 - v1)^2, and the classical nonlinear weights alpha_k = gamma_k/(beta_k + eps)^2 of stencils/weno_js_nonlinear_weight, normalised as (alpha0 p0 + alpha1 p1)/(alpha0 + alpha1) -- fire_behavior's flux_p / flux_m in Select_weno3. It is the third-order sibling of stencils/weno5_js_face_recon, with the same weight construction, eps and orientation, and NOT the same scheme as grids/cartesian_uniform_1d/stencils/weno3_recon (WENO-Z, Borges 2008: alpha_k = gamma_k (1 + (tau3/(eps + beta_k))^2), tau3 = |beta0 - beta1|): the two agree where the field is smooth and weight the candidates differently across a kink, so they must not be substituted for one another. Third order in smooth regions, degrading to the single-candidate value across a discontinuity. The mirrored (right-biased) face is obtained by binding the window in reverse order. Match-less helper of stencils/weno3_js_upwind_D1.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:reconstruct",
+      "order:3",
+      "stencil_width:3"
+    ],
+    "references": [
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls (case 8), Select_eno, Select_weno3, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "weno_js_nonlinear_weight.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno3_js_face_recon": {
+      "params": [
+        "v0",
+        "v1",
+        "v2"
+      ],
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno_js_nonlinear_weight",
+                    "bindings": {
+                      "gamma": {
+                        "op": "/",
+                        "args": [
+                          1,
+                          3
+                        ]
+                      },
+                      "beta": {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              "v1",
+                              "v0"
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              -1,
+                              "v0"
+                            ]
+                          },
+                          {
+                            "op": "*",
+                            "args": [
+                              3,
+                              "v1"
+                            ]
+                          }
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "weno_js_nonlinear_weight",
+                    "bindings": {
+                      "gamma": {
+                        "op": "/",
+                        "args": [
+                          2,
+                          3
+                        ]
+                      },
+                      "beta": {
+                        "op": "^",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              "v2",
+                              "v1"
+                            ]
+                          },
+                          2
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "op": "/",
+                    "args": [
+                      {
+                        "op": "+",
+                        "args": [
+                          "v1",
+                          "v2"
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "weno_js_nonlinear_weight",
+                "bindings": {
+                  "gamma": {
+                    "op": "/",
+                    "args": [
+                      1,
+                      3
+                    ]
+                  },
+                  "beta": {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          "v1",
+                          "v0"
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                }
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "weno_js_nonlinear_weight",
+                "bindings": {
+                  "gamma": {
+                    "op": "/",
+                    "args": [
+                      2,
+                      3
+                    ]
+                  },
+                  "beta": {
+                    "op": "^",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          "v2",
+                          "v1"
+                        ]
+                      },
+                      2
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

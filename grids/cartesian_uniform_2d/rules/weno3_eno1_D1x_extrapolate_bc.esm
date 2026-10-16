@@ -1,0 +1,83 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "weno3_eno1_D1x_extrapolate_bc",
+    "description": "Hybrid WENO3/ENO1 upwind first derivative d u/dx on cartesian_uniform_2d with the linear-extrapolation halo closure -- the per-axis derivative diff2x of NCAR fire_behavior's fire_upwinding = 8 level-set scheme: third-order Jiang-Shu WENO3 in a band of weno_band_cells cells around the zero level set, first-order ENO1 (minmod) elsewhere and within bdy_eno1_cells of the walls, upwind side chosen by the wind-relative sign signo = (grad4 u . (wind_u, wind_v)) d4 u/dx. Calc_tend_ls case 8 differs from the default case 9 only in calling Select_weno3 instead of Select_weno5, and this rule differs from rules/weno5_eno1_D1x_extrapolate_bc in the same single place: its body applies the same frame, rules/weno5_eno1_D1x_extrapolate_frame (ENO1 strips, guarded-extrapolation wall lines; lint-tiled in its own file), around stencils/weno3_eno1_D1x_interior instead of the WENO5 interior. Match D(u, wrt: x) at priority 10, scoped with where {u: {shape: [x, y]}} (esm-spec 9.6.1). It matches the same pattern at the same priority as the WENO5 sibling, so a document imports one of the two (esm-spec 9.6.8: choosing a scheme = choosing a rule). FREE NAMES: wind_u, wind_v ([x, y] fields), bdy_eno1_cells (>= 3, as for the WENO5 sibling: the shared frame's ENO1 strips are the outermost three cells; fire_behavior's BDY_ENO1 = 10), weno_band_cells (fire_lsm_band_ngp), and the grid's dx, dy. Requires NX, NY >= 7. ORDER: formally first (ENO1 strips and far field); third in the smooth part of the WENO band. Exact on a linear field except at the wall the field decreases toward, where the guarded ghost clamps and ENO1 returns 0 -- fire_behavior's own wall behaviour.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_difference",
+      "grid:cartesian_uniform_2d",
+      "op:D",
+      "axes:x,y",
+      "order:1",
+      "stencil_width:5",
+      "bc:extrapolate_linear",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Munoz-Esparza, D., Kosovic, B., Jimenez, P. A., & Coen, J. L. (2018). An accurate fire-spread algorithm in the Weather Research and Forecasting model using the level-set method. Journal of Advances in Modeling Earth Systems, 10(4), 908-926. The hybrid WENO/ENO1 level-set schemes (fire_upwinding = 8, 9) of WRF-Fire / NCAR fire_behavior.",
+        "doi": "10.1002/2017MS001108"
+      },
+      {
+        "citation": "Jiang, G.-S., & Shu, C.-W. (1996). Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1), 202-228. The classical smoothness indicators beta_k and nonlinear weights w_k = gamma_k/(beta_k + eps)^2.",
+        "doi": "10.1006/jcph.1996.0130"
+      },
+      {
+        "citation": "Harten, A., Engquist, B., Osher, S., & Chakravarthy, S. R. (1987). Uniformly high order accurate essentially non-oscillatory schemes, III. Journal of Computational Physics, 71(2), 231-303. ENO stencil selection by smallest divided difference (first-order form: the minmod limiter).",
+        "doi": "10.1016/0021-9991(87)90031-3"
+      },
+      {
+        "citation": "NCAR Community Fire Behavior Model (fire_behavior), develop @ eb77580, physics/level_set_mod.F90: Calc_tend_ls (case 8), Select_eno, Select_weno3, Select_4th, Extrapol_var_at_bdys. The transcribed reference implementation."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "weno5_eno1_D1x_extrapolate_frame.esm"
+    },
+    {
+      "ref": "../stencils/weno3_eno1_D1x_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "weno3_eno1_D1x_extrapolate_bc": {
+      "params": [
+        "u"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          "u"
+        ],
+        "wrt": "x"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "x",
+            "y"
+          ]
+        }
+      },
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "weno5_eno1_D1x_extrapolate_frame",
+        "bindings": {
+          "u": "u",
+          "interior": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "weno3_eno1_D1x_interior",
+            "bindings": {
+              "u": "u"
+            }
+          }
+        }
+      }
+    }
+  }
+}
