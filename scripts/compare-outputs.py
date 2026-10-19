@@ -200,7 +200,11 @@ def compare_simulation(results_root, bindings, rep):
                 rep.add("simulation", case, binding, "inline-assertions", "pass", detail)
             key = lambda a: (a["test_id"], a["assertion_idx"])
             if binding == reference:
-                ref_actuals = {key(a): a["actual"] for a in rec["assertions"]}
+                # A reference assertion that never produced a value (the
+                # reference binding failed the case) has nothing to compare
+                # against; its own FAIL row above already reports it.
+                ref_actuals = {key(a): a["actual"] for a in rec["assertions"]
+                               if a["actual"] is not None}
             elif ref_actuals:
                 # Per-binding cross-binding tolerance override
                 # (manifest "cross_binding_overrides"): the bindings are pinned
