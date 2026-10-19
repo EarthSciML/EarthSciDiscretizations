@@ -118,20 +118,31 @@ def rust_out_of_scope(manifest):
     return None
 
 
+CASE_TIMEOUT = float(os.environ.get("ESD_RUNNER_CASE_TIMEOUT", 3600)) or None
+
+
 def cargo_example(example, *argv):
     """Run one upstream cargo example; return parsed-JSON stdout.
 
     The wrapper built every example up front, so invoke the built binary
     directly when it exists — `cargo run` takes the build-directory lock on
     every invocation, which would serialize the parallel case fan-out below.
-    The cargo fallback keeps behavior identical if the layout ever changes."""
+    The cargo fallback keeps behavior identical if the layout ever changes.
+
+    Each call is bounded by `ESD_RUNNER_CASE_TIMEOUT` seconds (default 3600):
+    a case that hangs becomes that case's error record instead of wedging the
+    whole run until the CI job limit. `0` disables the bound."""
     binary = Path(MANIFEST_PATH).parent / "target" / "debug" / "examples" / example
     if binary.is_file():
         cmd = [str(binary), *argv]
     else:
         cmd = ["cargo", "run", "--quiet", "--manifest-path",
                MANIFEST_PATH, "--example", example, "--", *argv]
-    proc = subprocess.run(cmd, capture_output=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=CASE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"{example} timed out after {CASE_TIMEOUT:g} s "
+                           f"(ESD_RUNNER_CASE_TIMEOUT)") from None
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip())
     return proc.stdout

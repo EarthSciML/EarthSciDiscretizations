@@ -2,7 +2,7 @@
   "category": "simulation",
   "version": "1.0",
   "case": "duo_swe_va",
-  "description": "Per-equation rest-preservation gate (v-momentum, D(va)/dt=momentum_v_duo_g3+pgrad_l97_v_duo_g3) of the duo LMARS SWE. The full 6-rule system exceeds the 40 GB Slurm cgroup at build; this compiles only the v-momentum rule's RHS (Lin-Rood L97 four-corner pressure gradient, y-direction). Rest tendency exactly 0. Python is REQUIRED as of EarthSciAST caea886aa (whole-box broadcast contraction in the numpy interpreter): full gate PASS in 1017 s measured 2026-08-29 under CPU contention.",
+  "description": "Per-equation rest-preservation gate (v-momentum, D(va)/dt=momentum_v_duo_g3+pgrad_l97_v_duo_g3) of the duo LMARS SWE. The full 6-rule system exceeds the 40 GB Slurm cgroup at build; this compiles only the v-momentum rule's RHS (Lin-Rood L97 four-corner pressure gradient, y-direction). Rest tendency exactly 0. Python is REQUIRED as of EarthSciAST caea886aa (whole-box broadcast contraction in the numpy interpreter): full gate PASS in 1017 s measured 2026-08-29 under CPU contention. Rust is REQUIRED as of EarthSciAST 34f064149 (the strict `native` compiler, now the default, covers the reduced-rank/contracted makearray region values the duo momentum rules lower to): Erk 1e-10/1e-12, full gate PASS in 6 s measured 2026-10-19.",
   "problem": "../../../../problems/duo_swe_va.esm",
   "model": "DuoSWFreestreamVa",
   "tests": [
@@ -11,6 +11,7 @@
   "reference_binding": "julia",
   "bindings_required": [
     "julia",
+    "rust",
     "python"
   ],
   "scope_excluded": {
@@ -23,14 +24,16 @@
       "reltol": 1e-10,
       "abstol": 1e-12
     },
+    "rust": {
+      "solver": "Erk",
+      "reltol": 1e-10,
+      "abstol": 1e-12
+    },
     "python": {
       "method": "RK45",
       "rtol": 1e-10,
       "atol": 1e-12
     }
   },
-  "status": "active",
-  "blocked_upstream_bindings": {
-    "rust": "Rust does NOT complete this case in CI-tolerable time as of EarthSciAST 9a81afd8b (dev profile at opt-level 2, the run-rust.sh build): the momentum-side rules fall off the taped evaluator (RhsStats: duo_swe_dp already shows 24 fallback rules against 60 taped; its RHS costs 332 ms) and this case's per-RHS cost is >= minutes — the full pde-tests invocation was killed at 2400 s wall, and even rhs_bench (compile + 6 RHS evaluations) exceeded 1800 s. MEASURED 2026-08-28 on duo_swe_ua; duo_swe_va and the full duo_swe freestream system are strictly larger. The sibling duo_swe_dp case IS armed for Rust (49 s, passes; the shape fix in EarthSciAST 64cb58335 unblocked it). Re-arm when the Rust taped/vectorized evaluator covers the esm-spec 9.6.8 reduced-rank/contracted makearray region values the duo momentum rules lower to — the same construct EarthSciAST fd81e922f taught the Julia affine stencilizer and EarthSciAST caea886aa taught the Python numpy interpreter (which re-armed python on this case)."
-  }
+  "status": "active"
 }

@@ -16,7 +16,10 @@ CONFORMANCE_SPEC.md §4.2/§4.4) and applies each category's comparison contract
                {<binding>: {"rtol": …, "atol": …, "_doc": …}}) where the
                bindings' pinned integrators deterministically disagree on a
                floor-sensitive time-integrated functional; inline assertions
-               stay gated at the problem-file tolerances regardless.
+               stay gated at the problem-file tolerances regardless. Only
+               assertions the reference itself passed are a baseline; an
+               assertion with no baseline is a SKIP, never a silent pass,
+               regardless of --bindings order.
   convergence  error norms vs the committed golden/errors.json at the
                manifest's error_vs_golden_rtol/atol.
   regridding   every exact-invariant assertion passed; recorded fields carried
@@ -164,11 +167,38 @@ def compare_ast(results_root, bindings, rep):
                         "pass" if artifact == ref_artifact else "fail")
 
 
+def _sim_key(a):
+    return (a["test_id"], a["assertion_idx"])
+
+
+def _sim_reference(results_root, bindings, manifest):
+    """The reference binding's usable actuals for one simulation case, or
+    (None, why) when there is no baseline to cross-check against.
+
+    Resolved before the per-binding loop so the cross-binding gate does not
+    depend on the order of --bindings. Only assertions the reference itself
+    PASSED become the baseline: a reference that regressed to a finite but
+    wrong value must not fail the other bindings for its own error (its
+    inline-assertions FAIL row already reports it)."""
+    reference = manifest.get("reference_binding", "julia")
+    if reference not in bindings:
+        return None, f"reference binding {reference} not in this comparison"
+    if (reference in manifest.get("scope_excluded", {})
+            or reference in manifest.get("blocked_upstream_bindings", {})):
+        return None, f"reference binding {reference} does not run this case"
+    rec = case_rec(binding_results(results_root, reference, "simulation"),
+                   manifest["case"])
+    if rec is None or rec["status"] not in ("ok", "failed"):
+        return None, f"reference binding {reference} produced no result"
+    return {_sim_key(a): a["actual"] for a in rec["assertions"]
+            if a["passed"] and a["actual"] is not None}, None
+
+
 def compare_simulation(results_root, bindings, rep):
     for _case_dir, manifest in manifests("simulation"):
         case = manifest["case"]
         reference = manifest.get("reference_binding", "julia")
-        ref_actuals = {}
+        ref_actuals, no_ref = _sim_reference(results_root, bindings, manifest)
         for binding in bindings:
             if binding in manifest.get("scope_excluded", {}):
                 rep.add("simulation", case, binding, "scope", "skip",
@@ -198,32 +228,52 @@ def compare_simulation(results_root, bindings, rep):
                     f"{a['test_id']}[{a['assertion_idx']}] {a['reduce'] or 'point'}"
                     f"={a['actual']:.6e}" for a in rec["assertions"])
                 rep.add("simulation", case, binding, "inline-assertions", "pass", detail)
-            key = lambda a: (a["test_id"], a["assertion_idx"])
             if binding == reference:
-                ref_actuals = {key(a): a["actual"] for a in rec["assertions"]}
-            elif ref_actuals:
-                # Per-binding cross-binding tolerance override
-                # (manifest "cross_binding_overrides"): the bindings are pinned
-                # to DIFFERENT integrators (Tsit5 / LSODA / Erk), so a
-                # time-integrated assertion functional carries each method's
-                # truncation error, and on floor-sensitive cases that
-                # deterministic method disagreement exceeds the default 1e-9
-                # re-evaluation band. The override admits the MEASURED
-                # disagreement (documented per manifest with the run it was
-                # measured from) while every inline assertion stays gated at
-                # the problem-file tolerances — coverage is not dropped, only
-                # the cross-method band is widened where the methods provably
-                # disagree.
-                ov = (manifest.get("cross_binding_overrides") or {}).get(binding) or {}
-                rtol = float(ov.get("rtol", SIM_CROSS_RTOL))
-                atol = float(ov.get("atol", SIM_CROSS_ATOL))
-                mismatches = [
-                    a for a in rec["assertions"]
-                    if a["actual"] is not None and key(a) in ref_actuals
-                    and not close(a["actual"], ref_actuals[key(a)], rtol, atol)]
+                continue
+            if ref_actuals is None:
                 rep.add("simulation", case, binding, "cross-binding-actuals",
-                        "fail" if mismatches else "pass",
-                        f"{len(mismatches)} outside rtol={rtol}" if mismatches else "")
+                        "skip", no_ref)
+                continue
+            # Per-binding cross-binding tolerance override
+            # (manifest "cross_binding_overrides"): the bindings are pinned
+            # to DIFFERENT integrators (Tsit5 / LSODA / Erk), so a
+            # time-integrated assertion functional carries each method's
+            # truncation error, and on floor-sensitive cases that
+            # deterministic method disagreement exceeds the default 1e-9
+            # re-evaluation band. The override admits the MEASURED
+            # disagreement (documented per manifest with the run it was
+            # measured from) while every inline assertion stays gated at
+            # the problem-file tolerances — coverage is not dropped, only
+            # the cross-method band is widened where the methods provably
+            # disagree. The measured spread runs from rel 1e-8 to 1e-2
+            # across cases, so a single band per integrator pair would
+            # loosen most cases by orders of magnitude; the band stays
+            # per case.
+            ov = (manifest.get("cross_binding_overrides") or {}).get(binding) or {}
+            rtol = float(ov.get("rtol", SIM_CROSS_RTOL))
+            atol = float(ov.get("atol", SIM_CROSS_ATOL))
+            # An assertion this binding failed (actual None) is reported by
+            # its own inline-assertions row; one the reference failed has no
+            # baseline. Both are counted, never silently passed.
+            compared = [a for a in rec["assertions"]
+                        if a["actual"] is not None and _sim_key(a) in ref_actuals]
+            uncompared = len(rec["assertions"]) - len(compared)
+            if not compared:
+                rep.add("simulation", case, binding, "cross-binding-actuals", "skip",
+                        f"no assertion has a value in both this binding and "
+                        f"the passing reference ({reference})")
+                continue
+            mismatches = [a for a in compared
+                          if not close(a["actual"], ref_actuals[_sim_key(a)],
+                                       rtol, atol)]
+            notes = []
+            if mismatches:
+                notes.append(f"{len(mismatches)} outside rtol={rtol}")
+            if uncompared:
+                notes.append(f"{uncompared} not compared (no value in this "
+                             f"binding or the passing reference)")
+            rep.add("simulation", case, binding, "cross-binding-actuals",
+                    "fail" if mismatches else "pass", "; ".join(notes))
 
 
 def compare_convergence(results_root, bindings, rep):
