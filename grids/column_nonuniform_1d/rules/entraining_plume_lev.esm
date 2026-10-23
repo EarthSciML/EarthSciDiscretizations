@@ -1,0 +1,136 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "entraining_plume_lev",
+    "description": "Complete rewrite rule for the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),    phi(z_bottom) = phi0,\n\nlowered to the implicit-trapezoidal sweep upward along lev: the bottom cell takes the seed phi0 and every cell above it takes the Crank-Nicolson step of stencils/entraining_plume_lev_interior. This is the equation a rising plume obeys when it mixes with the environment it passes through at the fractional rate lam -- the governing equation of every mass-flux cumulus scheme's updraught, of the EDMF plumes in boundary-layer schemes, and of buoyant plume rise for a smoke or stack source. With phi_env = 0, lam = 2 eta and src = 2 B it is also the plume's KINETIC-ENERGY equation dK/dz = 2(B - eta K), so one rule serves both the carried scalars and the vertical velocity.\n\nWHY A SWEEP AND NOT A REDUCTION. The value at a cell is a function of the PREVIOUS ANSWER, not of the original data at earlier cells, so it does not unroll: substituting the step into itself produces a product of amplification factors that never collapses into a reduction over the inputs. That is exactly the esm-spec 4.3.1.1 causal self-reference, and it is the reason this rule cannot be written as one of the prefix reductions in this directory (integral_lev_*), whose terms ARE independent of the result. The distinction is decidable by unrolling and is worth stating, because the two look identical in the source of the models this serves.\n\nTHE CAUSAL SELF-ARGUMENT, and it is the one authoring constraint. A rewrite rule produces an EXPRESSION and cannot see the left-hand side of the equation it lands in, so a lowering that must read the array being defined has to be handed it: the consumer writes phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), naming phi twice. The expanded right-hand side then carries index(phi, k-1) under the right name and esm-spec 4.3.1.1 recognition fires on it. The repetition is not decoration -- it is the call site declaring that this is a sweep and not a pointwise map, which is information a reader of the consuming model wants anyway.\n\nORIENTATION. lev increases upward and cell 1 is the bottom, so the seed is the plume's departure value and the sweep runs in the direction of travel. A model whose vertical index runs top-down (WRF's New Tiedtke among them) reverses its arrays at the boundary of the component, as grids/column_nonuniform_1d/grid.esm already requires of every consumer.\n\nGEOMETRY. The independent variable is the grid's own layer-centre coordinate: the step uses ds[k] = zc[k] - zc[k-1], the centre-to-centre spacing, because the plume's values live at the points the coordinate labels rather than in control volumes. A consumer whose plume values live on the interfaces supplies an `ze` whose cell centres are those interfaces. `zc` is read by bare name, the keyed-factor contract of this grid.\n\nSTABILITY AND ORDER. A-stable: the amplification factor (1 - c)/(1 + c) with c = lam ds/2 has modulus below one for every positive lam and every spacing, so the sweep cannot grow on a coarse column where an explicit step would need ds < 2/lam. Second order on a smoothly stretched column; exactly first order if the entrainment rate is discontinuous, as it is at a cloud base.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:plume",
+      "grid:column_nonuniform_1d",
+      "op:entraining_plume_lev",
+      "order:2",
+      "bc:seeded_bottom",
+      "axes:lev"
+    ],
+    "references": [
+      {
+        "citation": "Tiedtke, M. (1989). A comprehensive mass flux scheme for cumulus parameterization in large-scale models. Mon. Wea. Rev. 117, 1779-1800.",
+        "doi": "10.1175/1520-0493(1989)117<1779:ACMFSF>2.0.CO;2"
+      },
+      {
+        "citation": "Jakob, C., and A. P. Siebesma (2003). A new subcloud model for mass-flux convection schemes: influence on triggering, updraft properties, and model climate. Mon. Wea. Rev. 131, 2765-2778.",
+        "doi": "10.1175/1520-0493(2003)131<2765:ANSMFM>2.0.CO;2"
+      },
+      {
+        "citation": "Siebesma, A. P., P. M. M. Soares, and J. Teixeira (2007). A combined eddy-diffusivity mass-flux approach for the convective boundary layer. J. Atmos. Sci. 64, 1230-1248.",
+        "doi": "10.1175/JAS3888.1"
+      },
+      {
+        "citation": "Simpson, J., and V. Wiggert (1969). Models of precipitating cumulus towers. Mon. Wea. Rev. 97, 471-489.",
+        "doi": "10.1175/1520-0493(1969)097<0471:MOPCT>2.3.CO;2"
+      },
+      {
+        "citation": "Hairer, E., and G. Wanner (1996). Solving Ordinary Differential Equations II. Springer. Section IV.3 (implicit trapezoidal rule, A-stability)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "../stencils/entraining_plume_lev_interior.esm"
+    }
+  ],
+  "expression_templates": {
+    "entraining_plume_lev": {
+      "params": [
+        "phi_env",
+        "lam",
+        "src",
+        "phi0",
+        "phi"
+      ],
+      "match": {
+        "op": "entraining_plume_lev",
+        "args": [
+          "phi_env",
+          "lam",
+          "src",
+          "phi0",
+          "phi"
+        ]
+      },
+      "where": {
+        "phi_env": {
+          "shape": [
+            "lev"
+          ]
+        },
+        "lam": {
+          "shape": [
+            "lev"
+          ]
+        },
+        "src": {
+          "shape": [
+            "lev"
+          ]
+        },
+        "phi": {
+          "shape": [
+            "lev"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              2,
+              "NLEV"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": [
+              "k"
+            ],
+            "args": [
+              "phi0"
+            ],
+            "ranges": {
+              "k": [
+                1,
+                1
+              ]
+            },
+            "expr": "phi0"
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "entraining_plume_lev_interior",
+            "bindings": {
+              "phi_env": "phi_env",
+              "lam": "lam",
+              "src": "src",
+              "phi": "phi"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

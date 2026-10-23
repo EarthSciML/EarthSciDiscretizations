@@ -1,0 +1,302 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "entraining_plume_lev_interior",
+    "description": "Interior trapezoidal (Crank-Nicolson) step of the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),\n\nintegrated upward along lev from a value seeded in the bottom cell. A rising plume exchanges with the environment it passes through at the fractional rate lam and is forced by src; phi is the plume's own value of whatever is being carried -- dry static energy, total water, a tracer, or (with phi_env = 0 and src the buoyancy) the plume's kinetic energy.\n\nAveraging the right-hand side over the two cell centres gives\n\n    (phi[k] - phi[k-1]) / ds[k] = (lam[k]/2)((phi_env[k-1] - phi[k-1]) + (phi_env[k] - phi[k])) + src[k]\n\nwith ds[k] = zc[k] - zc[k-1] the centre-to-centre spacing, which solves for phi[k] as\n\n    phi[k] = ( c (phi_env[k-1] + phi_env[k]) + (1 - c) phi[k-1] + ds[k] src[k] ) / (1 + c),   c = lam[k] ds[k] / 2.\n\nThis is the A-stable implicit-trapezoidal step: c > 0 for any lam > 0 and any spacing, so the amplification factor (1-c)/(1+c) has modulus below one however stiff the entrainment and however coarse the column. An explicit (forward-Euler) step would need ds < 2/lam, which a 30 hPa layer at lam = 2e-3 m^-1 already violates. Second order on a smoothly stretched column.\n\nThe SOURCE is evaluated at the destination cell rather than averaged across the step, because the schemes this serves supply it already centred on the interval (a buoyancy difference across the step, a heating integrated over it); averaging a source that is itself a face quantity would apply the trapezoidal weight twice.\n\nSelf-referential by construction: cell k reads cell k-1 of the array being defined, which is the esm-spec 4.3.1.1 causal recurrence -- admitted here because the next term IS a function of the previous ANSWER and the fold does not unroll into a reduction over the original values. Contrast the prefix reductions in this same directory (integral_lev_*), whose terms are independent of the result.\n\nMatch-less named template; rules/entraining_plume_lev wraps it with the seeded bottom cell. `zc` is the free-name layer-centre array resolving to the consuming model's geometry observed (grids/column_nonuniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:plume",
+      "grid:column_nonuniform_1d",
+      "op:entraining_plume_lev",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "Tiedtke, M. (1989). A comprehensive mass flux scheme for cumulus parameterization in large-scale models. Mon. Wea. Rev. 117, 1779-1800.",
+        "doi": "10.1175/1520-0493(1989)117<1779:ACMFSF>2.0.CO;2"
+      },
+      {
+        "citation": "Jakob, C., and A. P. Siebesma (2003). A new subcloud model for mass-flux convection schemes: influence on triggering, updraft properties, and model climate. Mon. Wea. Rev. 131, 2765-2778.",
+        "doi": "10.1175/1520-0493(2003)131<2765:ANSMFM>2.0.CO;2"
+      },
+      {
+        "citation": "Hairer, E., and G. Wanner (1996). Solving Ordinary Differential Equations II: Stiff and Differential-Algebraic Problems. Springer. Section IV.3 (the implicit trapezoidal rule and A-stability)."
+      },
+      {
+        "citation": "Simpson, J., and V. Wiggert (1969). Models of precipitating cumulus towers. Mon. Wea. Rev. 97, 471-489.",
+        "doi": "10.1175/1520-0493(1969)097<0471:MOPCT>2.3.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "entraining_plume_lev_interior": {
+      "params": [
+        "phi_env",
+        "lam",
+        "src",
+        "phi"
+      ],
+      "body": {
+        "op": "faq",
+        "output_idx": [
+          "k"
+        ],
+        "args": [
+          "phi_env",
+          "lam",
+          "src",
+          "phi"
+        ],
+        "ranges": {
+          "k": [
+            2,
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "/",
+          "args": [
+            {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        0.5,
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "lam",
+                                "k"
+                              ]
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    "k"
+                                  ]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "zc",
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "k",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "phi_env",
+                            {
+                              "op": "-",
+                              "args": [
+                                "k",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "phi_env",
+                            "k"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1.0,
+                        {
+                          "op": "*",
+                          "args": [
+                            0.5,
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "lam",
+                                    "k"
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "zc",
+                                        "k"
+                                      ]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": [
+                                        "zc",
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            "k",
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "phi",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            "k"
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": [
+                            "zc",
+                            {
+                              "op": "-",
+                              "args": [
+                                "k",
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "src",
+                        "k"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "+",
+              "args": [
+                1.0,
+                {
+                  "op": "*",
+                  "args": [
+                    0.5,
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": [
+                            "lam",
+                            "k"
+                          ]
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                "k"
+                              ]
+                            },
+                            {
+                              "op": "index",
+                              "args": [
+                                "zc",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "k",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
