@@ -1,53 +1,89 @@
 name: docs
 
-# Ported from the archive docs workflow (archive/.github/workflows/docs.yml).
-# The generate → Hugo build → deploy ordering is the contract: generated
-# content pages and convergence plots MUST be produced before Hugo runs,
-# otherwise pages under docs/content/grids/ and PNGs under docs/static/plots/
-# never ship. Generated files are never committed (.gitignore pins this —
-# see AGENTS.md "Generated files").
+# Generated catalog pages and convergence plots MUST be produced before the
+# bundle is built (see the prebuild steps below); they are never committed.
+# The site itself (Hugo, search, link check, deploy) is built by earthsci.dev.
+
+# Installed in each EarthSci source repo as .github/workflows/docs.yml.
+# Nothing of the docs machinery lives in this repo: extraction, rendering and
+# bundling all run from EarthSciML/earthsci.dev (DESIGN.md there).
+#
+# On push to main: extract API docs, build the docs bundle, merge it into this
+# repo's `docs-bundle` branch as the `dev` version and notify earthsci.dev,
+# which rebuilds the site.
+# (No API reference here, so there is nothing to version: release tags do not
+# trigger this workflow.)
+# On pull requests: the same, minus publishing and notifying (validation only).
+#
+# Needs the repo (or org) secrets DOCS_APP_ID and DOCS_APP_PRIVATE_KEY: a GitHub
+# App installed on EarthSciML/earthsci.dev with contents:write, used to notify
+# the site (repository_dispatch).
 
 on:
   push:
     branches: [main]
-    paths:
-      - "docs/**"
-      - "grids/**"
-      - "regridding/**"
-      - "reprojection/**"
-      - "problems/**"
-      - "tests/conformance/convergence/**"
-      - ".github/workflows/docs.yml"
   pull_request:
-    paths:
-      - "docs/**"
-      - "grids/**"
-      - "regridding/**"
-      - "reprojection/**"
-      - "problems/**"
-      - "tests/conformance/convergence/**"
-      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
-# Single deploy at a time; cancel in-flight superseded runs.
+# Publishing merges into one shared branch; tools/publish.py retries on a
+# conflict, but a tag build should still never be cancelled by a later push.
 concurrency:
   group: docs-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
-  build:
+  plan:
     runs-on: ubuntu-latest
-    env:
-      HUGO_VERSION: "0.131.0"
-      PAGEFIND_VERSION: "1.1.0"
+    outputs:
+      bindings: ${{ steps.plan.outputs.bindings }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: EarthSciML/earthsci.dev
+          ref: main
+          path: .earthsci-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Prints the bindings in docs/api/config.toml as a JSON array ([] when
+      # the repo has no API reference).
+      - id: plan
+        run: echo "bindings=$(python .earthsci-dev/tools/api_docs/plan.py --repo-root .)" >> "$GITHUB_OUTPUT"
+
+  extract:
+    needs: plan
+    if: needs.plan.outputs.bindings != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # A failing binding is reported but does not block the bundle; it renders
+    # as "not extracted in this build". Remove to make failures fatal.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        binding: ${{ fromJSON(needs.plan.outputs.bindings) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EarthSciML/earthsci.dev/.github/actions/api-extract@main
+        with:
+          binding: ${{ matrix.binding }}
+
+  bundle:
+    needs: [plan, extract]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # push the docs-bundle branch
     steps:
       - uses: actions/checkout@v4
 
+      # Prebuild (docs/site.toml `prebuild`): the catalog pages and convergence
+      # plots are generated, never committed (AGENTS.md "Generated files").
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -65,63 +101,29 @@ jobs:
           python -m pip install \
             "git+https://github.com/EarthSciML/EarthSciAST.git#subdirectory=pkg/earthsci-ast-py"
 
-      - name: Install Hugo extended
-        run: |
-          curl -sSL \
-            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin hugo
-
       - name: Generate catalog pages and convergence plots
         run: python docs/generate_catalog.py
 
-      - name: Build site with Hugo
-        run: hugo --source docs --minify --destination public
-
-      # Pagefind search index, ported from the archive docs workflow
-      # (archive/.github/workflows/docs.yml). Runs BEFORE the link check so
-      # lychee also validates the /pagefind/pagefind-ui.{js,css} references the
-      # head partial emits (params.pagefind in docs/hugo.toml).
-      - name: Install Pagefind
-        run: npm install -g "pagefind@${PAGEFIND_VERSION}"
-
-      - name: Build Pagefind search index
-        run: pagefind --site docs/public
-
-      - name: Link-check built site (internal links only)
-        uses: lycheeverse/lychee-action@v1
+      - name: Download extracted docstrings
+        continue-on-error: true
+        uses: actions/download-artifact@v4
         with:
-          # --offline ignores all network URLs (no third-party flake); --base
-          # resolves root-relative paths like /grids/ against docs/public/ so
-          # a broken internal link — e.g. a generated page referencing a plot
-          # that was never rendered — fails the build.
-          args: >-
-            --offline
-            --base
-            docs/public
-            --no-progress
-            docs/public
-          fail: true
+          pattern: api-docs-*
+          path: build/api-docs
+          merge-multiple: true
 
-      - name: Upload built site (PR preview artifact)
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+      # Short-lived token for notifying earthsci.dev; not minted on pull requests,
+      # which only validate.
+      - name: Create site dispatch token
+        id: app-token
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/create-github-app-token@v1
         with:
-          name: docs-site
-          path: docs/public
+          app-id: ${{ secrets.DOCS_APP_ID }}
+          private-key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
+          owner: EarthSciML
+          repositories: earthsci.dev
 
-      - name: Upload Pages artifact
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-pages-artifact@v3
+      - uses: EarthSciML/earthsci.dev/.github/actions/docs-bundle@main
         with:
-          path: docs/public
-
-  deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          dispatch-token: ${{ steps.app-token.outputs.token }}

@@ -139,7 +139,7 @@ fixpoint → official runner`.
 ## 6. Generated files
 
 Docs content pages and plots are generated **only** in the CI docs job and are never
-committed (`.gitignore` pins this). Conformance goldens and fixtures *are* committed —
+committed (`.gitignore` pins this). The docs site itself is built by EarthSciML/earthsci.dev from the `docs-bundle` branch this repo's `docs.yml` publishes; there is no Hugo config or layout here. Conformance goldens and fixtures *are* committed —
 AST goldens at or above the 64 KiB threshold as a `.sha256` digest rather than full bytes
 (§5). Convergence per-resolution fixtures are thin hand-written wrappers binding
 metaparameters — if you feel the need for a fixture generator, the metaparameter

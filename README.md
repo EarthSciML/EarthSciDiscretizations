@@ -68,7 +68,7 @@ own spacing (`problems/two_cartesian_grids_coexist.esm`).
 | `tests/conformance/` | `ast/` (byte-identical post-lowering ASTs, all five bindings), `simulation/` (MMS), `convergence/` (observed order), `regridding/`, `reprojection/` |
 | `tests/invalid/` | `lint/` (policy-lint fixtures) and `loader/` (diagnostic fixtures for the binding runners) |
 | `scripts/` | Validation, conformance orchestration, golden regeneration, thin per-binding runners |
-| `docs/` | Hugo site; grid/rule/regridding pages are generated from the library files at build time |
+| `docs/` | Docs content (`docs/content`, `docs/site.toml`) for the unified [earthsci.dev](https://earthsci.dev/discretizations/) site; grid/rule/regridding pages are generated from the library files at build time. No Hugo config or layouts here — see [Previewing the docs](#previewing-the-docs) |
 | `archive/` | The pre-0.8.0 catalog, kept read-only until its migration completes |
 
 ## Quickstart
@@ -346,3 +346,18 @@ lat-lon grid it has no polar singularity, and unlike an icosahedral mesh it is f
 resolution-generic within the `+ - * /` metaparameter closure: its sizes are `N`, `N+1`, and
 a literal `6`, with no mesh data and no subdivision fold. The pre-0.8.0
 catalog in `archive/` migrates rule-by-rule on top of these patterns.
+
+## Previewing the docs
+
+The site is built from [EarthSciML/earthsci.dev](https://github.com/EarthSciML/earthsci.dev),
+which owns the Hugo config and layouts; this repo contributes only content. CI
+(`.github/workflows/docs.yml`) generates the catalog, publishes it to the
+`docs-bundle` branch and notifies earthsci.dev. To preview locally (Python 3.11+, Hugo extended):
+
+```bash
+python docs/generate_catalog.py                       # generated pages + plots
+git clone https://github.com/EarthSciML/earthsci.dev ../earthsci.dev
+python ../earthsci.dev/tools/bundle.py --repo-root . --out ../earthsci.dev/build/bundles/discretizations
+python ../earthsci.dev/tools/assemble.py --local discretizations=../earthsci.dev/build/bundles/discretizations --only discretizations
+hugo server --source ../earthsci.dev
+```
