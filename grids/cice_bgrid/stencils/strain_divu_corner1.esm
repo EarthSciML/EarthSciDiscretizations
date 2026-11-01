@@ -1,0 +1,38 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "strain_divu_corner1",
+    "description": "Scalar atom of the B-grid strain-rate divergence at corner 1 (the NE corner, the U point U(i,j)) of T cell (i,j): divu_1 = cyp*u(i,j) - dyT*u(i-1,j) + cxp*v(i,j) - dxT*v(i,j-1) (strain_rates, ice_dyn_shared.F90:2148-2151; the area-weighted form of divu = D(u,x) + D(v,y) on the B grid). The four U-point coordinates enter through the index params: oi/oj are the cell's own corner indices (oi = i, oj = j) and wim1/wjm1 are the west/south neighbor indices (i-1, j-1); the strain_rates_divu rule binds wim1 := 1 / wjm1 := 1 on the i = 1 / j = 1 halo strips, reproducing the Fortran's halo-copy of the velocity at the domain edge. The metric coefficients cxp/cyp/cxm/cym and cell dimensions dxT/dyT are scalars of the cell (ice_dyn_shared.F90:410-413, 433-437), bound by the rule to the cell's own values. Pure combination algebra: no faq, no index sets of its own.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:cice_bgrid", "grid:cice_bgrid", "op:strain-rate"],
+    "references": [
+      {
+        "citation": "Hunke, E. C., et al. (2023). CICE v6.3.22 documentation and user's guide (LA-UR-23-31851), section on the EVP dynamics strain_rates."
+      }
+    ]
+  },
+  "expression_templates": {
+    "strain_divu_corner1": {
+      "params": ["uvel", "vvel", "oi", "oj", "wim1", "wjm1", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              { "op": "*", "args": ["cyp", { "op": "index", "args": ["uvel", "oi", "oj"] }] },
+              { "op": "*", "args": ["dyT", { "op": "index", "args": ["uvel", "wim1", "oj"] }] }
+            ]
+          },
+          {
+            "op": "-",
+            "args": [
+              { "op": "*", "args": ["cxp", { "op": "index", "args": ["vvel", "oi", "oj"] }] },
+              { "op": "*", "args": ["dxT", { "op": "index", "args": ["vvel", "oi", "wjm1"] }] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

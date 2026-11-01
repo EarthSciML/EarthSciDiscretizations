@@ -1,0 +1,140 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "cice_bgrid_transport_flux_divergence_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cice_bgrid/rules/transport_flux_divergence.esm at N_I = N_J = 4, NCAT = 2: a minimal model importing grids/cice_bgrid/grid.esm and the flux-divergence rule, declaring the free-name per-category tracer field (aicen on the T cells) and the B-grid corner velocities (uvel/vvel on the U points) plus the edge lengths HTE/HTN and T-cell area tarea, and one target equation D(aicen*uvel,x) + D(aicen*vvel,y) with shape [i,j,ncat]. Forces expansion of the 9-region makearray (interior, the four i/j strips, and the four corners with their halo-copy closures of c/u/v/HTE/HTN at every out-of-domain neighbor) of the centered edge reconstructions transport_flux_e/n (ice_transport_remap.F90:658-666) divided by tarea (mass update F90:3586-3590). Pins the byte-identical post-lowering AST.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cice_bgrid",
+      "rule:transport_flux_divergence"
+    ]
+  },
+  "models": {
+    "CiceBgridTransportFluxDivergenceAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cice_bgrid/grid.esm",
+          "bindings": {
+            "N_I": 4,
+            "N_J": 4,
+            "NCAT": 2
+          }
+        },
+        {
+          "ref": "../../../../grids/cice_bgrid/rules/transport_flux_divergence.esm"
+        }
+      ],
+      "variables": {
+        "aicen": {
+          "type": "parameter",
+          "units": "1",
+          "shape": [
+            "i",
+            "j",
+            "ncat"
+          ],
+          "default": 0.0,
+          "description": "Per-category ice concentration on the T cells, the advected tracer."
+        },
+        "uvel": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "x velocity at the U points (B-grid NE corners of the T cells)."
+        },
+        "vvel": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "y velocity at the U points."
+        },
+        "HTE": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "East edge length of the T cell (ice_grid.F90:1380)."
+        },
+        "HTN": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "North edge length of the T cell (ice_grid.F90:1342)."
+        },
+        "tarea": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "T-cell area (ice_grid.F90:682), the flux-divergence divisor."
+        },
+        "fdiv": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": [
+            "i",
+            "j",
+            "ncat"
+          ],
+          "description": "Conservative flux-form tracer divergence, the rewrite target D(aicen*uvel,x) + D(aicen*vvel,y)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": "fdiv",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "aicen",
+                      "uvel"
+                    ]
+                  }
+                ],
+                "wrt": "x"
+              },
+              {
+                "op": "D",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      "aicen",
+                      "vvel"
+                    ]
+                  }
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

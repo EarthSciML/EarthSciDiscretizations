@@ -1,0 +1,466 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "strain_rates_shear",
+    "description": "B-grid lowering rule of the strain-rate shearing rewrite target shear = D(uvel, y) + D(vvel, x) (strain_rates, ice_dyn_shared.F90:2094-2105; the corner formulas 2168-2175): the rule matches the two-term sum by GROUND PATTERN (the arguments are literal variable names uvel/vvel, not params, so no where-shape constraint is possible or needed, esm-spec 9.6.1/9.6.8) and emits the [i,j,corner] makearray of the four corner combinations, one region per corner slice (corner 1 = NE = U(i,j), 2 = NW = U(i-1,j), 3 = SW = U(i-1,j-1), 4 = SE = U(i,j-1)) tiled over four i/j position classes (interior [2..N_I]x[2..N_J], the i = 1 strip, the j = 1 strip, and the (1,1) corner) with halo-copy closures: on the i = 1 strip the west-neighbor index wim1 is bound to 1 and on the j = 1 strip the south-neighbor index wjm1 to 1 (the velocity of the ghost cell copies the edge value, as the Fortran's ice_HaloUpdate of uvel/vvel does before strain_rates). Each region value is a faq over its box that applies the scalar corner atom (strain_shear_corner1..4, ice_dyn_shared.F90:2168-2175) with the index params oi = i, oj = j, wim1, wjm1 and the cell's own metric coefficients cxp/cyp/cxm/cym and dimensions dxT/dyT (F90:410-413, 433-437), e.g. corner 1: shear = -cym*v(i,j) - dyT*v(i-1,j) - cxm*u(i,j) - dxT*u(i,j-1). Requires N_I >= 2 and N_J >= 2.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:cice_bgrid",
+      "grid:cice_bgrid",
+      "op:D",
+      "axes:i,j,corner",
+      "order:1",
+      "bc:halo-copy",
+      "stagger:b",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Hunke, E. C., et al. (2023). CICE v6.3.22 documentation and user's guide (LA-UR-23-31851), the EVP dynamics strain_rates."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/strain_shear_corner1.esm" },
+    { "ref": "../stencils/strain_shear_corner2.esm" },
+    { "ref": "../stencils/strain_shear_corner3.esm" },
+    { "ref": "../stencils/strain_shear_corner4.esm" }
+  ],
+  "expression_templates": {
+    "strain_rates_shear": {
+      "params": [],
+      "match": {
+        "op": "+",
+        "args": [
+          { "op": "D", "args": ["uvel"], "wrt": "y" },
+          { "op": "D", "args": ["vvel"], "wrt": "x" }
+        ]
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, "N_I"], [2, "N_J"], [1, 1]],
+          [[2, "N_I"], [2, "N_J"], [2, 2]],
+          [[2, "N_I"], [2, "N_J"], [3, 3]],
+          [[2, "N_I"], [2, "N_J"], [4, 4]],
+          [[1, 1], [2, "N_J"], [1, 1]],
+          [[1, 1], [2, "N_J"], [2, 2]],
+          [[1, 1], [2, "N_J"], [3, 3]],
+          [[1, 1], [2, "N_J"], [4, 4]],
+          [[2, "N_I"], [1, 1], [1, 1]],
+          [[2, "N_I"], [1, 1], [2, 2]],
+          [[2, "N_I"], [1, 1], [3, 3]],
+          [[2, "N_I"], [1, 1], [4, 4]],
+          [[1, 1], [1, 1], [1, 1]],
+          [[1, 1], [1, 1], [2, 2]],
+          [[1, 1], [1, 1], [3, 3]],
+          [[1, 1], [1, 1], [4, 4]]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [2, "N_J"], "k": [1, 1] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner1",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [2, "N_J"], "k": [2, 2] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner2",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [2, "N_J"], "k": [3, 3] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner3",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [2, "N_J"], "k": [4, 4] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner4",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [2, "N_J"], "k": [1, 1] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner1",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [2, "N_J"], "k": [2, 2] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner2",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [2, "N_J"], "k": [3, 3] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner3",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [2, "N_J"], "k": [4, 4] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner4",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": { "op": "-", "args": ["j", 1] },
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [1, 1], "k": [1, 1] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner1",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [1, 1], "k": [2, 2] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner2",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [1, 1], "k": [3, 3] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner3",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [2, "N_I"], "j": [1, 1], "k": [4, 4] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner4",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": { "op": "-", "args": ["i", 1] },
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [1, 1], "k": [1, 1] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner1",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [1, 1], "k": [2, 2] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner2",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [1, 1], "k": [3, 3] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner3",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["uvel", "vvel", "cxp", "cyp", "cxm", "cym", "dxT", "dyT"],
+            "ranges": { "i": [1, 1], "j": [1, 1], "k": [4, 4] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "strain_shear_corner4",
+              "bindings": {
+                "uvel": "uvel",
+                "vvel": "vvel",
+                "oi": "i",
+                "oj": "j",
+                "wim1": 1,
+                "wjm1": 1,
+                "cxp": { "op": "index", "args": ["cxp", "i", "j"] },
+                "cyp": { "op": "index", "args": ["cyp", "i", "j"] },
+                "cxm": { "op": "index", "args": ["cxm", "i", "j"] },
+                "cym": { "op": "index", "args": ["cym", "i", "j"] },
+                "dxT": { "op": "index", "args": ["dxT", "i", "j"] },
+                "dyT": { "op": "index", "args": ["dyT", "i", "j"] }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
