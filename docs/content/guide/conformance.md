@@ -28,7 +28,8 @@ the binding.
 
 Tools that *read* library files — the validator, the docs generator — parse
 `.esm` JSON structurally and may call official ESS display/pretty-print APIs,
-but never numerically evaluate library math.
+but never numerically evaluate library math. The docs generator prints every
+expression with `earthsci_ast.to_ascii` and has no renderer of its own.
 
 ## The categories
 

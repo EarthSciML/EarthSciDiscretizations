@@ -355,6 +355,7 @@ which owns the Hugo config and layouts; this repo contributes only content. CI
 `docs-bundle` branch and notifies earthsci.dev. To preview locally (Python 3.11+, Hugo extended):
 
 ```bash
+pip install matplotlib "git+https://github.com/EarthSciML/EarthSciAST.git#subdirectory=pkg/earthsci-ast-py"
 python docs/generate_catalog.py                       # generated pages + plots
 git clone https://github.com/EarthSciML/earthsci.dev ../earthsci.dev
 python ../earthsci.dev/tools/bundle.py --repo-root . --out ../earthsci.dev/build/bundles/discretizations

@@ -25,7 +25,9 @@ fixpoint → official runner`.
   tale.
 - `tools/` and `docs/generate_catalog.py` may *structurally* read `.esm` JSON (offsets,
   tags, metadata) and may call official ESS display/pretty-print APIs; they must never
-  numerically evaluate library math.
+  numerically evaluate library math. Every expression the docs display is printed by
+  `earthsci_ast.to_ascii` — no local renderer — so readers can paste it back through
+  `earthsci_ast.parse_expression`.
 
 ## 3. Layering rules
 
