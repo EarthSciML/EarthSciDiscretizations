@@ -22,25 +22,19 @@ committed (.gitignore pins docs/content/grids/, docs/content/regridding/,
 docs/content/reprojection/, docs/static/plots/ — see AGENTS.md "Generated
 files").
 
-Pretty-printing policy (AGENTS.md "single pathway"):
+Expression display policy (AGENTS.md "single pathway"):
   * This script reads .esm JSON structurally and NEVER evaluates library math.
-  * Float constants display at <= 12 significant digits ("%.12g", trailing
-    zeros stripped) in BOTH display paths: that is the official
-    earthsci_ast.display convention (_format_number), and the structural
-    fallback here normalizes to the same so generated pages are byte-identical
-    regardless of which renderer handled an expression. Presentation-layer
-    only — full precision always lives in the .esm sources the pages link.
-  * Math display prefers the OFFICIAL ESS display path
-    (`earthsci_ast.to_unicode`), used in-process when the toolkit is
-    importable (the CI docs job pip-installs it) or through
-    docs/_render_bridge.py in the EarthSciAST toolkit venv when a
-    local checkout is available.
-  * Node types the official renderer does not display usefully — index
-    arithmetic, faq, makearray, apply_expression_template, nested D — are
-    rendered structurally here (compact math-ish text such as
-    "(f[i+1] − 2·f[i] + f[i−1]) / dx²"). That is presentation, not evaluation.
-  * With no official display available at all, everything falls back to the
-    structural renderer and a warning is printed.
+  * Every expression shown on a generated page is printed by the public
+    `earthsci_ast.to_ascii` and nothing else, so the pages show EarthSciAST's
+    ascii surface syntax — the text `earthsci_ast.parse_expression` reads —
+    and a reader can paste any displayed expression back in. There is no
+    local renderer and no fallback: earthsci_ast is a hard requirement (the CI
+    docs job pip-installs it), and an expression `to_ascii` cannot print fails
+    the build. Full precision always lives in the .esm sources the pages link.
+  * Template names and parameter lists are shown as labels next to the
+    printed body; region tables and stencil expansion are gone — a rule's
+    `makearray` body is printed whole, imported stencils appearing as the
+    template applications `name<param=value, ...>` they are.
   * Observed convergence orders are read from committed golden errors.json
     files (the same log-ratio arithmetic as scripts/check_convergence_order.py);
     no numbers are ever recomputed through any non-official pathway.
@@ -57,10 +51,8 @@ import argparse
 import html
 import json
 import math
-import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -75,9 +67,6 @@ REPROJECTION = REPO / "reprojection"
 CONFORMANCE = REPO / "tests" / "conformance"
 
 MINUS = "−"  # −
-DOT = "·"  # ·
-PARTIAL = "∂"  # ∂
-ELEM = "∈"  # ∈
 SUPERSCRIPT = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
 
 warnings: list[str] = []
@@ -93,9 +82,6 @@ def fail(msg: str) -> None:
     errors.append(msg)
     print(f"[error] {msg}")
 
-
-def sup(n) -> str:
-    return str(n).translate(SUPERSCRIPT)
 
 
 def load_json(path: Path):
@@ -175,402 +161,46 @@ _MD_CODE_OR_LINKISH = re.compile(r"(?P<code>`+[^`]*`+)|(?P<linkish>\]\()")
 
 
 # ---------------------------------------------------------------------------
-# Official ESS display path (in-process or via the toolkit venv bridge).
+# Expression display: earthsci_ast.to_ascii, and nothing else.
 # ---------------------------------------------------------------------------
 
 
-class OfficialDisplay:
-    """Best-effort handle on earthsci_ast's to_unicode()."""
+def _load_to_ascii():
+    try:
+        # PUBLIC surface only, from the package namespace. In the Python
+        # binding an `Expr` IS the wire dict, so raw .esm JSON goes in directly.
+        from earthsci_ast import to_ascii  # type: ignore
+    except ImportError as exc:
+        raise SystemExit(
+            "generate_catalog.py: earthsci_ast is required — every expression on the "
+            "generated pages is printed by earthsci_ast.to_ascii. Install it with\n"
+            '  pip install "git+https://github.com/EarthSciML/EarthSciAST.git'
+            '#subdirectory=pkg/earthsci-ast-py"\n'
+            f"({exc})"
+        ) from exc
+    return to_ascii
+
+
+class AsciiPrinter:
+    """Prints displayed expressions with the public `earthsci_ast.to_ascii`."""
 
     def __init__(self) -> None:
-        self.mode: str | None = None
-        self._proc = None
-        self._inproc = None
+        self._to_ascii = _load_to_ascii()
+        self.count = 0
+
+    def __call__(self, node, where: str) -> str:
         try:
-            # PUBLIC surface only (api-surface.json: `to_unicode` is stable in
-            # all five bindings), from the package namespace rather than the
-            # module that defines it. `to_unicode` takes an `Expr`, and in the
-            # Python binding an `Expr` IS the wire dict — so the raw .esm JSON
-            # goes in directly and the private `parse._parse_expression`
-            # wire->typed step this used to import is not needed at all.
-            from earthsci_ast import to_unicode  # type: ignore
-
-            self._inproc = to_unicode
-            self.mode = "in-process"
-            return
-        except Exception:
-            pass
-        self._try_bridge()
-
-    def _try_bridge(self) -> None:
-        ess_root = Path(os.environ.get("ESS_ROOT") or (REPO.parent / "EarthSciAST"))
-        # Upstream renamed `packages/earthsci_ast` to `pkg/earthsci-ast-py`; the
-        # old spelling had gone dead, so the bridge never started and the docs
-        # build silently fell back to the structural renderer whenever
-        # earthsci_ast was not importable in-process. _render_bridge.py's own
-        # docstring already names the current layout.
-        toolkit = ess_root / "pkg" / "earthsci-ast-py"
-        venv_py = toolkit / ".venv" / "bin" / "python"
-        if not venv_py.exists():
-            return
-        env = dict(os.environ)
-        env["PYTHONPATH"] = str(toolkit / "src") + os.pathsep + env.get("PYTHONPATH", "")
-        try:
-            proc = subprocess.Popen(
-                [str(venv_py), str(DOCS / "_render_bridge.py")],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                env=env,
-            )
-            handshake = json.loads(proc.stdout.readline() or "{}")
-            if handshake.get("ok"):
-                self._proc = proc
-                self.mode = f"ess-venv bridge ({venv_py})"
-            else:
-                proc.kill()
-        except Exception:
-            self._proc = None
-
-    @property
-    def available(self) -> bool:
-        return self.mode is not None
-
-    def render(self, expr) -> str | None:
-        if self._inproc is not None:
-            try:
-                return self._inproc(expr)
-            except Exception:
-                return None
-        if self._proc is not None:
-            try:
-                self._proc.stdin.write(json.dumps(expr) + "\n")
-                self._proc.stdin.flush()
-                out = json.loads(self._proc.stdout.readline() or "{}")
-                return out["text"] if out.get("ok") else None
-            except Exception:
-                return None
-        return None
-
-    def close(self) -> None:
-        if self._proc is not None:
-            try:
-                self._proc.stdin.close()
-                self._proc.wait(timeout=5)
-            except Exception:
-                self._proc.kill()
-
-
-# ---------------------------------------------------------------------------
-# Structural unicode renderer (presentation only — no evaluation).
-# ---------------------------------------------------------------------------
-
-# Ops the official display path cannot render usefully for library files
-# (index(f, 2) instead of f[2]; apply_expression_template() losing the name;
-# faq(f) hiding the kernel). These always render structurally.
-STRUCTURAL_ONLY_OPS = {"index", "faq", "makearray", "apply_expression_template"}
-
-
-def official_safe(node) -> bool:
-    """True when the subtree contains no node the official renderer mangles."""
-    if isinstance(node, (int, float, str)) or node is None:
-        return True
-    if isinstance(node, dict):
-        op = node.get("op")
-        if op in STRUCTURAL_ONLY_OPS:
-            return False
-        if op == "D":
-            arg = (node.get("args") or [None])[0]
-            if isinstance(arg, dict) and arg.get("op") == "D":
-                return False  # official prints ∂∂f/∂x/∂x for nested D
-        for key in ("args",):
-            for a in node.get(key) or []:
-                if not official_safe(a):
-                    return False
-        return True
-    return False
-
-
-class MathRenderer:
-    SUM, TERM, UNARY, POW, ATOM = 40, 50, 60, 70, 100
-
-    def __init__(self, official: OfficialDisplay) -> None:
-        self.official = official
-        self.official_uses = 0
-        self.structural_fallback_ops: set[str] = set()
-
-    # -- public entry points ------------------------------------------------
-
-    def render_top(self, node) -> str:
-        """Render a whole expression, preferring the official display path."""
-        if self.official.available and official_safe(node):
-            text = self.official.render(node)
-            if text is not None:
-                self.official_uses += 1
-                return text
-        return self.render(node, 0)
-
-    REDUCTION_SYMBOL = {
-        "sum_product": "Σ",
-        "sum": "Σ",
-        "prod": "Π",
-        "product": "Π",
-        "min_plus": "min",
-        "max_plus": "max",
-        "min": "min",
-        "max": "max",
-    }
-
-    def render_faq(self, node) -> tuple[str, str, list[str]]:
-        """-> (kernel expression, range description, output indices).
-
-        Indices in `ranges` but not in `output_idx` are contracted (reduced by
-        the semiring); they render under the reduction symbol, together with
-        any `filter` condition.
-        """
-        output_idx = list(node.get("output_idx") or [])
-        ranges = node.get("ranges") or {}
-        expr = self.render_top(node.get("expr"))
-        cond = self.render_top(node["filter"]) if node.get("filter") else None
-        out_ranges = {k: v for k, v in ranges.items() if k in output_idx}
-        contracted = {k: v for k, v in ranges.items() if k not in output_idx}
-        if contracted:
-            # A `reduce` key names the contraction directly (min/max/sum/prod);
-            # otherwise the additive part of the semiring does (sum_product -> Σ).
-            reduce_key = node.get("reduce")
-            if reduce_key:
-                sym = self.REDUCTION_SYMBOL.get(reduce_key, reduce_key)
-            else:
-                sym = self.REDUCTION_SYMBOL.get(node.get("semiring", "sum_product"), node.get("semiring", "Σ"))
-            under = self.render_ranges(contracted)
-            if cond:
-                under += f" | {cond}"
-            expr = f"{sym}_{{{under}}} {expr}"
-            cond = None
-        ranges_str = self.render_ranges(out_ranges)
-        if cond:
-            ranges_str += f" where {cond}"
-        # An `output_idx` entry may be an integer LITERAL and not an index name
-        # — a singleton output axis, which `grids/duo/stencils/duo_extend_strip_*`
-        # spells as `[1, "gi", "gj"]`. Every caller joins these into a subscript,
-        # so stringify here rather than at four call sites (they used to raise
-        # `TypeError: sequence item 0: expected str instance, int found`, which
-        # took the whole docs build down). Membership above deliberately keeps
-        # the RAW values: a literal is never a `ranges` key, so it contracts
-        # nothing.
-        return expr, ranges_str, [str(i) for i in output_idx]
-
-    def render_ranges(self, ranges: dict) -> str:
-        parts = []
-        for name, spec in ranges.items():
-            if isinstance(spec, dict) and "from" in spec:
-                of = spec.get("of")
-                suffix = f"({', '.join(of)})" if isinstance(of, list) and of else ""
-                parts.append(f"{name} {ELEM} {spec['from']}{suffix}")
-            elif isinstance(spec, (list, tuple)) and len(spec) == 2:
-                lo, hi = (self.render(b, 0, compact=True) for b in spec)
-                parts.append(f"{name} {ELEM} [{lo}, {hi}]")
-            else:
-                parts.append(f"{name} {ELEM} ?")
-        return ", ".join(parts)
-
-    def render_region(self, region, axes: list[str]) -> tuple[str, str]:
-        """One makearray region -> (label, role) with role interior|face."""
-        parts, face = [], False
-        for k, bounds in enumerate(region):
-            axis = axes[k] if k < len(axes) else f"d{k + 1}"
-            lo, hi = (self.render(b, 0, compact=True) for b in bounds)
-            if lo == hi:
-                parts.append(f"{axis} = {lo}")
-                face = True
-            else:
-                parts.append(f"{axis} {ELEM} [{lo}, {hi}]")
-        return ", ".join(parts), ("boundary face" if face else "interior")
-
-    # -- recursive structural rendering --------------------------------------
-
-    def render(self, node, prec: int, compact: bool = False) -> str:
-        if isinstance(node, bool):
-            return str(node).lower()
-        if isinstance(node, int):
-            return self._number(node, prec)
-        if isinstance(node, float):
-            return self._number(node, prec)
-        if isinstance(node, str):
-            return node
-        if not isinstance(node, dict):
-            return str(node)
-
-        op = node.get("op")
-        args = node.get("args") or []
-
-        if op == "+":
-            return self._sum(args, prec, compact)
-        if op == "-":
-            if len(args) == 1:
-                s = MINUS + self.render(args[0], self.UNARY, compact)
-                return self._wrap(s, self.SUM, prec)
-            left = self.render(args[0], self.SUM, compact)
-            right = self.render(args[1], self.SUM + 2, compact)
-            sep = MINUS if compact else f" {MINUS} "
-            return self._wrap(f"{left}{sep}{right}", self.SUM, prec)
-        if op == "*":
-            return self._product(args, prec, compact)
-        if op == "/":
-            num = self.render(args[0], self.TERM + 1, compact)
-            den = self.render(args[1], self.TERM + 1, compact)
-            joined = f"{num}/{den}" if compact or len(num) + len(den) <= 7 else f"{num} / {den}"
-            return self._wrap(joined, self.TERM, prec)
-        if op == "^":
-            base = self.render(args[0], self.POW + 1, compact)
-            exp_arg = args[1] if len(args) > 1 else None
-            if (
-                isinstance(exp_arg, (int, float))
-                and not isinstance(exp_arg, bool)
-                and float(exp_arg).is_integer()
-            ):
-                return base + sup(int(exp_arg))
-            exponent = self.render(args[1], self.POW + 1, compact) if len(args) > 1 else "?"
-            return self._wrap(f"{base}^{exponent}", self.POW, prec)
-        if op == "index":
-            base = self.render(args[0], self.ATOM, compact)
-            idx = ", ".join(self.render(a, 0, compact=True) for a in args[1:])
-            return f"{base}[{idx}]"
-        if op == "apply_expression_template":
-            name = node.get("name", "?")
-            bindings = node.get("bindings") or {}
-            if not bindings:
-                return name
-            rendered = ", ".join(self.render(v, 0, compact) for v in bindings.values())
-            return f"{name}({rendered})"
-        if op == "faq":
-            expr, ranges, _ = self.render_faq(node)
-            return f"[{expr} for {ranges}]"
-        if op == "makearray":
-            lines = []
-            axes = [f"d{k + 1}" for k in range(len((node.get("regions") or [[]])[0]))]
-            for label, role, value in self.render_makearray(node, axes):
-                lines.append(f"{label} ({role}): {value}")
-            return "makearray{ " + "; ".join(lines) + " }"
-        if op == "D":
-            return self._derivative(node, prec, compact)
-        if op in ("<", ">", "<=", ">=", "==", "!="):
-            pretty_op = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}.get(op, op)
-            left = self.render(args[0], 31, compact)
-            right = self.render(args[1], 31, compact)
-            return self._wrap(f"{left} {pretty_op} {right}", 30, prec)
-
-        # Unknown op: try the official display path for pure-math subtrees
-        # (cos, exp, ...), else generic call syntax (recorded as a fallback).
-        if self.official.available and official_safe(node):
-            text = self.official.render(node)
-            if text is not None:
-                self.official_uses += 1
-                return text
-        self.structural_fallback_ops.add(str(op))
-        extra = "".join(
-            f", {k}: {node[k]}" for k in ("wrt", "dim") if k in node
-        )
-        rendered = ", ".join(self.render(a, 0, compact) for a in args)
-        return f"{op}({rendered}{extra})"
-
-    def render_makearray(self, node, axes: list[str]):
-        """-> [(region label, role, rendered value), ...] in declaration order."""
-        out = []
-        regions = node.get("regions") or []
-        values = node.get("values") or []
-        for region, value in zip(regions, values):
-            label, role = self.render_region(region, axes)
-            if isinstance(value, dict) and value.get("op") == "faq":
-                expr, ranges, _ = self.render_faq(value)
-                out.append((label, role, f"{expr}   for {ranges}"))
-            else:
-                out.append((label, role, self.render_top(value)))
-        return out
-
-    # -- helpers --------------------------------------------------------------
-
-    def _wrap(self, s: str, node_prec: int, prec: int) -> str:
-        return f"({s})" if node_prec < prec else s
-
-    def _number(self, value, prec: int) -> str:
-        if isinstance(value, float) and value.is_integer():
-            value = int(value)
-        if isinstance(value, float):
-            # Float display convention: at most 12 significant digits, matching
-            # the official earthsci_ast.display path (display.py
-            # _format_number: f"{num:.12g}" for regular-magnitude floats), so
-            # official-rendered and structurally-rendered pages agree.
-            # Presentation only — the underlying .esm bytes are untouched.
-            if 1e-4 <= abs(value) < 1e5:
-                text = f"{value:.12g}"
-                if "." in text:
-                    text = text.rstrip("0").rstrip(".")
-            else:
-                text = f"{value:.12g}"
-        else:
-            text = str(value)
-        if text.startswith("-"):
-            text = MINUS + text[1:]
-            if prec > self.TERM:
-                return f"({text})"
+            text = self._to_ascii(node)
+        except Exception as exc:  # reported, and fails the build
+            fail(f"{where}: earthsci_ast.to_ascii failed: {exc}")
+            return "?"
+        self.count += 1
         return text
 
-    def _negated(self, node):
-        """Return a node equal to -node when the sign is syntactically evident."""
-        if isinstance(node, (int, float)) and not isinstance(node, bool) and node < 0:
-            return -node
-        if isinstance(node, dict):
-            if node.get("op") == "-" and len(node.get("args") or []) == 1:
-                return node["args"][0]
-            if node.get("op") == "*":
-                args = node.get("args") or []
-                if args and isinstance(args[0], (int, float)) and not isinstance(args[0], bool) and args[0] < 0:
-                    first = -args[0]
-                    rest = ([first] if first != 1 or len(args) == 1 else []) + list(args[1:])
-                    return rest[0] if len(rest) == 1 else {"op": "*", "args": rest}
-        return None
 
-    def _sum(self, args, prec: int, compact: bool) -> str:
-        if not args:
-            return "0"
-        text = self.render(args[0], self.SUM + 1, compact)
-        for a in args[1:]:
-            neg = self._negated(a)
-            if neg is not None:
-                sep = MINUS if compact else f" {MINUS} "
-                text += sep + self.render(neg, self.SUM + 2, compact)
-            else:
-                text += ("+" if compact else " + ") + self.render(a, self.SUM + 1, compact)
-        return self._wrap(text, self.SUM, prec)
-
-    def _product(self, args, prec: int, compact: bool) -> str:
-        if not args:
-            return "1"
-        if len(args) > 1 and all(a == args[0] for a in args[1:]):
-            base = self.render(args[0], self.POW + 1, compact)
-            return base + sup(len(args))
-        prefix = ""
-        if isinstance(args[0], (int, float)) and not isinstance(args[0], bool) and args[0] < 0:
-            prefix = MINUS
-            first = -args[0]
-            args = ([first] if first != 1 or len(args) == 1 else []) + list(args[1:])
-        # Every factor at TERM+1 so embedded divisions/sums parenthesize:
-        # (a/b)·c, not the ambiguous a/b·c.
-        parts = [self.render(a, self.TERM + 1, compact) for a in args]
-        return self._wrap(prefix + DOT.join(parts), self.TERM, prec)
-
-    def _derivative(self, node, prec: int, compact: bool) -> str:
-        # Collect the chain of nested D nodes with a common wrt.
-        order, inner, wrt = 0, node, node.get("wrt")
-        while isinstance(inner, dict) and inner.get("op") == "D" and inner.get("wrt") == wrt:
-            order += 1
-            inner = (inner.get("args") or [None])[0]
-        arg = self.render(inner, self.ATOM, compact)
-        if order == 1:
-            return f"{PARTIAL}{arg}/{PARTIAL}{wrt}"
-        return f"{PARTIAL}{sup(order)}{arg}/{PARTIAL}{wrt}{sup(order)}"
+def code_span(text: str) -> str:
+    """Inline Markdown code span outside a table (newlines folded)."""
+    return "`" + text.replace("\n", " ") + "`"
 
 
 # ---------------------------------------------------------------------------
@@ -861,7 +491,7 @@ def references_md(metadata: dict) -> list[str]:
     return out
 
 
-def convergence_section(case: dict, renderer: MathRenderer, plots_root: Path) -> list[str]:
+def convergence_section(case: dict, plots_root: Path) -> list[str]:
     manifest = case["manifest"]
     name = case["case"]
     out = [f"#### Convergence — case [`{name}`]({tree(case['dir'])})", ""]
@@ -919,8 +549,7 @@ def convergence_section(case: dict, renderer: MathRenderer, plots_root: Path) ->
 def rule_section(
     rule_path: Path,
     doc: dict,
-    stencil_templates: dict,
-    renderer: MathRenderer,
+    printer: AsciiPrinter,
     conformance_cases,
     problem_cache,
     plots_root: Path,
@@ -933,10 +562,6 @@ def rule_section(
     name, template = entry
 
     axes_tag = tag_value(tags, "axes:")
-    # `axes:none` is the rank-0 form (a full reduction): no output axes to label.
-    axes = axes_tag.split(",") if axes_tag and axes_tag != "none" else []
-    if not axes and axes_tag != "none":
-        warn(f"{rel(rule_path)}: no axes: tag — using generic axis labels")
 
     out = [f"### `{name}`", ""]
     out.append(
@@ -958,9 +583,9 @@ def rule_section(
     # Match pattern.
     match = template.get("match")
     if match is not None:
-        pretty = renderer.render_top(match)
+        pretty = printer(match, f"{rel(rule_path)} match")
         priority_note = f" at priority {template['priority']}" if "priority" in template else ""
-        out.append(f"**Rewrites** `{md_cell(pretty)}`{priority_note} — match pattern:")
+        out.append(f"**Rewrites** {code_span(pretty)}{priority_note} — match pattern:")
         out.append("")
         out.append("```json")
         out.append(json.dumps(match, ensure_ascii=False))
@@ -993,29 +618,21 @@ def rule_section(
         )
         out.append("")
 
-    # Discretization: the makearray region table (interior vs boundary faces).
+    # Discretization: the whole body, printed by earthsci_ast.to_ascii.
     body = template.get("body")
-    if isinstance(body, dict) and body.get("op") == "makearray":
-        out.append(
-            "**Discretization** — one `makearray` tiling the output axes; boundary "
-            "conditions live in the face regions of this same rule (esm-spec §9.6.8; "
-            "later regions overwrite earlier, §4.3.2):"
-        )
+    if body is not None:
+        if isinstance(body, dict) and body.get("op") == "makearray":
+            out.append(
+                "**Discretization** — one `makearray` tiling the output axes; boundary "
+                "conditions live in the face regions of this same rule (esm-spec §9.6.8; "
+                "later regions overwrite earlier, §4.3.2). Imported stencils appear as "
+                "template applications `name<param=value, ...>`, defined in the "
+                "Stencils section of this page:"
+            )
+        else:
+            out.append("**Definition:**")
         out.append("")
-        out.append("| Region | Treatment | Value |")
-        out.append("|---|---|---|")
-        regions = body.get("regions") or []
-        values = body.get("values") or []
-        for region, value in zip(regions, values):
-            label, role = renderer.render_region(region, axes)
-            cell = render_region_value(value, stencil_templates, renderer)
-            role_html = f'<span class="region-role {"face" if "face" in role else "interior"}">{role}</span>'
-            out.append(f"| `{md_cell(label)}` | {role_html} | {md_cell(cell)} |")
-        out.append("")
-    elif body is not None:
-        out.append("**Definition:**")
-        out.append("")
-        out.append(math_block(renderer.render_top(body)))
+        out.append(math_block(printer(body, f"{rel(rule_path)} body")))
         out.append("")
 
     description = metadata.get("description")
@@ -1042,32 +659,19 @@ def rule_section(
 
     for case in hits:
         if case["category"] == "convergence":
-            out += convergence_section(case, renderer, plots_root)
+            out += convergence_section(case, plots_root)
 
     return out
 
 
-def render_region_value(value, stencil_templates: dict, renderer: MathRenderer) -> str:
-    """Pretty cell for a makearray region value; expands imported stencils."""
-    if isinstance(value, dict) and value.get("op") == "apply_expression_template":
-        name = value.get("name")
-        applied = renderer.render(value, 0)
-        stencil = stencil_templates.get(name)
-        if stencil is not None:
-            body = stencil.get("body")
-            if isinstance(body, dict) and body.get("op") == "faq":
-                expr, ranges, idx = renderer.render_faq(body)
-                idx_s = ",".join(idx)
-                return f"`{applied}[{idx_s}] = {expr}`   for `{ranges}`"
-            return f"`{applied} = {renderer.render_top(body)}`"
-        return f"`{applied}`"
-    if isinstance(value, dict) and value.get("op") == "faq":
-        expr, ranges, _ = renderer.render_faq(value)
-        return f"`{expr}`   for `{ranges}`"
-    return f"`{renderer.render_top(value)}`"
+def params_line(params) -> str:
+    """Label line naming a template's parameters (shown beside its printed body)."""
+    if not params:
+        return "No parameters."
+    return "Parameters: " + ", ".join(code_span(str(p)) for p in params)
 
 
-def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> list[str]:
+def stencil_section(stencil_path: Path, doc: dict, printer: AsciiPrinter) -> list[str]:
     metadata = doc.get("metadata", {})
     tags = metadata.get("tags") or []
     entry = sole_template(doc, stencil_path)
@@ -1088,16 +692,12 @@ def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> li
     out.append("")
     out.append(f"Source: [`{rel(stencil_path)}`]({blob(stencil_path)})")
     out.append("")
-    body = template.get("body")
-    params = template.get("params") or []
-    call = f"{name}({', '.join(params)})" if params else name
-    if isinstance(body, dict) and body.get("op") == "faq":
-        expr, ranges, idx = renderer.render_faq(body)
-        idx_s = ",".join(idx)
-        out.append(math_block(f"{call}[{idx_s}] = {expr}    for {ranges}"))
-    elif body is not None:
-        out.append(math_block(f"{call} = {renderer.render_top(body)}"))
+    out.append(params_line(template.get("params")))
     out.append("")
+    body = template.get("body")
+    if body is not None:
+        out.append(math_block(printer(body, f"{rel(stencil_path)} body")))
+        out.append("")
     description = metadata.get("description")
     if description:
         out.append(md_prose(description))
@@ -1108,7 +708,7 @@ def stencil_section(stencil_path: Path, doc: dict, renderer: MathRenderer) -> li
 
 def grid_page(
     grid_dir: Path,
-    renderer: MathRenderer,
+    printer: AsciiPrinter,
     conformance_cases,
     problem_cache,
     plots_root: Path,
@@ -1126,12 +726,6 @@ def grid_page(
     rule_docs = [(p, load_json(p)) for p in esm_files(grid_dir / "rules")]
     stencil_docs = [(p, d) for p, d in stencil_docs if d is not None]
     rule_docs = [(p, d) for p, d in rule_docs if d is not None]
-
-    # Templates defined by this grid's stencils, for in-place expansion on rules.
-    stencil_templates = {}
-    for path, sdoc in stencil_docs:
-        for tname, tmpl in (sdoc.get("expression_templates") or {}).items():
-            stencil_templates[tname] = tmpl
 
     all_tags = list(tags)
     ops, bcs = set(), set()
@@ -1244,16 +838,19 @@ def grid_page(
 
     templates = doc.get("expression_templates") or {}
     if templates:
-        lines += ["## Geometry templates", "", "| Template | Definition | Description |", "|---|---|---|"]
+        lines += [
+            "## Geometry templates",
+            "",
+            "| Template | Parameters | Definition | Description |",
+            "|---|---|---|---|",
+        ]
         for tname, tmpl in templates.items():
-            body = tmpl.get("body")
-            if isinstance(body, dict) and body.get("op") == "faq":
-                expr, ranges, idx = renderer.render_faq(body)
-                idx_s = ",".join(idx)
-                definition = f"`{tname}[{idx_s}] = {expr}` for `{ranges}`"
-            else:
-                definition = f"`{tname} = {renderer.render_top(body)}`"
-            lines.append(f"| `{tname}` | {md_cell(definition)} | {md_cell(md_prose(tmpl.get('description', '')))} |")
+            params = ", ".join(f"`{p}`" for p in tmpl.get("params") or []) or "—"
+            definition = printer(tmpl.get("body"), f"{rel(grid_path)} template {tname}")
+            lines.append(
+                f"| `{tname}` | {params} | `{md_cell(definition)}` "
+                f"| {md_cell(md_prose(tmpl.get('description', '')))} |"
+            )
         lines.append("")
 
     if stencil_docs:
@@ -1265,7 +862,7 @@ def grid_page(
             "",
         ]
         for path, sdoc in stencil_docs:
-            lines += stencil_section(path, sdoc, renderer)
+            lines += stencil_section(path, sdoc, printer)
 
     lines += ["## Rules", ""]
     if rule_docs:
@@ -1277,7 +874,7 @@ def grid_page(
         ]
         for path, rdoc in rule_docs:
             lines += rule_section(
-                path, rdoc, stencil_templates, renderer, conformance_cases, problem_cache, plots_root
+                path, rdoc, printer, conformance_cases, problem_cache, plots_root
             )
     else:
         lines += ["No rules published for this grid yet.", ""]
@@ -1285,7 +882,7 @@ def grid_page(
     return "\n".join(lines) + "\n"
 
 
-def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: MathRenderer) -> str:
+def cross_grid_section_page(directory: Path, title: str, kind: str, printer: AsciiPrinter) -> str:
     """Section page (_index.md) for regridding/ or reprojection/."""
     tag_prefix = {"regrid": "method:", "reproject": "crs:"}[kind]
     tag_label = {"regrid": "method", "reproject": "crs"}[kind]
@@ -1375,26 +972,17 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, renderer: Ma
             lines.append(f"<details><summary>Templates ({len(templates)})</summary>")
             lines.append("")
             for tname, tmpl in templates.items():
-                params = tmpl.get("params") or []
-                call = f"{tname}({', '.join(params)})" if params else tname
-                lines.append(f"**`{call}`**")
+                lines.append(f"**`{tname}`**")
                 if tmpl.get("description"):
                     lines.append("")
                     lines.append(md_prose(tmpl["description"]))
                 lines.append("")
-                body = tmpl.get("body")
-                if isinstance(body, dict) and body.get("op") == "makearray":
-                    axes = [f"d{k + 1}" for k in range(len((body.get("regions") or [[]])[0]))]
-                    rows = renderer.render_makearray(body, axes)
-                    text = "\n".join(f"{label}  ({role}):\n    {value}" for label, role, value in rows)
-                    lines.append(math_block(text))
-                elif isinstance(body, dict) and body.get("op") == "faq":
-                    expr, ranges, idx = renderer.render_faq(body)
-                    idx_s = ",".join(idx)
-                    lines.append(math_block(f"{call}[{idx_s}] = {expr}    for {ranges}"))
-                elif body is not None:
-                    lines.append(math_block(f"{call} = {renderer.render_top(body)}"))
+                lines.append(params_line(tmpl.get("params")))
                 lines.append("")
+                body = tmpl.get("body")
+                if body is not None:
+                    lines.append(math_block(printer(body, f"{rel(path)} template {tname}")))
+                    lines.append("")
             lines.append("</details>")
             lines.append("")
         lines += references_md(metadata)
@@ -1413,15 +1001,7 @@ def clean_dir(path: Path) -> None:
 
 
 def generate(content_root: Path, static_root: Path) -> None:
-    official = OfficialDisplay()
-    if official.available:
-        print(f"[info] official ESS display path: {official.mode}")
-    else:
-        warn(
-            "official ESS display path unavailable (earthsci_ast not importable and no "
-            "ESS toolkit venv found) — all math rendered structurally"
-        )
-    renderer = MathRenderer(official)
+    printer = AsciiPrinter()
 
     conformance_cases = index_conformance()
     problem_cache: dict = {}
@@ -1451,7 +1031,7 @@ def generate(content_root: Path, static_root: Path) -> None:
             if not (grid_dir / "grid.esm").exists():
                 warn(f"{rel(grid_dir)}: no grid.esm — skipped (possibly still landing)")
                 continue
-            page = grid_page(grid_dir, renderer, conformance_cases, problem_cache, plots_root)
+            page = grid_page(grid_dir, printer, conformance_cases, problem_cache, plots_root)
             if page is None:
                 continue
             out_dir = grids_out / grid_dir.name
@@ -1468,19 +1048,11 @@ def generate(content_root: Path, static_root: Path) -> None:
         out_dir = content_root / directory.name
         clean_dir(out_dir)
         (out_dir / "_index.md").write_text(
-            cross_grid_section_page(directory, title, kind, renderer), encoding="utf-8"
+            cross_grid_section_page(directory, title, kind, printer), encoding="utf-8"
         )
-
-    official.close()
 
     print(f"[info] generated {n_grids} grid page(s) into {grids_out}")
-    if renderer.official_uses:
-        print(f"[info] official display path rendered {renderer.official_uses} expression(s)")
-    if renderer.structural_fallback_ops:
-        print(
-            "[info] ops rendered with generic structural fallback (no official rendering): "
-            + ", ".join(sorted(renderer.structural_fallback_ops))
-        )
+    print(f"[info] earthsci_ast.to_ascii printed {printer.count} expression(s)")
 
 
 def main() -> int:
