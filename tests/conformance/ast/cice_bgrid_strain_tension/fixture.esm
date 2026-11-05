@@ -1,0 +1,147 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "cice_bgrid_strain_tension_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cice_bgrid/rules/strain_rates_tension.esm at N_I = N_J = 4, NCAT = 2: a minimal model importing grids/cice_bgrid/grid.esm and the tension rule, declaring the free-name strain-rate fields (uvel/vvel on the B-grid U points) and metric coefficients (cxp/cyp/cxm/cym/dxT/dyT on the T cells) the rule body binds by name, and one target equation D(uvel,x) - D(vvel,y) with shape [i,j,corner]. Forces expansion of the 16-region makearray (interior, the four i/j strips, and the four corners with their wim1/wjm1 := 1 closures) of the four corner combinations (ice_dyn_shared.F90:2158-2165). Pins the byte-identical post-lowering AST.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cice_bgrid",
+      "rule:strain_rates_tension"
+    ]
+  },
+  "models": {
+    "CiceBgridStrainTensionAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cice_bgrid/grid.esm",
+          "bindings": {
+            "N_I": 4,
+            "N_J": 4,
+            "NCAT": 2
+          }
+        },
+        {
+          "ref": "../../../../grids/cice_bgrid/rules/strain_rates_tension.esm"
+        }
+      ],
+      "variables": {
+        "uvel": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "x velocity at the U points (B-grid NE corners of the T cells)."
+        },
+        "vvel": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "y velocity at the U points."
+        },
+        "cxp": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "strain-rate metric coefficient cxp = 1.5*HTN(i,j) - 0.5*HTN(i,j-1) (ice_dyn_shared.F90:435)."
+        },
+        "cyp": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "strain-rate metric coefficient cyp = 1.5*HTE(i,j) - 0.5*HTE(i-1,j) (ice_dyn_shared.F90:434)."
+        },
+        "cxm": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "strain-rate metric coefficient cxm = -(1.5*HTN(i,j-1) - 0.5*HTN(i,j)) (ice_dyn_shared.F90:437)."
+        },
+        "cym": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "strain-rate metric coefficient cym = -(1.5*HTE(i-1,j) - 0.5*HTE(i,j)) (ice_dyn_shared.F90:436)."
+        },
+        "dxT": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "E-W dimension of the T cell through the middle (ice_grid.F90:1342)."
+        },
+        "dyT": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "N-S dimension of the T cell through the middle (ice_grid.F90:1380)."
+        },
+        "tension": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": [
+            "i",
+            "j",
+            "corner"
+          ],
+          "description": "Tension strain rate at the four cell corners, the rewrite target D(uvel,x) - D(vvel,y)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": "tension",
+          "rhs": {
+            "op": "-",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "uvel"
+                ],
+                "wrt": "x"
+              },
+              {
+                "op": "D",
+                "args": [
+                  "vvel"
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

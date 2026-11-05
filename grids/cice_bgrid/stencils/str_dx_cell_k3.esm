@@ -1,0 +1,96 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "str_dx_cell_k3",
+    "description": "Scalar atom of the CICE stress-combination algebra: str(i,j,3), the SE-corner contribution to the x divergence of the internal stress at the U point U(i,j) (stress, ice_dyn_evp.F90:1738-1739): str3 = -strp_tmp - strm_tmp + str12ew + dxhy*(-csigpse + csigmse) + dyhx*csig12se, with strp_tmp/strm_tmp = p25*dyT*(p333*ssigps + p166*ssigpn) (F90:1734-1735), str12ew = p5*dxT*(p333*ssig12e + p166*ssig12w) (F90:1715), csigpse/csigmse = p111*p4 + p055*(p1+p3) + p027*p2 (F90:1699, 1704) and csig12se = p222*s4 + p111*(s1+s3) + p055*s2 (F90:1712). Params and structure as on str_dx_cell_k1; the rule binds the p/m/s values of the SE cell (i,j+1) around the U point.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:cice_bgrid", "grid:cice_bgrid", "op:stress"],
+    "references": [
+      {
+        "citation": "Hunke, E. C., et al. (2023). CICE v6.3.22 documentation and user's guide (LA-UR-23-31851), the stress() corner combinations."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./str_csig.esm" },
+    { "ref": "./str_pairsum_lin.esm" }
+  ],
+  "expression_templates": {
+    "str_dx_cell_k3": {
+      "params": ["p1", "p2", "p3", "p4", "m1", "m2", "m3", "m4", "s1", "s2", "s3", "s4", "dxT", "dyT", "dxhy", "dyhx"],
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "str_pairsum_lin",
+                    "bindings": { "a1": "p3", "a2": "p4", "a3": "p1", "a4": "p2", "c": 0.25, "metric": "dyT" }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "str_pairsum_lin",
+                    "bindings": { "a1": "m3", "a2": "m4", "a3": "m1", "a4": "m2", "c": 0.25, "metric": "dyT" }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "str_pairsum_lin",
+            "bindings": { "a1": "s1", "a2": "s4", "a3": "s2", "a4": "s3", "c": 0.5, "metric": "dxT" }
+          },
+          {
+            "op": "*",
+            "args": [
+              "dxhy",
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "op": "apply_expression_template",
+                        "args": [],
+                        "name": "str_csig",
+                        "bindings": { "a1": "p4", "a2": "p1", "a3": "p2", "a4": "p3", "c1": { "op": "/", "args": [1, 9] }, "c2": { "op": "/", "args": [1, 18] }, "c3": { "op": "/", "args": [1, 36] } }
+                      }
+                    ]
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "str_csig",
+                    "bindings": { "a1": "m4", "a2": "m1", "a3": "m2", "a4": "m3", "c1": { "op": "/", "args": [1, 9] }, "c2": { "op": "/", "args": [1, 18] }, "c3": { "op": "/", "args": [1, 36] } }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              "dyhx",
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "str_csig",
+                "bindings": { "a1": "s4", "a2": "s1", "a3": "s2", "a4": "s3", "c1": { "op": "/", "args": [2, 9] }, "c2": { "op": "/", "args": [1, 9] }, "c3": { "op": "/", "args": [1, 18] } }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

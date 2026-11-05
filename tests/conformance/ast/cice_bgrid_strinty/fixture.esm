@@ -1,0 +1,149 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "cice_bgrid_strinty_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/cice_bgrid/rules/stress_divergence_strinty.esm at N_I = N_J = 4, NCAT = 2: a minimal model importing grids/cice_bgrid/grid.esm and the strinty rule, declaring the free-name stress fields (sigma11/sigma12/sigma22 on the four cell corners) and the str combination metrics (dxT/dyT/dxhy/dyhx on the T cells, uarear on the U points) the rule body binds by name, and one target equation D(sigma12,x) + D(sigma22,y) with shape [i,j]. Forces expansion of the 4-region makearray (interior, the i = N_I strip, the j = N_J strip, and the (N_I,N_J) corner with the str2/3/4 cell offsets clamped to N_I/N_J) of the four str_dy_cell_k atoms (ice_dyn_evp.F90:1727-1765, strinty = ice_dyn_shared.F90:960-961), including the uarear factor. Pins the byte-identical post-lowering AST.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:cice_bgrid",
+      "rule:stress_divergence_strinty"
+    ]
+  },
+  "models": {
+    "CiceBgridStrintyAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/cice_bgrid/grid.esm",
+          "bindings": {
+            "N_I": 4,
+            "N_J": 4,
+            "NCAT": 2
+          }
+        },
+        {
+          "ref": "../../../../grids/cice_bgrid/rules/stress_divergence_strinty.esm"
+        }
+      ],
+      "variables": {
+        "sigma11": {
+          "type": "parameter",
+          "units": "N/m",
+          "shape": [
+            "i",
+            "j",
+            "corner"
+          ],
+          "default": 0.0,
+          "description": "Normal stress sigma11 = (stressp + stressm)/2 at the four cell corners."
+        },
+        "sigma12": {
+          "type": "parameter",
+          "units": "N/m",
+          "shape": [
+            "i",
+            "j",
+            "corner"
+          ],
+          "default": 0.0,
+          "description": "Shear stress sigma12 = stress12 at the four cell corners."
+        },
+        "sigma22": {
+          "type": "parameter",
+          "units": "N/m",
+          "shape": [
+            "i",
+            "j",
+            "corner"
+          ],
+          "default": 0.0,
+          "description": "Normal stress sigma22 = (stressp - stressm)/2 at the four cell corners."
+        },
+        "dxT": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "E-W dimension of the T cell through the middle (ice_grid.F90:1342)."
+        },
+        "dyT": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "N-S dimension of the T cell through the middle (ice_grid.F90:1380)."
+        },
+        "dxhy": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "Metric dxhy = 0.5*(HTE(i,j) - HTE(i-1,j)) of the str combinations (ice_dyn_shared.F90:413-414)."
+        },
+        "dyhx": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "Metric dyhx = 0.5*(HTN(i,j) - HTN(i,j-1)) of the str combinations (ice_dyn_shared.F90:415-416)."
+        },
+        "uarear": {
+          "type": "parameter",
+          "units": "1/m^2",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "default": 0.0,
+          "description": "Inverse U-cell area (ice_grid.F90:703), the strinty normalization factor."
+        },
+        "strinty": {
+          "type": "unknown",
+          "units": "N/m^2",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "description": "y divergence of the internal stress at the U points, the rewrite target D(sigma12,x) + D(sigma22,y)."
+        }
+      },
+      "equations": [
+        {
+          "lhs": "strinty",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  "sigma12"
+                ],
+                "wrt": "x"
+              },
+              {
+                "op": "D",
+                "args": [
+                  "sigma22"
+                ],
+                "wrt": "y"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "transport_flux_e",
+    "description": "Scalar atom of the B-grid east-edge advective mass flux of the conservative transport: F_e = HTE * ((uS + uN)/2) * ((cL + cR)/2), the centered corner-average reconstruction of the CICE transport edge algebra. The east edge of T cell (i,j) runs between the two corner U points U(i,j-1) (south endpoint, velocity uS) and U(i,j) (north endpoint, velocity uN); the edge velocity is the average of the two corner velocities times the edge length HTE(i,j), exactly the Fortran's edge-area reconstruction edgearea_e(i,j) = (uvel(i,j) + uvel(i,j-1))*p5*HTE(i,j)*dt (ice_transport_remap.F90:658-661, the linear branch), and cL/cR are the tracer values in the two cells sharing the edge (cell (i,j) and cell (i+1,j)), averaged to the face. The rule transport_flux_divergence binds the six values from the surrounding cells and U points and differences the four edge fluxes around the cell; the incremental-remap scheme of the traced Fortran run computes its mflxe by departure-triangle integrals over the limited linear reconstruction (transport_integrals, ice_transport_remap.F90:3188-3472) rather than by this face average, so the rule implements the centered flux-divergence discretization of D(c*u,x) + D(c*v,y) (the mass update mm -= (mflxe(i,j) - mflxe(i-1,j) + mflxn(i,j) - mflxn(i,j-1))*tarear, F90:3586-3590), documented in the stage-2 transport pins. Pure combination algebra: no faq, no index sets of its own.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:cice_bgrid", "grid:cice_bgrid", "op:advection"],
+    "references": [
+      {
+        "citation": "Hunke, E. C., et al. (2023). CICE v6.3.22 documentation and user's guide (LA-UR-23-31851), the horizontal transport edge reconstruction."
+      }
+    ]
+  },
+  "expression_templates": {
+    "transport_flux_e": {
+      "params": ["cL", "cR", "uS", "uN", "HTE"],
+      "body": {
+        "op": "*",
+        "args": [
+          "HTE",
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [{ "op": "+", "args": ["uS", "uN"] }, 2] },
+              { "op": "/", "args": [{ "op": "+", "args": ["cL", "cR"] }, 2] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "cice_bgrid",
+    "description": "Two-dimensional B-grid of the CICE sea-ice model (Hunke et al., Los Alamos Sea Ice Model), the horizontal mesh of the momentum/stress/transport components: `i` (x) and `j` (y) are the cell axes of N_I x N_J T cells (the grid cells that carry the ice state), `corner` is the 4-member axis of the cell-corner (staggered U-point) stress values (corner 1 = NE = the U point U(i,j) at the cell's north-east corner, 2 = NW, 3 = SW, 4 = SE), and `ncat` is the thickness-category axis of NCAT categories. N_I, N_J, NCAT are the esm-spec 9.7 metaparameters, bound at an import edge or the loader API; the consumer (EqESM stage2 cice_dynamics/cice_transport) binds N_I = 3, N_J = 5, NCAT = 5 for the traced 3x5 subdomain of the stage-1 dump. FREE-NAME CONTRACT: a consuming model supplies the real-valued horizontal geometry as its own variables with the names dxT, dyT (T-cell E-W and N-S dimensions), dxhy, dyhx (the 1/2 east-edge-length and north-edge-length differences), cxp, cyp, cxm, cym (the strain-rate metric coefficients), HTE, HTN (the east- and north-edge lengths of the T cells), uarear (1/U-cell area), and tarear (1/T-cell area); the templates below derive each metric from the minimal set (HTE, HTN, dxT, dyT, tarea) with the Fortran's exact algebra, and a consumer MAY either bind the metrics directly from its own state (the stage-2 pin tests override them from the dump) or derive them through these templates. METRIC DERIVATIONS (ice_dyn_shared.F90 init_dyn_shared): dxhy(i,j) = 0.5*(HTE(i,j) - HTE(i-1,j)) (F90:413-414), dyhx(i,j) = 0.5*(HTN(i,j) - HTN(i,j-1)) (F90:415-416), cyp(i,j) = 1.5*HTE(i,j) - 0.5*HTE(i-1,j) (F90:434), cxp(i,j) = 1.5*HTN(i,j) - 0.5*HTN(i,j-1) (F90:435), cym(i,j) = -(1.5*HTE(i-1,j) - 0.5*HTE(i,j)) (F90:436), cxm(i,j) = -(1.5*HTN(i,j-1) - 0.5*HTN(i,j)) (F90:437); and (ice_grid.F90 primary_grid_lengths_HTN/HTE): dxT(i,j) = 0.5*(HTN(i,j) + HTN(i,j-1)) (F90:1342), dyT(i,j) = 0.5*(HTE(i,j) + HTE(i-1,j)) (F90:1380), tarea = dxT*dyT (F90:682) with tarear = 1/tarea (F90:698), and uarea(i,j) = 0.25*(tarea(i,j) + tarea(i+1,j) + tarea(i,j+1) + tarea(i+1,j+1)) (F90:1643-1645) with uarear = 1/uarea (F90:703). The derivations read the west (i-1) and south (j-1) neighbors of the T cell; the Fortran halos HTE/HTN before deriving (ice_HaloUpdate with fillValue = 1.0, F90:418-428), and a consumer whose HTE/HTN carry a halo-copy closure at the i = 1 / j = 1 boundary reproduces the halo values exactly (the stage-2 traced subdomain supplies real values on all four sides of the pin cells, so the closures do not enter the pin tests). The B-grid spatial rules that lower the D operators of the momentum/stress/transport equations live in rules/ (strain_rates_divu/tension/shear for D(uvel,x)+D(vvel,y) etc., stress_divergence_strintx/strinty for D(sigma11,x)+D(sigma12,y) etc., transport_flux_divergence for D(c*u,x)+D(c*v,y)) with their scalar atoms in stencils/, following the latlon3d flux-rule precedent of the velocity inside the compound operator.",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:cice_bgrid", "ndim:2", "stagger:b", "axis:i", "axis:j"],
+    "references": [
+      {
+        "citation": "Hunke, E. C., Allard, R., Bailey, D. A., Blain, P., Craig, A., Dupont, F., ... & Roberts, A. F. (2023). CICE-Consortium Icepack v1.2.4 and CICE v6.3.22: documentation and user's guide. Los Alamos National Laboratory (LA-UR-23-31851)."
+      }
+    ]
+  },
+  "metaparameters": {
+    "N_I": { "type": "integer", "default": 1, "description": "Number of T cells along the B-grid x axis (cell-based axis), [-]." },
+    "N_J": { "type": "integer", "default": 1, "description": "Number of T cells along the B-grid y axis (cell-based axis), [-]." },
+    "NCAT": { "type": "integer", "default": 5, "description": "Number of thickness categories of the transported ice state (namelist ncat = 5 default), [-]." }
+  },
+  "index_sets": {
+    "i": { "kind": "interval", "size": "N_I" },
+    "j": { "kind": "interval", "size": "N_J" },
+    "corner": { "kind": "interval", "size": 4 },
+    "ncat": { "kind": "interval", "size": "NCAT" }
+  },
+  "expression_templates": {
+    "cice_cyp": {
+      "params": ["HTE"],
+      "description": "Strain-rate metric coefficient cyp of the NE corner combination (ice_dyn_shared.F90:434): cyp(i,j) = 1.5*HTE(i,j) - 0.5*HTE(i-1,j), gathered over the [i,j] cell axes (aggregation indices gi/gj for inlining hygiene). A consuming model applies this to its HTE to derive its [i,j] cyp, or supplies cyp directly under the free-name contract.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTE"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            { "op": "*", "args": [1.5, { "op": "index", "args": ["HTE", "gi", "gj"] }] },
+            { "op": "*", "args": [0.5, { "op": "index", "args": ["HTE", { "op": "-", "args": ["gi", 1] }, "gj"] }] }
+          ]
+        }
+      }
+    },
+    "cice_cym": {
+      "params": ["HTE"],
+      "description": "Strain-rate metric coefficient cym of the NW/SW corner combinations (ice_dyn_shared.F90:436): cym(i,j) = -(1.5*HTE(i-1,j) - 0.5*HTE(i,j)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTE"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "*", "args": [1.5, { "op": "index", "args": ["HTE", { "op": "-", "args": ["gi", 1] }, "gj"] }] },
+                { "op": "*", "args": [0.5, { "op": "index", "args": ["HTE", "gi", "gj"] }] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_cxp": {
+      "params": ["HTN"],
+      "description": "Strain-rate metric coefficient cxp of the NE/NW corner combinations (ice_dyn_shared.F90:435): cxp(i,j) = 1.5*HTN(i,j) - 0.5*HTN(i,j-1), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTN"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            { "op": "*", "args": [1.5, { "op": "index", "args": ["HTN", "gi", "gj"] }] },
+            { "op": "*", "args": [0.5, { "op": "index", "args": ["HTN", "gi", { "op": "-", "args": ["gj", 1] }] }] }
+          ]
+        }
+      }
+    },
+    "cice_cxm": {
+      "params": ["HTN"],
+      "description": "Strain-rate metric coefficient cxm of the SW/SE corner combinations (ice_dyn_shared.F90:437): cxm(i,j) = -(1.5*HTN(i,j-1) - 0.5*HTN(i,j)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTN"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "-",
+          "args": [
+            {
+              "op": "-",
+              "args": [
+                { "op": "*", "args": [1.5, { "op": "index", "args": ["HTN", "gi", { "op": "-", "args": ["gj", 1] }] }] },
+                { "op": "*", "args": [0.5, { "op": "index", "args": ["HTN", "gi", "gj"] }] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_dxhy": {
+      "params": ["HTE"],
+      "description": "Half the east-edge-length difference of the str combinations (ice_dyn_shared.F90:413-414): dxhy(i,j) = 0.5*(HTE(i,j) - HTE(i-1,j)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTE"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.5,
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["HTE", "gi", "gj"] },
+                { "op": "index", "args": ["HTE", { "op": "-", "args": ["gi", 1] }, "gj"] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_dyhx": {
+      "params": ["HTN"],
+      "description": "Half the north-edge-length difference of the str combinations (ice_dyn_shared.F90:415-416): dyhx(i,j) = 0.5*(HTN(i,j) - HTN(i,j-1)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTN"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.5,
+            {
+              "op": "-",
+              "args": [
+                { "op": "index", "args": ["HTN", "gi", "gj"] },
+                { "op": "index", "args": ["HTN", "gi", { "op": "-", "args": ["gj", 1] }] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_dxT": {
+      "params": ["HTN"],
+      "description": "E-W dimension of the T cell (ice_grid.F90:1342): dxT(i,j) = 0.5*(HTN(i,j) + HTN(i,j-1)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTN"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.5,
+            {
+              "op": "+",
+              "args": [
+                { "op": "index", "args": ["HTN", "gi", "gj"] },
+                { "op": "index", "args": ["HTN", "gi", { "op": "-", "args": ["gj", 1] }] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_dyT": {
+      "params": ["HTE"],
+      "description": "N-S dimension of the T cell (ice_grid.F90:1380): dyT(i,j) = 0.5*(HTE(i,j) + HTE(i-1,j)), gathered over the [i,j] cell axes.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["HTE"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.5,
+            {
+              "op": "+",
+              "args": [
+                { "op": "index", "args": ["HTE", "gi", "gj"] },
+                { "op": "index", "args": ["HTE", { "op": "-", "args": ["gi", 1] }, "gj"] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cice_tarea": {
+      "params": ["dxT", "dyT"],
+      "description": "T-cell area (ice_grid.F90:682): tarea(i,j) = dxT(i,j)*dyT(i,j), gathered over the [i,j] cell axes; tarear = 1/tarea (F90:698) is the reciprocal the consumer derives from it.",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["dxT", "dyT"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            { "op": "index", "args": ["dxT", "gi", "gj"] },
+            { "op": "index", "args": ["dyT", "gi", "gj"] }
+          ]
+        }
+      }
+    },
+    "cice_uarea": {
+      "params": ["tarea"],
+      "description": "U-cell (corner cell) area from the four surrounding T-cell areas (ice_grid.F90:1643-1645): uarea(i,j) = 0.25*(tarea(i,j) + tarea(i+1,j) + tarea(i,j+1) + tarea(i+1,j+1)), gathered over the [i,j] U-point axes; uarear = 1/uarea (F90:703) is the reciprocal the consumer derives from it. This is the standard-B-grid form the Fortran uses away from the tripole fold (the special tripole form of F90:1641-1642 is out of scope for the traced subdomain).",
+      "body": {
+        "op": "faq",
+        "output_idx": ["gi", "gj"],
+        "args": ["tarea"],
+        "ranges": { "gi": { "from": "i" }, "gj": { "from": "j" } },
+        "expr": {
+          "op": "*",
+          "args": [
+            0.25,
+            {
+              "op": "+",
+              "args": [
+                { "op": "index", "args": ["tarea", "gi", "gj"] },
+                { "op": "index", "args": ["tarea", { "op": "+", "args": ["gi", 1] }, "gj"] },
+                { "op": "index", "args": ["tarea", "gi", { "op": "+", "args": ["gj", 1] }] },
+                { "op": "index", "args": ["tarea", { "op": "+", "args": ["gi", 1] }, { "op": "+", "args": ["gj", 1] }] }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

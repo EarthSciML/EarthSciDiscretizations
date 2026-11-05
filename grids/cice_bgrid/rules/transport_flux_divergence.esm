@@ -1,0 +1,3091 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "transport_flux_divergence",
+    "description": "B-grid lowering rule of the conservative flux-form tracer divergence rewrite target D(c*u, x) + D(c*v, y) for a per-category tracer c on the T cells advected by the B-grid corner velocities uvel/vvel on the U points: the rule matches the compound two-term sum with params c/u/v as wildcards and where-shape constraints (c: [i,j,ncat], u: [i,j], v: [i,j], esm-spec 9.6.1) and emits the [i,j,ncat] makearray of the conservative cell divergence div = (F_e(i,j,k) - F_e(i-1,j,k) + F_n(i,j,k) - F_n(i,j-1,k)) / tarea(i,j) (the Fortran mass update mm = mm - (mflxe(i,j) - mflxe(i-1,j) + mflxn(i,j) - mflxn(i,j-1))*tarear, ice_transport_remap.F90:3586-3590), where the east/north edge fluxes are the centered corner-average reconstructions F_e = HTE*((uS + uN)/2)*((cL + cR)/2) and F_n = HTN*((vW + vE)/2)*((cS + cN)/2) of the scalar atoms transport_flux_e/n: the edge runs between the two corner U points and its velocity is the average of the two corner velocities times the edge length, exactly the Fortran's edge-area reconstruction (edgearea_e/edgearea_n, ice_transport_remap.F90:658-666, the linear branch), and cL/cR (cS/cN) are the tracer values in the two cells sharing the edge, averaged to the face. The makearray tiles nine i/j position classes (interior [2..N_I-1]x[2..N_J-1], the four strips i = 1, i = N_I, j = 1, j = N_J, and the four corners) with halo-copy closures: every neighbor index that leaves the domain (c, u/v, HTE/HTN at i-1, i+1, j-1, j+1) is bound to the nearest interior value, reproducing the Fortran's ice_HaloUpdate of the transported fields and edge lengths. NOTE: the traced Fortran run integrates the incremental-remap transport (departure-region integrals over the limited linear reconstruction, transport_integrals, ice_transport_remap.F90:3188-3472), whose per-cell flux differs from this centered face average by O(C) slope corrections; the scheme difference is documented with the stage-2 transport pins.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:cice_bgrid",
+      "grid:cice_bgrid",
+      "op:D",
+      "axes:i,j,ncat",
+      "order:1",
+      "form:flux",
+      "bc:halo-copy",
+      "stagger:b",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Hunke, E. C., et al. (2023). CICE v6.3.22 documentation and user's guide (LA-UR-23-31851), the horizontal transport edge reconstruction."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/transport_flux_e.esm"
+    },
+    {
+      "ref": "../stencils/transport_flux_n.esm"
+    }
+  ],
+  "expression_templates": {
+    "transport_flux_divergence": {
+      "params": [
+        "c",
+        "u",
+        "v"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "+",
+        "args": [
+          {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  "u"
+                ]
+              }
+            ],
+            "wrt": "x"
+          },
+          {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "c",
+                  "v"
+                ]
+              }
+            ],
+            "wrt": "y"
+          }
+        ]
+      },
+      "where": {
+        "c": {
+          "shape": [
+            "i",
+            "j",
+            "ncat"
+          ]
+        },
+        "u": {
+          "shape": [
+            "i",
+            "j"
+          ]
+        },
+        "v": {
+          "shape": [
+            "i",
+            "j"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_I",
+                  1
+                ]
+              }
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_J",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_J",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              "N_I",
+              "N_I"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_J",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_I",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "N_I",
+                  1
+                ]
+              }
+            ],
+            [
+              "N_J",
+              "N_J"
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              "N_J",
+              "N_J"
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              "N_I",
+              "N_I"
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ],
+          [
+            [
+              "N_I",
+              "N_I"
+            ],
+            [
+              "N_J",
+              "N_J"
+            ],
+            [
+              1,
+              "NCAT"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_I",
+                    1
+                  ]
+                }
+              ],
+              "j": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_J",
+                    1
+                  ]
+                }
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_J",
+                    1
+                  ]
+                }
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                1,
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                1,
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            1,
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                1,
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                "N_I",
+                "N_I"
+              ],
+              "j": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_J",
+                    1
+                  ]
+                }
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "N_I",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_I",
+                    1
+                  ]
+                }
+              ],
+              "j": [
+                1,
+                1
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                1,
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                1
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                1
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                2,
+                {
+                  "op": "-",
+                  "args": [
+                    "N_I",
+                    1
+                  ]
+                }
+              ],
+              "j": [
+                "N_J",
+                "N_J"
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "N_J",
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                1,
+                1
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                1,
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                1
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                1,
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            1,
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                1,
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                1,
+                                1
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                1
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                1
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                1,
+                1
+              ],
+              "j": [
+                "N_J",
+                "N_J"
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            {
+                              "op": "+",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                1,
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                1,
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                1,
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "N_J",
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            1,
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                1,
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                "N_I",
+                "N_I"
+              ],
+              "j": [
+                1,
+                1
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "N_I",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            1
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            {
+                              "op": "+",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            },
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                1,
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                1
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                1
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "i",
+              "j",
+              "k"
+            ],
+            "args": [
+              "c",
+              "u",
+              "v",
+              "HTE",
+              "HTN",
+              "tarea"
+            ],
+            "ranges": {
+              "i": [
+                "N_I",
+                "N_I"
+              ],
+              "j": [
+                "N_J",
+                "N_J"
+              ],
+              "k": [
+                1,
+                "NCAT"
+              ]
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_e",
+                      "bindings": {
+                        "cL": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cR": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "N_I",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "uS": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            {
+                              "op": "-",
+                              "args": [
+                                "j",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        "uN": {
+                          "op": "index",
+                          "args": [
+                            "u",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTE": {
+                          "op": "index",
+                          "args": [
+                            "HTE",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_e",
+                          "bindings": {
+                            "cL": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "cR": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "uS": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "uN": {
+                              "op": "index",
+                              "args": [
+                                "u",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            },
+                            "HTE": {
+                              "op": "index",
+                              "args": [
+                                "HTE",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                "j"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "transport_flux_n",
+                      "bindings": {
+                        "cS": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "j",
+                            "k"
+                          ]
+                        },
+                        "cN": {
+                          "op": "index",
+                          "args": [
+                            "c",
+                            "i",
+                            "N_J",
+                            "k"
+                          ]
+                        },
+                        "vW": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            {
+                              "op": "-",
+                              "args": [
+                                "i",
+                                1
+                              ]
+                            },
+                            "j"
+                          ]
+                        },
+                        "vE": {
+                          "op": "index",
+                          "args": [
+                            "v",
+                            "i",
+                            "j"
+                          ]
+                        },
+                        "HTN": {
+                          "op": "index",
+                          "args": [
+                            "HTN",
+                            "i",
+                            "j"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "apply_expression_template",
+                          "args": [],
+                          "name": "transport_flux_n",
+                          "bindings": {
+                            "cS": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                },
+                                "k"
+                              ]
+                            },
+                            "cN": {
+                              "op": "index",
+                              "args": [
+                                "c",
+                                "i",
+                                "j",
+                                "k"
+                              ]
+                            },
+                            "vW": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "i",
+                                    1
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "vE": {
+                              "op": "index",
+                              "args": [
+                                "v",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "HTN": {
+                              "op": "index",
+                              "args": [
+                                "HTN",
+                                "i",
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    "j",
+                                    1
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "tarea",
+                    "i",
+                    "j"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
