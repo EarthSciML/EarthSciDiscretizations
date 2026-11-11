@@ -1,0 +1,127 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_value_bc",
+    "description": "Conservative finite-volume variable-coefficient vertical diffusion d/dz(K du/dz) on column_nonuniform_1d with the coefficient K on the INTERFACES and consumer-supplied VALUES of u on the two domain faces (the Dirichlet-boundary analogue of rules/varcoeff_face_laplacian_lev_flux_bc, which takes prescribed fluxes). The consumer writes the compound D( {op:*, args:[K, D(u, wrt: lev)]}, wrt: lev ) -- coefficient on the LEFT of the product (matching is structural and non-commutative) -- and the rule fires on the whole compound at priority 10 (esm-spec 9.6.3 outermost-first compound precedence) before any plain-D rule can lower the inner derivative; it is match-scoped with where {u: {shape: [lev]}, K: {shape: [lev_nodes]}} (esm-spec 9.6.1), so it fires only when the state is a bare layer field and the coefficient a bare interface field of THIS grid. Every flux in the operator is the ONE interface flux G[n] = K[n] (u[n]-u[n-1])/(zc[n]-zc[n-1]) of stencils/interface_flux_K_lev, and the two domain-face fluxes close the same law against the boundary VALUES: G[1] = K[1] (u[1]-u_sfc)/(zc[1]-z_sfc) at the surface face and G[NLEV+1] = K[NLEV+1] (u_top-u[NLEV])/(z_top-zc[NLEV]) at the top face (stencils/interface_flux_K_lev_value_bc, the same template a consumer applies directly to read a face flux, e.g. a basal conductive flux -G[NLEV+1]). Interior [2, NLEV-1]: the imported stencil, (G[k+1] - G[k]) / dz[k]; boundary layers: L u[1] = ( G[2] - G[1] ) / dz[1] and L u[NLEV] = ( G[NLEV+1] - G[NLEV] ) / dz[NLEV]. Free-name contract (resolved in the consuming model): the grid geometry observeds zc, dz (grids/column_nonuniform_1d/grid.esm), the domain-face coordinates z_sfc = ze[1], z_top = ze[NLEV+1] (shared with the integral rules), and the boundary values u_sfc (at the surface face) and u_top (at the top face) -- the names are POSITIONAL (ze[1] and ze[NLEV+1], ze increasing with the lev index), so a model whose vertical coordinate runs top-down (e.g. the CISM sigma column, with the ice surface at ze[1] = z_sfc = 0 and the bed at ze[NLEV+1] = z_top) satisfies the contract directly without reversing its arrays, the surface value entering the face at ze[1] and the bed value the face at ze[NLEV+1]. Because every interior flux enters the column sum once with each sign, the operator telescopes exactly: sum_k dz[k] L u[k] = G[NLEV+1] - G[1], the difference of the two boundary-value fluxes, so the column integral of u changes only through the two domain faces. The scheme is the node-centered conservative finite-volume diffusion of LeVeque section 2.13 on a stretched column -- exactly the dups stencil of the CISM temperature solve (glissade_therm.F90:151-163, 1410-1418 glissade_temperature_matrix_elements) with a constant per-column K -- second-order in L2 on a smoothly stretched column (supraconvergent); reduces to the classical three-point form on a uniform column with uniform K.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:dirichlet",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002, libglissade/glissade_therm.F90 glissade_temperature_matrix_elements (F90:1324-1507) and the dups grid quantities (F90:151-163)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/varcoeff_face_laplacian_lev_interior.esm" },
+    { "ref": "../stencils/interface_flux_K_lev.esm" },
+    { "ref": "../stencils/interface_flux_K_lev_value_bc.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_value_bc": {
+      "params": ["u", "K"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": { "shape": ["lev"] },
+        "K": { "shape": ["lev_nodes"] }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NLEV", 1] }]],
+          [[1, 1]],
+          [["NLEV", "NLEV"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_laplacian_lev_interior",
+            "bindings": { "u": "u", "K": "K" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev",
+                    "bindings": { "u": "u", "K": "K", "n": 2 }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev_value_bc",
+                    "bindings": {
+                      "u_bc": "u_sfc",
+                      "u_adj": { "op": "index", "args": ["u", 1] },
+                      "K_face": { "op": "index", "args": ["K", 1] },
+                      "z_bc": "z_sfc",
+                      "z_adj": { "op": "index", "args": ["zc", 1] }
+                    }
+                  }
+                ]
+              },
+              { "op": "index", "args": ["dz", 1] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev_value_bc",
+                    "bindings": {
+                      "u_bc": "u_top",
+                      "u_adj": { "op": "index", "args": ["u", "NLEV"] },
+                      "K_face": { "op": "index", "args": ["K", { "op": "+", "args": ["NLEV", 1] }] },
+                      "z_bc": "z_top",
+                      "z_adj": { "op": "index", "args": ["zc", "NLEV"] }
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev",
+                    "bindings": { "u": "u", "K": "K", "n": "NLEV" }
+                  }
+                ]
+              },
+              { "op": "index", "args": ["dz", "NLEV"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
