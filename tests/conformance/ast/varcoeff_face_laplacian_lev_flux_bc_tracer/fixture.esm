@@ -1,0 +1,184 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_flux_bc_tracer_ast_fixture",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d_tracer/rules/varcoeff_face_laplacian_lev_flux_bc_tracer: the varcoeff_face_laplacian_lev_flux_bc fixture with the state given a trailing tracer axis. A minimal consuming model binds NLEV=8 and NTRACER=3 at the rule's import edge and writes du/dt = D(K*D(u, wrt: lev), wrt: lev) with u shaped [lev, tracer], the coefficient K on the interfaces (shape [lev_nodes], shared by every tracer) and the per-tracer prescribed fluxes kdudz_bot / kdudz_top as [tracer] parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev, tracer], K: [lev_nodes]) -- and the 1-D rule must NOT, its where-constraint requiring u: [lev] -- and lower to the rule's three-region makearray over [lev, tracer]: interior [2,7] x [1,3] holding the imported per-tracer interior stencil, layer 1 and layer 8 holding the per-tracer prescribed-flux faces as faq's over the tracer axis with an explicit singleton lev output index; every flux is a reference to the one interface_flux_K_lev_tracer template. Geometry follows the column grid's edge-array contract exactly as in the 1-D fixture: ze from mesh/mms_column.esm (NLEV=8), zc and dz by column_cell_center / column_cell_thickness from grids/column_nonuniform_1d/grid.esm. The golden pins the byte-identical post-lowering AST across bindings.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:column_nonuniform_1d_tracer",
+      "rule:varcoeff_face_laplacian_lev_flux_bc_tracer"
+    ]
+  },
+  "models": {
+    "VarcoeffFaceLaplacianLevTracerAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/column_nonuniform_1d_tracer/rules/varcoeff_face_laplacian_lev_flux_bc_tracer.esm",
+          "bindings": {
+            "NLEV": 8,
+            "NTRACER": 3
+          }
+        },
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/mesh/mms_column.esm",
+          "bindings": {
+            "NLEV": 8
+          }
+        },
+        {
+          "ref": "../../../../grids/column_nonuniform_1d/grid.esm",
+          "only": [
+            "column_cell_center",
+            "column_cell_thickness"
+          ],
+          "bindings": {
+            "NLEV": 8
+          }
+        }
+      ],
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": [
+            "lev",
+            "tracer"
+          ],
+          "description": "Three tracers over the lev index set."
+        },
+        "K": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface diffusivity 1 + ze."
+        },
+        "kdudz_bot": {
+          "type": "parameter",
+          "units": "K m/s",
+          "default": 0.0,
+          "description": "Per-tracer prescribed K du/dz on the surface interface (the rule's free name).",
+          "shape": [
+            "tracer"
+          ]
+        },
+        "kdudz_top": {
+          "type": "parameter",
+          "units": "K m/s",
+          "default": 0.0,
+          "description": "Per-tracer prescribed K du/dz on the top interface (the rule's free name).",
+          "shape": [
+            "tracer"
+          ]
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev_nodes"
+          ],
+          "description": "Interface coordinates of the quadratic-stretch column at NLEV=8, ze[kn] = 0.6 ((kn-1)/8) + 0.4 ((kn-1)/8)^2 for kn=1..9: the grid's shared MMS test column mms_column_ze (mesh/mms_column.esm), bound at NLEV=8 at its import edge."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer centres, grid-derived by applying column_cell_center to ze."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": [
+            "lev"
+          ],
+          "description": "Layer thicknesses, grid-derived by applying column_cell_thickness to ze."
+        }
+      },
+      "equations": [
+        {
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "u"
+            ]
+          },
+          "rhs": 0.0
+        },
+        {
+          "lhs": {
+            "op": "D",
+            "args": [
+              "u"
+            ],
+            "wrt": "t"
+          },
+          "rhs": {
+            "op": "D",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "K",
+                  {
+                    "op": "D",
+                    "args": [
+                      "u"
+                    ],
+                    "wrt": "lev"
+                  }
+                ]
+              }
+            ],
+            "wrt": "lev"
+          }
+        },
+        {
+          "lhs": "K",
+          "rhs": {
+            "op": "+",
+            "args": [
+              1.0,
+              "ze"
+            ]
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_column_ze",
+            "bindings": {}
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_center",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        },
+        {
+          "lhs": "dz",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "column_cell_thickness",
+            "bindings": {
+              "ze": "ze"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
