@@ -1,0 +1,94 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_grad_x",
+    "description": "The zonal C-grid kinetic-energy-gradient rewrite target D(KE, wrt: x) on the mom6_cgrid: lowers the spatial derivative of the cell kinetic energy KE [i,j,k] to the east-face zonal gradient KEx(i,j,k) = (KE(i+1,j,k) - KE(i,j,k)) * IdxCu(i,j) (the KE_ARAKAWA gradient term -d(KE)/dx of the Coriolis + momentum-advection acceleration, MOM_CoriolisAdv.F90 gradKE :1249-1397 with the face difference (KE(i+1,j) - KE(i,j))*G%IdxCu(I,j) of the KEx loop :1300-1320; IdxCu(i,j) = 1/dxCu is the east-face 1/length so the gradient lives on the east faces). SOLID-WALL BOUNDARY: the east face at the domain edge (i = N_I) is a wall whose normal kinetic-energy gradient is identically zero, so the i = N_I region is the EXPLICIT free-slip wall value KEx(N_I,j,k) = 0 — NOT the clamped difference (KE(N_I) - KE(N_I))*IdxCu = 0 of a naive halo closure (the clamped form happens to evaluate to zero here, but it hides the wall as if the cell duplicated; this rule states the wall explicitly). The rule is a GROUND per-variable selector (esm-spec 9.6.1): KE is NOT a parameter, so the match arg \"KE\" is a literal that fires only on the derivative of the declared variable named KE, with priority 20 to outrank the wildcard mom6_cgrid_div_x (priority 10) when both are imported. KE and IdxCu are free names resolved in the consuming model (the free-name contract of grids/mom6_cgrid/grid.esm); the body's KE is the matched operand.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:grad",
+      "order:1",
+      "bc:wall",
+      "axes:i,j,k",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc gradKE :1249-1397, KEx at :1300-1320; the east-face convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_grad_x": {
+      "params": [],
+      "priority": 20,
+      "match": {
+        "op": "D",
+        "args": ["KE"],
+        "wrt": "x"
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["KE", "IdxCu"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": ["IdxCu", "i", "j"]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["KE", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["KE", "i", "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          0.0
+        ]
+      }
+    }
+  }
+}

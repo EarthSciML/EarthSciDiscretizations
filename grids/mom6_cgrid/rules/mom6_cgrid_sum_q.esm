@@ -1,0 +1,240 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_sum_q",
+    "description": "The q-point corner sum on the mom6_cgrid: the sum of the two east-face fields and the two north-face fields around a q-point, sum_q(i,j,k) = (x_u(i,j,k) + x_u(i,j+1,k)) + (x_v(i,j,k) + x_v(i+1,j,k)), where x_u [i,j,k] carries the east-face field (x_u(i,j) the east face of cell (i,j), x_u(i,j+1) the east face of the north neighbor) and x_v [i,j,k] the north-face field (x_v(i,j) the north face of cell (i,j), x_v(i+1,j) the north face of the east neighbor). This is the MOM6 q-cell layer-volume law hArea_q = (hArea_u(i,j) + hArea_u(i,j+1)) + (hArea_v(i,j) + hArea_v(i+1,j)) of MOM_CoriolisAdv.F90 CorAdCalc :348-357 (the q-point (i,j) sits at the NE corner of cell (i,j)). SOLID-WALL BOUNDARIES: the east domain edge (i = N_I) and the north domain edge (j = N_J) carry a zero-gradient halo, so the wall regions MIRROR the out-of-bounds neighbor onto the edge cell itself: the i = N_I region reads x_v(N_I,j,k) in place of x_v(N_I+1,j,k) and the j = N_J region reads x_u(i,N_J,k) in place of x_u(i,N_J+1,k) (the NE corner mirrors both) — NOT clamped reads of nonexistent cells. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_sum_q(x_u, x_v); both params must be declared [i,j,k] fields (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:sum",
+      "order:0",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc hArea_q :348-357; the q-point convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_sum_q": {
+      "params": ["x_u", "x_v"],
+      "match": {
+        "op": "mom6_cgrid_sum_q",
+        "args": ["x_u", "x_v"]
+      },
+      "where": {
+        "x_u": {
+          "shape": ["i", "j", "k"]
+        },
+        "x_v": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": ["N_J", "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": ["N_J", "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_u", "i", "j", "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["x_v", "i", "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,750 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_bound_coriolis_u",
+    "description": "The bound_coriolis east-face Coriolis + momentum-advection acceleration of the mom6_cgrid: CAu(i,j,k) = clamp(pvf_u(i,j,k), min(fv1..fv4), max(fv1..fv4)) - KEx(i,j,k), the MOM_CoriolisAdv.F90 CorAdCalc bound_Coriolis law (the fv1..fv4 bounds and the min/max clamp at :897-925, then the -d(KE)/dx term of the KEx loop at :930-940): fv1 = av(i,j,k)*v(i+1,j,k), fv2 = av(i,j,k)*v(i,j,k), fv3 = av(i,j-1,k)*v(i+1,j-1,k), fv4 = av(i,j-1,k)*v(i,j-1,k), the av*v products at the four q-points around the east face (av the absolute vorticity at the q-points, v the north-face velocities of the two cells on each side of the face), with the raw potential-vorticity flux pvf_u (the sibling mom6_cgrid_pvf_u rule) clamped to the local bound and the zonal KE gradient KEx subtracted (clamp(x, lo, hi) = min(max(x, lo), hi) is exact — max/min select without rounding, so the Fortran's min-then-max sequence produces identical bits). SOLID-WALL BOUNDARIES: the east domain edge (i = N_I) and the south domain edge (j = 1) carry a zero-gradient halo, so the wall regions MIRROR the out-of-bounds neighbor onto the edge cell itself: the i = N_I region reads v(N_I,j,k) in place of v(N_I+1,j,k) and the j = 1 region reads av(i,1,k) in place of av(i,0,k) (the SE corner mirrors both) — NOT clamped reads of nonexistent cells. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_bound_coriolis_u(pvf_u, av, v, KEx); all four params must be declared [i,j,k] fields (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:clamp",
+      "order:0",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc bound_Coriolis fv1..fv4 :897-925 and the -d(KE)/dx term :930-940; the face conventions of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_bound_coriolis_u": {
+      "params": ["pvf_u", "av", "v", "KEx"],
+      "match": {
+        "op": "mom6_cgrid_bound_coriolis_u",
+        "args": ["pvf_u", "av", "v", "KEx"]
+      },
+      "where": {
+        "pvf_u": {
+          "shape": ["i", "j", "k"]
+        },
+        "av": {
+          "shape": ["i", "j", "k"]
+        },
+        "v": {
+          "shape": ["i", "j", "k"]
+        },
+        "KEx": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [2, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [2, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, 1],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, 1],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["pvf_u", "av", "v", "KEx"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [2, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": ["pvf_u", "i", "j", "k"]
+                        },
+                        {
+                          "op": "min",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", { "op": "+", "args": ["i", 1] }, { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "max",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "max",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", { "op": "+", "args": ["i", 1] }, { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": ["KEx", "i", "j", "k"]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["pvf_u", "av", "v", "KEx"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [2, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": ["pvf_u", "i", "j", "k"]
+                        },
+                        {
+                          "op": "min",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", "i", "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "max",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", "i", "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "max",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": ["KEx", "i", "j", "k"]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["pvf_u", "av", "v", "KEx"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, 1],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": ["pvf_u", "i", "j", "k"]
+                        },
+                        {
+                          "op": "min",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "max",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "max",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": ["KEx", "i", "j", "k"]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["pvf_u", "av", "v", "KEx"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [1, 1],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "max",
+                      "args": [
+                        {
+                          "op": "index",
+                          "args": ["pvf_u", "i", "j", "k"]
+                        },
+                        {
+                          "op": "min",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", "i", "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "max",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["av", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["v", "i", "j", "k"]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "max",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["av", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["v", "i", "j", "k"]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "max",
+                                  "args": [
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        {
+                                          "op": "index",
+                                          "args": ["av", "i", "j", "k"]
+                                        },
+                                        {
+                                          "op": "index",
+                                          "args": ["v", "i", "j", "k"]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": ["KEx", "i", "j", "k"]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

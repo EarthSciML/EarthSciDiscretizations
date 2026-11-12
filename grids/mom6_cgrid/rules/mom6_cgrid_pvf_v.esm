@@ -1,0 +1,412 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_pvf_v",
+    "description": "The raw north-face potential-vorticity flux of the SADOURNY75_ENERGY Coriolis scheme on the mom6_cgrid: pvf_v(i,j,k) = -0.25 * ((q(i-1,j,k)*(uh(i-1,j,k) + uh(i-1,j+1,k))) + (q(i,j,k)*(uh(i,j,k) + uh(i,j+1,k)))) * IdyCv(i,j), the CAv argument of MOM_CoriolisAdv.F90 CorAdCalc before the bound_coriolis clamp and the -KEy addition (the SADOURNY75_ENERGY loop at :945-955, with q(i,j) the layer potential vorticity at the q-points, uh the east-face layer volume fluxes of the two cells straddling the north face — uh(i-1,j)/uh(i-1,j+1) the east faces of the west/south-west neighbors, uh(i,j)/uh(i,j+1) of the cell and its north neighbor — and IdyCv(i,j) = 1/dyCv the north-face 1/length). SOLID-WALL BOUNDARIES: the west domain edge (i = 1) and the north domain edge (j = N_J) carry a zero-gradient halo, so the wall regions MIRROR the out-of-bounds neighbor onto the edge cell itself: the i = 1 region reads q(1,j,k)/uh(1,j,k) in place of q(0,j,k)/uh(0,j,k) and the j = N_J region reads uh(i,N_J,k) in place of uh(i,N_J+1,k) (the NW corner mirrors both) — NOT clamped reads of nonexistent cells. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_pvf_v(q, uh, IdyCv); q and uh must be declared [i,j,k] fields and IdyCv a free [i,j] name resolved in the consuming model (esm-spec 9.6.1 where clause; the free-name contract of grids/mom6_cgrid/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:pvf",
+      "order:0",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc SADOURNY75_ENERGY CAv at :945-955; the face conventions of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_pvf_v": {
+      "params": ["q", "uh", "IdyCv"],
+      "match": {
+        "op": "mom6_cgrid_pvf_v",
+        "args": ["q", "uh", "IdyCv"]
+      },
+      "where": {
+        "q": {
+          "shape": ["i", "j", "k"]
+        },
+        "uh": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [2, "N_I"],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            [1, 1],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            [2, "N_I"],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            [1, 1],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": {
+              "i": [2, "N_I"],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "const",
+                      "args": [],
+                      "value": 0.25,
+                      "units": "1"
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", { "op": "-", "args": ["i", 1] }, "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", { "op": "-", "args": ["i", 1] }, "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", { "op": "-", "args": ["i", 1] }, { "op": "+", "args": ["j", 1] }, "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": ["IdyCv", "i", "j"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": {
+              "i": [1, 1],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "const",
+                      "args": [],
+                      "value": 0.25,
+                      "units": "1"
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": ["IdyCv", "i", "j"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": {
+              "i": [2, "N_I"],
+              "j": ["N_J", "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "const",
+                      "args": [],
+                      "value": 0.25,
+                      "units": "1"
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", { "op": "-", "args": ["i", 1] }, "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", { "op": "-", "args": ["i", 1] }, "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", { "op": "-", "args": ["i", 1] }, "j", "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": ["IdyCv", "i", "j"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": {
+              "i": [1, 1],
+              "j": ["N_J", "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "const",
+                      "args": [],
+                      "value": 0.25,
+                      "units": "1"
+                    },
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "*",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["q", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    },
+                                    {
+                                      "op": "index",
+                                      "args": ["uh", "i", "j", "k"]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "index",
+                          "args": ["IdyCv", "i", "j"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

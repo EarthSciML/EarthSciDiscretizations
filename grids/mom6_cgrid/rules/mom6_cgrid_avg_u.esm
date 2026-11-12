@@ -1,0 +1,111 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_avg_u",
+    "description": "The zonal cell-to-face average on the mom6_cgrid: the arithmetic mean of a cell field X [i,j,k] across an east face, avg_u(i,j,k) = 0.5*(X(i,j,k) + X(i+1,j,k)) (the MOM6 u-cell average, e.g. the hArea_u = 0.5*(Area_h(i,j)*h(i,j) + Area_h(i+1,j)*h(i+1,j)) of MOM_CoriolisAdv.F90 CorAdCalc and the h_c + h_e face-thickness sums of MOM_PressureForce_FV.F90). SOLID-WALL BOUNDARY: the east face at the domain edge (i = N_I) is a wall with a zero-gradient halo (no normal variation of the cell fields through the wall), so the i = N_I region is the EXPLICIT mirror wall avg_u(N_I,j,k) = 0.5*(X(N_I,j,k) + X(N_I,j,k)) = X(N_I,j,k) — the mirrored neighbor is the cell itself, NOT a clamped read of a nonexistent cell. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_avg_u(X); X is a param whose shape must be declared [i,j,k] (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:avg",
+      "order:0",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc hArea_u/hArea_v :348-357; the east-face convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_avg_u": {
+      "params": ["X"],
+      "match": {
+        "op": "mom6_cgrid_avg_u",
+        "args": ["X"]
+      },
+      "where": {
+        "X": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["X"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.5,
+                  "units": "1"
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["X", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["X", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["X"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [1, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "index",
+              "args": ["X", "N_I", "j", "k"]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

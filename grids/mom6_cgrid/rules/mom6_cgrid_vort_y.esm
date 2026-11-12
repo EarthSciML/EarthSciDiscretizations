@@ -1,0 +1,103 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_vort_y",
+    "description": "The meridional C-grid vorticity rewrite target D(u, wrt: y) on the mom6_cgrid, the y mirror of mom6_cgrid_vort_x: lowers the spatial derivative of the zonal face velocity field u [i,j,k] (the east-face velocity of each T cell) to the q-point meridional derivative of the zonal volume transport dudy(i,j,k) = u(i,j+1,k)*dxCu(i,j+1) - u(i,j,k)*dxCu(i,j) (the forward difference dudy(I,J) = u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j) of MOM_CoriolisAdv.F90:325-326, with u(i,j+1) the east-face velocity of the north neighbor cell, i.e. the u at the north side of the q-point, and dxCu(i,j+1) its face length). SOLID-WALL BOUNDARY: the q-point column at the north domain edge (j = N_J) has no north neighbor cell, and with free-slip walls the vorticity derivative is identically zero there, so the j = N_J region is the EXPLICIT free-slip wall value dudy(i,N_J,k) = 0 (the y mirror of the vort_x explicit-wall statement). The rule is a GROUND per-variable selector (esm-spec 9.6.1): u is NOT a parameter, so the match arg \"u\" is a literal that fires only on the derivative of the declared variable named u, with priority 20 to outrank the wildcard mom6_cgrid_div_y (priority 10) when both are imported; the body is a pure forward difference of the face transport (PV_ADV_CENTERED momentum PV advection). u and dxCu are free names resolved in the consuming model (the free-name contract of grids/mom6_cgrid/grid.esm); the body's u is the matched operand.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:vort",
+      "order:1",
+      "bc:wall",
+      "axes:i,j,k",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc, dudy at :325-326 (Stokes_VF = .false. branch); the q-point convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_vort_y": {
+      "params": [],
+      "priority": 20,
+      "match": {
+        "op": "D",
+        "args": ["u"],
+        "wrt": "y"
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, "N_I"],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            [1, "N_I"],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["u", "dxCu"],
+            "ranges": {
+              "i": [1, "N_I"],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["dxCu", "i", { "op": "+", "args": ["j", 1] }]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["u", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["dxCu", "i", "j"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["u", "i", "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          0.0
+        ]
+      }
+    }
+  }
+}

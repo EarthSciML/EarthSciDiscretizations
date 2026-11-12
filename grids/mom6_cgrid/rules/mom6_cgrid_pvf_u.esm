@@ -1,0 +1,392 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_pvf_u",
+    "description": "The raw east-face potential-vorticity flux of the SADOURNY75_ENERGY Coriolis scheme on the mom6_cgrid: pvf_u(i,j,k) = 0.25 * ((q(i,j,k)*(vh(i+1,j,k) + vh(i,j,k))) + (q(i,j-1,k)*(vh(i,j-1,k) + vh(i+1,j-1,k)))) * IdxCu(i,j), the CAu argument of MOM_CoriolisAdv.F90 CorAdCalc before the bound_coriolis clamp and the -KEx addition (the SADOURNY75_ENERGY loop, with q(i,j) the layer potential vorticity at the q-points, vh the north-face layer volume fluxes of the two cells straddling the east face — vh(i+1,j)/vh(i,j) the north faces of the east/west neighbors of the north side, vh(i,j-1)/vh(i+1,j-1) of the south side — and IdxCu(i,j) = 1/dxCu the east-face 1/length). SOLID-WALL BOUNDARIES: the east domain edge (i = N_I) and the south domain edge (j = 1) carry a zero-gradient halo, so the wall regions MIRROR the out-of-bounds neighbor onto the edge cell itself: the i = N_I region reads vh(N_I,j,k) in place of vh(N_I+1,j,k) and the j = 1 region reads q(i,1,k)/vh(i,1,k) in place of q(i,0,k)/vh(i,0,k) (the SE corner mirrors both) — NOT clamped reads of nonexistent cells. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_pvf_u(q, vh, IdxCu); q and vh must be declared [i,j,k] fields and IdxCu a free [i,j] name resolved in the consuming model (esm-spec 9.6.1 where clause; the free-name contract of grids/mom6_cgrid/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:pvf",
+      "order:0",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc SADOURNY75_ENERGY CAu at :897-925; the face conventions of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_pvf_u": {
+      "params": ["q", "vh", "IdxCu"],
+      "match": {
+        "op": "mom6_cgrid_pvf_u",
+        "args": ["q", "vh", "IdxCu"]
+      },
+      "where": {
+        "q": {
+          "shape": ["i", "j", "k"]
+        },
+        "vh": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [2, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [2, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, 1],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, 1],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "vh", "IdxCu"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [2, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.25,
+                  "units": "1"
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", { "op": "+", "args": ["i", 1] }, { "op": "-", "args": ["j", 1] }, "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["IdxCu", "i", "j"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "vh", "IdxCu"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [2, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.25,
+                  "units": "1"
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["IdxCu", "i", "j"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "vh", "IdxCu"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, 1],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.25,
+                  "units": "1"
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["IdxCu", "i", "j"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "vh", "IdxCu"],
+            "ranges": {
+              "i": ["N_I", "N_I"],
+              "j": [1, 1],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.25,
+                  "units": "1"
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "index",
+                              "args": ["q", "i", "j", "k"]
+                            },
+                            {
+                              "op": "+",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                },
+                                {
+                                  "op": "index",
+                                  "args": ["vh", "i", "j", "k"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["IdxCu", "i", "j"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

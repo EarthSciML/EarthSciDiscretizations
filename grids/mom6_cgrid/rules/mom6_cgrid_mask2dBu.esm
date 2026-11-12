@@ -1,0 +1,107 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "mom6_cgrid_mask2dBu",
+    "description": "The q-point mask of the mom6_cgrid: the product of the masks of the four T cells around a q-point, mask2dBu(i,j) = mask(i,j) * mask(i+1,j) * mask(i,j+1) * mask(i+1,j+1), where mask [i,j] is the 0/1 ocean-cell indicator and q-point (i,j) sits at the NE corner of cell (i,j). This is the MOM6 vertex mask of MOM_grid_initialize.F90:1294 (G%mask2dBu(I,J) = (G%mask2dCu(I,j) * G%mask2dCu(I,j+1)) * (G%mask2dCv(i,J) * G%mask2dCv(i+1,J)), the product of the four surrounding face masks, which equals the product of the four surrounding cell masks on the interior), used by CorAdCalc to zero the relative vorticity at land q-points. SOLID-WALL BOUNDARIES: at the east domain edge (i = N_I) or the north domain edge (j = N_J) there is no cell beyond the wall, so mask2dBu is EXPLICITLY zero there (the q-point touches land — a cell mask of 0) — the i = N_I and j = N_J regions are the wall value 0.0, NOT clamped reads of nonexistent cells. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_mask2dBu(mask); the param mask must be a declared [i,j] field (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:mask",
+      "order:0",
+      "bc:wall",
+      "axes:i,j"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_grid_initialize.F90:1294 (mask2dBu from the face masks); the q-point convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_mask2dBu": {
+      "params": ["mask"],
+      "match": {
+        "op": "mom6_cgrid_mask2dBu",
+        "args": ["mask"]
+      },
+      "where": {
+        "mask": {
+          "shape": ["i", "j"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, { "op": "-", "args": ["N_J", 1] }]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, "N_J"]
+          ],
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            ["N_J", "N_J"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j"],
+            "args": ["mask"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["mask", "i", "j"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["mask", "i", { "op": "+", "args": ["j", 1] }]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["mask", { "op": "+", "args": ["i", 1] }, { "op": "+", "args": ["j", 1] }]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          0.0,
+          0.0
+        ]
+      }
+    }
+  }
+}
