@@ -2,7 +2,7 @@
   "esm": "1.2.0",
   "metadata": {
     "name": "entraining_plume_lev",
-    "description": "Complete rewrite rule for the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),    phi(z_bottom) = phi0,\n\nlowered to the implicit-trapezoidal sweep upward along lev: the bottom cell takes the seed phi0 and every cell above it takes the Crank-Nicolson step of stencils/entraining_plume_lev_interior. This is the equation a rising plume obeys when it mixes with the environment it passes through at the fractional rate lam -- the governing equation of every mass-flux cumulus scheme's updraught, of the EDMF plumes in boundary-layer schemes, and of buoyant plume rise for a smoke or stack source. With phi_env = 0, lam = 2 eta and src = 2 B it is also the plume's KINETIC-ENERGY equation dK/dz = 2(B - eta K), so one rule serves both the carried scalars and the vertical velocity.\n\nWHY A SWEEP AND NOT A REDUCTION. The value at a cell is a function of the PREVIOUS ANSWER, not of the original data at earlier cells, so it does not unroll: substituting the step into itself produces a product of amplification factors that never collapses into a reduction over the inputs. That is exactly the esm-spec 4.3.1.1 causal self-reference, and it is the reason this rule cannot be written as one of the prefix reductions in this directory (integral_lev_*), whose terms ARE independent of the result. The distinction is decidable by unrolling and is worth stating, because the two look identical in the source of the models this serves.\n\nTHE CAUSAL SELF-ARGUMENT, and it is the one authoring constraint. A rewrite rule produces an EXPRESSION and cannot see the left-hand side of the equation it lands in, so a lowering that must read the array being defined has to be handed it: the consumer writes phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), naming phi twice. The expanded right-hand side then carries index(phi, k-1) under the right name and esm-spec 4.3.1.1 recognition fires on it. The repetition is not decoration -- it is the call site declaring that this is a sweep and not a pointwise map, which is information a reader of the consuming model wants anyway.\n\nORIENTATION. lev increases upward and cell 1 is the bottom, so the seed is the plume's departure value and the sweep runs in the direction of travel. A model whose vertical index runs top-down (WRF's New Tiedtke among them) reverses its arrays at the boundary of the component, as grids/column_nonuniform_1d/grid.esm already requires of every consumer.\n\nGEOMETRY. The independent variable is the grid's own layer-centre coordinate: the step uses ds[k] = zc[k] - zc[k-1], the centre-to-centre spacing, because the plume's values live at the points the coordinate labels rather than in control volumes. A consumer whose plume values live on the interfaces supplies an `ze` whose cell centres are those interfaces. `zc` is read by bare name, the keyed-factor contract of this grid.\n\nSTABILITY AND ORDER. A-stable: the amplification factor (1 - c)/(1 + c) with c = lam ds/2 has modulus below one for every positive lam and every spacing, so the sweep cannot grow on a coarse column where an explicit step would need ds < 2/lam. Second order on a smoothly stretched column; exactly first order if the entrainment rate is discontinuous, as it is at a cloud base.",
+    "description": "Complete rewrite rule for the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),    phi(z_bottom) = phi0,\n\nlowered to the implicit-trapezoidal sweep upward along lev: the bottom cell takes the seed phi0 and every cell above it takes the Crank-Nicolson step of stencils/entraining_plume_lev_interior. This is the equation a rising plume obeys when it mixes with the environment it passes through at the fractional rate lam -- the governing equation of every mass-flux cumulus scheme's updraught, of the EDMF plumes in boundary-layer schemes, and of buoyant plume rise for a smoke or stack source. With phi_env = 0, lam = 2 eta and src = 2 B it is also the plume's KINETIC-ENERGY equation dK/dz = 2(B - eta K), so one rule serves both the carried scalars and the vertical velocity.\n\nWHY A SWEEP AND NOT A REDUCTION. The value at a cell is a function of the PREVIOUS ANSWER, not of the original data at earlier cells, so it does not unroll: substituting the step into itself produces a product of amplification factors that never collapses into a reduction over the inputs. That is exactly the esm-spec 4.3.1.1 causal self-reference, and it is the reason this rule cannot be written as one of the prefix reductions in this directory (integral_lev_*), whose terms ARE independent of the result. The distinction is decidable by unrolling and is worth stating, because the two look identical in the source of the models this serves.\n\nTHE FORM OF THE SWEEP. The body is ONE `faq` over lev whose cell k reads index(phi, k-1), with the seed phi0 behind an `ifelse` guard at k = 1, and every step taken by the scalar stencil stencils/entraining_plume_lev_interior. That is the esm-spec 4.3.1.1 canonical spelling; the earlier form, a `makearray` with the seed region and an array-valued interior stencil, is rejected by the spec twice over (a self-read reached through a `makearray` region value is `recurrence_unsupported_form`, and the array-valued stencil named phi as an operand, a BARE self-read, `recurrence_not_wellfounded`) and the Rust binding refuses to build it.\n\nTHE CAUSAL SELF-ARGUMENT, and it is the one authoring constraint. A rewrite rule produces an EXPRESSION and cannot see the left-hand side of the equation it lands in, so a lowering that must read the array being defined has to be handed it: the consumer writes phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), naming phi twice. The expanded right-hand side then carries index(phi, k-1) under the right name and esm-spec 4.3.1.1 recognition fires on it. The repetition is not decoration -- it is the call site declaring that this is a sweep and not a pointwise map, which is information a reader of the consuming model wants anyway.\n\nORIENTATION. lev increases upward and cell 1 is the bottom, so the seed is the plume's departure value and the sweep runs in the direction of travel. A model whose vertical index runs top-down (WRF's New Tiedtke among them) reverses its arrays at the boundary of the component, as grids/column_nonuniform_1d/grid.esm already requires of every consumer.\n\nGEOMETRY. The independent variable is the grid's own layer-centre coordinate: the step uses ds[k] = zc[k] - zc[k-1], the centre-to-centre spacing, because the plume's values live at the points the coordinate labels rather than in control volumes. A consumer whose plume values live on the interfaces supplies an `ze` whose cell centres are those interfaces. `zc` is read by bare name, the keyed-factor contract of this grid.\n\nSTABILITY AND ORDER. A-stable for a constant rate: the amplification factor (1 - c)/(1 + c) with c = lam ds/2 has modulus below one for every positive lam and every spacing, so the sweep cannot grow on a coarse column where an explicit step would need ds < 2/lam. The rate is taken at BOTH ends of each step (lam[k-1] and lam[k]), so the sweep is second order on a smoothly stretched column whether or not lam varies (tests/conformance/convergence/plume_column_trapezoidal: observed order 2.0 with lam = 2 + 3z); a frozen-coefficient step that took lam[k] at both ends would be first order wherever lam varies. Exactly first order if the entrainment rate is discontinuous, as it is at a cloud base.",
     "license": "MIT",
     "tags": [
       "esd:rule",
@@ -85,51 +85,121 @@
         }
       },
       "body": {
-        "op": "makearray",
-        "args": [],
-        "regions": [
-          [
-            [
-              1,
-              1
-            ]
-          ],
-          [
-            [
-              2,
-              "NLEV"
-            ]
-          ]
+        "op": "faq",
+        "output_idx": [
+          "k"
         ],
-        "values": [
-          {
-            "op": "faq",
-            "output_idx": [
-              "k"
-            ],
-            "args": [
-              "phi0"
-            ],
-            "ranges": {
-              "k": [
-                1,
+        "args": [],
+        "ranges": {
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "ifelse",
+          "args": [
+            {
+              "op": "<=",
+              "args": [
+                "k",
                 1
               ]
             },
-            "expr": "phi0"
-          },
-          {
-            "op": "apply_expression_template",
-            "args": [],
-            "name": "entraining_plume_lev_interior",
-            "bindings": {
-              "phi_env": "phi_env",
-              "lam": "lam",
-              "src": "src",
-              "phi": "phi"
+            "phi0",
+            {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "entraining_plume_lev_interior",
+              "bindings": {
+                "phi_prev": {
+                  "op": "index",
+                  "args": [
+                    "phi",
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "phi_env_prev": {
+                  "op": "index",
+                  "args": [
+                    "phi_env",
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "phi_env": {
+                  "op": "index",
+                  "args": [
+                    "phi_env",
+                    "k"
+                  ]
+                },
+                "lam_prev": {
+                  "op": "index",
+                  "args": [
+                    "lam",
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "lam": {
+                  "op": "index",
+                  "args": [
+                    "lam",
+                    "k"
+                  ]
+                },
+                "src": {
+                  "op": "index",
+                  "args": [
+                    "src",
+                    "k"
+                  ]
+                },
+                "ds": {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "zc",
+                        "k"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "zc",
+                        {
+                          "op": "-",
+                          "args": [
+                            "k",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             }
-          }
-        ]
+          ]
+        }
       }
     }
   }

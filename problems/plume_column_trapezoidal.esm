@@ -1,0 +1,766 @@
+{
+ "esm": "1.2.0",
+ "metadata": {
+  "name": "plume_column_trapezoidal",
+  "description": "MMS driver for grids/column_nonuniform_1d/rules/entraining_plume_lev, the implicit-trapezoidal sweep of the entraining-plume ODE dphi/dz = lam(z)(phi_env(z) - phi(z)) + src(z) upward along lev from a seeded bottom cell. Manufactured solution phi*(z) = 1 + sin(pi z) on the grid's shared quadratic-stretch column (mesh/mms_column.esm), with environment phi_env = cos(pi z) and a VARYING entrainment rate lam = 2 + 3z; the forcing S(z) = phi*' - lam (phi_env - phi*) is supplied as the trapezoidal mean over each step, the centring the rule's source contract asks for. The varying rate is the point: it separates the library step (rate at both ends, second order) from the frozen-coefficient step mass-flux schemes write (rate at the upper end only, first order), which this case was used to measure. An accumulator state w with ic 0 and dw/dt = phi makes w(1) = phi exactly, so the L2 error at t = 1 isolates the lowering. The reference spells the layer centre from literals and NLEV (build-time scope caveat, AGENTS.md).",
+  "license": "MIT",
+  "tags": [
+   "esd:problem",
+   "grid:column_nonuniform_1d",
+   "equation:entraining_plume",
+   "mms"
+  ],
+  "references": [
+   {
+    "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+    "doi": "10.1115/1.1436090"
+   }
+  ]
+ },
+ "models": {
+  "PlumeTrapezoidal": {
+   "expression_template_imports": [
+    {
+     "ref": "../grids/column_nonuniform_1d/rules/entraining_plume_lev.esm"
+    },
+    {
+     "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
+    }
+   ],
+   "variables": {
+    "ze": {
+     "type": "unknown",
+     "units": "m",
+     "shape": [
+      "lev_nodes"
+     ],
+     "description": "Interface coordinates of the grid's shared quadratic-stretch MMS column (mesh/mms_column.esm mms_column_ze)."
+    },
+    "zc": {
+     "type": "unknown",
+     "units": "m",
+     "shape": [
+      "lev"
+     ],
+     "description": "Layer centres, grid-derived from ze by column_cell_center; the coordinate the plume rule steps along, read by bare name."
+    },
+    "lam": {
+     "type": "unknown",
+     "units": "1/m",
+     "shape": [
+      "lev"
+     ],
+     "description": "Entrainment rate lam(z) = 2 + 3z at the layer centres. It VARIES, so the case discriminates a step that takes the rate at both ends (second order) from one that freezes it at the upper end (first order)."
+    },
+    "phi_env": {
+     "type": "unknown",
+     "units": "1",
+     "shape": [
+      "lev"
+     ],
+     "description": "Environment profile cos(pi z) at the layer centres."
+    },
+    "src": {
+     "type": "unknown",
+     "units": "1/m",
+     "shape": [
+      "lev"
+     ],
+     "description": "Source centred on each step, the trapezoidal mean (S(zc[k-1]) + S(zc[k]))/2 of the manufactured forcing S(z) = phi*'(z) - lam(z)(phi_env(z) - phi*(z)); cell 1 (never read by the rule, which seeds it) holds S(zc[1])."
+    },
+    "phi0": {
+     "type": "unknown",
+     "units": "1",
+     "description": "Seed: the manufactured solution at the bottom layer centre, 1 + sin(pi zc[1])."
+    },
+    "phi": {
+     "type": "unknown",
+     "units": "1",
+     "shape": [
+      "lev"
+     ],
+     "description": "The lowered plume: phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), compared with phi*(z) = 1 + sin(pi z)."
+    },
+    "w_plume": {
+     "type": "unknown",
+     "units": "1",
+     "shape": [
+      "lev"
+     ],
+     "description": "Accumulator state with ic 0 and dw/dt = phi, so w(1) = phi exactly for every integrator and the L2 error of w at t = 1 is the error of the lowering alone (the pattern of problems/integral_column_midpoint.esm)."
+    }
+   },
+   "equations": [
+    {
+     "lhs": {
+      "op": "ic",
+      "args": [
+       "w_plume"
+      ]
+     },
+     "rhs": 0.0
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "w_plume"
+      ],
+      "wrt": "t"
+     },
+     "rhs": "phi"
+    },
+    {
+     "lhs": "ze",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "mms_column_ze",
+      "bindings": {}
+     }
+    },
+    {
+     "lhs": "zc",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "column_cell_center",
+      "bindings": {
+       "ze": "ze"
+      }
+     }
+    },
+    {
+     "lhs": "lam",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "i"
+      ],
+      "args": [
+       "zc"
+      ],
+      "ranges": {
+       "i": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "+",
+       "args": [
+        2.0,
+        {
+         "op": "*",
+         "args": [
+          3.0,
+          {
+           "op": "index",
+           "args": [
+            "zc",
+            "i"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "phi_env",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "i"
+      ],
+      "args": [
+       "zc"
+      ],
+      "ranges": {
+       "i": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "cos",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          3.141592653589793,
+          {
+           "op": "index",
+           "args": [
+            "zc",
+            "i"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "src",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "i"
+      ],
+      "args": [
+       "zc"
+      ],
+      "ranges": {
+       "i": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "<=",
+         "args": [
+          "i",
+          1
+         ]
+        },
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            3.141592653589793,
+            {
+             "op": "cos",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                3.141592653589793,
+                {
+                 "op": "index",
+                 "args": [
+                  "zc",
+                  "i"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "+",
+             "args": [
+              2.0,
+              {
+               "op": "*",
+               "args": [
+                3.0,
+                {
+                 "op": "index",
+                 "args": [
+                  "zc",
+                  "i"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "cos",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  3.141592653589793,
+                  {
+                   "op": "index",
+                   "args": [
+                    "zc",
+                    "i"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                1.0,
+                {
+                 "op": "sin",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    3.141592653589793,
+                    {
+                     "op": "index",
+                     "args": [
+                      "zc",
+                      "i"
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          0.5,
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                3.141592653589793,
+                {
+                 "op": "cos",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    3.141592653589793,
+                    {
+                     "op": "index",
+                     "args": [
+                      "zc",
+                      {
+                       "op": "-",
+                       "args": [
+                        "i",
+                        1
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "+",
+                 "args": [
+                  2.0,
+                  {
+                   "op": "*",
+                   "args": [
+                    3.0,
+                    {
+                     "op": "index",
+                     "args": [
+                      "zc",
+                      {
+                       "op": "-",
+                       "args": [
+                        "i",
+                        1
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "-",
+                 "args": [
+                  {
+                   "op": "cos",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      3.141592653589793,
+                      {
+                       "op": "index",
+                       "args": [
+                        "zc",
+                        {
+                         "op": "-",
+                         "args": [
+                          "i",
+                          1
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    1.0,
+                    {
+                     "op": "sin",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        3.141592653589793,
+                        {
+                         "op": "index",
+                         "args": [
+                          "zc",
+                          {
+                           "op": "-",
+                           "args": [
+                            "i",
+                            1
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                3.141592653589793,
+                {
+                 "op": "cos",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    3.141592653589793,
+                    {
+                     "op": "index",
+                     "args": [
+                      "zc",
+                      "i"
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "+",
+                 "args": [
+                  2.0,
+                  {
+                   "op": "*",
+                   "args": [
+                    3.0,
+                    {
+                     "op": "index",
+                     "args": [
+                      "zc",
+                      "i"
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "-",
+                 "args": [
+                  {
+                   "op": "cos",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      3.141592653589793,
+                      {
+                       "op": "index",
+                       "args": [
+                        "zc",
+                        "i"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    1.0,
+                    {
+                     "op": "sin",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        3.141592653589793,
+                        {
+                         "op": "index",
+                         "args": [
+                          "zc",
+                          "i"
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "phi0",
+     "rhs": {
+      "op": "+",
+      "args": [
+       1.0,
+       {
+        "op": "sin",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           3.141592653589793,
+           {
+            "op": "index",
+            "args": [
+             "zc",
+             1
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "phi",
+     "rhs": {
+      "op": "entraining_plume_lev",
+      "args": [
+       "phi_env",
+       "lam",
+       "src",
+       "phi0",
+       "phi"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "plume_trapezoidal_mms",
+     "description": "w_plume(1) = phi, the implicit-trapezoidal sweep of dphi/dz = lam (phi_env - phi) + src on the quadratic-stretch column with lam = 2 + 3z, compared in L2 against phi* = 1 + sin(pi z) at the layer centres, at the default NLEV = 64. Measured with the Rust binding: L2 error 3.88e-5; the bound is 2x that. Mutation check: the frozen-coefficient step (lam[k] at both ends of the step) gives 4.82e-3 on this case and fails, so the case discriminates the order claim. Per-resolution errors belong in tests/conformance/convergence/plume_column_trapezoidal/golden/errors.json once the Julia reference generates them.",
+     "time_span": {
+      "start": 0.0,
+      "end": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "w_plume",
+       "time": 1.0,
+       "expected": 0.0,
+       "tolerance": {
+        "abs": 7.8e-05
+       },
+       "reduce": "L2_error",
+       "reference": {
+        "op": "faq",
+        "output_idx": [
+         "i"
+        ],
+        "args": [],
+        "ranges": {
+         "i": {
+          "from": "lev"
+         }
+        },
+        "expr": {
+         "op": "+",
+         "args": [
+          1.0,
+          {
+           "op": "sin",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              3.141592653589793,
+              {
+               "op": "*",
+               "args": [
+                0.5,
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      0.6,
+                      {
+                       "op": "/",
+                       "args": [
+                        {
+                         "op": "-",
+                         "args": [
+                          "i",
+                          1
+                         ]
+                        },
+                        "NLEV"
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      0.4,
+                      {
+                       "op": "/",
+                       "args": [
+                        {
+                         "op": "-",
+                         "args": [
+                          "i",
+                          1
+                         ]
+                        },
+                        "NLEV"
+                       ]
+                      },
+                      {
+                       "op": "/",
+                       "args": [
+                        {
+                         "op": "-",
+                         "args": [
+                          "i",
+                          1
+                         ]
+                        },
+                        "NLEV"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      0.6,
+                      {
+                       "op": "/",
+                       "args": [
+                        "i",
+                        "NLEV"
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      0.4,
+                      {
+                       "op": "/",
+                       "args": [
+                        "i",
+                        "NLEV"
+                       ]
+                      },
+                      {
+                       "op": "/",
+                       "args": [
+                        "i",
+                        "NLEV"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -2,7 +2,7 @@
   "esm": "1.2.0",
   "metadata": {
     "name": "entraining_plume_lev_interior",
-    "description": "Interior trapezoidal (Crank-Nicolson) step of the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),\n\nintegrated upward along lev from a value seeded in the bottom cell. A rising plume exchanges with the environment it passes through at the fractional rate lam and is forced by src; phi is the plume's own value of whatever is being carried -- dry static energy, total water, a tracer, or (with phi_env = 0 and src the buoyancy) the plume's kinetic energy.\n\nAveraging the right-hand side over the two cell centres gives\n\n    (phi[k] - phi[k-1]) / ds[k] = (lam[k]/2)((phi_env[k-1] - phi[k-1]) + (phi_env[k] - phi[k])) + src[k]\n\nwith ds[k] = zc[k] - zc[k-1] the centre-to-centre spacing, which solves for phi[k] as\n\n    phi[k] = ( c (phi_env[k-1] + phi_env[k]) + (1 - c) phi[k-1] + ds[k] src[k] ) / (1 + c),   c = lam[k] ds[k] / 2.\n\nThis is the A-stable implicit-trapezoidal step: c > 0 for any lam > 0 and any spacing, so the amplification factor (1-c)/(1+c) has modulus below one however stiff the entrainment and however coarse the column. An explicit (forward-Euler) step would need ds < 2/lam, which a 30 hPa layer at lam = 2e-3 m^-1 already violates. Second order on a smoothly stretched column.\n\nThe SOURCE is evaluated at the destination cell rather than averaged across the step, because the schemes this serves supply it already centred on the interval (a buoyancy difference across the step, a heating integrated over it); averaging a source that is itself a face quantity would apply the trapezoidal weight twice.\n\nSelf-referential by construction: cell k reads cell k-1 of the array being defined, which is the esm-spec 4.3.1.1 causal recurrence -- admitted here because the next term IS a function of the previous ANSWER and the fold does not unroll into a reduction over the original values. Contrast the prefix reductions in this same directory (integral_lev_*), whose terms are independent of the result.\n\nMatch-less named template; rules/entraining_plume_lev wraps it with the seeded bottom cell. `zc` is the free-name layer-centre array resolving to the consuming model's geometry observed (grids/column_nonuniform_1d/grid.esm).",
+    "description": "ONE implicit-trapezoidal (Crank-Nicolson) step of the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),\n\ntaken from a cell whose plume value is phi_prev to the next cell up, a distance ds above it. A rising plume exchanges with the environment it passes through at the fractional rate lam and is forced by src; phi is the plume's own value of whatever is being carried -- dry static energy, total water, a tracer, or (with phi_env = 0 and src the buoyancy) the plume's kinetic energy.\n\nAveraging the right-hand side over the two ends of the step gives\n\n    (phi - phi_prev) / ds = (1/2)(lam_prev (phi_env_prev - phi_prev) + lam (phi_env - phi)) + src\n\nwhich solves for the value at the upper end as\n\n    phi = ( c_prev phi_env_prev + c phi_env + (1 - c_prev) phi_prev + ds src ) / (1 + c),\n    c_prev = lam_prev ds / 2,   c = lam ds / 2.\n\nA scheme that freezes the entrainment rate over each step at its upper-end value -- the IFS/Tiedtke updraught does, with eta(jk) only -- passes the same rate as lam_prev and lam, and the step reduces to the frozen-coefficient form (c (phi_env_prev + phi_env) + (1 - c) phi_prev)/(1 + c) it writes. That frozen form is FIRST order wherever lam varies (measured on the quadratic-stretch MMS column with lam = 2 + 3z: observed order 0.95, 0.98, 0.99 from NLEV = 16 to 128), which is why the library step takes the rate at both ends; with both ends it is second order (1.98, 1.99, 2.00) whether lam varies or not. This is the A-stable implicit-trapezoidal step: c > 0 for any lam > 0 and any spacing, so the amplification factor (1-c_prev)/(1+c) has modulus below one (for lam_prev = lam; for a varying rate it is below one whenever lam_prev ds < 2 + lam ds, which a positive rate meets on any step short enough to resolve its variation) however stiff the entrainment and however coarse the column. An explicit (forward-Euler) step would need ds < 2/lam, which a 30 hPa layer at lam = 2e-3 m^-1 already violates. Second order on a smoothly stretched column.\n\nThe SOURCE is evaluated at the destination rather than averaged across the step, because the schemes this serves supply it already centred on the interval (a buoyancy difference across the step, a heating integrated over it); averaging a source that is itself a face quantity would apply the trapezoidal weight twice.\n\nWHY A SCALAR STEP AND NOT A COLUMN STENCIL. Every argument is a value, not an array, so the template is evaluated per cell inside whatever sweep calls it. Two callers need exactly that. rules/entraining_plume_lev places it inside ONE `faq` over lev with the seed as a guard, which is the only form esm-spec 4.3.1.1 admits for a recurrence -- a self-read reached through a `makearray` region value is `recurrence_unsupported_form`, and an array-valued step that names the swept array as an operand reads it BARE, which is `recurrence_not_wellfounded`. And a scheme whose plume passes through a per-level NONLINEAR projection after each step (the saturation adjustment of a mass-flux cumulus updraught: WRF New Tiedtke's cutypen and cuascn) cannot use the rule at all, because the value carried to the next level is the projected one, not the step's; it calls this template inside its own recurrence and wraps the projection around it. Precedent for value-parameter stencils: stencils/sedimentation_jh2010_*.\n\nMatch-less named template with no free names; it reads no geometry, so it does not import the grid.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -30,272 +30,116 @@
       }
     ]
   },
-  "expression_template_imports": [
-    {
-      "ref": "../grid.esm"
-    }
-  ],
   "expression_templates": {
     "entraining_plume_lev_interior": {
       "params": [
+        "phi_prev",
+        "phi_env_prev",
         "phi_env",
+        "lam_prev",
         "lam",
         "src",
-        "phi"
+        "ds"
       ],
+      "description": "phi at the upper end of one implicit-trapezoidal step of dphi/dz = lam (phi_env - phi) + src of length ds, from phi_prev at the lower end: lam_prev and phi_env_prev at the lower end, lam and phi_env at the upper end, src already centred on the step.",
       "body": {
-        "op": "faq",
-        "output_idx": [
-          "k"
-        ],
+        "op": "/",
         "args": [
-          "phi_env",
-          "lam",
-          "src",
-          "phi"
-        ],
-        "ranges": {
-          "k": [
-            2,
-            "NLEV"
-          ]
-        },
-        "expr": {
-          "op": "/",
-          "args": [
-            {
-              "op": "+",
-              "args": [
-                {
-                  "op": "*",
-                  "args": [
-                    {
-                      "op": "*",
-                      "args": [
-                        0.5,
-                        {
-                          "op": "*",
-                          "args": [
-                            {
-                              "op": "index",
-                              "args": [
-                                "lam",
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "-",
-                              "args": [
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "zc",
-                                    "k"
-                                  ]
-                                },
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "zc",
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "k",
-                                        1
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "+",
-                      "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "phi_env",
-                            {
-                              "op": "-",
-                              "args": [
-                                "k",
-                                1
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "index",
-                          "args": [
-                            "phi_env",
-                            "k"
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        1.0,
-                        {
-                          "op": "*",
-                          "args": [
-                            0.5,
-                            {
-                              "op": "*",
-                              "args": [
-                                {
-                                  "op": "index",
-                                  "args": [
-                                    "lam",
-                                    "k"
-                                  ]
-                                },
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    {
-                                      "op": "index",
-                                      "args": [
-                                        "zc",
-                                        "k"
-                                      ]
-                                    },
-                                    {
-                                      "op": "index",
-                                      "args": [
-                                        "zc",
-                                        {
-                                          "op": "-",
-                                          "args": [
-                                            "k",
-                                            1
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "phi",
-                        {
-                          "op": "-",
-                          "args": [
-                            "k",
-                            1
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "*",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            "k"
-                          ]
-                        },
-                        {
-                          "op": "index",
-                          "args": [
-                            "zc",
-                            {
-                              "op": "-",
-                              "args": [
-                                "k",
-                                1
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "index",
-                      "args": [
-                        "src",
-                        "k"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "+",
-              "args": [
-                1.0,
-                {
-                  "op": "*",
-                  "args": [
-                    0.5,
-                    {
-                      "op": "*",
-                      "args": [
-                        {
-                          "op": "index",
-                          "args": [
-                            "lam",
-                            "k"
-                          ]
-                        },
-                        {
-                          "op": "-",
-                          "args": [
-                            {
-                              "op": "index",
-                              "args": [
-                                "zc",
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "zc",
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "k",
-                                    1
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      0.5,
+                      {
+                        "op": "*",
+                        "args": [
+                          "lam_prev",
+                          "ds"
+                        ]
+                      }
+                    ]
+                  },
+                  "phi_env_prev"
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      0.5,
+                      {
+                        "op": "*",
+                        "args": [
+                          "lam",
+                          "ds"
+                        ]
+                      }
+                    ]
+                  },
+                  "phi_env"
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      1.0,
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "*",
+                            "args": [
+                              "lam_prev",
+                              "ds"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "phi_prev"
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  "ds",
+                  "src"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              1.0,
+              {
+                "op": "*",
+                "args": [
+                  0.5,
+                  {
+                    "op": "*",
+                    "args": [
+                      "lam",
+                      "ds"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     }
   }
