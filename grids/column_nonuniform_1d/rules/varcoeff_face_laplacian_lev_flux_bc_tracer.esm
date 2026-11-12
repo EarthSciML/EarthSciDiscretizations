@@ -1,0 +1,236 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_flux_bc_tracer",
+    "description": "rules/varcoeff_face_laplacian_lev_flux_bc applied to a field with a trailing TRACER axis, u shaped [lev, tracer]: the same compound match D( K*D(u, lev), lev ), the same stencil and the same prescribed-flux closure, column by column, with the coefficient K [lev_nodes] and the geometry shared by every tracer and the two prescribed face fluxes `kdudz_bot` / `kdudz_top` supplied per tracer ([tracer]). Column s of the result is exactly what the 1-D rule gives for u[:, s], so the telescoping identity sum_k dz[k] L u[k,s] = kdudz_top[s] - kdudz_bot[s] holds tracer by tracer. Match-scoped with where {u: {shape: [lev, tracer]}, K: {shape: [lev_nodes]}}, so it is disjoint from the 1-D rule and a model may import both. The tracer axis comes from grids/column_nonuniform_1d/tracer_axis.esm; a consumer whose axis has another name imports this rule with `rename: {tracer: <name>}` and binds NTRACER. Motivation: one mount of a column tracer-mixing component for every chemical species of a WRF-Chem mechanism (WRF-Chem's vertmx is called once per species with the same exch_h). The two face regions are filled by a faq with output_idx [1, s] -- an explicit singleton lev dimension -- because the be1fafe6d Rust binding fills the WHOLE array with NaN when a rank-1 [tracer] value is assigned to a [1, NTRACER] region, although esm-spec 4.3.2 says singleton dimensions are excluded from the shape match.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:prescribed_flux",
+      "spec:9.6.8",
+      "axes:tracer"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      },
+      {
+        "citation": "Hong, S.-Y., Noh, Y., and Dudhia, J. (2006). A new vertical diffusion package with an explicit treatment of entrainment processes. Mon. Wea. Rev. 134, 2318-2341. (Surface-flux boundary condition of the YSU scheme.)",
+        "doi": "10.1175/MWR3199.1"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/varcoeff_face_laplacian_lev_interior_tracer.esm"
+    },
+    {
+      "ref": "../stencils/interface_flux_K_lev_tracer.esm"
+    },
+    {
+      "ref": "../tracer_axis.esm"
+    }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_flux_bc_tracer": {
+      "params": [
+        "u",
+        "K"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "K",
+              {
+                "op": "D",
+                "args": [
+                  "u"
+                ],
+                "wrt": "lev"
+              }
+            ]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": {
+          "shape": [
+            "lev",
+            "tracer"
+          ]
+        },
+        "K": {
+          "shape": [
+            "lev_nodes"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NLEV",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ],
+          [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ],
+          [
+            [
+              "NLEV",
+              "NLEV"
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_laplacian_lev_interior_tracer",
+            "bindings": {
+              "u": "u",
+              "K": "K"
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              1,
+              "s"
+            ],
+            "args": [
+              "u",
+              "K"
+            ],
+            "ranges": {
+              "s": {
+                "from": "tracer"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "interface_flux_K_lev_tracer",
+                      "bindings": {
+                        "u": "u",
+                        "K": "K",
+                        "n": 2,
+                        "s": "s"
+                      }
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "kdudz_bot",
+                        "s"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    1
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              1,
+              "s"
+            ],
+            "args": [
+              "u",
+              "K"
+            ],
+            "ranges": {
+              "s": {
+                "from": "tracer"
+              }
+            },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": [
+                        "kdudz_top",
+                        "s"
+                      ]
+                    },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "interface_flux_K_lev_tracer",
+                      "bindings": {
+                        "u": "u",
+                        "K": "K",
+                        "n": "NLEV",
+                        "s": "s"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "index",
+                  "args": [
+                    "dz",
+                    "NLEV"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
