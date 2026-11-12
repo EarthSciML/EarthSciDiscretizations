@@ -1,0 +1,48 @@
+{
+  "esm": "1.3.0",
+  "metadata": {
+    "name": "interface_flux_K_lev_value_bc",
+    "description": "Diffusive flux through ONE DOMAIN FACE of column_nonuniform_1d, computed from the consumer-supplied boundary VALUE: G = K_face (u_adj - u_bc) / (z_adj - z_bc), the same interface-flux law as stencils/interface_flux_K_lev with the boundary value in the outer slot (uL <- u_bc and zc[n-1] <- z_bc). A pointwise match-less template: the caller supplies the adjacent cell value u_adj (at the layer centre z_adj) and the face coefficient K_face (K[1] at the surface face, K[NLEV+1] at the top face), so one formula serves both ends of the column. Positive in the +lev direction. Applied by rules/varcoeff_face_laplacian_lev_value_bc at the surface face (u_bc = u_sfc, z_bc = z_sfc, u_adj = u[1], z_adj = zc[1], K_face = K[1]) and at the top face (u_bc = u_top, z_bc = z_top, u_adj = u[NLEV], z_adj = zc[NLEV], K_face = K[NLEV+1]), and applied directly by consumers that read a domain-face diffusive flux (e.g. a basal conductive flux -G_top). `zc` is the consumer's free-name layer-centre observed and z_sfc / z_top the domain-face coordinates (grids/column_nonuniform_1d/grid.esm).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:interface_flux",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "interface_flux_K_lev_value_bc": {
+      "params": ["u_bc", "u_adj", "K_face", "z_bc", "z_adj"],
+      "body": {
+        "op": "*",
+        "args": [
+          "K_face",
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": ["u_adj", "u_bc"]
+              },
+              {
+                "op": "-",
+                "args": ["z_adj", "z_bc"]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
