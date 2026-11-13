@@ -1,0 +1,1507 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_cgrid_flux_ppm",
+  "description": "Numeric conformance problem for the mom6_cgrid PPM flux/divergence rules (grids/mom6_cgrid/rules/mom6_cgrid_flux_x/y.esm and mom6_cgrid_div_x/y.esm) on a tiny 7x7x1 grid (the grid metaparameters N_I/N_J/N_K are bound to 7/7/1 by the simulation manifest; 7 is the smallest size on which every pinned face (i,j in [3, N-2]) carries the full 6-cell PPM reconstruction stencil) by the simulation manifest): the same five equations as the consuming EqESM model \u2014 the zonal/meridional PPM layer fluxes uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) and vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) (zonal_flux_layer / merid_flux_layer, MOM_continuity_PPM.F90:933-956 / 1809-1893, with the PPM_reconstruction_x/y parabolas F90:2327-2478 / 2503-2629 and the PPM_limit_pos limiter F90:2636-2674 built from the stencil laws), the C-grid face-flux divergences div_x = D(uh,x), div_y = D(vh,y), and the continuity PDE D(h,t) = -(div_x + div_y).  The hand-chosen state exercises every branch of the flux laws at once: u_E > 0 at the (3,3) face, u_E < 0 at (4,4), u_E > 0 at (3,4) whose west neighbour cell (2,4) is MASKED (mask = 0, exercising the masked-slope zeroing and the masked-neighbour edge replacement), v_N < 0 at (3,3), v_N > 0 at (4,4) and (3,4), zero velocities elsewhere, and the zero-flux EAST and NORTH wall regions (faces i = 7 and j = 7) of the flux rules' explicit wall regions.  The 14 expected values are the MOM6 laws evaluated by the independent Python transcription of stage1/analysis/extract_mom6_dyn_test.py (EqESM), which reproduces the instrumented Fortran's uh_E/uh_W/vh_N/vh_S columns at rel 1e-12; the rule lowering agrees with the Fortran at rel 1e-12 (EqESM stage2/mom6_dynamics.esm pins), so the two independent transcriptions of the same law bound the golden at rel 1e-11 (the rule groups dy*(u*(...)) where the Fortran/Python group (dy*u)*(...), leaving a few ULPs of association-order slack; the AST fixture tests/conformance/ast/mom6_cgrid_continuity pins the byte-identical expansion).",
+  "license": "MIT",
+  "tags": [
+   "conformance",
+   "problem",
+   "grid:mom6_cgrid",
+   "rule:mom6_cgrid_flux_x",
+   "rule:mom6_cgrid_flux_y",
+   "rule:mom6_cgrid_div_x",
+   "rule:mom6_cgrid_div_y"
+  ]
+ },
+ "models": {
+  "Mom6CgridFluxPpm": {
+   "expression_template_imports": [
+    {
+     "ref": "../grids/mom6_cgrid/grid.esm"
+    },
+    {
+     "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_flux_x.esm"
+    },
+    {
+     "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_flux_y.esm"
+    },
+    {
+     "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_div_x.esm"
+    },
+    {
+     "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_div_y.esm"
+    }
+   ],
+   "variables": {
+    "h": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "Layer thickness on the T cells, the continuity state (a hand-chosen 6x6 bump profile in [1, 2.4] m with one masked cell at (2,4))."
+    },
+    "uh": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "Zonal layer volume flux at the east faces, the flux_x rule target."
+    },
+    "vh": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "Meridional layer volume flux at the north faces, the flux_y rule target."
+    },
+    "div_x": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Zonal face-flux divergence, the div_x rule target."
+    },
+    "div_y": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Meridional face-flux divergence, the div_y rule target."
+    },
+    "u_E": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "East-face zonal velocity of the C-grid staggering (nonzero at the (3,3), (4,4) and (3,4) faces)."
+    },
+    "v_N": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "North-face meridional velocity of the C-grid staggering (nonzero at the (3,3), (4,4) and (3,4) faces)."
+    },
+    "dy_Cu_E": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "Length of the east face (uniform 1 m on the tiny grid)."
+    },
+    "dx_Cv_N": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "Length of the north face (uniform 1 m on the tiny grid)."
+    },
+    "mask": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "0/1 ocean-cell indicator (all 1 except the masked cell (2,4))."
+    },
+    "IdxT": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1/m",
+     "default": 0.0,
+     "description": "1/dxT of the cell (uniform 0.1 1/m on the tiny grid's 10 m cells)."
+    },
+    "IdxT_e": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1/m",
+     "default": 0.0,
+     "description": "1/dxT of the east neighbour cell, the u_E < 0 branch CFL denominator."
+    },
+    "IdyT": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1/m",
+     "default": 0.0,
+     "description": "1/dyT of the cell (uniform 0.1 1/m)."
+    },
+    "IdyT_n": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1/m",
+     "default": 0.0,
+     "description": "1/dyT of the north neighbour cell, the v_N < 0 branch CFL denominator."
+    },
+    "IareaT": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "1/m^2",
+     "default": 0.0,
+     "description": "1/cell area (uniform 0.01 1/m^2 on the 10 m x 10 m cells), the divergence rules' free-name contract with the grid."
+    },
+    "h_min_recon": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "The PPM_limit_pos thickness floor (1e-10 m)."
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 0.0,
+     "description": "The tracer time step (100 s; CFL = |u|*dt*IdxT = 0.2 at the 0.02 m/s faces)."
+    }
+   },
+   "equations": [
+    {
+     "lhs": "uh",
+     "rhs": {
+      "op": "mom6_cgrid_flux_x",
+      "args": [
+       "h",
+       "u_E",
+       "dy_Cu_E",
+       "mask",
+       "h_min_recon",
+       "dt",
+       "IdxT",
+       "IdxT_e"
+      ]
+     }
+    },
+    {
+     "lhs": "vh",
+     "rhs": {
+      "op": "mom6_cgrid_flux_y",
+      "args": [
+       "h",
+       "v_N",
+       "dx_Cv_N",
+       "mask",
+       "h_min_recon",
+       "dt",
+       "IdyT",
+       "IdyT_n"
+      ]
+     }
+    },
+    {
+     "lhs": "div_x",
+     "rhs": {
+      "op": "D",
+      "args": [
+       "uh"
+      ],
+      "wrt": "x"
+     }
+    },
+    {
+     "lhs": "div_y",
+     "rhs": {
+      "op": "D",
+      "args": [
+       "vh"
+      ],
+      "wrt": "y"
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "h"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "div_x",
+         "div_y"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "flux_law_numeric",
+     "description": "Instantaneous numeric pin (time span 0 to 0, rel 1e-11) of the rule-lowered fluxes, divergences and wall regions on the tiny 7x7x1 grid. The 7x7 grid is the smallest on which every pinned face (i,j in [3, N-2]) carries the full 6-cell PPM stencil. The test state is the hand-chosen field of the metadata description: h the 6x6 bump profile with the masked cell (2,4), u_E/v_N nonzero at the (3,3) (+/- branches), (4,4) (-/+ branches) and (3,4) (+, with the masked west neighbour) faces, uniform metrics (10 m cells: IdxT/IdxT_e/IdyT/IdyT_n = 0.1 1/m, dy_Cu_E/dx_Cv_N = 1 m, IareaT = 0.01 1/m^2), dt = 100 s, h_min_recon = 1e-10 m. The expected values are the MOM6 laws evaluated by the independent Python transcription of the EqESM dump extractor (reproduces the Fortran columns at rel 1e-12); the tolerance rel 1e-11 covers the association-order slack between the rule lowering and the Python evaluation (each is within rel 1e-12 of the Fortran; the rule groups dy*(u*(...)) where the Fortran groups (dy*u)*(...)). The uh(7,3) and vh(3,7) assertions pin the explicit zero-flux east/north wall regions of the flux rules.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "h": [
+       [
+        [
+         1.0
+        ],
+        [
+         1.0
+        ],
+        [
+         1.2
+        ],
+        [
+         1.5
+        ],
+        [
+         1.3
+        ],
+        [
+         1.0
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.0
+        ],
+        [
+         1.1
+        ],
+        [
+         1.3
+        ],
+        [
+         1.6
+        ],
+        [
+         1.2
+        ],
+        [
+         1.0
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.2
+        ],
+        [
+         1.3
+        ],
+        [
+         2.0
+        ],
+        [
+         2.2
+        ],
+        [
+         1.8
+        ],
+        [
+         1.2
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.5
+        ],
+        [
+         1.6
+        ],
+        [
+         2.2
+        ],
+        [
+         2.4
+        ],
+        [
+         2.0
+        ],
+        [
+         1.5
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.3
+        ],
+        [
+         1.2
+        ],
+        [
+         1.8
+        ],
+        [
+         2.0
+        ],
+        [
+         1.6
+        ],
+        [
+         1.3
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.0
+        ],
+        [
+         1.0
+        ],
+        [
+         1.2
+        ],
+        [
+         1.5
+        ],
+        [
+         1.3
+        ],
+        [
+         1.0
+        ],
+        [
+         1.0
+        ]
+       ],
+       [
+        [
+         1.0
+        ],
+        [
+         1.0
+        ],
+        [
+         1.2
+        ],
+        [
+         1.5
+        ],
+        [
+         1.3
+        ],
+        [
+         1.0
+        ],
+        [
+         1.0
+        ]
+       ]
+      ]
+     },
+     "parameter_overrides": {
+      "u_E": [
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.02
+        ],
+        [
+         0.01
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         -0.015
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ]
+      ],
+      "v_N": [
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         -0.02
+        ],
+        [
+         0.01
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.015
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ],
+       [
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ],
+        [
+         0.0
+        ]
+       ]
+      ],
+      "dy_Cu_E": [
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ]
+      ],
+      "dx_Cv_N": [
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ]
+      ],
+      "mask": [
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+       ]
+      ],
+      "IdxT": [
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ]
+      ],
+      "IdxT_e": [
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ]
+      ],
+      "IdyT": [
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ]
+      ],
+      "IdyT_n": [
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ],
+       [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+       ]
+      ],
+      "IareaT": [
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ],
+       [
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+       ]
+      ],
+      "dt": 100.0,
+      "h_min_recon": 1e-10
+     },
+     "assertions": [
+      {
+       "variable": "uh",
+       "time": 0.0,
+       "expected": 0.04336,
+       "coords": {
+        "i": 3,
+        "j": 3,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vh",
+       "time": 0.0,
+       "expected": -0.043946666666666676,
+       "coords": {
+        "i": 3,
+        "j": 3,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_x",
+       "time": 0.0,
+       "expected": 0.0004336,
+       "coords": {
+        "i": 3,
+        "j": 3,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_y",
+       "time": 0.0,
+       "expected": -0.00043946666666666676,
+       "coords": {
+        "i": 3,
+        "j": 3,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "uh",
+       "time": 0.0,
+       "expected": -0.033601875,
+       "coords": {
+        "i": 4,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vh",
+       "time": 0.0,
+       "expected": 0.0347090625,
+       "coords": {
+        "i": 4,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_x",
+       "time": 0.0,
+       "expected": -0.00056411875,
+       "coords": {
+        "i": 4,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_y",
+       "time": 0.0,
+       "expected": 0.000347090625,
+       "coords": {
+        "i": 4,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "uh",
+       "time": 0.0,
+       "expected": 0.022809999999999997,
+       "coords": {
+        "i": 3,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vh",
+       "time": 0.0,
+       "expected": 0.021085000000000003,
+       "coords": {
+        "i": 3,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_x",
+       "time": 0.0,
+       "expected": 0.00022809999999999996,
+       "coords": {
+        "i": 3,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "div_y",
+       "time": 0.0,
+       "expected": 0.0006503166666666668,
+       "coords": {
+        "i": 3,
+        "j": 4,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "uh",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "i": 7,
+        "j": 3,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vh",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "i": 3,
+        "j": 7,
+        "k": 1
+       },
+       "tolerance": {
+        "rel": 1e-11,
+        "abs": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
