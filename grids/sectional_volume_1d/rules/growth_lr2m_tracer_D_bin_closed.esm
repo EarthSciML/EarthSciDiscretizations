@@ -1,0 +1,288 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "growth_lr2m_tracer_D_bin_closed",
+    "description": "Companion of growth_lr2m_D_bin_closed for any quantity carried by the particles' VOLUME -- component masses, aerosol water, a dry-volume tracer -- on the trailing axis `tracer`: the consumer writes dm/dt = -D(lam*m, N, V, wrt: bin) + ... with m [cell, bin, tracer] and the section number N and dry volume V [cell, bin] as trailing operands (esm-spec 9.6.8). The particles crossing an edge each carry the edge volume, and m is uniformly mixed over its donor section's volume, so the flux of m through an edge is v_edge F_N m_donor/V_donor, with F_N the number flux of growth_lr2m_D_bin_closed (sectional_lr2m_tracer_flux_up / _down). That is MOSAIC's apply_moves, which moves every component and the water by the same volume fraction xferfracvol, in the dt -> 0 limit. Telescoping per tracer (sum_j dm_j/dt = 0), closed at both ends of the size range exactly as the number rule. The arity (three operands) keeps the two rules disjoint: the number rule's two-operand pattern cannot match this node, nor this pattern that one. Requires NBIN >= 2.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:sectional_volume_1d",
+      "op:advection",
+      "order:1",
+      "scheme:linear-discrete",
+      "scheme:upwind",
+      "bc:closed",
+      "form:flux",
+      "spec:9.6.8",
+      "axes:cell,bin,tracer"
+    ],
+    "references": [
+      {
+        "citation": "Zaveri, R. A., Easter, R. C., Fast, J. D., & Peters, L. K. (2008). Model for Simulating Aerosol Interactions and Chemistry (MOSAIC). Journal of Geophysical Research, 113, D13204.",
+        "doi": "10.1029/2007JD008782"
+      },
+      {
+        "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
+      },
+      {
+        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
+        "doi": "10.1016/0021-9797(80)90394-X"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/sectional_lr2m_growth_tracer_interior.esm"
+    },
+    {
+      "ref": "../stencils/sectional_lr2m_tracer_flux_up.esm"
+    },
+    {
+      "ref": "../stencils/sectional_lr2m_tracer_flux_down.esm"
+    },
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "growth_lr2m_tracer_D_bin_closed": {
+      "params": [
+        "lam",
+        "m",
+        "N",
+        "V"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "lam",
+              "m"
+            ]
+          },
+          "N",
+          "V"
+        ],
+        "wrt": "bin"
+      },
+      "where": {
+        "lam": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        },
+        "m": {
+          "shape": [
+            "cell",
+            "bin",
+            "tracer"
+          ]
+        },
+        "N": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        },
+        "V": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NBIN",
+                  1
+                ]
+              }
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ],
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ],
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              "NBIN",
+              "NBIN"
+            ],
+            [
+              1,
+              "NTRACER"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sectional_lr2m_growth_tracer_interior",
+            "bindings": {
+              "lam": "lam",
+              "N": "N",
+              "V": "V",
+              "m": "m"
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j",
+              "s"
+            ],
+            "args": [],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": [
+                1,
+                1
+              ],
+              "s": {
+                "from": "tracer"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_tracer_flux_up",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "m": "m",
+                    "c": "c",
+                    "j": "j",
+                    "s": "s"
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_tracer_flux_down",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "m": "m",
+                    "c": "c",
+                    "j": {
+                      "op": "+",
+                      "args": [
+                        "j",
+                        1
+                      ]
+                    },
+                    "s": "s"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j",
+              "s"
+            ],
+            "args": [],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": [
+                "NBIN",
+                "NBIN"
+              ],
+              "s": {
+                "from": "tracer"
+              }
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_tracer_flux_down",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "m": "m",
+                    "c": "c",
+                    "j": "j",
+                    "s": "s"
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_tracer_flux_up",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "m": "m",
+                    "c": "c",
+                    "j": {
+                      "op": "-",
+                      "args": [
+                        "j",
+                        1
+                      ]
+                    },
+                    "s": "s"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
