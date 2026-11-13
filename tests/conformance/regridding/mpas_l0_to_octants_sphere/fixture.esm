@@ -35,6 +35,12 @@
             "NTGT": 8,
             "NVERT": 3
           }
+        },
+        {
+          "ref": "esm:std/geometry.esm",
+          "only": [
+            "lonlat_to_unit"
+          ]
         }
       ],
       "subsystems": {
@@ -116,6 +122,24 @@
           ],
           "description": "Target-cell geometry: the 8 spherical octants as closed CCW lon-lat-degree triangles (NVERT = 3). Every edge is a 90-degree great-circle arc; the north/south poles are spelled (0, +/-90) IDENTICALLY in every ring that touches them and shared equator vertices reuse identical spellings (270 stays 270, the wrap vertex is 0), so adjacent octants share seams exactly and the eight tile the sphere: expected A_j = pi/2 each, sum 4*pi."
         },
+        "src_unit": {
+          "type": "unknown",
+          "shape": [
+            "cells",
+            "maxEdges",
+            "overlap_unit_xyz"
+          ],
+          "description": "Unit vectors (x, y, z) of the source rings src_poly (lon-lat degrees), the operand of conservative_overlap_A_ij_spherical."
+        },
+        "tgt_unit": {
+          "type": "unknown",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_unit_xyz"
+          ],
+          "description": "Unit vectors (x, y, z) of the target rings tgt_poly (lon-lat degrees), the operand of conservative_overlap_A_ij_spherical."
+        },
         "F_src": {
           "type": "unknown",
           "units": "1",
@@ -139,7 +163,7 @@
             "cells",
             "tgt_cells"
           ],
-          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), manifold 'spherical' bound at the invocation: great-circle-edge clipping on the unit sphere, areas in steradians."
+          "description": "Overlap-area matrix from the library's spherical narrow-phase template conservative_overlap_A_ij_spherical (build-once), on the unit-vector stacks src_unit and tgt_unit: great-circle-edge clipping on the unit sphere, areas in steradians (esm:std overlap_area_spherical; before esm 2.0.0 this was conservative_overlap_A_ij with manifold 'spherical'). Pentagon sources (5 vertex slots) against triangle targets (3)."
         },
         "A_j": {
           "type": "unknown",
@@ -439,6 +463,78 @@
           }
         },
         {
+          "lhs": "src_unit",
+          "rhs": {
+            "op": "faq",
+            "args": [
+              "src_poly"
+            ],
+            "output_idx": [
+              "c",
+              "v",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "v": {
+                "from": "maxEdges"
+              },
+              "d": {
+                "from": "overlap_unit_xyz"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "lonlat_to_unit",
+              "bindings": {
+                "ring": "src_poly",
+                "cell": "c",
+                "vert": "v",
+                "comp": "d"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "tgt_unit",
+          "rhs": {
+            "op": "faq",
+            "args": [
+              "tgt_poly"
+            ],
+            "output_idx": [
+              "c",
+              "v",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "tgt_cells"
+              },
+              "v": {
+                "from": "overlap_cell_verts"
+              },
+              "d": {
+                "from": "overlap_unit_xyz"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "lonlat_to_unit",
+              "bindings": {
+                "ring": "tgt_poly",
+                "cell": "c",
+                "vert": "v",
+                "comp": "d"
+              }
+            }
+          }
+        },
+        {
           "lhs": "F_src",
           "rhs": {
             "op": "const",
@@ -484,12 +580,13 @@
           "lhs": "A_ij",
           "rhs": {
             "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
+            "name": "conservative_overlap_A_ij_spherical",
             "args": [],
             "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "spherical"
+              "src_unit": "src_unit",
+              "tgt_unit": "tgt_unit",
+              "nv_src": 5,
+              "nv_tgt": 3
             }
           }
         },

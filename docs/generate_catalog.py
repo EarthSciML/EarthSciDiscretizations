@@ -909,10 +909,10 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Asc
             "byte-identical across bindings.",
             "- **Gated == dense** value-identically under an admissible binning (the gated "
             "denominator broad-phases like the numerator, so partition-of-unity stays exact).",
-            "- **One file, every manifold**: `planar` or `spherical` is a per-invocation "
-            "template parameter. Spherical clip runs on Julia + Rust today; the Python "
-            "spherical case is gated on the optional `spherely` dependency (planar cases run "
-            "on Julia + Python + Rust), and the two rewrite-only ports (Go, TypeScript) are "
+            "- **Planar and spherical narrow phases**: `conservative_overlap_A_ij` clips in "
+            "the coordinate plane and `conservative_overlap_A_ij_spherical` on the unit "
+            "sphere, both through pure-AST `esm:std/geometry.esm` templates, so both run on "
+            "Julia + Python + Rust; the two rewrite-only ports (Go, TypeScript) are "
             "scope-excluded — recorded in each case manifest, never shimmed.",
             "",
             "End-to-end exemplars: `tests/conformance/regridding/"
