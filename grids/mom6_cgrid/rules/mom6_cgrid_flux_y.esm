@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_cgrid_flux_y",
-  "description": "The meridional PPM layer-flux lowering rule of the mom6_cgrid, the y mirror of mom6_cgrid_flux_x: matches the user rewrite target mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) — the north-face layer volume flux of every cell — and emits the [i,j,k] makearray of the MOM6 meridional flux law (merid_flux_layer, MOM_continuity_PPM.F90:1809-1893, VOL_CFL=False, por_face_areaV = 1): vh(i,j,k) = dx_Cv_N(i,j,k) * v_N(i,j,k) * (the PPM parabola integral of the UPWIND cell's limited edges), with the PPM_limit_pos-limited reconstruction of the upwind cell built inline from the same stencil laws as the zonal rule (mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral). The sign of the face velocity selects the upwind cell: v_N > 0 upwinds the cell itself (the F90:1854-1861 branch: CFL = v*dt*IdyT(i,j), vh = dx*v*(h_N(i,j) + CFL*(0.5*(h_S(i,j) - h_N(i,j)) + curv_3*(CFL - 1.5)))), v_N < 0 upwinds the north neighbor (the F90:1862-1869 branch: CFL = -v*dt*IdyT_n(i,j), vh = dx*v*(h_S(i,j+1) + CFL*(0.5*(h_N(i,j+1) - h_S(i,j+1)) + curv_3*(CFL - 1.5)))), and v_N == 0 gives the trivial zero flux. The reconstruction reads h and the mask over the 6-cell stencil j-2..j+3 of the face; the index expressions CLAMP at the domain edges (max(1, j-2), max(1, j-1) low, min(N_J, j+2), min(N_J, j+3) high) so the lowered operator is total on the traced subdomain — the halo closure is a well-definedness device only: the pinned interior faces (j >= 3, j <= N_J-2) never read a clamped index, so the stage-2 pins compare the rule against the Fortran's halo-updated values bit-for-bit. The NORTH DOMAIN WALL is an explicit region: the face at j = N_J (the north edge of the last cell row) carries the zero flux of a solid wall (the convergence (vh(i,j) - vh(i,j-1))*IareaT then telescopes to -vh(i,N_J-1)*IareaT in the sibling mom6_cgrid_div_y). The masked-cell handling is inside the stencil laws (zero slope and the masked-neighbor edge replacement of PPM_reconstruction_y, F90:2503-2629). The consuming model spells vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) with h [i,j,k], v_N/dx_Cv_N/IdyT/IdyT_n [i,j,k], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
+  "description": "The meridional PPM layer-flux lowering rule of the mom6_cgrid, the y mirror of mom6_cgrid_flux_x: matches the user rewrite target mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) — the north-face layer volume flux of every cell — and emits the [i,j,k] makearray of the MOM6 meridional flux law (merid_flux_layer, MOM_continuity_PPM.F90:1809-1893, VOL_CFL=False, por_face_areaV = 1): vh(i,j,k) = dx_Cv_N(i,j,k) * v_N(i,j,k) * (the PPM parabola integral of the UPWIND cell's limited edges), with the PPM_limit_pos-limited reconstruction of the upwind cell built inline from the same stencil laws as the zonal rule (mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral). The sign of the face velocity selects the upwind cell: v_N > 0 upwinds the cell itself (the F90:1854-1861 branch: CFL = v*dt*IdyT(i,j), vh = dx*v*(h_N(i,j) + CFL*(0.5*(h_S(i,j) - h_N(i,j)) + curv_3*(CFL - 1.5)))), v_N < 0 upwinds the north neighbor (the F90:1862-1869 branch: CFL = -v*dt*IdyT_n(i,j), vh = dx*v*(h_S(i,j+1) + CFL*(0.5*(h_N(i,j+1) - h_S(i,j+1)) + curv_3*(CFL - 1.5)))), and v_N == 0 gives the trivial zero flux. The reconstruction reads h and the mask over the 6-cell stencil j-2..j+3 of the face; the index expressions CLAMP at the domain edges (max(1, j-2), max(1, j-1) low, min(N_J, j+2), min(N_J, j+3) high) so the lowered operator is total on the traced subdomain — the halo closure is a well-definedness device only: the pinned interior faces (j >= 3, j <= N_J-2) never read a clamped index, so the stage-2 pins compare the rule against the Fortran's halo-updated values bit-for-bit. The NORTH DOMAIN WALL is an explicit region: the face at j = N_J (the north edge of the last cell row) carries the zero flux of a solid wall (the convergence (vh(i,j) - vh(i,j-1))*IareaT then telescopes to -vh(i,N_J-1)*IareaT in the sibling mom6_cgrid_div_y). The masked-cell handling is inside the stencil laws (zero slope and the masked-neighbor edge replacement of PPM_reconstruction_y, F90:2503-2629). The consuming model spells vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) with h [i,j,k], v_N [i,j,k], the horizontal metrics dx_Cv_N/IdyT/IdyT_n [i,j], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
   "license": "MIT",
   "tags": [
    "esd:rule",
@@ -92,8 +92,7 @@
     "dx_Cv_N": {
      "shape": [
       "i",
-      "j",
-      "k"
+      "j"
      ]
     },
     "mask": {
@@ -105,15 +104,13 @@
     "IdyT": {
      "shape": [
       "i",
-      "j",
-      "k"
+      "j"
      ]
     },
     "IdyT_n": {
      "shape": [
       "i",
-      "j",
-      "k"
+      "j"
      ]
     }
    },
@@ -232,8 +229,7 @@
            "args": [
             "dx_Cv_N",
             "i",
-            "j",
-            "k"
+            "j"
            ]
           },
           "I_dx": {
@@ -241,8 +237,7 @@
            "args": [
             "IdyT",
             "i",
-            "j",
-            "k"
+            "j"
            ]
           },
           "h_face": {
@@ -1830,8 +1825,7 @@
              "args": [
               "dx_Cv_N",
               "i",
-              "j",
-              "k"
+              "j"
              ]
             },
             "I_dx": {
@@ -1839,8 +1833,7 @@
              "args": [
               "IdyT_n",
               "i",
-              "j",
-              "k"
+              "j"
              ]
             },
             "h_face": {

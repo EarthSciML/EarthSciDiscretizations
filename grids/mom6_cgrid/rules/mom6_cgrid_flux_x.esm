@@ -2,7 +2,7 @@
   "esm": "1.3.0",
   "metadata": {
     "name": "mom6_cgrid_flux_x",
-    "description": "The zonal PPM layer-flux lowering rule of the mom6_cgrid: matches the user rewrite target mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) — the east-face layer volume flux of every cell — and emits the [i,j,k] makearray of the MOM6 zonal flux law (zonal_flux_layer, MOM_continuity_PPM.F90:933-956, VOL_CFL=False, por_face_areaU = 1): uh(i,j,k) = dy_Cu_E(i,j,k) * u_E(i,j,k) * (the PPM parabola integral of the UPWIND cell's limited edges), with the PPM_limit_pos-limited reconstruction of the upwind cell built inline from the stencil laws mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral. The sign of the face velocity selects the upwind cell: u_E > 0 upwinds the cell itself (the F90:933-939 branch: CFL = u*dt*IdxT(i,j), uh = dy*u*(h_E(i) + CFL*(0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))), u_E < 0 upwinds the east neighbor (the F90:940-949 branch: CFL = -u*dt*IdxT_e(i,j), uh = dy*u*(h_W(i+1) + CFL*(0.5*(h_E(i+1) - h_W(i+1)) + curv_3*(CFL - 1.5)))), and u_E == 0 gives the trivial zero flux. The reconstruction reads h and the mask over the 6-cell stencil i-2..i+3 of the face; the index expressions CLAMP at the domain edges (max(1, i-2), max(1, i-1) low, min(N_I, i+2), min(N_I, i+3) high) so the lowered operator is total on the traced subdomain — the halo closure is a well-definedness device only: the pinned interior faces (i >= 3, i <= N_I-2) never read a clamped index, so the stage-2 pins compare the rule against the Fortran's halo-updated values bit-for-bit. The EAST DOMAIN WALL is an explicit region: the face at i = N_I (the east edge of the last cell column) carries the zero flux of a solid wall (the Fortran's masked face: u = 0 and the convergence (uh(i,j) - uh(i-1,j))*IareaT then telescopes to -uh(N_I-1)*IareaT in the sibling mom6_cgrid_div_x). The masked-cell handling is inside the stencil laws (zero slope and the masked-neighbor edge replacement of PPM_reconstruction_x, F90:2380-2449). The consuming model spells uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) with h [i,j,k], u_E/dy_Cu_E/IdxT/IdxT_e [i,j,k], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
+    "description": "The zonal PPM layer-flux lowering rule of the mom6_cgrid: matches the user rewrite target mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) — the east-face layer volume flux of every cell — and emits the [i,j,k] makearray of the MOM6 zonal flux law (zonal_flux_layer, MOM_continuity_PPM.F90:933-956, VOL_CFL=False, por_face_areaU = 1): uh(i,j,k) = dy_Cu_E(i,j,k) * u_E(i,j,k) * (the PPM parabola integral of the UPWIND cell's limited edges), with the PPM_limit_pos-limited reconstruction of the upwind cell built inline from the stencil laws mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral. The sign of the face velocity selects the upwind cell: u_E > 0 upwinds the cell itself (the F90:933-939 branch: CFL = u*dt*IdxT(i,j), uh = dy*u*(h_E(i) + CFL*(0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))), u_E < 0 upwinds the east neighbor (the F90:940-949 branch: CFL = -u*dt*IdxT_e(i,j), uh = dy*u*(h_W(i+1) + CFL*(0.5*(h_E(i+1) - h_W(i+1)) + curv_3*(CFL - 1.5)))), and u_E == 0 gives the trivial zero flux. The reconstruction reads h and the mask over the 6-cell stencil i-2..i+3 of the face; the index expressions CLAMP at the domain edges (max(1, i-2), max(1, i-1) low, min(N_I, i+2), min(N_I, i+3) high) so the lowered operator is total on the traced subdomain — the halo closure is a well-definedness device only: the pinned interior faces (i >= 3, i <= N_I-2) never read a clamped index, so the stage-2 pins compare the rule against the Fortran's halo-updated values bit-for-bit. The EAST DOMAIN WALL is an explicit region: the face at i = N_I (the east edge of the last cell column) carries the zero flux of a solid wall (the Fortran's masked face: u = 0 and the convergence (uh(i,j) - uh(i-1,j))*IareaT then telescopes to -uh(N_I-1)*IareaT in the sibling mom6_cgrid_div_x). The masked-cell handling is inside the stencil laws (zero slope and the masked-neighbor edge replacement of PPM_reconstruction_x, F90:2380-2449). The consuming model spells uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) with h [i,j,k], u_E [i,j,k], the horizontal metrics dy_Cu_E/IdxT/IdxT_e [i,j], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
     "license": "MIT",
     "tags": [
       "esd:rule",
@@ -59,10 +59,10 @@
       "where": {
         "h": { "shape": ["i", "j", "k"] },
         "u_E": { "shape": ["i", "j", "k"] },
-        "dy_Cu_E": { "shape": ["i", "j", "k"] },
+        "dy_Cu_E": { "shape": ["i", "j"] },
         "mask": { "shape": ["i", "j"] },
-        "IdxT": { "shape": ["i", "j", "k"] },
-        "IdxT_e": { "shape": ["i", "j", "k"] }
+        "IdxT": { "shape": ["i", "j"] },
+        "IdxT_e": { "shape": ["i", "j"] }
       },
       "body": {
         "op": "makearray",
@@ -106,8 +106,8 @@
                   "bindings": {
                     "u": { "op": "index", "args": ["u_E", "i", "j", "k"] },
                     "dt": "dt",
-                    "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j", "k"] },
-                    "I_dx": { "op": "index", "args": ["IdxT", "i", "j", "k"] },
+                    "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j"] },
+                    "I_dx": { "op": "index", "args": ["IdxT", "i", "j"] },
                     "h_face": {
                       "op": "apply_expression_template",
                       "args": [],
@@ -378,8 +378,8 @@
                       "bindings": {
                         "u": { "op": "index", "args": ["u_E", "i", "j", "k"] },
                         "dt": "dt",
-                        "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j", "k"] },
-                        "I_dx": { "op": "index", "args": ["IdxT_e", "i", "j", "k"] },
+                        "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j"] },
+                        "I_dx": { "op": "index", "args": ["IdxT_e", "i", "j"] },
                         "h_face": {
                           "op": "apply_expression_template",
                           "args": [],

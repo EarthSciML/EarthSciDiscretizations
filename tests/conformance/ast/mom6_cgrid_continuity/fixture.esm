@@ -1,205 +1,284 @@
 {
-  "esm": "1.3.0",
-  "metadata": {
-    "name": "mom6_cgrid_continuity_ast_fixture",
-    "description": "AST-expansion conformance fixture for the mom6_cgrid PPM continuity rule quartet (grids/mom6_cgrid/rules/mom6_cgrid_flux_x/y.esm and mom6_cgrid_div_x/y.esm) at N_I = N_J = 8, N_K = 2 (the traced stage-2 subdomain of EqESM stage2/mom6_dynamics.esm): the same five equations as the consuming model — the zonal and meridional PPM layer fluxes uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) and vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) (the zonal_flux_layer and merid_flux_layer laws of MOM_continuity_PPM.F90:933-956 / 1809-1893 with the PPM_reconstruction_x/y parabolas F90:2327-2478 / 2503-2629 and the PPM_limit_pos limiter F90:2636-2674 built from the shared stencil laws mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral), the C-grid face-flux divergences div_x = D(uh,x) and div_y = D(vh,y) (the interior (uh(i,j)-uh(i-1,j))*IareaT(i,j) form with the explicit west/south wall single-face regions and the east/north wall zero-flux regions of the flux rules), and the continuity PDE D(h,t) = -(div_x + div_y).  Forces expansion of the flux rules' 2-region makearrays (interior faces plus the zero-flux east/north wall faces) with the clamped index expressions max(1, i-2), max(1, i-1), min(N_I, i+2), min(N_I, i+3) (and their y mirrors) at the domain edges, and of the divergence rules' 2-region makearrays; every apply_expression_template node of the stencil laws must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/2 at the grid import edge).  The stage-2 test pins (stage2/mom6_dynamics.esm) carry the numeric comparison against the Fortran dump at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
-    "license": "MIT",
-    "tags": [
-      "conformance",
-      "ast",
-      "grid:mom6_cgrid",
-      "rule:mom6_cgrid_flux_x",
-      "rule:mom6_cgrid_flux_y",
-      "rule:mom6_cgrid_div_x",
-      "rule:mom6_cgrid_div_y"
-    ]
-  },
-  "models": {
-    "Mom6CgridContinuityAst": {
-      "expression_template_imports": [
-        {
-          "ref": "../../../../grids/mom6_cgrid/grid.esm"
-        },
-        {
-          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_flux_x.esm"
-        },
-        {
-          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_flux_y.esm"
-        },
-        {
-          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_div_x.esm"
-        },
-        {
-          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_div_y.esm"
-        }
-      ],
-      "variables": {
-        "h": {
-          "type": "unknown",
-          "units": "m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Layer thickness on the T cells, the continuity state."
-        },
-        "uh": {
-          "type": "unknown",
-          "units": "m^3/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Zonal layer volume flux at the east faces, the flux_x rule target."
-        },
-        "vh": {
-          "type": "unknown",
-          "units": "m^3/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Meridional layer volume flux at the north faces, the flux_y rule target."
-        },
-        "div_x": {
-          "type": "unknown",
-          "units": "m/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Zonal face-flux divergence, the div_x rule target."
-        },
-        "div_y": {
-          "type": "unknown",
-          "units": "m/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Meridional face-flux divergence, the div_y rule target."
-        },
-        "u_E": {
-          "type": "parameter",
-          "units": "m/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "East-face zonal velocity of the C-grid staggering."
-        },
-        "v_N": {
-          "type": "parameter",
-          "units": "m/s",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "North-face meridional velocity of the C-grid staggering."
-        },
-        "dy_Cu_E": {
-          "type": "parameter",
-          "units": "m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Length of the east face."
-        },
-        "dx_Cv_N": {
-          "type": "parameter",
-          "units": "m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "Length of the north face."
-        },
-        "mask": {
-          "type": "parameter",
-          "units": "1",
-          "shape": ["i", "j"],
-          "default": 0.0,
-          "description": "0/1 ocean-cell indicator."
-        },
-        "IdxT": {
-          "type": "parameter",
-          "units": "1/m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "1/dxT of the cell."
-        },
-        "IdxT_e": {
-          "type": "parameter",
-          "units": "1/m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "1/dxT of the east neighbor cell."
-        },
-        "IdyT": {
-          "type": "parameter",
-          "units": "1/m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "1/dyT of the cell."
-        },
-        "IdyT_n": {
-          "type": "parameter",
-          "units": "1/m",
-          "shape": ["i", "j", "k"],
-          "default": 0.0,
-          "description": "1/dyT of the north neighbor cell."
-        },
-        "IareaT": {
-          "type": "parameter",
-          "units": "1/m^2",
-          "shape": ["i", "j"],
-          "default": 0.0,
-          "description": "1/cell area."
-        },
-        "h_min_recon": {
-          "type": "parameter",
-          "units": "m",
-          "default": 0.0,
-          "description": "The PPM_limit_pos thickness floor."
-        },
-        "dt": {
-          "type": "parameter",
-          "units": "s",
-          "default": 0.0,
-          "description": "The tracer time step."
-        }
-      },
-      "equations": [
-        {
-          "lhs": "uh",
-          "rhs": {
-            "op": "mom6_cgrid_flux_x",
-            "args": ["h", "u_E", "dy_Cu_E", "mask", "h_min_recon", "dt", "IdxT", "IdxT_e"]
-          }
-        },
-        {
-          "lhs": "vh",
-          "rhs": {
-            "op": "mom6_cgrid_flux_y",
-            "args": ["h", "v_N", "dx_Cv_N", "mask", "h_min_recon", "dt", "IdyT", "IdyT_n"]
-          }
-        },
-        {
-          "lhs": "div_x",
-          "rhs": {
-            "op": "D",
-            "args": ["uh"],
-            "wrt": "x"
-          }
-        },
-        {
-          "lhs": "div_y",
-          "rhs": {
-            "op": "D",
-            "args": ["vh"],
-            "wrt": "y"
-          }
-        },
-        {
-          "lhs": {
-            "op": "D",
-            "args": ["h"],
-            "wrt": "t"
-          },
-          "rhs": {
-            "op": "-",
-            "args": [
-              {
-                "op": "+",
-                "args": ["div_x", "div_y"]
-              }
-            ]
-          }
-        }
-      ]
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_cgrid_continuity_ast_fixture",
+  "description": "AST-expansion conformance fixture for the mom6_cgrid PPM continuity rule quartet (grids/mom6_cgrid/rules/mom6_cgrid_flux_x/y.esm and mom6_cgrid_div_x/y.esm) at N_I = N_J = 8, N_K = 2 (the traced stage-2 subdomain of EqESM stage2/mom6_dynamics.esm; the horizontal metrics dy_Cu_E/dx_Cv_N/IdxT/IdxT_e/IdyT/IdyT_n are [i,j] (the flux rules' where clause accepts the 2-D metric shapes and indexes them at (i,j), the k axis entering only through h and the face velocities u_E/v_N)): the same five equations as the consuming model \u2014 the zonal and meridional PPM layer fluxes uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) and vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) (the zonal_flux_layer and merid_flux_layer laws of MOM_continuity_PPM.F90:933-956 / 1809-1893 with the PPM_reconstruction_x/y parabolas F90:2327-2478 / 2503-2629 and the PPM_limit_pos limiter F90:2636-2674 built from the shared stencil laws mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral), the C-grid face-flux divergences div_x = D(uh,x) and div_y = D(vh,y) (the interior (uh(i,j)-uh(i-1,j))*IareaT(i,j) form with the explicit west/south wall single-face regions and the east/north wall zero-flux regions of the flux rules), and the continuity PDE D(h,t) = -(div_x + div_y).  Forces expansion of the flux rules' 2-region makearrays (interior faces plus the zero-flux east/north wall faces) with the clamped index expressions max(1, i-2), max(1, i-1), min(N_I, i+2), min(N_I, i+3) (and their y mirrors) at the domain edges, and of the divergence rules' 2-region makearrays; every apply_expression_template node of the stencil laws must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/2 at the grid import edge).  The stage-2 test pins (stage2/mom6_dynamics.esm) carry the numeric comparison against the Fortran dump at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
+  "license": "MIT",
+  "tags": [
+   "conformance",
+   "ast",
+   "grid:mom6_cgrid",
+   "rule:mom6_cgrid_flux_x",
+   "rule:mom6_cgrid_flux_y",
+   "rule:mom6_cgrid_div_x",
+   "rule:mom6_cgrid_div_y"
+  ]
+ },
+ "models": {
+  "Mom6CgridContinuityAst": {
+   "expression_template_imports": [
+    {
+     "ref": "../../../../grids/mom6_cgrid/grid.esm"
+    },
+    {
+     "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_flux_x.esm"
+    },
+    {
+     "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_flux_y.esm"
+    },
+    {
+     "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_div_x.esm"
+    },
+    {
+     "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_div_y.esm"
     }
+   ],
+   "variables": {
+    "h": {
+     "type": "unknown",
+     "units": "m",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "Layer thickness on the T cells, the continuity state."
+    },
+    "uh": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "Zonal layer volume flux at the east faces, the flux_x rule target."
+    },
+    "vh": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "Meridional layer volume flux at the north faces, the flux_y rule target."
+    },
+    "div_x": {
+     "type": "unknown",
+     "units": "m/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "Zonal face-flux divergence, the div_x rule target."
+    },
+    "div_y": {
+     "type": "unknown",
+     "units": "m/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "Meridional face-flux divergence, the div_y rule target."
+    },
+    "u_E": {
+     "type": "parameter",
+     "units": "m/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "East-face zonal velocity of the C-grid staggering."
+    },
+    "v_N": {
+     "type": "parameter",
+     "units": "m/s",
+     "shape": [
+      "i",
+      "j",
+      "k"
+     ],
+     "default": 0.0,
+     "description": "North-face meridional velocity of the C-grid staggering."
+    },
+    "dy_Cu_E": {
+     "type": "parameter",
+     "units": "m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "Length of the east face. (horizontal metric, [i,j])"
+    },
+    "dx_Cv_N": {
+     "type": "parameter",
+     "units": "m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "Length of the north face. (horizontal metric, [i,j])"
+    },
+    "mask": {
+     "type": "parameter",
+     "units": "1",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "0/1 ocean-cell indicator."
+    },
+    "IdxT": {
+     "type": "parameter",
+     "units": "1/m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "1/dxT of the cell. (horizontal metric, [i,j])"
+    },
+    "IdxT_e": {
+     "type": "parameter",
+     "units": "1/m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "1/dxT of the east neighbor cell. (horizontal metric, [i,j])"
+    },
+    "IdyT": {
+     "type": "parameter",
+     "units": "1/m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "1/dyT of the cell. (horizontal metric, [i,j])"
+    },
+    "IdyT_n": {
+     "type": "parameter",
+     "units": "1/m",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "1/dyT of the north neighbor cell. (horizontal metric, [i,j])"
+    },
+    "IareaT": {
+     "type": "parameter",
+     "units": "1/m^2",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "default": 0.0,
+     "description": "1/cell area."
+    },
+    "h_min_recon": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "The PPM_limit_pos thickness floor."
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 0.0,
+     "description": "The tracer time step."
+    }
+   },
+   "equations": [
+    {
+     "lhs": "uh",
+     "rhs": {
+      "op": "mom6_cgrid_flux_x",
+      "args": [
+       "h",
+       "u_E",
+       "dy_Cu_E",
+       "mask",
+       "h_min_recon",
+       "dt",
+       "IdxT",
+       "IdxT_e"
+      ]
+     }
+    },
+    {
+     "lhs": "vh",
+     "rhs": {
+      "op": "mom6_cgrid_flux_y",
+      "args": [
+       "h",
+       "v_N",
+       "dx_Cv_N",
+       "mask",
+       "h_min_recon",
+       "dt",
+       "IdyT",
+       "IdyT_n"
+      ]
+     }
+    },
+    {
+     "lhs": "div_x",
+     "rhs": {
+      "op": "D",
+      "args": [
+       "uh"
+      ],
+      "wrt": "x"
+     }
+    },
+    {
+     "lhs": "div_y",
+     "rhs": {
+      "op": "D",
+      "args": [
+       "vh"
+      ],
+      "wrt": "y"
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "h"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "div_x",
+         "div_y"
+        ]
+       }
+      ]
+     }
+    }
+   ]
   }
+ }
 }
