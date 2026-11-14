@@ -1,15 +1,15 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "sectional_lr2m_interior_mean",
-    "description": "True when section j holds particles (N > 0) and their mean volume lies inside the section by more than 1 % of its width at each end, vb[j] + 0.01 (vb[j+1] - vb[j]) < vbar < vb[j+1] - 0.01 (vb[j+1] - vb[j]). Otherwise the section has no linear reconstruction and carries nothing across its edges at an infinitesimal growth step: MOSAIC moves such a section's whole content to the section that holds its mean ('moving center', iforce_movecenter 12/13), a finite relocation that is not part of this rate operator -- a mean outside its own section is a state this operator never produces, so a consumer that can create one (coagulation, emissions, nucleation) must project it back itself.",
+    "description": "True when section j holds particles (N > 0) and their mean volume lies inside the section by more than 1 % of its width at each end, 0.01 < x < 0.99 with x = sectional_lr2m_position. Otherwise the section has no linear reconstruction and carries nothing across its edges at an infinitesimal growth step: MOSAIC moves such a section's whole content to the section that holds its mean ('moving center', iforce_movecenter 12/13), a finite relocation that is not part of this rate operator -- a mean outside its own section is a state this operator never produces, so a consumer that can create one (coagulation, emissions, nucleation) must project it back itself. An interior mean implies V = N vbar > 0, which is what lets sectional_lr2m_tracer_per_volume divide by the donor volume under this same predicate.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
       "family:finite_volume",
       "grid:sectional_volume_1d",
       "op:advection",
-      "order:1",
+      "order:2",
       "scheme:linear-discrete"
     ],
     "references": [
@@ -19,16 +19,12 @@
       },
       {
         "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
-      },
-      {
-        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
-        "doi": "10.1016/0021-9797(80)90394-X"
       }
     ]
   },
   "expression_template_imports": [
     {
-      "ref": "./sectional_mean_volume.esm"
+      "ref": "./sectional_lr2m_position.esm"
     },
     {
       "ref": "../grid.esm"
@@ -36,29 +32,11 @@
   ],
   "expression_templates": {
     "sectional_lr2m_interior_mean": {
-      "params": [
-        "N",
-        "V",
-        "c",
-        "j"
-      ],
+      "params": ["N", "V", "c", "j"],
       "body": {
         "op": "and",
         "args": [
-          {
-            "op": ">",
-            "args": [
-              {
-                "op": "index",
-                "args": [
-                  "N",
-                  "c",
-                  "j"
-                ]
-              },
-              0
-            ]
-          },
+          {"op": ">", "args": [{"op": "index", "args": ["N", "c", "j"]}, 0]},
           {
             "op": "and",
             "args": [
@@ -68,57 +46,10 @@
                   {
                     "op": "apply_expression_template",
                     "args": [],
-                    "name": "sectional_mean_volume",
-                    "bindings": {
-                      "N": "N",
-                      "V": "V",
-                      "c": "c",
-                      "j": "j"
-                    }
+                    "name": "sectional_lr2m_position",
+                    "bindings": {"N": "N", "V": "V", "c": "c", "j": "j"}
                   },
-                  {
-                    "op": "+",
-                    "args": [
-                      {
-                        "op": "index",
-                        "args": [
-                          "vb",
-                          "j"
-                        ]
-                      },
-                      {
-                        "op": "*",
-                        "args": [
-                          0.01,
-                          {
-                            "op": "-",
-                            "args": [
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  {
-                                    "op": "+",
-                                    "args": [
-                                      "j",
-                                      1
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  "j"
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
+                  0.01
                 ]
               },
               {
@@ -127,63 +58,10 @@
                   {
                     "op": "apply_expression_template",
                     "args": [],
-                    "name": "sectional_mean_volume",
-                    "bindings": {
-                      "N": "N",
-                      "V": "V",
-                      "c": "c",
-                      "j": "j"
-                    }
+                    "name": "sectional_lr2m_position",
+                    "bindings": {"N": "N", "V": "V", "c": "c", "j": "j"}
                   },
-                  {
-                    "op": "-",
-                    "args": [
-                      {
-                        "op": "index",
-                        "args": [
-                          "vb",
-                          {
-                            "op": "+",
-                            "args": [
-                              "j",
-                              1
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "op": "*",
-                        "args": [
-                          0.01,
-                          {
-                            "op": "-",
-                            "args": [
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  {
-                                    "op": "+",
-                                    "args": [
-                                      "j",
-                                      1
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  "j"
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
+                  0.99
                 ]
               }
             ]

@@ -1,15 +1,15 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "sectional_lr2m_tracer_flux_up",
-    "description": "Flux of a volume-carried quantity m (shape [cell, bin, tracer]: a component mass, water, ...) UP through the upper edge of section j: every particle crossing carries the edge volume vb[j+1], and the quantity is uniformly mixed over the donor section's volume, so the flux is vb[j+1] F_N m[c,j,s]/V[c,j] with F_N = sectional_lr2m_number_flux_up. Zero for an empty donor (V = 0).",
+    "description": "Flux of a volume-carried quantity m (shape [cell, bin, tracer]: a component mass, water, ...) UP through the upper edge of section j: every particle crossing carries the edge volume vb[j+1], and the quantity is uniformly mixed over the donor section's volume, so the flux is vb[j+1] F_N m[c,j,s]/V[c,j] with F_N = sectional_lr2m_number_flux_up and m/V = sectional_lr2m_tracer_per_volume. Zero whenever the number flux is, under the one predicate (sectional_lr2m_interior_mean) both read.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
       "family:finite_volume",
       "grid:sectional_volume_1d",
       "op:advection",
-      "order:1",
+      "order:2",
       "scheme:linear-discrete"
     ],
     "references": [
@@ -19,10 +19,6 @@
       },
       {
         "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
-      },
-      {
-        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
-        "doi": "10.1016/0021-9797(80)90394-X"
       }
     ]
   },
@@ -31,95 +27,31 @@
       "ref": "./sectional_lr2m_number_flux_up.esm"
     },
     {
+      "ref": "./sectional_lr2m_tracer_per_volume.esm"
+    },
+    {
       "ref": "../grid.esm"
     }
   ],
   "expression_templates": {
     "sectional_lr2m_tracer_flux_up": {
-      "params": [
-        "lam",
-        "N",
-        "V",
-        "m",
-        "c",
-        "j",
-        "s"
-      ],
+      "params": ["lam", "N", "V", "m", "c", "j", "s"],
       "body": {
-        "op": "ifelse",
+        "op": "*",
         "args": [
+          {"op": "index", "args": ["vb", {"op": "+", "args": ["j", 1]}]},
           {
-            "op": ">",
-            "args": [
-              {
-                "op": "index",
-                "args": [
-                  "V",
-                  "c",
-                  "j"
-                ]
-              },
-              0
-            ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sectional_lr2m_number_flux_up",
+            "bindings": {"N": "N", "V": "V", "c": "c", "j": "j", "lam": "lam"}
           },
           {
-            "op": "/",
-            "args": [
-              {
-                "op": "*",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      {
-                        "op": "index",
-                        "args": [
-                          "vb",
-                          {
-                            "op": "+",
-                            "args": [
-                              "j",
-                              1
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "op": "apply_expression_template",
-                        "args": [],
-                        "name": "sectional_lr2m_number_flux_up",
-                        "bindings": {
-                          "lam": "lam",
-                          "N": "N",
-                          "V": "V",
-                          "c": "c",
-                          "j": "j"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "op": "index",
-                    "args": [
-                      "m",
-                      "c",
-                      "j",
-                      "s"
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "index",
-                "args": [
-                  "V",
-                  "c",
-                  "j"
-                ]
-              }
-            ]
-          },
-          0
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sectional_lr2m_tracer_per_volume",
+            "bindings": {"N": "N", "V": "V", "m": "m", "c": "c", "j": "j", "s": "s"}
+          }
         ]
       }
     }

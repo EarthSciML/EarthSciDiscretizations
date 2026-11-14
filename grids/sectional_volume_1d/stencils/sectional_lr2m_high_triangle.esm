@@ -1,15 +1,15 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "sectional_lr2m_high_triangle",
-    "description": "True when the mean volume of section j sits in the UPPER third of the section, vbar/vb[j] >= 0.9999 + 2 gamma/3 (gamma = vb[j+1]/vb[j] - 1): the reconstruction is cut back to a triangle on [vb[j+1] - 3 (vb[j+1] - vbar), vb[j+1]] that vanishes at its bottom (sectional_lr2m_support_bottom). Only consulted when sectional_lr2m_low_triangle is false, as in MOSAIC's if/else-if. 0.9999 is MOSAIC's tolerance.",
+    "description": "True when the mean volume of section j sits in the UPPER third of the section, x >= 2/3 with x = sectional_lr2m_position: the reconstruction is cut back to a triangle on [vb[j+1] - 3 (vb[j+1] - vbar), vb[j+1]] that vanishes at its bottom (sectional_lr2m_support_bottom). Exclusive of sectional_lr2m_low_triangle (x <= 1/3), so the two cut-backs never compete. MOSAIC's form, vbar/vb[j] >= 0.9999 + 2 gamma/3, carries an absolute ratio margin that does not shrink with the section width; see sectional_lr2m_low_triangle for why the position form is used and why it reproduces MOSAIC wherever MOSAIC's margins do not overlap.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
       "family:finite_volume",
       "grid:sectional_volume_1d",
       "op:advection",
-      "order:1",
+      "order:2",
       "scheme:linear-discrete"
     ],
     "references": [
@@ -19,16 +19,12 @@
       },
       {
         "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
-      },
-      {
-        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
-        "doi": "10.1016/0021-9797(80)90394-X"
       }
     ]
   },
   "expression_template_imports": [
     {
-      "ref": "./sectional_mean_volume.esm"
+      "ref": "./sectional_lr2m_position.esm"
     },
     {
       "ref": "../grid.esm"
@@ -36,87 +32,17 @@
   ],
   "expression_templates": {
     "sectional_lr2m_high_triangle": {
-      "params": [
-        "N",
-        "V",
-        "c",
-        "j"
-      ],
+      "params": ["N", "V", "c", "j"],
       "body": {
         "op": ">=",
         "args": [
           {
-            "op": "/",
-            "args": [
-              {
-                "op": "apply_expression_template",
-                "args": [],
-                "name": "sectional_mean_volume",
-                "bindings": {
-                  "N": "N",
-                  "V": "V",
-                  "c": "c",
-                  "j": "j"
-                }
-              },
-              {
-                "op": "index",
-                "args": [
-                  "vb",
-                  "j"
-                ]
-              }
-            ]
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sectional_lr2m_position",
+            "bindings": {"N": "N", "V": "V", "c": "c", "j": "j"}
           },
-          {
-            "op": "+",
-            "args": [
-              0.9999,
-              {
-                "op": "/",
-                "args": [
-                  {
-                    "op": "*",
-                    "args": [
-                      2,
-                      {
-                        "op": "-",
-                        "args": [
-                          {
-                            "op": "/",
-                            "args": [
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  {
-                                    "op": "+",
-                                    "args": [
-                                      "j",
-                                      1
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "op": "index",
-                                "args": [
-                                  "vb",
-                                  "j"
-                                ]
-                              }
-                            ]
-                          },
-                          1
-                        ]
-                      }
-                    ]
-                  },
-                  3
-                ]
-              }
-            ]
-          }
+          {"op": "/", "args": [2, 3]}
         ]
       }
     }

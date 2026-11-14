@@ -1,15 +1,15 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "sectional_mean_volume",
-    "description": "Mean single-particle volume vbar = V[c,j] / N[c,j] of section j in cell c, from the section's integrated volume V and number N (both shape [cell, bin]). The one quantity the two-moment reconstruction of the sibling stencils is built from.",
+    "description": "Mean single-particle volume vbar = V[c,j] / N[c,j] of section j in cell c, from the section's integrated volume V and number N (both shape [cell, bin]); the one quantity the two-moment reconstruction of the sibling stencils is built from. An EMPTY section (N <= 0, e.g. every section outside a compactly supported distribution) has no mean, and gets vbar = vb[j], its lower edge, which sectional_lr2m_interior_mean rejects, so the section carries nothing. The guard is applied twice -- ifelse(N > 0, V / ifelse(N > 0, N, 1), vb[j]) -- so the division is finite on BOTH branches: a binding that differentiates through ifelse (a taped/AD Jacobian for an implicit integrator) multiplies the untaken branch's derivative by zero, and a 0/0 there would turn that zero into NaN and poison the Jacobian.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
       "family:finite_volume",
       "grid:sectional_volume_1d",
       "op:advection",
-      "order:1",
+      "order:2",
       "scheme:linear-discrete"
     ],
     "references": [
@@ -33,31 +33,26 @@
   ],
   "expression_templates": {
     "sectional_mean_volume": {
-      "params": [
-        "N",
-        "V",
-        "c",
-        "j"
-      ],
+      "params": ["N", "V", "c", "j"],
       "body": {
-        "op": "/",
+        "op": "ifelse",
         "args": [
+          {"op": ">", "args": [{"op": "index", "args": ["N", "c", "j"]}, 0]},
           {
-            "op": "index",
+            "op": "/",
             "args": [
-              "V",
-              "c",
-              "j"
+              {"op": "index", "args": ["V", "c", "j"]},
+              {
+                "op": "ifelse",
+                "args": [
+                  {"op": ">", "args": [{"op": "index", "args": ["N", "c", "j"]}, 0]},
+                  {"op": "index", "args": ["N", "c", "j"]},
+                  1
+                ]
+              }
             ]
           },
-          {
-            "op": "index",
-            "args": [
-              "N",
-              "c",
-              "j"
-            ]
-          }
+          {"op": "index", "args": ["vb", "j"]}
         ]
       }
     }
