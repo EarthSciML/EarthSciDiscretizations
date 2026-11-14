@@ -896,24 +896,24 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Asc
     capability = {
         "regrid": [
             "The conservative overlap regridder is **end-to-end declarative**: a consumer "
-            "constructs source and target cell rings, derives the broad-phase bin keys, and "
-            "runs the candidate-gated overlap → normalize → apply, all from `.esm` templates "
-            "with no host glue.",
+            "constructs source and target cell rings and runs the candidate-gated "
+            "overlap → normalize → apply, all from `.esm` templates with no host glue.",
             "",
             "- **Cell-ring constructors** turn a grid spec into the `[cells, verts, coord]` "
             "vertex rings the regridder consumes — `cartesian_cell_rings.esm` from a uniform "
             "cartesian spec, and `grids/mpas/grid.esm`'s `mpas_cell_rings_deg` from MPAS mesh "
             "vertex data (the widened contract).",
-            "- **Broad phase in-library**: representative binning coordinates derived from the "
-            "rings themselves plus integer `skolem` bin keys, so the candidate set is "
-            "byte-identical across bindings.",
-            "- **Gated == dense** value-identically under an admissible binning (the gated "
-            "denominator broad-phases like the numerator, so partition-of-unity stays exact).",
-            "- **One file, every manifold**: `planar` or `spherical` is a per-invocation "
-            "template parameter. Spherical clip runs on Julia + Rust today; the Python "
-            "spherical case is gated on the optional `spherely` dependency (planar cases run "
-            "on Julia + Python + Rust), and the two rewrite-only ports (Go, TypeScript) are "
-            "scope-excluded — recorded in each case manifest, never shimmed.",
+            "- **Broad phase in-library**: a `join.overlap` gate on the ring envelopes "
+            "(bounding boxes the engine derives from the same rings the narrow phase clips), "
+            "so the candidate set is byte-identical across bindings with no binning parameter.",
+            "- **Gated == dense** value-identically (the gated denominator broad-phases like "
+            "the numerator, so partition-of-unity stays exact).",
+            "- **One file, both manifolds**: the consumer picks the narrow phase — "
+            "`conservative_overlap_A_ij_planar` or `conservative_overlap_A_ij_spherical` "
+            "(over unit-vector rings from `conservative_overlap_unit_rings`) — and everything "
+            "downstream of A_ij is shared. Both run on Julia + Python + Rust; the two "
+            "rewrite-only ports (Go, TypeScript) are scope-excluded — recorded in each case "
+            "manifest, never shimmed.",
             "",
             "End-to-end exemplars: `tests/conformance/regridding/"
             "cartesian_rings_regrid_gated_3x3_to_2x2` (grid spec → rings → broad phase → "
