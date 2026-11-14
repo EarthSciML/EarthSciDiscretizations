@@ -1,0 +1,250 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "growth_lr2m_D_bin_closed",
+    "description": "Integrated divergence, over each SECTION of a sectional size distribution, of the condensational-growth flux of particle NUMBER, int_section d(G n)/dv dv, for the growth law G(v) = lam v (each section's particles grow at that section's uniform relative rate lam, the volume-proportional growth of a sectional model in which the condensed volume of a section is shared over its particles in proportion to their volume). The consumer writes the number-moment equation as dN/dt = -D(lam*N, V, wrt: bin) + ..., where N [cell, bin] is the section NUMBER and the trailing operand V [cell, bin] (esm-spec 9.6.8 'trailing operands on D') is the section dry VOLUME moment the reconstruction reads; lam [cell, bin] is 1/V dV/dt of the section's own condensation (zero for a section the consumer considers inactive). The lowered value per section is outflow through both edges minus inflow from the neighbours, telescoping, so sum_j dN_j/dt = 0 to round-off. CLOSED size range: nothing grows out of the top section nor shrinks out of the bottom one (the first and last regions drop the outer edge fluxes), so particles growing past vb[NBIN+1] stay in section NBIN and shrinking ones below vb[1] stay in section 1, as in MOSAIC. RECONSTRUCTION AND EDGE FLUX. Within each section the number density is linear in v on a support [lo, hi] inside the section, fixed by the two moments (N, V) -- MOSAIC's 'linear-discrete' / mass-number-advection reconstruction (move_sections_calc_masnumadvect): the full section when the mean volume vbar = V/N lies in the middle third, a triangle that vanishes at the far end when it lies in the lower or upper third (sectional_lr2m_support_top / _bottom), and no reconstruction (zero edge flux) when vbar lies within 1 % of the section's width of either edge (sectional_lr2m_interior_mean). The edge flux is upwind: the growth flux G n at an edge is evaluated in the section that grows into it (lam > 0 sends particles up through the upper edge) or shrinks into it (lam < 0 sends them down through the lower edge), G(v_edge) n(v_edge) = |lam| v_edge n_edge (sectional_lr2m_number_flux_up / _down). WHY THIS IS THE RIGHT OPERATOR. MOSAIC's movesect is fully discrete in time: after a step's growth it maps every particle of section j from v to s v (s = vbar_after/vbar_before, the section's volume growth factor) and integrates the linear density over the pulled-back section edges. As the growth step goes to zero (s = 1 + lam dt), the fraction of number carried across the upper edge is (1 + b/2) N (vb[j+1] - vb[j+1]/s)/(hi - lo) = lam dt vb[j+1] n_top, and that limit is this flux; verified against a real64 replay of WRF's own move_sections on 16 recorded WRF-Chem column states (59 levels x 8 sections), with each step's growth scaled to fractions 1e-2 and 2e-2 and Richardson-extrapolated: all 98,176 section rates (number, ten components, two waters) agree within 1e-5 relative or 1e-6 of the largest rate of their quantity. MOSAIC's finite-step relocations ('moving center': a section whose mean has left it is moved whole; and the number conform that clips a section's mean back inside its edges) are projections, not rates, and are not part of this operator. ORDER. Second order on smooth data: the two-moment linear reconstruction is exact for a density linear within the section, so the upwind edge value carries an O(h^2) error, as in an unlimited MUSCL scheme; the triangle cut-backs and the 1 % edge band act as a limiter and degrade it locally where they engage (at the edges of a distribution's support). Measured on problems/growth_sectional_lr2m_mms (a compactly supported C2 bump on a geometric grid, growing and shrinking): pairwise observed orders 1.77, 2.13, 2.24 over NBIN = 32..256 (median 2.1; tests/conformance/convergence/growth_sectional_lr2m_mms). The same problem asserts the telescoping: each cell's total number stays at its initial value to round-off, also after the whole distribution has piled up against both closed ends. Requires NBIN >= 2.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:sectional_volume_1d",
+      "op:advection",
+      "order:2",
+      "scheme:linear-discrete",
+      "scheme:upwind",
+      "bc:closed",
+      "form:flux",
+      "spec:9.6.8",
+      "axes:cell,bin"
+    ],
+    "references": [
+      {
+        "citation": "Zaveri, R. A., Easter, R. C., Fast, J. D., & Peters, L. K. (2008). Model for Simulating Aerosol Interactions and Chemistry (MOSAIC). Journal of Geophysical Research, 113, D13204.",
+        "doi": "10.1029/2007JD008782"
+      },
+      {
+        "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
+      },
+      {
+        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
+        "doi": "10.1016/0021-9797(80)90394-X"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../stencils/sectional_lr2m_growth_number_interior.esm"
+    },
+    {
+      "ref": "../stencils/sectional_lr2m_number_flux_up.esm"
+    },
+    {
+      "ref": "../stencils/sectional_lr2m_number_flux_down.esm"
+    },
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "growth_lr2m_D_bin_closed": {
+      "params": [
+        "lam",
+        "N",
+        "V"
+      ],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              "lam",
+              "N"
+            ]
+          },
+          "V"
+        ],
+        "wrt": "bin"
+      },
+      "where": {
+        "lam": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        },
+        "N": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        },
+        "V": {
+          "shape": [
+            "cell",
+            "bin"
+          ]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              2,
+              {
+                "op": "-",
+                "args": [
+                  "NBIN",
+                  1
+                ]
+              }
+            ]
+          ],
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              1,
+              "NCELL"
+            ],
+            [
+              "NBIN",
+              "NBIN"
+            ]
+          ]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "sectional_lr2m_growth_number_interior",
+            "bindings": {
+              "lam": "lam",
+              "N": "N",
+              "V": "V"
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": [
+                1,
+                1
+              ]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_number_flux_up",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "c": "c",
+                    "j": "j"
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_number_flux_down",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "c": "c",
+                    "j": {
+                      "op": "+",
+                      "args": [
+                        "j",
+                        1
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j"
+            ],
+            "args": [],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": [
+                "NBIN",
+                "NBIN"
+              ]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_number_flux_down",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "c": "c",
+                    "j": "j"
+                  }
+                },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "sectional_lr2m_number_flux_up",
+                  "bindings": {
+                    "lam": "lam",
+                    "N": "N",
+                    "V": "V",
+                    "c": "c",
+                    "j": {
+                      "op": "-",
+                      "args": [
+                        "j",
+                        1
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
