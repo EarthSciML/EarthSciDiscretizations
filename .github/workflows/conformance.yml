@@ -95,7 +95,13 @@ jobs:
   # The Python binding (earthsci_ast): full category coverage — ast bytes,
   # §6.6.5 simulation + convergence via inline_tests/run_inline_tests,
   # regridding invariants, reprojection points (scripts/runners/run-python.py).
+  #
+  # DISABLED: against EarthSciAST esm 2.x the python runner no longer finishes
+  # inside the 6 h job limit (ast + simulation pass, then the job is cancelled
+  # in convergence). Re-enable -- and restore `python` in the compare job's
+  # `needs` and `--bindings` -- once the upstream python runner is fast enough.
   python:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -204,7 +210,7 @@ jobs:
           path: ess
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.26"
           cache-dependency-path: ess/pkg/earthsci-ast-go/go.sum
       - name: Conformance (go; ast)
         run: |
@@ -223,7 +229,7 @@ jobs:
   # manifests' error_vs_golden_* tolerances) in one place.
   compare:
     runs-on: ubuntu-latest
-    needs: [julia, python, rust, typescript, go]
+    needs: [julia, rust, typescript, go]
     if: always() && !cancelled()
     steps:
       - uses: actions/checkout@v6
@@ -239,7 +245,7 @@ jobs:
         run: |
           python3 scripts/compare-outputs.py \
             --results-root conformance-results \
-            --bindings julia,python,rust,typescript,go \
+            --bindings julia,rust,typescript,go \
             --categories ast,simulation,convergence,regridding,reprojection
       - name: Upload comparison summary
         if: always()

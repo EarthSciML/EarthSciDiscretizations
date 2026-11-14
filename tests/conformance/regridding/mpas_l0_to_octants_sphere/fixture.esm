@@ -1,8 +1,8 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "mpas_l0_to_octants_sphere",
-    "description": "SMOKE conformance fixture: MPAS cell rings DERIVED IN-DOCUMENT feeding the conservative regridder on the SPHERE -- the unstructured half of the end-to-end declarative regridding story. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem; the mesh file is the library's one allowed precomputation, with derivation provenance in its own _doc). The source rings are NOT authored here: src_poly comes from the grid's mpas_cell_rings_deg template over the widened mesh contract (latVertex/lonVertex/verticesOnCell aliased bare-name from the subsystem), which gathers each cell's CCW vertex ring and converts radians to the degrees the geometry kernels take; at level 0 every cell has exactly MAXEDGES = 5 vertices, so the template's min(k, nEdgesOnCell) pad clamp never fires (padding tolerance of the kernels is pinned separately -- see the grid _doc). Target: the 8 spherical OCTANTS as an inline const ring stack (NVERT = 3; every edge a 90-degree great-circle arc; all octants share the pole and equator vertices under IDENTICAL coordinate spellings, so seams are exact and the octants tile the sphere: sum A_j = 4*pi). MIXED VERTEX COUNTS, deliberately: the narrow phase slices whole rings per cell (index(src_poly, i) / index(tgt_poly, j)), so a pentagon source and a triangle target compose without a shared vertex-count axis -- the production MPAS-to-latlon shape. DENSE narrow phase at manifold 'spherical' (great-circle-edge clipping, areas in steradians): the candidate-gated broad phase rides the planar gated cases; lon-lat floor-binning is the wrong broad phase near poles and the level-0 mesh has only 96 pairs. Exact gates (CONFORMANCE_SPEC 5.8.3): partition-of-unity is exact by construction (the A_j denominator row-sums the SAME computed areas under the SAME sliver filter); conservation is gated at 1e-9 sr -- the octants tile the sphere and the seams are shared arcs, so the residual sum_j A_j*F_tgt[j] - sum_i areaCell[i]*F_src[i] is pure clip noise (mass_src uses the mesh file's committed areaCell as the true source areas; with F_src = [1..12] and areaCell = pi/3 each, mass_src = 26*pi = 81.68140899333463). Several dodecahedron vertices lie EXACTLY on octant boundary great circles (the x = 0 and z = 0 coordinate planes pass through (0, +/-1/phi, +/-phi)-family vertices), so boundary-degenerate clips are part of what this case smokes out -- the sliver filter (atol 1e-12 sr against true overlaps of order 0.1 sr) is the 5.8.2 mechanism that absorbs them identically in numerator and denominator. Golden per-pair A_ij/A_j/W_ij from the official Julia runner (GeometryOps spherical backend) via scripts/regenerate-goldens.sh; rust gates the same arrays through s2geometry (5.8.4: different kernels, same manifold declaration).",
+    "description": "SMOKE conformance fixture: MPAS cell rings DERIVED IN-DOCUMENT feeding the conservative regridder on the SPHERE -- the unstructured half of the end-to-end declarative regridding story. Source: the 12 pentagonal Voronoi cells of the icosahedral level-0 mesh (grids/mpas/mesh/level0.esm mounted as the `mesh` subsystem; the mesh file is the library's one allowed precomputation, with derivation provenance in its own _doc). The source rings are NOT authored here: src_poly comes from the grid's mpas_cell_rings_deg template over the widened mesh contract (latVertex/lonVertex/verticesOnCell aliased bare-name from the subsystem), which gathers each cell's CCW vertex ring and converts radians to the degrees the geometry kernels take; at level 0 every cell has exactly MAXEDGES = 5 vertices, so the template's min(k, nEdgesOnCell) pad clamp never fires (padding tolerance of the kernels is pinned separately -- see the grid _doc). Target: the 8 spherical OCTANTS as an inline const ring stack (NVERT = 3; every edge a 90-degree great-circle arc; all octants share the pole and equator vertices under IDENTICAL coordinate spellings, so seams are exact and the octants tile the sphere: sum A_j = 4*pi). MIXED VERTEX COUNTS, deliberately: the narrow phase slices whole rings per cell (index(src_poly, i) / index(tgt_poly, j)), so a pentagon source and a triangle target compose without a shared vertex-count axis -- the production MPAS-to-latlon shape. DENSE narrow phase with the spherical narrow phase (great-circle-edge clipping, areas in steradians): the candidate-gated broad phase rides the planar gated cases; lon-lat floor-binning is the wrong broad phase near poles and the level-0 mesh has only 96 pairs. Exact gates (CONFORMANCE_SPEC 5.8.3): partition-of-unity is exact by construction (the A_j denominator row-sums the SAME computed areas under the SAME sliver filter); conservation is gated at 1e-9 sr -- the octants tile the sphere and the seams are shared arcs, so the residual sum_j A_j*F_tgt[j] - sum_i areaCell[i]*F_src[i] is pure clip noise (mass_src uses the mesh file's committed areaCell as the true source areas; with F_src = [1..12] and areaCell = pi/3 each, mass_src = 26*pi = 81.68140899333463). Several dodecahedron vertices lie EXACTLY on octant boundary great circles (the x = 0 and z = 0 coordinate planes pass through (0, +/-1/phi, +/-phi)-family vertices), so boundary-degenerate clips are part of what this case smokes out -- the sliver filter (atol 1e-12 sr against true overlaps of order 0.1 sr) is the 5.8.2 mechanism that absorbs them identically in numerator and denominator. Golden per-pair A_ij/A_j/W_ij from the official Julia runner (the esm:std/geometry.esm overlap_area_spherical template) via scripts/regenerate-goldens.sh; every binding evaluates the same template AST.",
     "tags": [
       "conformance",
       "regridding",
@@ -35,6 +35,12 @@
             "NTGT": 8,
             "NVERT": 3
           }
+        },
+        {
+          "ref": "esm:std/geometry.esm",
+          "only": [
+            "lonlat_to_unit"
+          ]
         }
       ],
       "subsystems": {
@@ -139,7 +145,7 @@
             "cells",
             "tgt_cells"
           ],
-          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), manifold 'spherical' bound at the invocation: great-circle-edge clipping on the unit sphere, areas in steradians."
+          "description": "DENSE narrow phase on MIXED vertex counts (pentagon sources, triangle targets -- the narrow phase slices whole rings, so no shared vertex-count axis is needed), spherical narrow phase (conservative_overlap_A_ij_spherical): great-circle-edge clipping on the unit sphere, areas in steradians."
         },
         "A_j": {
           "type": "unknown",
@@ -210,6 +216,26 @@
           ],
           "default": 0.0,
           "description": "Surfacing state for the regridded field: regrid_state(1) = F_tgt, gated against the golden and cross-binding."
+        },
+        "src_unit": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "cells",
+            "maxEdges",
+            "overlap_xyz"
+          ],
+          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `src_poly`, one per ring slot: faq(c, v, d) lonlat_to_unit(src_poly, c, v, d) with the esm:std/geometry.esm template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
+        },
+        "tgt_unit": {
+          "type": "unknown",
+          "units": "1",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_xyz"
+          ],
+          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `tgt_poly`, one per ring slot: faq(c, v, d) lonlat_to_unit(tgt_poly, c, v, d) with the esm:std/geometry.esm template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
         }
       },
       "equations": [
@@ -481,15 +507,84 @@
           }
         },
         {
+          "lhs": "src_unit",
+          "rhs": {
+            "op": "faq",
+            "args": [],
+            "output_idx": [
+              "c",
+              "v",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cells"
+              },
+              "v": {
+                "from": "maxEdges"
+              },
+              "d": {
+                "from": "overlap_xyz"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "lonlat_to_unit",
+              "bindings": {
+                "ring": "src_poly",
+                "cell": "c",
+                "vert": "v",
+                "comp": "d"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "tgt_unit",
+          "rhs": {
+            "op": "faq",
+            "args": [],
+            "output_idx": [
+              "c",
+              "v",
+              "d"
+            ],
+            "ranges": {
+              "c": {
+                "from": "tgt_cells"
+              },
+              "v": {
+                "from": "overlap_cell_verts"
+              },
+              "d": {
+                "from": "overlap_xyz"
+              }
+            },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "lonlat_to_unit",
+              "bindings": {
+                "ring": "tgt_poly",
+                "cell": "c",
+                "vert": "v",
+                "comp": "d"
+              }
+            }
+          }
+        },
+        {
           "lhs": "A_ij",
           "rhs": {
             "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
+            "name": "conservative_overlap_A_ij_spherical",
             "args": [],
             "bindings": {
-              "src_poly": "src_poly",
-              "tgt_poly": "tgt_poly",
-              "manifold": "spherical"
+              "src_unit": "src_unit",
+              "tgt_unit": "tgt_unit",
+              "src_nv": 5,
+              "tgt_nv": 3
             }
           }
         },
