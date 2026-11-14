@@ -84,3 +84,6 @@ simulation pathway takes it from there.
 The grid, regridding, and reprojection pages are **generated from the library
 files at build time** by `docs/generate_catalog.py` (they are never committed);
 the source of truth is always the `.esm` file linked at the top of each page.
+Every expression on those pages is printed by EarthSciAST's `to_ascii`, in the
+text syntax `earthsci_ast.parse_expression` reads, so it can be copied back
+into a model.

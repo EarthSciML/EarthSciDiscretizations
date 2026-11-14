@@ -170,10 +170,10 @@ side is precomputed (`cartesian_rings_regrid_cart2cart_3x3_to_2x2`).
 
 Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript are
 rewrite-only ports (`scope_excluded` from the numeric categories), and the
-`blocked_upstream_bindings` entries name their precise upstream sites — notably
-**Python spherical regridding stays gated on the optional `spherely` dependency**
-(planar regrid runs on Julia + Python + Rust; spherical on Julia + Rust, and
-activates for Python the moment the pinned wheel installs).
+`blocked_upstream_bindings` entries name their precise upstream sites. Planar
+and spherical regrid both run on Julia + Python + Rust: since esm 2.0.0 the
+overlap areas are the `esm:std/geometry.esm` templates, so no binding needs a
+geometry backend.
 
 The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent;
 a centered second derivative with zero-gradient, parameterized Dirichlet, and
@@ -355,6 +355,7 @@ which owns the Hugo config and layouts; this repo contributes only content. CI
 `docs-bundle` branch and notifies earthsci.dev. To preview locally (Python 3.11+, Hugo extended):
 
 ```bash
+pip install matplotlib "git+https://github.com/EarthSciML/EarthSciAST.git#subdirectory=pkg/earthsci-ast-py"
 python docs/generate_catalog.py                       # generated pages + plots
 git clone https://github.com/EarthSciML/earthsci.dev ../earthsci.dev
 python ../earthsci.dev/tools/bundle.py --repo-root . --out ../earthsci.dev/build/bundles/discretizations
