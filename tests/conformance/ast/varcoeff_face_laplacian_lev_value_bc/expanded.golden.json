@@ -1,5 +1,5 @@
 {
-  "esm": "1.3.0",
+  "esm": "2.2.0",
   "index_sets": {
     "lev": {
       "kind": "interval",
@@ -11,7 +11,7 @@
     }
   },
   "metadata": {
-    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two boundary-value free names u_sfc / u_top and the two domain-face coordinates z_sfc / z_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's three-region makearray -- interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 holding the boundary-value faces: every K du/dz flux in all three regions is a reference to the one interface_flux_K_lev template (bound at n = k+1, k, 2 and 8) or to the one interface_flux_K_lev_value_bc template (bound at the surface face with u_sfc/z_sfc and at the top face with u_top/z_top). The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two boundary-value free names u_sfc / u_top and the two domain-face coordinates z_sfc / z_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's body, a reference to the grid's shared three-region layout rules/varcoeff_face_laplacian_lev_frame (interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 the boundary layers) with its two face-flux parameters bound to the one two-point law interface_flux_K_two_point closed against the boundary values (u_sfc/z_sfc at the surface face, u_top/z_top at the top face); every interior K du/dz flux is a reference to interface_flux_K_lev (bound at n = k+1, k, 2 and 8), itself that same two-point law. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
     "license": "MIT",
     "name": "varcoeff_face_laplacian_lev_value_bc_ast_fixture",
     "tags": [
@@ -43,158 +43,78 @@
           },
           "rhs": {
             "args": [],
-            "op": "makearray",
-            "regions": [
-              [
-                [
-                  2,
-                  7
-                ]
-              ],
-              [
-                [
-                  1,
-                  1
-                ]
-              ],
-              [
-                [
-                  8,
-                  8
-                ]
-              ]
-            ],
-            "values": [
-              {
+            "bindings": {
+              "G_bot": {
                 "args": [],
                 "bindings": {
-                  "K": "K",
-                  "u": "u"
-                },
-                "name": "varcoeff_face_laplacian_lev_interior",
-                "op": "apply_expression_template"
-              },
-              {
-                "args": [
-                  {
+                  "K_face": {
                     "args": [
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 2,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
-                      },
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K_face": {
-                            "args": [
-                              "K",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "u_adj": {
-                            "args": [
-                              "u",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "u_bc": "u_sfc",
-                          "z_adj": {
-                            "args": [
-                              "zc",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "z_bc": "z_sfc"
-                        },
-                        "name": "interface_flux_K_lev_value_bc",
-                        "op": "apply_expression_template"
-                      }
-                    ],
-                    "op": "-"
-                  },
-                  {
-                    "args": [
-                      "dz",
+                      "K",
                       1
                     ],
                     "op": "index"
-                  }
-                ],
-                "op": "/"
-              },
-              {
-                "args": [
-                  {
+                  },
+                  "u_hi": {
                     "args": [
+                      "u",
+                      1
+                    ],
+                    "op": "index"
+                  },
+                  "u_lo": "u_sfc",
+                  "z_hi": {
+                    "args": [
+                      "zc",
+                      1
+                    ],
+                    "op": "index"
+                  },
+                  "z_lo": "z_sfc"
+                },
+                "name": "interface_flux_K_two_point",
+                "op": "apply_expression_template"
+              },
+              "G_top": {
+                "args": [],
+                "bindings": {
+                  "K_face": {
+                    "args": [
+                      "K",
                       {
-                        "args": [],
-                        "bindings": {
-                          "K_face": {
-                            "args": [
-                              "K",
-                              {
-                                "args": [
-                                  8,
-                                  1
-                                ],
-                                "op": "+"
-                              }
-                            ],
-                            "op": "index"
-                          },
-                          "u_adj": {
-                            "args": [
-                              "u",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          "u_bc": "u_top",
-                          "z_adj": {
-                            "args": [
-                              "zc",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          "z_bc": "z_top"
-                        },
-                        "name": "interface_flux_K_lev_value_bc",
-                        "op": "apply_expression_template"
-                      },
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 8,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
+                        "args": [
+                          8,
+                          1
+                        ],
+                        "op": "+"
                       }
                     ],
-                    "op": "-"
+                    "op": "index"
                   },
-                  {
+                  "u_hi": "u_top",
+                  "u_lo": {
                     "args": [
-                      "dz",
+                      "u",
+                      8
+                    ],
+                    "op": "index"
+                  },
+                  "z_hi": "z_top",
+                  "z_lo": {
+                    "args": [
+                      "zc",
                       8
                     ],
                     "op": "index"
                   }
-                ],
-                "op": "/"
-              }
-            ]
+                },
+                "name": "interface_flux_K_two_point",
+                "op": "apply_expression_template"
+              },
+              "K": "K",
+              "u": "u"
+            },
+            "name": "varcoeff_face_laplacian_lev_frame",
+            "op": "apply_expression_template"
           }
         },
         {
@@ -270,71 +190,58 @@
         },
         "interface_flux_K_lev": {
           "body": {
-            "args": [
-              {
+            "args": [],
+            "bindings": {
+              "K_face": {
                 "args": [
                   "K",
                   "n"
                 ],
                 "op": "index"
               },
-              {
+              "u_hi": {
                 "args": [
+                  "u",
+                  "n"
+                ],
+                "op": "index"
+              },
+              "u_lo": {
+                "args": [
+                  "u",
                   {
                     "args": [
-                      {
-                        "args": [
-                          "u",
-                          "n"
-                        ],
-                        "op": "index"
-                      },
-                      {
-                        "args": [
-                          "u",
-                          {
-                            "args": [
-                              "n",
-                              1
-                            ],
-                            "op": "-"
-                          }
-                        ],
-                        "op": "index"
-                      }
-                    ],
-                    "op": "-"
-                  },
-                  {
-                    "args": [
-                      {
-                        "args": [
-                          "zc",
-                          "n"
-                        ],
-                        "op": "index"
-                      },
-                      {
-                        "args": [
-                          "zc",
-                          {
-                            "args": [
-                              "n",
-                              1
-                            ],
-                            "op": "-"
-                          }
-                        ],
-                        "op": "index"
-                      }
+                      "n",
+                      1
                     ],
                     "op": "-"
                   }
                 ],
-                "op": "/"
+                "op": "index"
+              },
+              "z_hi": {
+                "args": [
+                  "zc",
+                  "n"
+                ],
+                "op": "index"
+              },
+              "z_lo": {
+                "args": [
+                  "zc",
+                  {
+                    "args": [
+                      "n",
+                      1
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "index"
               }
-            ],
-            "op": "*"
+            },
+            "name": "interface_flux_K_two_point",
+            "op": "apply_expression_template"
           },
           "params": [
             "u",
@@ -342,7 +249,7 @@
             "n"
           ]
         },
-        "interface_flux_K_lev_value_bc": {
+        "interface_flux_K_two_point": {
           "body": {
             "args": [
               "K_face",
@@ -350,15 +257,15 @@
                 "args": [
                   {
                     "args": [
-                      "u_adj",
-                      "u_bc"
+                      "u_hi",
+                      "u_lo"
                     ],
                     "op": "-"
                   },
                   {
                     "args": [
-                      "z_adj",
-                      "z_bc"
+                      "z_hi",
+                      "z_lo"
                     ],
                     "op": "-"
                   }
@@ -369,11 +276,11 @@
             "op": "*"
           },
           "params": [
-            "u_bc",
-            "u_adj",
             "K_face",
-            "z_bc",
-            "z_adj"
+            "u_lo",
+            "u_hi",
+            "z_lo",
+            "z_hi"
           ]
         },
         "mms_column_integrand": {
@@ -588,6 +495,105 @@
             "xe"
           ]
         },
+        "varcoeff_face_laplacian_lev_frame": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  2,
+                  7
+                ]
+              ],
+              [
+                [
+                  1,
+                  1
+                ]
+              ],
+              [
+                [
+                  8,
+                  8
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "K": "K",
+                  "u": "u"
+                },
+                "name": "varcoeff_face_laplacian_lev_interior",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 2,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
+                      },
+                      "G_bot"
+                    ],
+                    "op": "-"
+                  },
+                  {
+                    "args": [
+                      "dz",
+                      1
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "/"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      "G_top",
+                      {
+                        "args": [],
+                        "bindings": {
+                          "K": "K",
+                          "n": 8,
+                          "u": "u"
+                        },
+                        "name": "interface_flux_K_lev",
+                        "op": "apply_expression_template"
+                      }
+                    ],
+                    "op": "-"
+                  },
+                  {
+                    "args": [
+                      "dz",
+                      8
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "/"
+              }
+            ]
+          },
+          "params": [
+            "u",
+            "K",
+            "G_bot",
+            "G_top"
+          ]
+        },
         "varcoeff_face_laplacian_lev_interior": {
           "body": {
             "args": [
@@ -656,158 +662,78 @@
         "varcoeff_face_laplacian_lev_value_bc": {
           "body": {
             "args": [],
-            "op": "makearray",
-            "regions": [
-              [
-                [
-                  2,
-                  7
-                ]
-              ],
-              [
-                [
-                  1,
-                  1
-                ]
-              ],
-              [
-                [
-                  8,
-                  8
-                ]
-              ]
-            ],
-            "values": [
-              {
+            "bindings": {
+              "G_bot": {
                 "args": [],
                 "bindings": {
-                  "K": "K",
-                  "u": "u"
-                },
-                "name": "varcoeff_face_laplacian_lev_interior",
-                "op": "apply_expression_template"
-              },
-              {
-                "args": [
-                  {
+                  "K_face": {
                     "args": [
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 2,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
-                      },
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K_face": {
-                            "args": [
-                              "K",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "u_adj": {
-                            "args": [
-                              "u",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "u_bc": "u_sfc",
-                          "z_adj": {
-                            "args": [
-                              "zc",
-                              1
-                            ],
-                            "op": "index"
-                          },
-                          "z_bc": "z_sfc"
-                        },
-                        "name": "interface_flux_K_lev_value_bc",
-                        "op": "apply_expression_template"
-                      }
-                    ],
-                    "op": "-"
-                  },
-                  {
-                    "args": [
-                      "dz",
+                      "K",
                       1
                     ],
                     "op": "index"
-                  }
-                ],
-                "op": "/"
-              },
-              {
-                "args": [
-                  {
+                  },
+                  "u_hi": {
                     "args": [
+                      "u",
+                      1
+                    ],
+                    "op": "index"
+                  },
+                  "u_lo": "u_sfc",
+                  "z_hi": {
+                    "args": [
+                      "zc",
+                      1
+                    ],
+                    "op": "index"
+                  },
+                  "z_lo": "z_sfc"
+                },
+                "name": "interface_flux_K_two_point",
+                "op": "apply_expression_template"
+              },
+              "G_top": {
+                "args": [],
+                "bindings": {
+                  "K_face": {
+                    "args": [
+                      "K",
                       {
-                        "args": [],
-                        "bindings": {
-                          "K_face": {
-                            "args": [
-                              "K",
-                              {
-                                "args": [
-                                  8,
-                                  1
-                                ],
-                                "op": "+"
-                              }
-                            ],
-                            "op": "index"
-                          },
-                          "u_adj": {
-                            "args": [
-                              "u",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          "u_bc": "u_top",
-                          "z_adj": {
-                            "args": [
-                              "zc",
-                              8
-                            ],
-                            "op": "index"
-                          },
-                          "z_bc": "z_top"
-                        },
-                        "name": "interface_flux_K_lev_value_bc",
-                        "op": "apply_expression_template"
-                      },
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 8,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
+                        "args": [
+                          8,
+                          1
+                        ],
+                        "op": "+"
                       }
                     ],
-                    "op": "-"
+                    "op": "index"
                   },
-                  {
+                  "u_hi": "u_top",
+                  "u_lo": {
                     "args": [
-                      "dz",
+                      "u",
+                      8
+                    ],
+                    "op": "index"
+                  },
+                  "z_hi": "z_top",
+                  "z_lo": {
+                    "args": [
+                      "zc",
                       8
                     ],
                     "op": "index"
                   }
-                ],
-                "op": "/"
-              }
-            ]
+                },
+                "name": "interface_flux_K_two_point",
+                "op": "apply_expression_template"
+              },
+              "K": "K",
+              "u": "u"
+            },
+            "name": "varcoeff_face_laplacian_lev_frame",
+            "op": "apply_expression_template"
           },
           "match": {
             "args": [
