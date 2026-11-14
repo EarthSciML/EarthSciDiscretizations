@@ -1,0 +1,120 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "entraining_plume_lev_interior",
+    "description": "ONE implicit-trapezoidal (Crank-Nicolson) step of the ENTRAINING-PLUME ODE on column_nonuniform_1d,\n\n    dphi/dz = lam(z) (phi_env(z) - phi(z)) + src(z),\n\ntaken from a cell whose plume value is phi_prev to the next cell up, a distance ds above it. A rising plume exchanges with the environment it passes through at the fractional rate lam and is forced by src; phi is the plume's own value of whatever is being carried -- dry static energy, total water, a tracer, or (with phi_env = 0 and src the buoyancy) the plume's kinetic energy.\n\nAveraging the right-hand side over the two ends of the step gives\n\n    (phi - phi_prev) / ds = (1/2)(lam_prev (phi_env_prev - phi_prev) + lam (phi_env - phi)) + src\n\nwhich solves for the value at the upper end as\n\n    phi = ( c_prev phi_env_prev + c phi_env + (1 - c_prev) phi_prev + ds src ) / (1 + c),\n    c_prev = lam_prev ds / 2,   c = lam ds / 2.\n\nA scheme that freezes the entrainment rate over each step at its upper-end value -- the IFS/Tiedtke updraught does, with eta(jk) only -- passes the same rate as lam_prev and lam, and the step reduces to the frozen-coefficient form (c (phi_env_prev + phi_env) + (1 - c) phi_prev)/(1 + c) it writes. That frozen form is FIRST order wherever lam varies (measured on the quadratic-stretch MMS column with lam = 2 + 3z: observed order 0.95, 0.98, 0.99 from NLEV = 16 to 128), which is why the library step takes the rate at both ends; with both ends it is second order (1.98, 1.99, 2.00) whether lam varies or not.\n\nSTABILITY AND SIGN. With c_prev = lam_prev ds/2 and c = lam ds/2 the step maps a perturbation of phi_prev to (1 - c_prev)/(1 + c) times itself. For a constant positive rate that factor has modulus below one for every spacing (the trapezoidal rule is A-stable); for a varying positive rate it is below one exactly when lam_prev ds < 4 + lam ds. The trapezoidal rule is NOT L-stable and NOT positivity-preserving, and that matters on a coarse column: the weight on phi_prev is (1 - c_prev)/(1 + c), which turns NEGATIVE once lam_prev ds > 2. The sweep then stays bounded but over-relaxes, alternating about phi_env from one cell to the next instead of decaying toward it, and a quantity that must stay non-negative can step below zero. The step is monotone (all weights non-negative, so phi is a convex mix of phi_prev, phi_env_prev, phi_env plus the source increment) exactly when lam_prev ds <= 2. For the kinetic-energy use (lam = 2 eta) that is eta ds <= 1, i.e. ds <= 500 m at eta = 2e-3 m^-1; a consumer stepping K across thicker layers, or a strongly entraining tracer, must either refine the column there or clip the result before taking sqrt(2K). For comparison, an explicit (forward-Euler) step is stable only for ds < 2/lam (1000 m at lam = 2e-3 m^-1, a layer of roughly 100 hPa in the lower troposphere) and is monotone only for ds <= 1/lam; the trapezoid trades that stability limit for second-order accuracy and the monotonicity limit above.\n\nThe SOURCE is evaluated at the destination rather than averaged across the step, because the schemes this serves supply it already centred on the interval (a buoyancy difference across the step, a heating integrated over it); averaging a source that is itself a face quantity would apply the trapezoidal weight twice.\n\nWHY A SCALAR STEP AND NOT A COLUMN STENCIL. Every argument is a value, not an array, so the template is evaluated per cell inside whatever sweep calls it. Two callers need exactly that. rules/entraining_plume_lev places it inside ONE `faq` over lev with the seed as a guard, which is the only form esm-spec 4.3.1.1 admits for a recurrence -- a self-read reached through a `makearray` region value is `recurrence_unsupported_form`, and an array-valued step that names the swept array as an operand reads it BARE, which is `recurrence_not_wellfounded`. And a scheme whose plume passes through a per-level NONLINEAR projection after each step (the saturation adjustment of a mass-flux cumulus updraught: WRF New Tiedtke's cutypen and cuascn) cannot use the rule at all, because the value carried to the next level is the projected one, not the step's; it calls this template inside its own recurrence and wraps the projection around it. Precedent for value-parameter stencils: stencils/sedimentation_jh2010_*.\n\nMatch-less named template with no free names; it reads no geometry, so it does not import the grid.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:plume",
+      "grid:column_nonuniform_1d",
+      "op:entraining_plume_lev",
+      "order:2",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "Tiedtke, M. (1989). A comprehensive mass flux scheme for cumulus parameterization in large-scale models. Mon. Wea. Rev. 117, 1779-1800.",
+        "doi": "10.1175/1520-0493(1989)117<1779:ACMFSF>2.0.CO;2"
+      },
+      {
+        "citation": "Jakob, C., and A. P. Siebesma (2003). A new subcloud model for mass-flux convection schemes: influence on triggering, updraft properties, and model climate. Mon. Wea. Rev. 131, 2765-2778.",
+        "doi": "10.1175/1520-0493(2003)131<2765:ANSMFM>2.0.CO;2"
+      },
+      {
+        "citation": "Hairer, E., and G. Wanner (1996). Solving Ordinary Differential Equations II: Stiff and Differential-Algebraic Problems. Springer. Section IV.3 (the implicit trapezoidal rule and A-stability)."
+      },
+      {
+        "citation": "Simpson, J., and V. Wiggert (1969). Models of precipitating cumulus towers. Mon. Wea. Rev. 97, 471-489.",
+        "doi": "10.1175/1520-0493(1969)097<0471:MOPCT>2.3.CO;2"
+      }
+    ]
+  },
+  "expression_templates": {
+    "entraining_plume_lev_interior": {
+      "params": [
+        "phi_prev",
+        "phi_env_prev",
+        "phi_env",
+        "lam_prev",
+        "lam",
+        "src",
+        "ds"
+      ],
+      "description": "phi at the upper end of one implicit-trapezoidal step of dphi/dz = lam (phi_env - phi) + src of length ds, from phi_prev at the lower end: lam_prev and phi_env_prev at the lower end, lam and phi_env at the upper end, src already centred on the step. Spelled as the increment form (phi_prev + ds((lam_prev (phi_env_prev - phi_prev) + lam phi_env)/2 + src)) / (1 + lam ds/2), so each end's coefficient is written once.",
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "+",
+            "args": [
+              "phi_prev",
+              {
+                "op": "*",
+                "args": [
+                  "ds",
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          0.5,
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "op": "*",
+                                "args": [
+                                  "lam_prev",
+                                  {
+                                    "op": "-",
+                                    "args": [
+                                      "phi_env_prev",
+                                      "phi_prev"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "*",
+                                "args": [
+                                  "lam",
+                                  "phi_env"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "src"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              1.0,
+              {
+                "op": "*",
+                "args": [
+                  0.5,
+                  {
+                    "op": "*",
+                    "args": [
+                      "lam",
+                      "ds"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
