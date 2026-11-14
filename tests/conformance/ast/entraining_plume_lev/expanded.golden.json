@@ -1,0 +1,1203 @@
+{
+  "esm": "2.1.0",
+  "index_sets": {
+    "lev": {
+      "kind": "interval",
+      "size": 64
+    },
+    "lev_nodes": {
+      "kind": "interval",
+      "size": 65
+    }
+  },
+  "metadata": {
+    "description": "MMS driver for grids/column_nonuniform_1d/rules/entraining_plume_lev, the implicit-trapezoidal sweep of the entraining-plume ODE dphi/dz = lam(z)(phi_env(z) - phi(z)) + src(z) upward along lev from a seeded bottom cell. Manufactured solution phi*(z) = 1 + sin(pi z) on the grid's shared quadratic-stretch column (mesh/mms_column.esm), with environment phi_env = cos(pi z) and a VARYING entrainment rate lam = 2 + 3z; the forcing S(z) = phi*' - lam (phi_env - phi*) is sampled at the layer centres and supplied as the trapezoidal mean over each step, the centring the rule's source contract asks for. phi*, phi_env, lam and S are written once each, as the model's own expression templates plume_mms_*, and every equation applies them. The varying rate is the point: it separates the library step (rate at both ends, second order) from the frozen-coefficient step mass-flux schemes write (rate at the upper end only, first order), which this case was used to measure. An accumulator state w with ic 0 and dw/dt = phi makes w(1) = phi exactly, so the L2 error at t = 1 isolates the lowering. The test reference spells phi* at the layer centre from literals and NLEV rather than applying plume_mms_exact (build-time scope caveat, AGENTS.md; templates cannot be resolved in a 6.6.5 reference). This document is also the fixture of tests/conformance/ast/entraining_plume_lev, so the model that simulates is the model whose lowering is byte-pinned.",
+    "license": "MIT",
+    "name": "plume_column_trapezoidal",
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ],
+    "tags": [
+      "esd:problem",
+      "grid:column_nonuniform_1d",
+      "equation:entraining_plume",
+      "mms"
+    ]
+  },
+  "models": {
+    "PlumeTrapezoidal": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "w_plume"
+            ],
+            "op": "ic"
+          },
+          "rhs": 0
+        },
+        {
+          "lhs": {
+            "args": [
+              "w_plume"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": "phi"
+        },
+        {
+          "lhs": "ze",
+          "rhs": {
+            "args": [],
+            "bindings": {},
+            "name": "mms_column_ze",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "zc",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "ze": "ze"
+            },
+            "name": "column_cell_center",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "lam",
+          "rhs": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [],
+              "bindings": {
+                "z": {
+                  "args": [
+                    "zc",
+                    "i"
+                  ],
+                  "op": "index"
+                }
+              },
+              "name": "plume_mms_rate",
+              "op": "apply_expression_template"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "phi_env",
+          "rhs": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [],
+              "bindings": {
+                "z": {
+                  "args": [
+                    "zc",
+                    "i"
+                  ],
+                  "op": "index"
+                }
+              },
+              "name": "plume_mms_env",
+              "op": "apply_expression_template"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "S",
+          "rhs": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [],
+              "bindings": {
+                "z": {
+                  "args": [
+                    "zc",
+                    "i"
+                  ],
+                  "op": "index"
+                }
+              },
+              "name": "plume_mms_forcing",
+              "op": "apply_expression_template"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "src",
+          "rhs": {
+            "args": [
+              "S"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "i",
+                    1
+                  ],
+                  "op": "<="
+                },
+                {
+                  "args": [
+                    "S",
+                    "i"
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    0.5,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "S",
+                            {
+                              "args": [
+                                "i",
+                                1
+                              ],
+                              "op": "-"
+                            }
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "S",
+                            "i"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "ifelse"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "phi0",
+          "rhs": {
+            "args": [],
+            "bindings": {
+              "z": {
+                "args": [
+                  "zc",
+                  1
+                ],
+                "op": "index"
+              }
+            },
+            "name": "plume_mms_exact",
+            "op": "apply_expression_template"
+          }
+        },
+        {
+          "lhs": "phi",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "k",
+                    1
+                  ],
+                  "op": "<="
+                },
+                "phi0",
+                {
+                  "args": [],
+                  "bindings": {
+                    "ds": {
+                      "args": [
+                        {
+                          "args": [
+                            "zc",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "zc",
+                            {
+                              "args": [
+                                "k",
+                                1
+                              ],
+                              "op": "-"
+                            }
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    "lam": {
+                      "args": [
+                        "lam",
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    "lam_prev": {
+                      "args": [
+                        "lam",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "phi_env": {
+                      "args": [
+                        "phi_env",
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    "phi_env_prev": {
+                      "args": [
+                        "phi_env",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "phi_prev": {
+                      "args": [
+                        "phi",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "src": {
+                      "args": [
+                        "src",
+                        "k"
+                      ],
+                      "op": "index"
+                    }
+                  },
+                  "name": "entraining_plume_lev_interior",
+                  "op": "apply_expression_template"
+                }
+              ],
+              "op": "ifelse"
+            },
+            "op": "faq",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "k": {
+                "from": "lev"
+              }
+            }
+          }
+        }
+      ],
+      "expression_templates": {
+        "column_cell_center": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_center",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer mid-points from the interface array: zc[gi] = (ze[gi] + ze[gi+1]) / 2 over the lev (cell) axis, gathering the NLEV+1-node interface array ze (shape [lev_nodes]). The cartesian_nonuniform_1d `nonuniform_cell_center` template applied on the renamed lev axis -- one definition in the library. A consuming model applies this to its `ze` to define its `zc` observed. Aggregation index `gi` (not `k`) so the derived observed never captures a consuming rule's own aggregate index when inlined.",
+          "params": [
+            "ze"
+          ]
+        },
+        "column_cell_thickness": {
+          "body": {
+            "args": [],
+            "bindings": {
+              "xe": "ze"
+            },
+            "name": "nonuniform_cell_width",
+            "op": "apply_expression_template"
+          },
+          "description": "Layer thicknesses from the interface array: dz[gi] = ze[gi+1] - ze[gi] over the lev (cell) axis (positive when ze increases with the lev index, the required orientation). The cartesian_nonuniform_1d `nonuniform_cell_width` template applied on the renamed lev axis. A consuming model applies this to its `ze` to define its `dz` observed, the finite-volume control measure read by every rule on this grid.",
+          "params": [
+            "ze"
+          ]
+        },
+        "entraining_plume_lev": {
+          "body": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "k",
+                    1
+                  ],
+                  "op": "<="
+                },
+                "phi0",
+                {
+                  "args": [],
+                  "bindings": {
+                    "ds": {
+                      "args": [
+                        {
+                          "args": [
+                            "zc",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "zc",
+                            {
+                              "args": [
+                                "k",
+                                1
+                              ],
+                              "op": "-"
+                            }
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    "lam": {
+                      "args": [
+                        "lam",
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    "lam_prev": {
+                      "args": [
+                        "lam",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "phi_env": {
+                      "args": [
+                        "phi_env",
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    "phi_env_prev": {
+                      "args": [
+                        "phi_env",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "phi_prev": {
+                      "args": [
+                        "phi",
+                        {
+                          "args": [
+                            "k",
+                            1
+                          ],
+                          "op": "-"
+                        }
+                      ],
+                      "op": "index"
+                    },
+                    "src": {
+                      "args": [
+                        "src",
+                        "k"
+                      ],
+                      "op": "index"
+                    }
+                  },
+                  "name": "entraining_plume_lev_interior",
+                  "op": "apply_expression_template"
+                }
+              ],
+              "op": "ifelse"
+            },
+            "op": "faq",
+            "output_idx": [
+              "k"
+            ],
+            "ranges": {
+              "k": {
+                "from": "lev"
+              }
+            }
+          },
+          "match": {
+            "args": [
+              "phi_env",
+              "lam",
+              "src",
+              "phi0",
+              "phi"
+            ],
+            "op": "entraining_plume_lev"
+          },
+          "params": [
+            "phi_env",
+            "lam",
+            "src",
+            "phi0",
+            "phi"
+          ],
+          "where": {
+            "lam": {
+              "shape": [
+                "lev"
+              ]
+            },
+            "phi": {
+              "shape": [
+                "lev"
+              ]
+            },
+            "phi_env": {
+              "shape": [
+                "lev"
+              ]
+            },
+            "src": {
+              "shape": [
+                "lev"
+              ]
+            }
+          }
+        },
+        "entraining_plume_lev_interior": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  "phi_prev",
+                  {
+                    "args": [
+                      "ds",
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              0.5,
+                              {
+                                "args": [
+                                  {
+                                    "args": [
+                                      "lam_prev",
+                                      {
+                                        "args": [
+                                          "phi_env_prev",
+                                          "phi_prev"
+                                        ],
+                                        "op": "-"
+                                      }
+                                    ],
+                                    "op": "*"
+                                  },
+                                  {
+                                    "args": [
+                                      "lam",
+                                      "phi_env"
+                                    ],
+                                    "op": "*"
+                                  }
+                                ],
+                                "op": "+"
+                              }
+                            ],
+                            "op": "*"
+                          },
+                          "src"
+                        ],
+                        "op": "+"
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "+"
+              },
+              {
+                "args": [
+                  1,
+                  {
+                    "args": [
+                      0.5,
+                      {
+                        "args": [
+                          "lam",
+                          "ds"
+                        ],
+                        "op": "*"
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "+"
+              }
+            ],
+            "op": "/"
+          },
+          "description": "phi at the upper end of one implicit-trapezoidal step of dphi/dz = lam (phi_env - phi) + src of length ds, from phi_prev at the lower end: lam_prev and phi_env_prev at the lower end, lam and phi_env at the upper end, src already centred on the step. Spelled as the increment form (phi_prev + ds((lam_prev (phi_env_prev - phi_prev) + lam phi_env)/2 + src)) / (1 + lam ds/2), so each end's coefficient is written once.",
+          "params": [
+            "phi_prev",
+            "phi_env_prev",
+            "phi_env",
+            "lam_prev",
+            "lam",
+            "src",
+            "ds"
+          ]
+        },
+        "mms_column_integrand": {
+          "body": {
+            "args": [
+              "zc"
+            ],
+            "expr": {
+              "args": [
+                1,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        3.141592653589793,
+                        {
+                          "args": [
+                            "zc",
+                            "i"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "*"
+                    }
+                  ],
+                  "op": "cos"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "faq",
+            "output_idx": [
+              "i"
+            ],
+            "ranges": {
+              "i": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "The MMS integrand 1 + cos(pi z) sampled at the layer centres zc (shape [lev]), as an explicit gather over lev.",
+          "params": [
+            "zc"
+          ]
+        },
+        "mms_column_ze": {
+          "body": {
+            "args": [],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    0.6,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        64
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                },
+                {
+                  "args": [
+                    0.4,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        64
+                      ],
+                      "op": "/"
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "kn",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        64
+                      ],
+                      "op": "/"
+                    }
+                  ],
+                  "op": "*"
+                }
+              ],
+              "op": "+"
+            },
+            "op": "faq",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "lev_nodes"
+              }
+            }
+          },
+          "description": "Interface coordinates of the quadratic-stretch unit column: ze[kn] = 0.6 xi + 0.4 xi^2, xi = (kn - 1)/NLEV, over kn in lev_nodes.",
+          "params": []
+        },
+        "nonuniform_cell_center": {
+          "body": {
+            "args": [
+              "xe"
+            ],
+            "expr": {
+              "args": [
+                0.5,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "xe",
+                        "gi"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "xe",
+                        {
+                          "args": [
+                            "gi",
+                            1
+                          ],
+                          "op": "+"
+                        }
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "faq",
+            "output_idx": [
+              "gi"
+            ],
+            "ranges": {
+              "gi": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Cell centers from the node array: xc[gi] = (xe[gi] + xe[gi+1]) / 2 over the x (cell) axis, gathering the N+1-node edge array xe (shape [x_nodes]). A consuming model applies this to its `xe` to define its `xc` observed. The aggregation index is named `gi`, NOT `i`, so the derived observed does not capture a consuming finite-volume rule's own aggregate index `i` when it is inlined into the rule body (the rule reads xc by variable index xc[i-1], xc[i], xc[i+1]).",
+          "params": [
+            "xe"
+          ]
+        },
+        "nonuniform_cell_width": {
+          "body": {
+            "args": [
+              "xe"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    "xe",
+                    {
+                      "args": [
+                        "gi",
+                        1
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "index"
+                },
+                {
+                  "args": [
+                    "xe",
+                    "gi"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "faq",
+            "output_idx": [
+              "gi"
+            ],
+            "ranges": {
+              "gi": {
+                "from": "lev"
+              }
+            }
+          },
+          "description": "Finite-volume control widths from the node array: dxw[gi] = xe[gi+1] - xe[gi] over the x (cell) axis. A consuming model applies this to its `xe` to define its `dxw` observed. Aggregation index `gi` (distinct from a rule's `i`) for the same hygiene reason as nonuniform_cell_center.",
+          "params": [
+            "xe"
+          ]
+        },
+        "plume_mms_env": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  3.141592653589793,
+                  "z"
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "cos"
+          },
+          "description": "Environment profile phi_env(z) = cos(pi z).",
+          "params": [
+            "z"
+          ]
+        },
+        "plume_mms_exact": {
+          "body": {
+            "args": [
+              1,
+              {
+                "args": [
+                  {
+                    "args": [
+                      3.141592653589793,
+                      "z"
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "sin"
+              }
+            ],
+            "op": "+"
+          },
+          "description": "Manufactured plume solution phi*(z) = 1 + sin(pi z).",
+          "params": [
+            "z"
+          ]
+        },
+        "plume_mms_forcing": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  3.141592653589793,
+                  {
+                    "args": [],
+                    "bindings": {
+                      "z": "z"
+                    },
+                    "name": "plume_mms_env",
+                    "op": "apply_expression_template"
+                  }
+                ],
+                "op": "*"
+              },
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "z": "z"
+                    },
+                    "name": "plume_mms_rate",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "z": "z"
+                        },
+                        "name": "plume_mms_env",
+                        "op": "apply_expression_template"
+                      },
+                      {
+                        "args": [],
+                        "bindings": {
+                          "z": "z"
+                        },
+                        "name": "plume_mms_exact",
+                        "op": "apply_expression_template"
+                      }
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "-"
+          },
+          "description": "Manufactured forcing S(z) = phi*'(z) - lam(z)(phi_env(z) - phi*(z)), with phi*'(z) = pi cos(pi z) = pi phi_env(z).",
+          "params": [
+            "z"
+          ]
+        },
+        "plume_mms_rate": {
+          "body": {
+            "args": [
+              2,
+              {
+                "args": [
+                  3,
+                  "z"
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "+"
+          },
+          "description": "Varying entrainment rate lam(z) = 2 + 3z.",
+          "params": [
+            "z"
+          ]
+        }
+      },
+      "tests": [
+        {
+          "assertions": [
+            {
+              "expected": 0,
+              "reduce": "L2_error",
+              "reference": {
+                "args": [],
+                "expr": {
+                  "args": [
+                    1,
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            3.141592653589793,
+                            {
+                              "args": [
+                                0.5,
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "args": [
+                                                {
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ],
+                                                  "op": "-"
+                                                },
+                                                64
+                                              ],
+                                              "op": "/"
+                                            }
+                                          ],
+                                          "op": "*"
+                                        },
+                                        {
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "args": [
+                                                {
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ],
+                                                  "op": "-"
+                                                },
+                                                64
+                                              ],
+                                              "op": "/"
+                                            },
+                                            {
+                                              "args": [
+                                                {
+                                                  "args": [
+                                                    "i",
+                                                    1
+                                                  ],
+                                                  "op": "-"
+                                                },
+                                                64
+                                              ],
+                                              "op": "/"
+                                            }
+                                          ],
+                                          "op": "*"
+                                        }
+                                      ],
+                                      "op": "+"
+                                    },
+                                    {
+                                      "args": [
+                                        {
+                                          "args": [
+                                            0.6,
+                                            {
+                                              "args": [
+                                                "i",
+                                                64
+                                              ],
+                                              "op": "/"
+                                            }
+                                          ],
+                                          "op": "*"
+                                        },
+                                        {
+                                          "args": [
+                                            0.4,
+                                            {
+                                              "args": [
+                                                "i",
+                                                64
+                                              ],
+                                              "op": "/"
+                                            },
+                                            {
+                                              "args": [
+                                                "i",
+                                                64
+                                              ],
+                                              "op": "/"
+                                            }
+                                          ],
+                                          "op": "*"
+                                        }
+                                      ],
+                                      "op": "+"
+                                    }
+                                  ],
+                                  "op": "+"
+                                }
+                              ],
+                              "op": "*"
+                            }
+                          ],
+                          "op": "*"
+                        }
+                      ],
+                      "op": "sin"
+                    }
+                  ],
+                  "op": "+"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i"
+                ],
+                "ranges": {
+                  "i": {
+                    "from": "lev"
+                  }
+                }
+              },
+              "time": 1,
+              "tolerance": {
+                "abs": 7.8e-5
+              },
+              "variable": "w_plume"
+            }
+          ],
+          "description": "w_plume(1) = phi, the implicit-trapezoidal sweep of dphi/dz = lam (phi_env - phi) + src on the quadratic-stretch column with lam = 2 + 3z, compared in L2 against phi* = 1 + sin(pi z) at the layer centres, at the default NLEV = 64. Measured with the julia and rust bindings against EarthSciAST main bf7c1fa2: L2 error 3.88e-5 in both; the bound is 2x that. Mutation check: the frozen-coefficient step (lam[k] at both ends of the step) gives 4.82e-3 on this case and fails, so the case discriminates the order claim. Per-resolution errors are pinned in tests/conformance/convergence/plume_column_trapezoidal/golden/errors.json (julia reference).",
+          "id": "plume_trapezoidal_mms",
+          "time_span": {
+            "end": 1,
+            "start": 0
+          }
+        }
+      ],
+      "variables": {
+        "S": {
+          "description": "The manufactured forcing S(z) = phi*'(z) - lam(z)(phi_env(z) - phi*(z)) sampled at the layer centres (template plume_mms_forcing).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1/m"
+        },
+        "lam": {
+          "description": "Entrainment rate lam(z) = 2 + 3z at the layer centres. It VARIES, so the case discriminates a step that takes the rate at both ends (second order) from one that freezes it at the upper end (first order).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1/m"
+        },
+        "phi": {
+          "description": "The lowered plume: phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), compared with phi*(z) = 1 + sin(pi z).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "phi0": {
+          "description": "Seed: the manufactured solution at the bottom layer centre, 1 + sin(pi zc[1]).",
+          "type": "unknown",
+          "units": "1"
+        },
+        "phi_env": {
+          "description": "Environment profile cos(pi z) at the layer centres.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "src": {
+          "description": "Source centred on each step, the trapezoidal mean (S[k-1] + S[k])/2 of the sampled forcing; cell 1 (never read by the rule, which seeds it) holds S[1].",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1/m"
+        },
+        "w_plume": {
+          "description": "Accumulator state with ic 0 and dw/dt = phi, so w(1) = phi exactly for every integrator and the L2 error of w at t = 1 is the error of the lowering alone (the pattern of problems/integral_column_midpoint.esm).",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "1"
+        },
+        "zc": {
+          "description": "Layer centres, grid-derived from ze by column_cell_center; the coordinate the plume rule steps along, read by bare name.",
+          "shape": [
+            "lev"
+          ],
+          "type": "unknown",
+          "units": "m"
+        },
+        "ze": {
+          "description": "Interface coordinates of the grid's shared quadratic-stretch MMS column (mesh/mms_column.esm mms_column_ze).",
+          "shape": [
+            "lev_nodes"
+          ],
+          "type": "unknown",
+          "units": "m"
+        }
+      }
+    }
+  }
+}

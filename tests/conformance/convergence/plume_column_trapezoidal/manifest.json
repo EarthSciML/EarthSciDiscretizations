@@ -42,12 +42,14 @@
   "reference_binding": "julia",
   "bindings_required": [
     "julia",
-    "python",
     "rust"
   ],
   "scope_excluded": {
     "go": "rewrite-only port; no makearray lowering / simulator",
     "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "blocked_upstream_bindings": {
+    "python": "Measured 2026-11-14 against EarthSciAST main bf7c1fa2: earthsci_ast rejects the problem before simulating with `observed_cycle: models/PlumeTrapezoidal: observed definition cycle: phi -> phi`. Its structural observed-cycle check runs on the PRE-lowering equation phi = entraining_plume_lev(phi_env, lam, src, phi0, phi), where phi appears as a bare argument, so the esm-spec 4.3.1.1 self-edge exemption (which looks for an index(phi, ...) read) does not apply; after the 9.6.3 rewrite the RHS is the recurrence faq reading index(phi, k-1), which julia and rust accept and evaluate. Python's lowered AST for this rule is byte-identical to the julia golden (tests/conformance/ast/entraining_plume_lev), so only the pre-lowering cycle check blocks it. The python conformance job is also disabled on main for runtime (.github/workflows/conformance.yml). Re-arm once the check runs on the lowered equations."
   },
   "tolerances": {
     "error_vs_golden_rtol": 0.0001,
@@ -71,5 +73,5 @@
     }
   },
   "golden": "golden/errors.json",
-  "status": "pending-golden"
+  "status": "active"
 }
