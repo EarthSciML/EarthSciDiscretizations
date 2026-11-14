@@ -285,6 +285,10 @@ def free_names_for_grid(grid_doc: dict, sub_docs: list) -> list:
 
     docs = [grid_doc] + [d for _, d in sub_docs]
     for doc in docs:
+        # A rule may declare a passive operand axis of its own (e.g. cice_bgrid's
+        # `layer` / `N_LAYER`); those names are bound, not consumer-supplied.
+        bound |= set((doc.get("metaparameters") or {}).keys())
+        bound |= set((doc.get("index_sets") or {}).keys())
         templates = doc.get("expression_templates") or {}
         bound |= set(templates.keys())
         for tmpl in templates.values():
