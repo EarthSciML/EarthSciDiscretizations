@@ -82,12 +82,6 @@ import OrdinaryDiffEqTsit5
 # specializes `SciMLBase.__init` / `__solve` on an `EsmProblem` rather than
 # exporting copies that would collide with any loaded solver.
 import SciMLBase
-# The spherical geometry kernel (manifold "spherical" on intersect_polygon /
-# polygon_intersection_area) lives in the EarthSciASTGeometryOpsExt
-# package extension, which loads only when GeometryOps + GeoInterface are in
-# the session (both are pinned deps of the pde_sim_adapter environment). The
-# planar path never needs them; the spherical regridding conformance case does.
-import GeometryOps, GeoInterface
 const ODE = OrdinaryDiffEqTsit5
 const ESS = EarthSciAST
 
