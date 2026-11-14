@@ -1,0 +1,44 @@
+{
+  "category": "convergence",
+  "version": "1.0",
+  "case": "growth_sectional_lr2m_tracer_mms",
+  "description": "Observed-order-of-accuracy sweep for grids/sectional_volume_1d/rules/growth_lr2m_tracer_D_bin_closed (a VOLUME-CARRIED quantity: here the section dry volume m itself, NTRACER = 1) driven by problems/growth_sectional_lr2m_mms.esm, the same problem, model and resolutions as growth_sectional_lr2m_mms. The measured quantity is the relative L2 error of m at t = 0.1, the problem's only L2_error assertion at that time (the runners take the first one at assert_time, so the tracer is asserted at a different time from the number's t = 0.2 to be selectable). m is advanced by dm/dt = lam m - D(lam*m, N, V, wrt: bin), so its error measures the tracer rule's edge flux vb_edge F_N m/V on top of the number flux it carries: a first-order or wrong-donor tracer flux, or a wrong edge volume, shows up here even when the number case still passes. Sweep from NBIN = 32, where the limiter's share of the error has fallen and the pairwise orders have settled near 2.",
+  "problem": "../../../../problems/growth_sectional_lr2m_mms.esm",
+  "model": "Growth",
+  "rule": "../../../../grids/sectional_volume_1d/rules/growth_lr2m_tracer_D_bin_closed.esm",
+  "grid": "sectional_volume_1d",
+  "resolutions": [
+    {"n": 32, "bindings": {"NBIN": 32}},
+    {"n": 64, "bindings": {"NBIN": 64}},
+    {"n": 128, "bindings": {"NBIN": 128}},
+    {"n": 256, "bindings": {"NBIN": 256}}
+  ],
+  "norms": [
+    "L2_error"
+  ],
+  "assert_time": 0.1,
+  "expected_order": 2.0,
+  "order_tolerance": 0.25,
+  "reference_binding": "julia",
+  "bindings_required": [
+    "julia",
+    "rust"
+  ],
+  "scope_excluded": {
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "blocked_upstream_bindings": {
+    "python": "Too slow, as for growth_sectional_lr2m_mms (same problem and sweep): the python runner did not finish the NBIN = 256 sweep, and the python conformance job is disabled on main for the same reason against esm 2.x (.github/workflows/conformance.yml). Re-arm with an LSODA tolerance as tight as the 1e-13 / 1e-15 the other bindings use, once the python binding runs this sweep in CI-tolerable time."
+  },
+  "tolerances": {
+    "error_vs_golden_rtol": 0.0001,
+    "error_vs_golden_atol": 1e-09
+  },
+  "integrators": {
+    "julia": {"algorithm": "Tsit5", "reltol": 1e-13, "abstol": 1e-15},
+    "rust": {"solver": "Erk", "reltol": 1e-13, "abstol": 1e-15}
+  },
+  "golden": "golden/errors.json",
+  "status": "active"
+}

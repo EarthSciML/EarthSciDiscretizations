@@ -1,13 +1,14 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.1.0",
   "metadata": {
     "name": "conservative_overlap",
-    "description": "Conservative overlap-area regridding, factored as a template library (esm-spec 9.7) so a coupling can invoke it instead of restating the aggregates inline. This is the library form of exactly the computation in the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm and tests/coupling/cross_domain_coupling.esm (esm-spec 8.6 / 8.6.1): F_tgt[j] = (1/A_j) * sum_i A_ij * F_src[i], with A_ij = polygon_intersection_area(src_i, tgt_j) and A_j = sum_i A_ij. The match-less templates factor the stages: (1) conservative_overlap_A_ij -- the NARROW PHASE as a dense evaluable aggregate over the fused polygon_intersection_area leaf (esm-spec 8.6.1: the fused leaf is what makes the narrow phase a dense tensor contraction with no ragged clip-ring intermediate); (2) conservative_overlap_A_j -- the ROW-NORMALIZATION denominator, the group-by-j row-sum of the SAME computed areas with the sliver filter A_ij > atol (CONFORMANCE_SPEC 5.8.2), which is what makes partition-of-unity sum_i W_ij = 1 EXACT BY CONSTRUCTION (5.8.3: the denominator is the row-sum of the computed areas, not the true target-cell area) -- note the denominator applies the SAME filter as the numerator, so the surviving sets coincide and the invariant is exact; (3) conservative_overlap_apply -- the weighted-sum APPLY + NORMALIZE, F_tgt[j] = sum_i A_ij*F_src[i] / A_j[j] over the same filtered set (the sparse mat-vec of ConservativeRegridding.jl, W_ij = A_ij/A_j folded in). THE BROAD PHASE IS THE SPATIAL-OVERLAP JOIN GATE (projection-pushdown Phase 2a): (4) the _gated narrow-phase/assembly variants (conservative_overlap_A_ij_gated / _A_j_gated / _W_ij_gated / _apply_gated) -- the SAME aggregates with the candidate join folded in as a join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]} gate. The engine builds the candidate (i,j) set ONCE at build time from the cell-ring ENVELOPES -- each ring's axis-aligned bounding box, derived by the engine from the SAME polygon stacks the narrow phase clips (no hand-authored binning coordinate, no bin key, no bin-width parameter), inflated outward by a small eps -- via an STRtree (when the GeometryOps extension is loaded) or a dependency-free brute-force sweep, byte-identically. A product term is contributed only where the source and target envelopes intersect (src_poly is the QUERY side, tgt_poly the INDEXED cell side), so the contraction runs over O(#candidates) instead of O(NSRC*NTGT). DENSE OR GATED IS THE CONSUMER'S CHOICE, value-identically: with the sliver filter present the two forms agree EXACTLY -- a non-candidate pair has disjoint bounding boxes hence zero true overlap area, which the dense path computes and the filter drops while the gated path never visits it; identical surviving sets, identical sums, and adding exact-zero terms to a nonnegative-area sum is FP-exact. The broad phase is ADMISSIBLE BY CONSTRUCTION: envelope candidacy never misses a genuine positive-area overlap for any eps >= 0 (two cells whose interiors overlap have overlapping bounding boxes), so no consumer bin-width admissibility obligation remains -- disjoint cell clusters are still pruned automatically (their bounding boxes do not intersect). The gated A_j applies the SAME join gate AND the SAME filter as the gated numerator, so the surviving sets coincide and partition-of-unity stays exact by construction -- the denominator broad-phases like the numerator. Cell polygons ARRIVE AS TEMPLATE PARAMETERS (closed vertex rings shaped [cells, overlap_cell_verts, overlap_coord], CCW, ring vertex v = [lon, lat]), so the templates are grid-agnostic: any pair of grids that can present its cells as fixed-vertex-count rings flows through unchanged (regridding/cartesian_cell_rings.esm derives such rings from a uniform cartesian grid spec; grids/mpas/grid.esm's mpas_cell_rings_deg derives them from MPAS mesh vertex data). Grid sizes are load-time metaparameters (NSRC, NTGT source/target cell counts; NVERT ring length, default quads), bound at the import edge; the defaults match the 3x3 -> 2x2 conformance exemplar. The MANIFOLD stays a TEMPLATE PARAMETER of the A_ij templates: per the esm-spec 9.6.1 scalar-field substitution rule (a parameter name appearing as the string value of a scalar Expression-node field in a body is a substitution site, the mirror of the match-side scalar-field binding rule), the geometry kernel's manifold flag is bound at each invocation -- 'planar' (clipping in the source/target coordinate plane; exact for the lon-lat-rectangle coarsening exemplar and for any projected patch) or 'spherical' (great-circle-edge clipping on the unit sphere, areas in steradians; the correct model for lat-lon-on-sphere regridding, with the CONFORMANCE_SPEC 5.8.4 great-circle-edge caveat for parallel edges). The bound value MUST be a member of the closed set {planar, spherical, geodesic}: substitution is pure-syntactic and the enum is enforced on the expanded form (9.6.4, diagnostic geometry_manifold_invalid). One library file therefore serves every manifold; there is no separate spherical near-duplicate. Conformance contract for consumers: candidate set byte-identical (when the broad phase is used), conservation and partition-of-unity as the primary exact gates, per-pair areas/weights toleranced with the sliver floor (CONFORMANCE_SPEC 5.8.1-5.8.3), and dense/gated value-identity gated exactly where both paths are computed. Exemplars: tests/conformance/regridding/conservative_overlap_3x3_to_2x2/ (dense, manifold 'planar'), conservative_overlap_sphere_fan_4_to_2/ (dense, 'spherical'), conservative_overlap_gated_3x3_to_2x2/ (gated vs dense value-identity on the exemplar geometry), conservative_overlap_gated_clusters_4_to_2/ (gated with genuine candidate pruning across disjoint clusters), cartesian_rings_regrid_3x3_to_2x2/ (grid-spec -> rings -> broad phase -> narrow phase -> apply, end-to-end declarative), and mpas_l0_to_octants_sphere/ (MPAS mesh-derived rings on the sphere).",
+    "description": "Conservative overlap-area regridding, factored as a template library (esm-spec 9.7) so a coupling can invoke it instead of restating the aggregates inline. This is the library form of exactly the computation in the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm and tests/coupling/cross_domain_coupling.esm (esm-spec 8.6 / 8.6.1): F_tgt[j] = (1/A_j) * sum_i A_ij * F_src[i], with A_ij = the overlap area of src_i and tgt_j (the esm:std/geometry.esm templates overlap_area_planar / overlap_area_spherical, esm 2.0.0) and A_j = sum_i A_ij. The match-less templates factor the stages: (1) conservative_overlap_A_ij_planar / conservative_overlap_A_ij_spherical -- the NARROW PHASE as a dense evaluable faq whose element is the scalar overlap-area template of esm:std/geometry.esm (esm-spec 8.6.1: the template returns the scalar area with its convex clip written out in its body, so the narrow phase is a dense tensor contraction with no ragged clip-ring intermediate); (2) conservative_overlap_A_j -- the ROW-NORMALIZATION denominator, the group-by-j row-sum of the SAME computed areas with the sliver filter A_ij > atol (CONFORMANCE_SPEC 5.8.2), which is what makes partition-of-unity sum_i W_ij = 1 EXACT BY CONSTRUCTION (5.8.3: the denominator is the row-sum of the computed areas, not the true target-cell area) -- note the denominator applies the SAME filter as the numerator, so the surviving sets coincide and the invariant is exact; (3) conservative_overlap_apply -- the weighted-sum APPLY + NORMALIZE, F_tgt[j] = sum_i A_ij*F_src[i] / A_j[j] over the same filtered set (the sparse mat-vec of ConservativeRegridding.jl, W_ij = A_ij/A_j folded in). THE BROAD PHASE IS THE SPATIAL-OVERLAP JOIN GATE (projection-pushdown Phase 2a): (4) the _gated narrow-phase/assembly variants (conservative_overlap_A_ij_gated_planar / _A_j_gated / _W_ij_gated / _apply_gated) -- the SAME aggregates with the candidate join folded in as a join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]} gate. The engine builds the candidate (i,j) set ONCE at build time from the cell-ring ENVELOPES -- each ring's axis-aligned bounding box, derived by the engine from the SAME polygon stacks the narrow phase clips (no hand-authored binning coordinate, no bin key, no bin-width parameter), inflated outward by a small eps -- byte-identically in every binding. A product term is contributed only where the source and target envelopes intersect (src_poly is the QUERY side, tgt_poly the INDEXED cell side), so the contraction runs over O(#candidates) instead of O(NSRC*NTGT). DENSE OR GATED IS THE CONSUMER'S CHOICE, value-identically: with the sliver filter present the two forms agree EXACTLY -- a non-candidate pair has disjoint bounding boxes hence zero true overlap area, which the dense path computes and the filter drops while the gated path never visits it; identical surviving sets, identical sums, and adding exact-zero terms to a nonnegative-area sum is FP-exact. The broad phase is ADMISSIBLE BY CONSTRUCTION: envelope candidacy never misses a genuine positive-area overlap for any eps >= 0 (two cells whose interiors overlap have overlapping bounding boxes), so no consumer bin-width admissibility obligation remains -- disjoint cell clusters are still pruned automatically (their bounding boxes do not intersect). The gated A_j applies the SAME join gate AND the SAME filter as the gated numerator, so the surviving sets coincide and partition-of-unity stays exact by construction -- the denominator broad-phases like the numerator. Cell polygons ARRIVE AS TEMPLATE PARAMETERS (closed vertex rings shaped [cells, overlap_cell_verts, overlap_coord], CCW, ring vertex v = [lon, lat]), so the templates are grid-agnostic: any pair of grids that can present its cells as fixed-vertex-count rings flows through unchanged (regridding/cartesian_cell_rings.esm derives such rings from a uniform cartesian grid spec; grids/mpas/grid.esm's mpas_cell_rings_deg derives them from MPAS mesh vertex data). Grid sizes are load-time metaparameters (NSRC, NTGT source/target cell counts; NVERT ring length, default quads), bound at the import edge; the defaults match the 3x3 -> 2x2 conformance exemplar. The MANIFOLD is chosen by WHICH narrow-phase template a consumer applies (esm 2.0.0 removed the polygon_intersection_area leaf and its manifold field; esm-spec 4.2 'Removed ops'): conservative_overlap_A_ij_planar clips in the source/target coordinate plane (areas in the squared coordinate unit; exact for the lon-lat-rectangle coarsening exemplar and for any projected patch), and conservative_overlap_A_ij_spherical clips with great-circle edges on the unit sphere (areas in steradians; the correct model for lat-lon-on-sphere regridding, with the CONFORMANCE_SPEC 5.8.4 great-circle-edge caveat for parallel edges). All three narrow-phase templates are the same pairwise skeleton (conservative_overlap_pairs, or conservative_overlap_pairs_gated with the broad-phase join) around a per-manifold element (conservative_overlap_area_planar_ij / conservative_overlap_area_spherical_ij). The spherical template reads [cells, verts, overlap_xyz] UNIT-VECTOR stacks, which the consumer builds from its lon-lat rings with conservative_overlap_unit_rings (a faq of esm:std/geometry.esm lonlat_to_unit over the ring's own cell and vertex axes); the planar templates read the lon-lat (or projected x-y) rings directly. Both take the source and target ring slot counts (src_nv, tgt_nv) explicitly, since a ring stack's vertex axis need not be overlap_cell_verts (an MPAS source ring is padded to maxEdges); a consumer binds them to the same metaparameter that sizes that axis, so the count is stated once. The broad phase is planar-envelope only, so the gated variants are planar. Everything downstream of A_ij (A_j, W_ij, apply and their gated forms) is manifold-agnostic. Conformance contract for consumers: candidate set byte-identical (when the broad phase is used), conservation and partition-of-unity as the primary exact gates, per-pair areas/weights toleranced with the sliver floor (CONFORMANCE_SPEC 5.8.1-5.8.3), and dense/gated value-identity gated exactly where both paths are computed. Exemplars: tests/conformance/regridding/conservative_overlap_3x3_to_2x2/ (dense, planar), conservative_overlap_sphere_fan_4_to_2/ (dense, spherical), conservative_overlap_gated_3x3_to_2x2/ (gated vs dense value-identity on the exemplar geometry), conservative_overlap_gated_clusters_4_to_2/ (gated with genuine candidate pruning across disjoint clusters), cartesian_rings_regrid_3x3_to_2x2/ (grid-spec -> rings -> broad phase -> narrow phase -> apply, end-to-end declarative), and mpas_l0_to_octants_sphere/ (MPAS mesh-derived rings on the sphere).",
     "license": "MIT",
     "tags": [
       "esd:regrid",
       "method:conservative_overlap",
-      "manifold:parametric",
+      "manifold:planar",
+      "manifold:spherical",
       "conservation",
       "partition-of-unity"
     ],
@@ -17,7 +18,7 @@
         "doi": "10.1175/1520-0493(1999)127<2204:FASOCR>2.0.CO;2"
       },
       {
-        "citation": "EarthSciAST esm-spec.md 8.6/8.6.1 (regridding is a coupling expression; the polygon_intersection_area fused leaf) and CONFORMANCE_SPEC.md 5.8 (geometry tolerance contract).",
+        "citation": "EarthSciAST esm-spec.md 8.6/8.6.1 (regridding is a coupling expression; the overlap-area templates of esm:std/geometry.esm) and CONFORMANCE_SPEC.md 5.8 (geometry tolerance contract).",
         "notes": "The library factoring mirrors the ESS worked fixtures tests/valid/geometry/conservative_regrid_overlap_join.esm (equations 2-5) and tests/coupling/cross_domain_coupling.esm (rg_A / rg_At / heat_flux)."
       }
     ]
@@ -55,16 +56,30 @@
     "overlap_coord": {
       "kind": "interval",
       "size": 2
+    },
+    "overlap_xyz": {
+      "kind": "interval",
+      "size": 3
     }
   },
+  "expression_template_imports": [
+    {
+      "ref": "esm:std/geometry.esm",
+      "only": [
+        "overlap_area_planar",
+        "overlap_area_spherical",
+        "lonlat_to_unit"
+      ]
+    }
+  ],
   "expression_templates": {
-    "conservative_overlap_A_ij": {
+    "conservative_overlap_pairs": {
       "params": [
-        "src_poly",
-        "tgt_poly",
-        "manifold"
+        "src_ring",
+        "tgt_ring",
+        "area"
       ],
-      "description": "NARROW PHASE (overlap-weight template): the raw overlap-area matrix A_ij[i,j] = polygon_intersection_area(src_poly[i], tgt_poly[j]) as a dense evaluable aggregate (esm-spec 8.6.1). src_poly is shaped [src_cells, overlap_cell_verts, overlap_coord], tgt_poly [tgt_cells, overlap_cell_verts, overlap_coord]; each cell is a closed CCW vertex ring with ring vertex v = [lon, lat] (or [x, y] on a projected patch). The fused leaf hides the clip ring, so no ragged intermediate appears and the whole matrix is a dense tensor contraction. The MANIFOLD is the third template parameter, occupying the leaf's scalar manifold field as a substitution site (esm-spec 9.6.1): bind 'planar' for coordinate-plane clipping (areas in the squared coordinate unit) or 'spherical' for great-circle-edge clipping on the unit sphere (areas in steradians); the bound value must be a member of the closed set {planar, spherical, geodesic}, enforced post-expansion (9.6.4, geometry_manifold_invalid). Entries for disjoint pairs are exactly 0; near-tangent slivers are dropped downstream by the atol filter of the A_j / apply templates, never here -- the raw areas are what the CONFORMANCE_SPEC 5.8.2 tolerance gates compare.",
+      "description": "DENSE PAIRWISE SKELETON (narrow-phase scaffold shared by the planar and spherical A_ij templates): the [src_cells, tgt_cells] matrix whose (i, j) entry is the expression bound to `area`, evaluated with loop symbols i (source cell) and j (target cell) in scope -- bind `area` to conservative_overlap_area_planar_ij or conservative_overlap_area_spherical_ij, which read exactly those symbols. src_ring and tgt_ring are the ring stacks the element gathers from (the faq's args). Every source/target pair is visited; see conservative_overlap_pairs_gated for the broad-phase-pruned form.",
       "body": {
         "op": "faq",
         "semiring": "sum_product",
@@ -81,28 +96,192 @@
           }
         },
         "args": [
-          "src_poly",
-          "tgt_poly"
+          "src_ring",
+          "tgt_ring"
         ],
-        "expr": {
-          "op": "polygon_intersection_area",
-          "manifold": "manifold",
-          "args": [
-            {
-              "op": "index",
-              "args": [
-                "src_poly",
-                "i"
-              ]
-            },
-            {
-              "op": "index",
-              "args": [
-                "tgt_poly",
-                "j"
-              ]
+        "expr": "area"
+      }
+    },
+    "conservative_overlap_pairs_gated": {
+      "params": [
+        "src_ring",
+        "tgt_ring",
+        "area"
+      ],
+      "description": "GATED PAIRWISE SKELETON: conservative_overlap_pairs with the spatial-overlap broad phase folded in as a join.overlap{src_env:[src_ring], tgt_env:[tgt_ring]} gate, so `area` is evaluated only for the candidate (i, j) pairs whose ring envelopes (axis-aligned bounding boxes inflated by eps) intersect; every other entry is the additive identity 0. The envelopes are planar, so src_ring / tgt_ring are the lon-lat (or projected x-y) rings, never unit-vector stacks.",
+      "body": {
+        "op": "faq",
+        "semiring": "sum_product",
+        "output_idx": [
+          "i",
+          "j"
+        ],
+        "ranges": {
+          "i": {
+            "from": "src_cells"
+          },
+          "j": {
+            "from": "tgt_cells"
+          }
+        },
+        "join": [
+          {
+            "overlap": {
+              "src_env": [
+                "src_poly"
+              ],
+              "tgt_env": [
+                "tgt_poly"
+              ],
+              "eps": 1e-09
             }
-          ]
+          }
+        ],
+        "args": [
+          "src_ring",
+          "tgt_ring"
+        ],
+        "expr": "area"
+      }
+    },
+    "conservative_overlap_area_planar_ij": {
+      "params": [
+        "src_poly",
+        "tgt_poly",
+        "src_nv",
+        "tgt_nv"
+      ],
+      "description": "NARROW-PHASE ELEMENT, PLANAR: the esm:std/geometry.esm overlap_area_planar of source cell i of src_poly and target cell j of tgt_poly, i.e. one entry of A_ij. It reads the loop symbols i and j of the enclosing conservative_overlap_pairs / conservative_overlap_pairs_gated faq, so it is only meaningful bound to that skeleton's `area`. src_poly and tgt_poly are [cells, verts, overlap_coord] lon-lat (or x-y) stacks; src_nv and tgt_nv are the vertex slot counts of their rings.",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "overlap_area_planar",
+        "bindings": {
+          "ring_a": "src_poly",
+          "cell_a": "i",
+          "nv_a": "src_nv",
+          "ring_b": "tgt_poly",
+          "cell_b": "j",
+          "nv_b": "tgt_nv"
+        }
+      }
+    },
+    "conservative_overlap_area_spherical_ij": {
+      "params": [
+        "src_unit",
+        "tgt_unit",
+        "src_nv",
+        "tgt_nv"
+      ],
+      "description": "NARROW-PHASE ELEMENT, SPHERICAL: the esm:std/geometry.esm overlap_area_spherical of source cell i of src_unit and target cell j of tgt_unit, i.e. one entry of A_ij. It reads the loop symbols i and j of the enclosing conservative_overlap_pairs / conservative_overlap_pairs_gated faq, so it is only meaningful bound to that skeleton's `area`. src_unit and tgt_unit are [cells, verts, overlap_xyz] unit-vector stacks; src_nv and tgt_nv are the vertex slot counts of their rings.",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "overlap_area_spherical",
+        "bindings": {
+          "ring_a": "src_unit",
+          "cell_a": "i",
+          "nv_a": "src_nv",
+          "ring_b": "tgt_unit",
+          "cell_b": "j",
+          "nv_b": "tgt_nv"
+        }
+      }
+    },
+    "conservative_overlap_unit_rings": {
+      "params": [
+        "lonlat_ring",
+        "ring_cells",
+        "ring_verts"
+      ],
+      "description": "UNIT-VECTOR RING STACK (input adapter for conservative_overlap_A_ij_spherical): the [ring_cells, ring_verts, overlap_xyz] stack of unit vectors of the lon-lat-degree ring stack lonlat_ring, each entry the esm:std/geometry.esm lonlat_to_unit of one vertex component, so the trig is evaluated once per vertex rather than once per cell pair. ring_cells and ring_verts NAME the index sets lonlat_ring is shaped over (e.g. src_cells and overlap_cell_verts, or an MPAS mesh's cells and maxEdges), so one template serves source and target stacks of any grid.",
+      "body": {
+        "op": "faq",
+        "args": [],
+        "output_idx": [
+          "c",
+          "v",
+          "d"
+        ],
+        "ranges": {
+          "c": {
+            "from": "ring_cells"
+          },
+          "v": {
+            "from": "ring_verts"
+          },
+          "d": {
+            "from": "overlap_xyz"
+          }
+        },
+        "expr": {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "lonlat_to_unit",
+          "bindings": {
+            "ring": "lonlat_ring",
+            "cell": "c",
+            "vert": "v",
+            "comp": "d"
+          }
+        }
+      }
+    },
+    "conservative_overlap_A_ij_planar": {
+      "params": [
+        "src_poly",
+        "tgt_poly",
+        "src_nv",
+        "tgt_nv"
+      ],
+      "description": "NARROW PHASE, PLANAR (overlap-weight template): the raw overlap-area matrix A_ij[i,j] = overlap_area_planar(src_poly[i], tgt_poly[j]) (esm:std/geometry.esm) as a dense evaluable faq (esm-spec 8.6.1): conservative_overlap_pairs over the conservative_overlap_area_planar_ij element, clipping with straight edges in the coordinate plane; areas in the squared coordinate unit. src_poly is shaped [src_cells, verts, overlap_coord], tgt_poly [tgt_cells, verts, overlap_coord]; each cell is a closed convex vertex ring with vertex v = [lon, lat] (or [x, y] on a projected patch), either orientation. src_nv is the slot count of each source ring (its vertex axis length), tgt_nv of each target ring; a ring shorter than its slot count repeats its last vertex, which contributes nothing. Bind src_nv / tgt_nv to the SAME metaparameter that sizes the ring stack's vertex axis, never to a separate literal: a count below the axis length silently clips each cell as a polygon with fewer vertices, and because the A_j denominator row-sums the same (wrong) areas, partition-of-unity and conservation still hold -- no invariant gate would catch it. Entries for disjoint pairs are exactly 0; near-tangent slivers are dropped downstream by the atol filter of the A_j / apply templates, never here -- the raw areas are what the CONFORMANCE_SPEC 5.8.2 tolerance gates compare.",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "conservative_overlap_pairs",
+        "bindings": {
+          "src_ring": "src_poly",
+          "tgt_ring": "tgt_poly",
+          "area": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "conservative_overlap_area_planar_ij",
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "src_nv": "src_nv",
+              "tgt_nv": "tgt_nv"
+            }
+          }
+        }
+      }
+    },
+    "conservative_overlap_A_ij_spherical": {
+      "params": [
+        "src_unit",
+        "tgt_unit",
+        "src_nv",
+        "tgt_nv"
+      ],
+      "description": "NARROW PHASE, SPHERICAL (overlap-weight template): the raw overlap-area matrix A_ij[i,j] = overlap_area_spherical(src_unit[i], tgt_unit[j]) (esm:std/geometry.esm) as a dense evaluable faq (esm-spec 8.6.1): conservative_overlap_pairs over the conservative_overlap_area_spherical_ij element, clipping with great-circle edges on the unit sphere; areas in steradians (multiply by R^2 for a physical area). src_unit is shaped [src_cells, verts, overlap_xyz], tgt_unit [tgt_cells, verts, overlap_xyz]: UNIT-VECTOR ring stacks, built by the consumer from its lon-lat-degree rings with conservative_overlap_unit_rings, so the conversion is computed once per vertex rather than once per pair. src_nv is the slot count of each source ring (its vertex axis length), tgt_nv of each target ring; a ring shorter than its slot count repeats its last vertex, which contributes nothing. Bind src_nv / tgt_nv to the SAME metaparameter that sizes the ring stack's vertex axis, never to a separate literal: a count below the axis length silently clips each cell as a polygon with fewer vertices, and because the A_j denominator row-sums the same (wrong) areas, partition-of-unity and conservation still hold -- no invariant gate would catch it. Agrees with the removed polygon_intersection_area(manifold spherical) within the CONFORMANCE_SPEC 5.8.2 tolerance, not bit for bit. Entries for disjoint pairs are exactly 0; slivers are dropped downstream by the atol filter.",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "conservative_overlap_pairs",
+        "bindings": {
+          "src_ring": "src_unit",
+          "tgt_ring": "tgt_unit",
+          "area": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "conservative_overlap_area_spherical_ij",
+            "bindings": {
+              "src_unit": "src_unit",
+              "tgt_unit": "tgt_unit",
+              "src_nv": "src_nv",
+              "tgt_nv": "tgt_nv"
+            }
+          }
         }
       }
     },
@@ -290,64 +469,32 @@
         }
       }
     },
-    "conservative_overlap_A_ij_gated": {
+    "conservative_overlap_A_ij_gated_planar": {
       "params": [
         "src_poly",
         "tgt_poly",
-        "manifold"
+        "src_nv",
+        "tgt_nv"
       ],
-      "description": "CANDIDATE-GATED NARROW PHASE: the overlap-area matrix of conservative_overlap_A_ij with the SPATIAL-OVERLAP broad-phase candidate join folded in -- join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]} (projection-pushdown Phase 2a) admits a product term only where the source cell's and target cell's envelopes intersect (each ring factor's axis-aligned bounding box, computed once at build time from the SAME polygon rings the narrow phase clips; inflated outward by eps), so one polygon clip runs per CANDIDATE pair instead of per (i,j) pair: O(#candidates) build cost. src_poly is the QUERY side (src_env), tgt_poly the INDEXED cell side (tgt_env); the candidate (i,j) set is built once (STRtree when the GeometryOps extension is loaded, else brute-force) and consulted per contracted tuple. Non-candidate entries are the aggregate's additive identity, exactly 0. VALUE-IDENTICAL to the dense template: a pruned pair has zero true overlap area (disjoint bounding boxes => disjoint cells), which the dense path computes as 0 and the downstream sliver filter drops anyway -- identical surviving sets, identical sums. eps is a small conservative slack (the broad phase never misses a genuine positive-area overlap for eps >= 0). Manifold semantics identical to conservative_overlap_A_ij.",
+      "description": "CANDIDATE-GATED NARROW PHASE: the overlap-area matrix of conservative_overlap_A_ij_planar with the SPATIAL-OVERLAP broad-phase candidate join folded in -- join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]} (projection-pushdown Phase 2a) admits a product term only where the source cell's and target cell's envelopes intersect (each ring factor's axis-aligned bounding box, computed once at build time from the SAME polygon rings the narrow phase clips; inflated outward by eps), so one polygon clip runs per CANDIDATE pair instead of per (i,j) pair: O(#candidates) build cost. src_poly is the QUERY side (src_env), tgt_poly the INDEXED cell side (tgt_env); the candidate (i,j) set is built once and consulted per contracted tuple. Non-candidate entries are the aggregate's additive identity, exactly 0. VALUE-IDENTICAL to the dense template: a pruned pair has zero true overlap area (disjoint bounding boxes => disjoint cells), which the dense path computes as 0 and the downstream sliver filter drops anyway -- identical surviving sets, identical sums. eps is a small conservative slack (the broad phase never misses a genuine positive-area overlap for eps >= 0). PLANAR only: the envelope broad phase is a planar bounding-box test, and the narrow phase is overlap_area_planar exactly as in conservative_overlap_A_ij_planar (same src_nv / tgt_nv contract) -- the two differ only in the skeleton, conservative_overlap_pairs_gated instead of conservative_overlap_pairs.",
       "body": {
-        "op": "faq",
-        "semiring": "sum_product",
-        "output_idx": [
-          "i",
-          "j"
-        ],
-        "ranges": {
-          "i": {
-            "from": "src_cells"
-          },
-          "j": {
-            "from": "tgt_cells"
-          }
-        },
-        "join": [
-          {
-            "overlap": {
-              "src_env": [
-                "src_poly"
-              ],
-              "tgt_env": [
-                "tgt_poly"
-              ],
-              "eps": 1e-09
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "conservative_overlap_pairs_gated",
+        "bindings": {
+          "src_ring": "src_poly",
+          "tgt_ring": "tgt_poly",
+          "area": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "conservative_overlap_area_planar_ij",
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "src_nv": "src_nv",
+              "tgt_nv": "tgt_nv"
             }
           }
-        ],
-        "args": [
-          "src_poly",
-          "tgt_poly"
-        ],
-        "expr": {
-          "op": "polygon_intersection_area",
-          "manifold": "manifold",
-          "args": [
-            {
-              "op": "index",
-              "args": [
-                "src_poly",
-                "i"
-              ]
-            },
-            {
-              "op": "index",
-              "args": [
-                "tgt_poly",
-                "j"
-              ]
-            }
-          ]
         }
       }
     },
@@ -358,7 +505,7 @@
         "tgt_poly",
         "atol"
       ],
-      "description": "CANDIDATE-GATED ROW NORMALIZATION: A_j[j] = sum_i A_ij[i,j] over the CANDIDATE pairs (join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]}) that survive the sliver filter A_ij > atol. THE DENOMINATOR BROAD-PHASES LIKE THE NUMERATOR: this template applies the SAME spatial-overlap join gate and the SAME filter as conservative_overlap_A_ij_gated / the apply, so the surviving-overlap sets coincide and partition-of-unity sum_i W_ij = 1 stays EXACT BY CONSTRUCTION (CONFORMANCE_SPEC 5.8.3) -- gating only the numerator, or only the denominator, would break the invariant wherever a spurious sliver or a pruned pair appears on one side only. Value-identical to conservative_overlap_A_j on a gated A_ij: the pruned entries have zero overlap area and are sub-atol, so both forms sum the same surviving terms. Bind src_poly/tgt_poly to the SAME ring stacks passed to conservative_overlap_A_ij_gated (the envelope broad phase reads their bounding boxes at build time).",
+      "description": "CANDIDATE-GATED ROW NORMALIZATION: A_j[j] = sum_i A_ij[i,j] over the CANDIDATE pairs (join.overlap{src_env:[src_poly], tgt_env:[tgt_poly]}) that survive the sliver filter A_ij > atol. THE DENOMINATOR BROAD-PHASES LIKE THE NUMERATOR: this template applies the SAME spatial-overlap join gate and the SAME filter as conservative_overlap_A_ij_gated_planar / the apply, so the surviving-overlap sets coincide and partition-of-unity sum_i W_ij = 1 stays EXACT BY CONSTRUCTION (CONFORMANCE_SPEC 5.8.3) -- gating only the numerator, or only the denominator, would break the invariant wherever a spurious sliver or a pruned pair appears on one side only. Value-identical to conservative_overlap_A_j on a gated A_ij: the pruned entries have zero overlap area and are sub-atol, so both forms sum the same surviving terms. Bind src_poly/tgt_poly to the SAME ring stacks passed to conservative_overlap_A_ij_gated_planar (the envelope broad phase reads their bounding boxes at build time).",
       "body": {
         "op": "faq",
         "semiring": "sum_product",

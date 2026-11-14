@@ -1,0 +1,178 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "sectional_lr2m_density_top",
+    "description": "Number density per unit particle volume at the UPPER edge v = vb[j+1] of section j, N (1 + b/2)/(hi - lo): the reconstructed linear density at z = 1, zero when the support stops short of the edge (a lower-third triangle) or the section has no interior mean (sectional_lr2m_interior_mean).",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:sectional_volume_1d",
+      "op:advection",
+      "order:2",
+      "scheme:linear-discrete"
+    ],
+    "references": [
+      {
+        "citation": "Zaveri, R. A., Easter, R. C., Fast, J. D., & Peters, L. K. (2008). Model for Simulating Aerosol Interactions and Chemistry (MOSAIC). Journal of Geophysical Research, 113, D13204.",
+        "doi": "10.1029/2007JD008782"
+      },
+      {
+        "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
+      },
+      {
+        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
+        "doi": "10.1016/0021-9797(80)90394-X"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "./sectional_mean_volume.esm"
+    },
+    {
+      "ref": "./sectional_lr2m_interior_mean.esm"
+    },
+    {
+      "ref": "./sectional_lr2m_support_top.esm"
+    },
+    {
+      "ref": "./sectional_lr2m_support_bottom.esm"
+    },
+    {
+      "ref": "./sectional_lr2m_slope.esm"
+    },
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "sectional_lr2m_density_top": {
+      "params": [
+        "N",
+        "V",
+        "c",
+        "j"
+      ],
+      "body": {
+        "op": "ifelse",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sectional_lr2m_interior_mean",
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                }
+              },
+              {
+                "op": ">=",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "sectional_lr2m_support_top",
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    }
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "vb",
+                      {
+                        "op": "+",
+                        "args": [
+                          "j",
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      1,
+                      {
+                        "op": "/",
+                        "args": [
+                          {
+                            "op": "apply_expression_template",
+                            "args": [],
+                            "name": "sectional_lr2m_slope",
+                            "bindings": {
+                              "N": "N",
+                              "V": "V",
+                              "c": "c",
+                              "j": "j"
+                            }
+                          },
+                          2
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "index",
+                    "args": [
+                      "N",
+                      "c",
+                      "j"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "sectional_lr2m_support_top",
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    }
+                  },
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "sectional_lr2m_support_bottom",
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          0
+        ]
+      }
+    }
+  }
+}
