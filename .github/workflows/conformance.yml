@@ -92,17 +92,17 @@ jobs:
           name: conformance-results-julia
           path: conformance-results/
 
-  # The Python binding (earthsci_ast): full category coverage — ast bytes,
-  # §6.6.5 simulation + convergence via inline_tests/run_inline_tests,
-  # regridding invariants, reprojection points (scripts/runners/run-python.py).
+  # The Python binding (earthsci_ast): ast bytes, §6.6.5 simulation via
+  # inline_tests/run_inline_tests, regridding invariants + per-pair weights,
+  # reprojection points (scripts/runners/run-python.py).
   #
-  # DISABLED: against EarthSciAST esm 2.x the python runner no longer finishes
-  # inside the 6 h job limit (ast + simulation pass, then the job is cancelled
-  # in convergence). Re-enable -- and restore `python` in the compare job's
-  # `needs` and `--bindings` -- once the upstream python runner is fast enough.
+  # CONVERGENCE IS NOT RUN HERE: against EarthSciAST esm 2.x the python
+  # convergence sweeps alone take hours (the full matrix took ~3.4 h), so the
+  # category stays Julia + Rust until the upstream python solver path is fast
+  # enough. Every other category runs and is cross-compared below.
   python:
-    if: false
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
@@ -121,11 +121,11 @@ jobs:
         # through `inline_tests.run_inline_tests` -> `solve`, so the solver is
         # asked for by name via the `simulate` extra.
         run: pip install -e "ess/pkg/earthsci-ast-py[simulate]"
-      - name: Conformance (python; all categories)
+      - name: Conformance (python; all categories but convergence)
         run: |
           ESS_ROOT="$PWD/ess" ./scripts/test-conformance.sh \
             --bindings python \
-            --categories ast,simulation,convergence,regridding,reprojection
+            --categories ast,simulation,regridding,reprojection
       - name: Upload runner outputs
         if: always()
         uses: actions/upload-artifact@v4
@@ -229,7 +229,7 @@ jobs:
   # manifests' error_vs_golden_* tolerances) in one place.
   compare:
     runs-on: ubuntu-latest
-    needs: [julia, rust, typescript, go]
+    needs: [julia, python, rust, typescript, go]
     if: always() && !cancelled()
     steps:
       - uses: actions/checkout@v6
@@ -245,7 +245,7 @@ jobs:
         run: |
           python3 scripts/compare-outputs.py \
             --results-root conformance-results \
-            --bindings julia,rust,typescript,go \
+            --bindings julia,python,rust,typescript,go \
             --categories ast,simulation,convergence,regridding,reprojection
       - name: Upload comparison summary
         if: always()

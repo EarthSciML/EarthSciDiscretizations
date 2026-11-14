@@ -2,18 +2,24 @@
   "esm": "2.1.0",
   "metadata": {
     "name": "conservative_overlap_sphere_fan_4_to_2",
-    "description": "Conformance fixture: a 4 -> 2 SPHERICAL conservative coarsening driven through the SAME regridding/conservative_overlap.esm template library as the planar 3x3 -> 2x2 exemplar, differing only in the narrow-phase template (conservative_overlap_A_ij_spherical over lonlat_to_unit unit-vector stacks, selected by applying conservative_overlap_A_ij_planar / _spherical) and the cell geometry. GEOMETRY (hand-exact by Girard, unit sphere, steradians): a meridian fan on the octant patch. Apex E = (0E, 0N); base vertices on the meridian lon = 90E at latitudes 0, 15, 30, 45, 60 degrees. E is a POLE of the great circle lon = +-90 (every point of that circle is at 90 degrees angular distance from E = the unit vector x-hat, since that circle is the x = 0 great circle), so every fan arc E -> (90E, phi) meets the meridian at a RIGHT angle -- exactly as meridians from the north pole meet the equator. Each spherical triangle (E, (90E, phi_a), (90E, phi_b)) therefore has angles (delta_phi, 90, 90) and by Girard's theorem area = spherical excess = delta_phi in radians: ITS BASE'S LATITUDE SPAN. Every edge in both grids is a great-circle arc (fan arcs by construction; base segments lie ON the lon = 90E meridian), so the source triangles tile each target triangle EXACTLY -- no parallel-edge (small-circle) modelling error anywhere, which is what makes every quantity below hand-derivable. Source: four triangles S_k = (E, (90E, 15(k-1)), (90E, 15k)), k = 1..4, each of area pi/12 = 0.2617993877991494 sr. Target: two triangles T_1 = (E, (90E, 0), (90E, 30)) and T_2 = (E, (90E, 30), (90E, 60)), each of area pi/6. EXPECTED (non-golden, manifest reference_weights): A_ij = pi/12 for the four nested pairs (S1,S2 in T1; S3,S4 in T2), exactly 0 elsewhere (S2/S3 touch the opposite target only along the shared arc E -> (90E, 30), a measure-zero overlap dropped by the sliver filter); A_j = pi/6 for both targets; W_ij = (pi/12)/(pi/6) = 1/2 EXACTLY for the four surviving pairs; total patch area sum_j A_j = pi/3 = 1.0471975511965976 sr (the fan triangle (E, (90E,0), (90E,60)), excess 60 degrees). With F_src = [1,2,3,4]: F_tgt = [(1+2)/2, (3+4)/2] = [1.5, 3.5]; both mass sums equal (pi/12)*(1+2+3+4) = 5*pi/6 = 2.6179938779914944. These are documentation for eyeball checking ONLY -- the committed golden (golden/weights.json) is produced by the official Julia runner via scripts/regenerate-goldens.sh, per the repo's single-pathway doctrine. Inline tests assert only the two EXACT invariants (CONFORMANCE_SPEC 5.8.3): partition-of-unity (exact by construction: the apply divides by the row-sum of the SAME computed areas under the SAME filter, regardless of manifold or backend) and conservation (exact because the targets tile the source patch with shared great-circle seams; src_area carries the true areas pi/12, so the residual is pure FP noise, gated at 1e-9). Per-pair spherical areas are tolerance-gated cross-binding (5.8.2): every binding evaluates the same esm:std/geometry.esm overlap_area_spherical template (esm 2.0.0), so the per-pair tolerance now only absorbs floating-point evaluation-order differences.",
+    "description": "Conformance fixture: a 4 -> 2 SPHERICAL conservative coarsening driven through the SAME regridding/conservative_overlap.esm template library as the planar 3x3 -> 2x2 exemplar, differing only in the narrow-phase template (conservative_overlap_A_ij_spherical, over unit-vector stacks built with the library's conservative_overlap_unit_rings, in place of conservative_overlap_A_ij_planar) and the cell geometry. GEOMETRY (hand-exact by Girard, unit sphere, steradians): a meridian fan on the octant patch. Apex E = (0E, 0N); base vertices on the meridian lon = 90E at latitudes 0, 15, 30, 45, 60 degrees. E is a POLE of the great circle lon = +-90 (every point of that circle is at 90 degrees angular distance from E = the unit vector x-hat, since that circle is the x = 0 great circle), so every fan arc E -> (90E, phi) meets the meridian at a RIGHT angle -- exactly as meridians from the north pole meet the equator. Each spherical triangle (E, (90E, phi_a), (90E, phi_b)) therefore has angles (delta_phi, 90, 90) and by Girard's theorem area = spherical excess = delta_phi in radians: ITS BASE'S LATITUDE SPAN. Every edge in both grids is a great-circle arc (fan arcs by construction; base segments lie ON the lon = 90E meridian), so the source triangles tile each target triangle EXACTLY -- no parallel-edge (small-circle) modelling error anywhere, which is what makes every quantity below hand-derivable. Source: four triangles S_k = (E, (90E, 15(k-1)), (90E, 15k)), k = 1..4, each of area pi/12 = 0.2617993877991494 sr. Target: two triangles T_1 = (E, (90E, 0), (90E, 30)) and T_2 = (E, (90E, 30), (90E, 60)), each of area pi/6. EXPECTED (non-golden, manifest reference_weights): A_ij = pi/12 for the four nested pairs (S1,S2 in T1; S3,S4 in T2), exactly 0 elsewhere (S2/S3 touch the opposite target only along the shared arc E -> (90E, 30), a measure-zero overlap dropped by the sliver filter); A_j = pi/6 for both targets; W_ij = (pi/12)/(pi/6) = 1/2 EXACTLY for the four surviving pairs; total patch area sum_j A_j = pi/3 = 1.0471975511965976 sr (the fan triangle (E, (90E,0), (90E,60)), excess 60 degrees). With F_src = [1,2,3,4]: F_tgt = [(1+2)/2, (3+4)/2] = [1.5, 3.5]; both mass sums equal (pi/12)*(1+2+3+4) = 5*pi/6 = 2.6179938779914944. These are documentation for eyeball checking ONLY -- the committed golden (golden/weights.json) is produced by the official Julia runner via scripts/regenerate-goldens.sh, per the repo's single-pathway doctrine. Inline tests assert only the two EXACT invariants (CONFORMANCE_SPEC 5.8.3): partition-of-unity (exact by construction: the apply divides by the row-sum of the SAME computed areas under the SAME filter, regardless of manifold or backend) and conservation (exact because the targets tile the source patch with shared great-circle seams; src_area carries the true areas pi/12, so the residual is pure FP noise, gated at 1e-9). Per-pair spherical areas are tolerance-gated cross-binding (5.8.2): every binding evaluates the same esm:std/geometry.esm overlap_area_spherical template (esm 2.0.0), so the per-pair tolerance now only absorbs floating-point evaluation-order differences.",
     "tags": [
       "conformance",
       "regridding",
       "conservative_overlap",
       "spherical",
-      "manifold-parameter",
       "coupling",
       "template-import",
       "partition-of-unity",
       "conservation"
     ]
+  },
+  "metaparameters": {
+    "RING_NV": {
+      "type": "integer",
+      "default": 3,
+      "description": "Vertex slots per cell ring, source and target alike. Sizes the overlap library's overlap_cell_verts axis (the NVERT binding) the rings are shaped over AND is the overlap kernel's src_nv / tgt_nv, so the two cannot drift apart."
+    }
   },
   "models": {
     "Src": {
@@ -71,14 +77,8 @@
           "bindings": {
             "NSRC": 4,
             "NTGT": 2,
-            "NVERT": 3
+            "NVERT": "RING_NV"
           }
-        },
-        {
-          "ref": "esm:std/geometry.esm",
-          "only": [
-            "lonlat_to_unit"
-          ]
         }
       ],
       "variables": {
@@ -121,7 +121,7 @@
             "src_cells",
             "tgt_cells"
           ],
-          "description": "Overlap-area matrix from the library's narrow-phase template (build-once). The geometry manifold is bound HERE, at the invocation ('spherical' -- selected by applying conservative_overlap_A_ij_planar / _spherical): great-circle-edge clipping on the unit sphere, areas in steradians. Expected (non-golden, manifest reference_weights): pi/12 for the four nested pairs, 0 elsewhere."
+          "description": "Overlap-area matrix from the library's narrow-phase template (build-once). The manifold is chosen HERE, by which narrow-phase template is applied (conservative_overlap_A_ij_spherical in place of _A_ij_planar): great-circle-edge clipping on the unit sphere, areas in steradians. Expected (non-golden, manifest reference_weights): pi/12 for the four nested pairs, 0 elsewhere."
         },
         "A_j": {
           "type": "unknown",
@@ -201,7 +201,7 @@
             "overlap_cell_verts",
             "overlap_xyz"
           ],
-          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `src_poly`, one per ring slot: faq(c, v, d) lonlat_to_unit(src_poly, c, v, d) with the esm:std/geometry.esm template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
+          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `src_poly`, one per ring slot: conservative_overlap_unit_rings(src_poly, src_cells, overlap_cell_verts), the library's faq of the esm:std/geometry.esm lonlat_to_unit template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
         },
         "tgt_unit": {
           "type": "unknown",
@@ -211,7 +211,7 @@
             "overlap_cell_verts",
             "overlap_xyz"
           ],
-          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `tgt_poly`, one per ring slot: faq(c, v, d) lonlat_to_unit(tgt_poly, c, v, d) with the esm:std/geometry.esm template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
+          "description": "Unit vectors (x, y, z) of the lon-lat-degree ring stack `tgt_poly`, one per ring slot: conservative_overlap_unit_rings(tgt_poly, tgt_cells, overlap_cell_verts), the library's faq of the esm:std/geometry.esm lonlat_to_unit template. The operand form conservative_overlap_A_ij_spherical reads (computed once per vertex, not once per pair)."
         }
       },
       "equations": [
@@ -399,68 +399,26 @@
         {
           "lhs": "src_unit",
           "rhs": {
-            "op": "faq",
+            "op": "apply_expression_template",
             "args": [],
-            "output_idx": [
-              "c",
-              "v",
-              "d"
-            ],
-            "ranges": {
-              "c": {
-                "from": "src_cells"
-              },
-              "v": {
-                "from": "overlap_cell_verts"
-              },
-              "d": {
-                "from": "overlap_xyz"
-              }
-            },
-            "expr": {
-              "op": "apply_expression_template",
-              "args": [],
-              "name": "lonlat_to_unit",
-              "bindings": {
-                "ring": "src_poly",
-                "cell": "c",
-                "vert": "v",
-                "comp": "d"
-              }
+            "name": "conservative_overlap_unit_rings",
+            "bindings": {
+              "lonlat_ring": "src_poly",
+              "ring_cells": "src_cells",
+              "ring_verts": "overlap_cell_verts"
             }
           }
         },
         {
           "lhs": "tgt_unit",
           "rhs": {
-            "op": "faq",
+            "op": "apply_expression_template",
             "args": [],
-            "output_idx": [
-              "c",
-              "v",
-              "d"
-            ],
-            "ranges": {
-              "c": {
-                "from": "tgt_cells"
-              },
-              "v": {
-                "from": "overlap_cell_verts"
-              },
-              "d": {
-                "from": "overlap_xyz"
-              }
-            },
-            "expr": {
-              "op": "apply_expression_template",
-              "args": [],
-              "name": "lonlat_to_unit",
-              "bindings": {
-                "ring": "tgt_poly",
-                "cell": "c",
-                "vert": "v",
-                "comp": "d"
-              }
+            "name": "conservative_overlap_unit_rings",
+            "bindings": {
+              "lonlat_ring": "tgt_poly",
+              "ring_cells": "tgt_cells",
+              "ring_verts": "overlap_cell_verts"
             }
           }
         },
@@ -473,8 +431,8 @@
             "bindings": {
               "src_unit": "src_unit",
               "tgt_unit": "tgt_unit",
-              "src_nv": 3,
-              "tgt_nv": 3
+              "src_nv": "RING_NV",
+              "tgt_nv": "RING_NV"
             }
           }
         },
@@ -606,7 +564,7 @@
           "atol": "Regrid.atol"
         }
       },
-      "description": "The regridding coupling, spelled natively (esm-spec 8.6 / 10.5): the transform IS the conservative-overlap apply expression -- the imported library template invoked on the source field, with the receiving component's build-once weight arrays bound through fully-scoped references. Identical to the planar exemplar; only the A_ij invocation's manifold binding differs."
+      "description": "The regridding coupling, spelled natively (esm-spec 8.6 / 10.5): the transform IS the conservative-overlap apply expression -- the imported library template invoked on the source field, with the receiving component's build-once weight arrays bound through fully-scoped references. Identical to the planar exemplar; only the narrow-phase template the A_ij observed applies differs."
     },
     {
       "type": "variable_map",
