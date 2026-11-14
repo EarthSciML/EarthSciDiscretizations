@@ -1,8 +1,8 @@
 {
-  "esm": "1.2.0",
+  "esm": "2.2.0",
   "metadata": {
     "name": "heat_column_varcoeff_flux_bc_tracer",
-    "description": "MMS driver for grids/column_nonuniform_1d_tracer/rules/varcoeff_face_laplacian_lev_flux_bc_tracer: the 1-D heat equation u_t = d/dz(K du/dz) solved for TWO tracers at once, u shaped [lev, tracer] with NTRACER = 2 bound at the rule's import edge, on the same smoothly stretched unit column as problems/heat_column_varcoeff_flux_bc (the grid's shared MMS column mms_column_ze, quadratic stretch z(xi) = 0.6 xi + 0.4 xi^2) with the same shared interface coefficient K = alpha. Tracer s carries its OWN manufactured solution u_s(z,t) = a_s z + b_s exp(-alpha pi^2 t) cos(pi z), a = (1, -2), b = (1, 0.5) (spelled a_s = 4 - 3s, b_s = 1.5 - s/2), and therefore its OWN prescribed fluxes kdudz_bot[s] = kdudz_top[s] = alpha a_s, observeds tied to alpha. Tracer 1 is exactly problems/heat_column_varcoeff_flux_bc; tracer 2 has the opposite-signed, doubled ramp and half the cosine amplitude. Because the operator is linear, column by column, and annihilates every linear ramp (each discrete interface gradient of a_s z is a_s, cancelled at the faces by the prescribed alpha a_s), tracer 1's error field is exactly the 1-D problem's and tracer 2's is exactly half of it, so the (relative, esm-spec 6.6.5) L2 error over the [lev, tracer] field falls at the 1-D problem's second order. A per-tracer mix-up (reading another tracer's u, or another tracer's face flux) breaks the ramp cancellation and gives an O(1) error. The per-tracer column totals sum_k u[k,s] dz[k] (the grid's tracer_column_total template) are conserved exactly by the discrete operator because each tracer's two face fluxes are equal; the test pins them at t = 0 and t = 0.1 to the same values, tracer 1's as the field max and tracer 2's as the field min (an element assertion on a shaped observed, total[s], is not evaluated by every binding). Build-time ic/reference positions spell the layer centre 0.5 (z((i-1)/NLEV) + z(i/NLEV)) inline from literals and NLEV (AGENTS.md build-time scope caveat).",
+    "description": "MMS driver for grids/column_nonuniform_1d_tracer/rules/varcoeff_face_laplacian_lev_flux_bc_tracer: the 1-D heat equation u_t = d/dz(K du/dz) solved for TWO tracers at once, u shaped [lev, tracer] with NTRACER = 2 bound at the rule's import edge, on the same smoothly stretched unit column as problems/heat_column_varcoeff_flux_bc (the grid's shared MMS column mms_column_ze, quadratic stretch z(xi) = 0.6 xi + 0.4 xi^2) with the same shared interface coefficient K = alpha. Tracer s carries its OWN manufactured solution u_s(z,t) = a_s z + b_s exp(-alpha pi^2 t) cos(pi z), a = (1, -2), b = (1, 0.5) (spelled a_s = 4 - 3s, b_s = 1.5 - s/2), and therefore its OWN prescribed fluxes kdudz_bot[s] = kdudz_top[s] = alpha a_s, observeds tied to alpha. Tracer 1 is exactly problems/heat_column_varcoeff_flux_bc; tracer 2 has the opposite-signed, doubled ramp and half the cosine amplitude. Because the operator is linear, column by column, and annihilates every linear ramp (each discrete interface gradient of a_s z is a_s, cancelled at the faces by the prescribed alpha a_s), tracer 1's error field is exactly the 1-D problem's and tracer 2's is exactly half of it, so the (relative, esm-spec 6.6.5) L2 error over the [lev, tracer] field falls at the 1-D problem's second order. A per-tracer mix-up (reading another tracer's u, or another tracer's face flux) breaks the ramp cancellation and gives an O(1) error. The per-tracer column totals sum_k u[k,s] dz[k] (the grid's tracer_column_total template) are conserved exactly by the discrete operator because each tracer's two face fluxes are equal; the test pins them at t = 0 and t = 0.1 to the same values, tracer 1's as the field max and tracer 2's as the field min (an element assertion on a shaped observed, total[s], is not evaluated by every binding). The ic applies the closed per-layer centre template mms_column_zc (grids/column_nonuniform_1d/mesh/mms_column_centre.esm) inside its aggregate over [lev, tracer]; the 6.6.5 test references spell the layer centre 0.5 (z((i-1)/NLEV) + z(i/NLEV)) inline from literals and NLEV, because the inline-test oracle does not resolve template references. This problem's two face fluxes are equal for each tracer and K is constant, which is what makes the conservation and ramp-cancellation checks exact; problems/heat_column_varcoeff_forced_tracer covers a variable K with unequal, time-dependent per-tracer face fluxes.",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -34,6 +34,9 @@
         },
         {
           "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
+        },
+        {
+          "ref": "../grids/column_nonuniform_1d/mesh/mms_column_centre.esm"
         }
       ],
       "variables": {
@@ -152,109 +155,12 @@
                       ]
                     },
                     {
-                      "op": "*",
-                      "args": [
-                        0.5,
-                        {
-                          "op": "+",
-                          "args": [
-                            {
-                              "op": "+",
-                              "args": [
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    0.6,
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        {
-                                          "op": "-",
-                                          "args": [
-                                            "i",
-                                            1
-                                          ]
-                                        },
-                                        "NLEV"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    0.4,
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        {
-                                          "op": "-",
-                                          "args": [
-                                            "i",
-                                            1
-                                          ]
-                                        },
-                                        "NLEV"
-                                      ]
-                                    },
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        {
-                                          "op": "-",
-                                          "args": [
-                                            "i",
-                                            1
-                                          ]
-                                        },
-                                        "NLEV"
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "op": "+",
-                              "args": [
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    0.6,
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        "i",
-                                        "NLEV"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "*",
-                                  "args": [
-                                    0.4,
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        "i",
-                                        "NLEV"
-                                      ]
-                                    },
-                                    {
-                                      "op": "/",
-                                      "args": [
-                                        "i",
-                                        "NLEV"
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "mms_column_zc",
+                      "bindings": {
+                        "i": "i"
+                      }
                     }
                   ]
                 },
@@ -283,109 +189,12 @@
                           "args": [
                             3.141592653589793,
                             {
-                              "op": "*",
-                              "args": [
-                                0.5,
-                                {
-                                  "op": "+",
-                                  "args": [
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        {
-                                          "op": "*",
-                                          "args": [
-                                            0.6,
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    "i",
-                                                    1
-                                                  ]
-                                                },
-                                                "NLEV"
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "op": "*",
-                                          "args": [
-                                            0.4,
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    "i",
-                                                    1
-                                                  ]
-                                                },
-                                                "NLEV"
-                                              ]
-                                            },
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                {
-                                                  "op": "-",
-                                                  "args": [
-                                                    "i",
-                                                    1
-                                                  ]
-                                                },
-                                                "NLEV"
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "+",
-                                      "args": [
-                                        {
-                                          "op": "*",
-                                          "args": [
-                                            0.6,
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                "i",
-                                                "NLEV"
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "op": "*",
-                                          "args": [
-                                            0.4,
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                "i",
-                                                "NLEV"
-                                              ]
-                                            },
-                                            {
-                                              "op": "/",
-                                              "args": [
-                                                "i",
-                                                "NLEV"
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
+                              "op": "apply_expression_template",
+                              "args": [],
+                              "name": "mms_column_zc",
+                              "bindings": {
+                                "i": "i"
+                              }
                             }
                           ]
                         }
