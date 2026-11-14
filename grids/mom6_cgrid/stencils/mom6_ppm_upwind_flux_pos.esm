@@ -1,0 +1,60 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_ppm_upwind_flux_pos",
+    "description": "The MOM6 PPM layer flux through a face whose UPWIND cell is given by its 5-cell stencil, for u > 0: the upwind cell lies on the minus side of the face (the cell itself for the east/north face of a cell), its RIGHT (east/north) limited edge is the face edge h_face and its LEFT edge the back edge h_back (zonal_flux_layer F90:952-957: uh = dy*u*(h_E(i) + CFL*(0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))). The law is mom6_ppm_face_integral of the upwind cell (CFL = |u|*dt*I_dx, I_dx the upwind cell's 1/dx) with both edges the PPM_limit_pos-limited edges mom6_ppm_limited_edge of the cell: h_face = h_0 + scale*(mom6_ppm_edge_e - h_0), h_back = h_0 + scale*(mom6_ppm_edge_w - h_0), scale = mom6_ppm_cell_scale of the cell. The sibling mom6_ppm_upwind_flux_neg is the same law with the face/back edge roles swapped; the rules bind this one to the upwind cell's stencil, so the u > 0 and u < 0 branches of every flux rule are one reconstruction applied to two one-cell-shifted stencils. The stencil params h_m2..h_p2 / m_m2..m_p2 are positional relative to the upwind cell along the flux axis; dy is the face length, [m3 s-1].",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:advection"],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./mom6_ppm_edge_w.esm" },
+    { "ref": "./mom6_ppm_edge_e.esm" },
+    { "ref": "./mom6_ppm_cell_scale.esm" },
+    { "ref": "./mom6_ppm_limited_edge.esm" },
+    { "ref": "./mom6_ppm_face_integral.esm" }
+  ],
+  "expression_templates": {
+    "mom6_ppm_upwind_flux_pos": {
+      "params": ["u", "dt", "dy", "I_dx", "h_m2", "h_m1", "h_0", "h_p1", "h_p2", "m_m2", "m_m1", "m_0", "m_p1", "m_p2", "h_min_recon"],
+      "description": "The PPM layer flux through a face from its upwind cell's 5-cell stencil, u > 0 (MOM_continuity_PPM.F90:952-957)",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "mom6_ppm_face_integral",
+        "bindings": {
+          "u": "u",
+          "dt": "dt",
+          "dy": "dy",
+          "I_dx": "I_dx",
+          "h_face": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mom6_ppm_limited_edge",
+            "bindings": {
+              "h_0": "h_0",
+              "scale": { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_cell_scale", "bindings": { "h_m2": "h_m2", "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1", "h_p2": "h_p2", "m_m2": "m_m2", "m_m1": "m_m1", "m_0": "m_0", "m_p1": "m_p1", "m_p2": "m_p2", "h_min_recon": "h_min_recon" } },
+              "raw": { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_edge_e", "bindings": { "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1", "h_p2": "h_p2", "m_m1": "m_m1", "m_0": "m_0", "m_p1": "m_p1", "m_p2": "m_p2" } }
+            }
+          },
+          "h_back": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mom6_ppm_limited_edge",
+            "bindings": {
+              "h_0": "h_0",
+              "scale": { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_cell_scale", "bindings": { "h_m2": "h_m2", "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1", "h_p2": "h_p2", "m_m2": "m_m2", "m_m1": "m_m1", "m_0": "m_0", "m_p1": "m_p1", "m_p2": "m_p2", "h_min_recon": "h_min_recon" } },
+              "raw": { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_edge_w", "bindings": { "h_m2": "h_m2", "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1", "m_m2": "m_m2", "m_m1": "m_m1", "m_0": "m_0", "m_p1": "m_p1" } }
+            }
+          },
+          "h_0": "h_0"
+        }
+      }
+    }
+  }
+}
