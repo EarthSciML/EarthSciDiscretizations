@@ -1,8 +1,8 @@
 {
-  "esm": "1.3.0",
+  "esm": "2.2.0",
   "metadata": {
     "name": "mom6_ppm_slope",
-    "description": "The monotonicity-limited slope of the MOM6 PPM reconstruction at a cell center (PPM_reconstruction_x, MOM_continuity_PPM.F90:2380-2427, the monotonic=False branch of the reference run): s = 0.5*(h_p1 - h_m1) limited to sign(s)*min(|s|, 2*min(dMx, dMn)) with dMx = max(h_p1, h_m1, h_0) - h_0 and dMn = h_0 - min(h_p1, h_m1, h_0), the Lin (1994) Eq. B2 constraint, and s = 0 if the cell is masked (the 0/1 ocean-cell indicator product m_m1*m_0*m_p1 == 0, G%mask2dT = 0 over land) or if s == 0 exactly. Pure scalar algebra (one cell's five stencil values), the smallest piece of the C-grid PPM reconstruction; grid-agnostic. The layer thicknesses h_m1/h_0/h_p1 are of one layer, [m]; the masks are dimensionless.",
+    "description": "The monotonicity-limited slope of the MOM6 PPM reconstruction at a cell center (PPM_reconstruction_x, MOM_continuity_PPM.F90:2397-2406, the monotonic=False branch of the reference run): the sign of the raw slope s = mom6_ppm_slope_raw = 0.5*(h_p1 - h_m1) times the Lin (1994) Eq. B2 limited magnitude mom6_ppm_slope_mag = min(|s|, 2*min(dMx, dMn)) (the Fortran's sign(1., s)*min(abs(s), 2*min(dMx, dMn))), and s = 0 if the cell is masked (the 0/1 ocean-cell indicator product m_m1*m_0*m_p1 == 0, G%mask2dT = 0 over land) or if s == 0 exactly. Pure scalar algebra (one cell's five stencil values), the center-slope piece of the C-grid PPM reconstruction; grid-agnostic. The layer thicknesses h_m1/h_0/h_p1 are of one layer, [m]; the masks are dimensionless.",
     "license": "MIT",
     "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:reconstruct"],
     "references": [
@@ -15,105 +15,40 @@
       }
     ]
   },
+  "expression_template_imports": [{ "ref": "./mom6_ppm_slope_raw.esm" }, { "ref": "./mom6_ppm_slope_mag.esm" }],
   "expression_templates": {
     "mom6_ppm_slope": {
       "params": ["h_m1", "h_0", "h_p1", "m_m1", "m_0", "m_p1"],
-      "description": "The Lin-1994-limited center slope of one cell (MOM_continuity_PPM.F90:2380-2427)",
+      "description": "The Lin-1994-limited center slope of one cell (MOM_continuity_PPM.F90:2397-2406)",
       "body": {
         "op": "ifelse",
         "args": [
-          {
-            "op": ">",
-            "args": [
-              { "op": "*", "args": ["m_m1", { "op": "*", "args": ["m_0", "m_p1"] }] },
-              0.5
-            ]
-          },
+          { "op": ">", "args": [{ "op": "*", "args": ["m_m1", { "op": "*", "args": ["m_0", "m_p1"] }] }, 0.5] },
           {
             "op": "ifelse",
             "args": [
               {
                 "op": ">",
                 "args": [
-                  { "op": "*", "args": [0.5, { "op": "-", "args": ["h_p1", "h_m1"] }] },
+                  { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_slope_raw", "bindings": { "h_m1": "h_m1", "h_p1": "h_p1" } },
                   0.0
                 ]
               },
-              {
-                "op": "min",
-                "args": [
-                  { "op": "abs", "args": [{ "op": "*", "args": [0.5, { "op": "-", "args": ["h_p1", "h_m1"] }] }] },
-                  {
-                    "op": "*",
-                    "args": [
-                      2.0,
-                      {
-                        "op": "min",
-                        "args": [
-                          {
-                            "op": "-",
-                            "args": [
-                              { "op": "max", "args": ["h_p1", { "op": "max", "args": ["h_m1", "h_0"] }] },
-                              "h_0"
-                            ]
-                          },
-                          {
-                            "op": "-",
-                            "args": [
-                              "h_0",
-                              { "op": "min", "args": ["h_p1", { "op": "min", "args": ["h_m1", "h_0"] }] }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
+              { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_slope_mag", "bindings": { "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1" } },
               {
                 "op": "ifelse",
                 "args": [
                   {
                     "op": "<",
                     "args": [
-                      { "op": "*", "args": [0.5, { "op": "-", "args": ["h_p1", "h_m1"] }] },
+                      { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_slope_raw", "bindings": { "h_m1": "h_m1", "h_p1": "h_p1" } },
                       0.0
                     ]
                   },
                   {
                     "op": "-",
                     "args": [
-                      {
-                        "op": "min",
-                        "args": [
-                          { "op": "abs", "args": [{ "op": "*", "args": [0.5, { "op": "-", "args": ["h_p1", "h_m1"] }] }] },
-                          {
-                            "op": "*",
-                            "args": [
-                              2.0,
-                              {
-                                "op": "min",
-                                "args": [
-                                  {
-                                    "op": "-",
-                                    "args": [
-                                      { "op": "max", "args": ["h_p1", { "op": "max", "args": ["h_m1", "h_0"] }] },
-                                      "h_0"
-                                    ]
-                                  },
-                                  {
-                                    "op": "-",
-                                    "args": [
-                                      "h_0",
-                                      { "op": "min", "args": ["h_p1", { "op": "min", "args": ["h_m1", "h_0"] }] }
-                                    ]
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
+                      { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_slope_mag", "bindings": { "h_m1": "h_m1", "h_0": "h_0", "h_p1": "h_p1" } }
                     ]
                   },
                   0.0

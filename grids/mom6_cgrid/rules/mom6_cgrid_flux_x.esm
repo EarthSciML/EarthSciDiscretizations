@@ -1,19 +1,10 @@
 {
-  "esm": "1.3.0",
+  "esm": "2.2.0",
   "metadata": {
     "name": "mom6_cgrid_flux_x",
-    "description": "The zonal PPM layer-flux lowering rule of the mom6_cgrid: matches the user rewrite target mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) — the east-face layer volume flux of every cell — and emits the [i,j,k] makearray of the MOM6 zonal flux law (zonal_flux_layer, MOM_continuity_PPM.F90:933-956, VOL_CFL=False, por_face_areaU = 1): uh(i,j,k) = dy_Cu_E(i,j,k) * u_E(i,j,k) * (the PPM parabola integral of the UPWIND cell's limited edges), with the PPM_limit_pos-limited reconstruction of the upwind cell built inline from the stencil laws mom6_ppm_slope/edge/limit_scale/limited_edge/face_integral. The sign of the face velocity selects the upwind cell: u_E > 0 upwinds the cell itself (the F90:933-939 branch: CFL = u*dt*IdxT(i,j), uh = dy*u*(h_E(i) + CFL*(0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))), u_E < 0 upwinds the east neighbor (the F90:940-949 branch: CFL = -u*dt*IdxT_e(i,j), uh = dy*u*(h_W(i+1) + CFL*(0.5*(h_E(i+1) - h_W(i+1)) + curv_3*(CFL - 1.5)))), and u_E == 0 gives the trivial zero flux. The reconstruction reads h and the mask over the 6-cell stencil i-2..i+3 of the face; the index expressions CLAMP at the domain edges (max(1, i-2), max(1, i-1) low, min(N_I, i+2), min(N_I, i+3) high) so the lowered operator is total on the traced subdomain — the halo closure is a well-definedness device only: the pinned interior faces (i >= 3, i <= N_I-2) never read a clamped index, so the stage-2 pins compare the rule against the Fortran's halo-updated values bit-for-bit. The EAST DOMAIN WALL is an explicit region: the face at i = N_I (the east edge of the last cell column) carries the zero flux of a solid wall (the Fortran's masked face: u = 0 and the convergence (uh(i,j) - uh(i-1,j))*IareaT then telescopes to -uh(N_I-1)*IareaT in the sibling mom6_cgrid_div_x). The masked-cell handling is inside the stencil laws (zero slope and the masked-neighbor edge replacement of PPM_reconstruction_x, F90:2380-2449). The consuming model spells uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) with h [i,j,k], u_E/dy_Cu_E/IdxT/IdxT_e [i,j,k], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
+    "description": "The zonal PPM layer-flux lowering rule of the mom6_cgrid: matches the user rewrite target mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) (the east-face layer volume flux of every cell) and emits the [i,j,k] makearray of the MOM6 zonal flux law (zonal_flux_layer, MOM_continuity_PPM.F90:950-966, VOL_CFL=False, por_face_areaU = 1): uh(i,j,k) = dy_Cu_E(i,j) * u_E(i,j,k) * (the PPM parabola integral of the UPWIND cell's PPM_limit_pos-limited edges). The sign of the face velocity selects the upwind cell, and the two branches apply the one per-cell reconstruction to two one-cell-shifted stencils: u_E > 0 upwinds the cell itself, mom6_ppm_upwind_flux_pos bound to the stencil i-2..i+2 with I_dx = IdxT(i,j) (F90:952-957: CFL = u*dt*IdxT(i,j), uh = dy*u*(h_E(i) + CFL*(0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))); u_E < 0 upwinds the east neighbour, mom6_ppm_upwind_flux_neg bound to the stencil i-1..i+3 with I_dx = IdxT_e(i,j) (F90:958-964: CFL = -u*dt*IdxT(i+1,j), uh = dy*u*(h_W(i+1) + CFL*(0.5*(h_E(i+1) - h_W(i+1)) + curv_3*(CFL - 1.5)))); u_E == 0 gives the zero flux. The reconstruction (center slopes, raw edges, PPM_limit_pos scale, limited edges, parabola integral) lives in the stencil laws, so the meridional rule mom6_cgrid_flux_y applies the same two templates along j. LAND CLOSURE: the stencil index expressions CLAMP at the domain edges (max(1, i-2), max(1, i-1) low; min(N_I, i+2), min(N_I, i+3) high), and the clamp reproduces MOM6's land-masked closure exactly, as if the cells outside the domain were land (mask2dT = 0): a clamped thickness equals the masked-neighbour replacement h_im1 = h(i) of PPM_reconstruction_x (F90:2430-2431), and the clamped center slope of an edge cell and of a ghost cell is identically zero (the Lin bound 2*min(dMx, dMn) vanishes when two of the three stencil values coincide), which is the masked zero slope of F90:2397-2398. The faces next to the walls (i = 1, i = N_I-1) are therefore the MOM6 faces of a basin closed by land, pinned numerically by problems/mom6_cgrid_flux_ppm.esm. The EAST DOMAIN WALL is an explicit region: the face at i = N_I (the east edge of the last cell column, between the last ocean cell and the land beyond) carries the zero flux of a solid wall whatever u_E holds there (MOM6 sets u = 0 on a land face); the convergence (uh(i,j) - uh(i-1,j))*IareaT then telescopes to -uh(N_I-1)*IareaT in the sibling mom6_cgrid_div_x. The consuming model spells uh = mom6_cgrid_flux_x(h, u_E, dy_Cu_E, mask, h_min_recon, dt, IdxT, IdxT_e) with h [i,j,k], u_E [i,j,k], the horizontal metrics dy_Cu_E/IdxT/IdxT_e [i,j], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
     "license": "MIT",
-    "tags": [
-      "esd:rule",
-      "family:mom6_cgrid",
-      "grid:mom6_cgrid",
-      "op:advection",
-      "order:3",
-      "bc:wall",
-      "axes:i,j,k",
-      "spec:9.6.8"
-    ],
+    "tags": ["esd:rule", "family:mom6_cgrid", "grid:mom6_cgrid", "op:advection", "order:3", "bc:wall", "axes:i,j,k", "spec:9.6.8"],
     "references": [
       {
         "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
@@ -29,608 +20,86 @@
     ]
   },
   "expression_template_imports": [
-    {
-      "ref": "../grid.esm"
-    },
-    {
-      "ref": "../stencils/mom6_ppm_slope.esm"
-    },
-    {
-      "ref": "../stencils/mom6_ppm_edge.esm"
-    },
-    {
-      "ref": "../stencils/mom6_ppm_limit_scale.esm"
-    },
-    {
-      "ref": "../stencils/mom6_ppm_limited_edge.esm"
-    },
-    {
-      "ref": "../stencils/mom6_ppm_face_integral.esm"
-    }
+    { "ref": "../grid.esm" },
+    { "ref": "../stencils/mom6_ppm_upwind_flux_pos.esm" },
+    { "ref": "../stencils/mom6_ppm_upwind_flux_neg.esm" }
   ],
   "expression_templates": {
     "mom6_cgrid_flux_x": {
       "params": ["h", "u_E", "dy_Cu_E", "mask", "h_min_recon", "dt", "IdxT", "IdxT_e"],
       "priority": 10,
-      "match": {
-        "op": "mom6_cgrid_flux_x",
-        "args": ["h", "u_E", "dy_Cu_E", "mask", "h_min_recon", "dt", "IdxT", "IdxT_e"]
-      },
+      "match": { "op": "mom6_cgrid_flux_x", "args": ["h", "u_E", "dy_Cu_E", "mask", "h_min_recon", "dt", "IdxT", "IdxT_e"] },
       "where": {
         "h": { "shape": ["i", "j", "k"] },
         "u_E": { "shape": ["i", "j", "k"] },
-        "dy_Cu_E": { "shape": ["i", "j", "k"] },
+        "dy_Cu_E": { "shape": ["i", "j"] },
         "mask": { "shape": ["i", "j"] },
-        "IdxT": { "shape": ["i", "j", "k"] },
-        "IdxT_e": { "shape": ["i", "j", "k"] }
+        "IdxT": { "shape": ["i", "j"] },
+        "IdxT_e": { "shape": ["i", "j"] }
       },
       "body": {
         "op": "makearray",
         "args": [],
         "regions": [
-          [
-            [1, { "op": "-", "args": ["N_I", 1] }],
-            [1, "N_J"],
-            [1, "N_K"]
-          ],
-          [
-            ["N_I", "N_I"],
-            [1, "N_J"],
-            [1, "N_K"]
-          ]
+          [[1, { "op": "-", "args": ["N_I", 1] }], [1, "N_J"], [1, "N_K"]],
+          [["N_I", "N_I"], [1, "N_J"], [1, "N_K"]]
         ],
         "values": [
           {
             "op": "faq",
             "output_idx": ["i", "j", "k"],
             "args": ["h", "u_E", "dy_Cu_E", "mask", "h_min_recon", "dt", "IdxT", "IdxT_e"],
-            "ranges": {
-              "i": [1, { "op": "-", "args": ["N_I", 1] }],
-              "j": [1, "N_J"],
-              "k": [1, "N_K"]
-            },
+            "ranges": { "i": [1, { "op": "-", "args": ["N_I", 1] }], "j": [1, "N_J"], "k": [1, "N_K"] },
             "expr": {
               "op": "ifelse",
               "args": [
-                {
-                  "op": ">",
-                  "args": [
-                    { "op": "index", "args": ["u_E", "i", "j", "k"] },
-                    0.0
-                  ]
-                },
+                { "op": ">", "args": [{ "op": "index", "args": ["u_E", "i", "j", "k"] }, 0.0] },
                 {
                   "op": "apply_expression_template",
                   "args": [],
-                  "name": "mom6_ppm_face_integral",
+                  "name": "mom6_ppm_upwind_flux_pos",
                   "bindings": {
                     "u": { "op": "index", "args": ["u_E", "i", "j", "k"] },
                     "dt": "dt",
-                    "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j", "k"] },
-                    "I_dx": { "op": "index", "args": ["IdxT", "i", "j", "k"] },
-                    "h_face": {
-                      "op": "apply_expression_template",
-                      "args": [],
-                      "name": "mom6_ppm_limited_edge",
-                      "bindings": {
-                        "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                        "scale": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_limit_scale",
-                          "bindings": {
-                            "hL_raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", "i", "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] }
-                              }
-                            },
-                            "hR_raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                              }
-                            },
-                            "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                            "h_min_recon": "h_min_recon"
-                          }
-                        },
-                        "raw": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_edge",
-                          "bindings": {
-                            "h_side": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                            "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                            "slp_side": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_slope",
-                              "bindings": {
-                                "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                              }
-                            },
-                            "slp_0": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_slope",
-                              "bindings": {
-                                "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                              }
-                            },
-                            "m_side": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                          }
-                        }
-                      }
-                    },
-                    "h_back": {
-                      "op": "apply_expression_template",
-                      "args": [],
-                      "name": "mom6_ppm_limited_edge",
-                      "bindings": {
-                        "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                        "scale": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_limit_scale",
-                          "bindings": {
-                            "hL_raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", "i", "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] }
-                              }
-                            },
-                            "hR_raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                              }
-                            },
-                            "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                            "h_min_recon": "h_min_recon"
-                          }
-                        },
-                        "raw": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_edge",
-                          "bindings": {
-                            "h_side": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                            "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                            "slp_side": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_slope",
-                              "bindings": {
-                                "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                "h_p1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j"] },
-                                "m_0": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                "m_p1": { "op": "index", "args": ["mask", "i", "j"] }
-                              }
-                            },
-                            "slp_0": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_slope",
-                              "bindings": {
-                                "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                              }
-                            },
-                            "m_side": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] }
-                          }
-                        }
-                      }
-                    },
-                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] }
+                    "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j"] },
+                    "I_dx": { "op": "index", "args": ["IdxT", "i", "j"] },
+                    "h_m2": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j", "k"] },
+                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
+                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
+                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
+                    "h_p2": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
+                    "m_m2": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 2] }] }, "j"] },
+                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
+                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
+                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
+                    "m_p2": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] },
+                    "h_min_recon": "h_min_recon"
                   }
                 },
                 {
                   "op": "ifelse",
                   "args": [
-                    {
-                      "op": "<",
-                      "args": [
-                        { "op": "index", "args": ["u_E", "i", "j", "k"] },
-                        0.0
-                      ]
-                    },
+                    { "op": "<", "args": [{ "op": "index", "args": ["u_E", "i", "j", "k"] }, 0.0] },
                     {
                       "op": "apply_expression_template",
                       "args": [],
-                      "name": "mom6_ppm_face_integral",
+                      "name": "mom6_ppm_upwind_flux_neg",
                       "bindings": {
                         "u": { "op": "index", "args": ["u_E", "i", "j", "k"] },
                         "dt": "dt",
-                        "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j", "k"] },
-                        "I_dx": { "op": "index", "args": ["IdxT_e", "i", "j", "k"] },
-                        "h_face": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_limited_edge",
-                          "bindings": {
-                            "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                            "scale": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_limit_scale",
-                              "bindings": {
-                                "hL_raw": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_edge",
-                                  "bindings": {
-                                    "h_side": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "slp_side": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                      }
-                                    },
-                                    "slp_0": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                      }
-                                    },
-                                    "m_side": { "op": "index", "args": ["mask", "i", "j"] }
-                                  }
-                                },
-                                "hR_raw": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_edge",
-                                  "bindings": {
-                                    "h_side": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "slp_side": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                      }
-                                    },
-                                    "slp_0": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j"] }
-                                      }
-                                    },
-                                    "m_side": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "h_min_recon": "h_min_recon"
-                              }
-                            },
-                            "raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", "i", "j"] }
-                              }
-                            }
-                          }
-                        },
-                        "h_back": {
-                          "op": "apply_expression_template",
-                          "args": [],
-                          "name": "mom6_ppm_limited_edge",
-                          "bindings": {
-                            "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                            "scale": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_limit_scale",
-                              "bindings": {
-                                "hL_raw": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_edge",
-                                  "bindings": {
-                                    "h_side": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "slp_side": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] }
-                                      }
-                                    },
-                                    "slp_0": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                      }
-                                    },
-                                    "m_side": { "op": "index", "args": ["mask", "i", "j"] }
-                                  }
-                                },
-                                "hR_raw": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_edge",
-                                  "bindings": {
-                                    "h_side": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "slp_side": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                      }
-                                    },
-                                    "slp_0": {
-                                      "op": "apply_expression_template",
-                                      "args": [],
-                                      "name": "mom6_ppm_slope",
-                                      "bindings": {
-                                        "h_m1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                        "h_0": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j", "k"] },
-                                        "m_m1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                        "m_0": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] },
-                                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j"] }
-                                      }
-                                    },
-                                    "m_side": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "h_min_recon": "h_min_recon"
-                              }
-                            },
-                            "raw": {
-                              "op": "apply_expression_template",
-                              "args": [],
-                              "name": "mom6_ppm_edge",
-                              "bindings": {
-                                "h_side": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                "slp_side": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                                  }
-                                },
-                                "slp_0": {
-                                  "op": "apply_expression_template",
-                                  "args": [],
-                                  "name": "mom6_ppm_slope",
-                                  "bindings": {
-                                    "h_m1": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
-                                    "h_0": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
-                                    "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j", "k"] },
-                                    "m_m1": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
-                                    "m_0": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] },
-                                    "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j"] }
-                                  }
-                                },
-                                "m_side": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] }
-                              }
-                            }
-                          }
-                        },
-                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] }
+                        "dy": { "op": "index", "args": ["dy_Cu_E", "i", "j"] },
+                        "I_dx": { "op": "index", "args": ["IdxT_e", "i", "j"] },
+                        "h_m2": { "op": "index", "args": ["h", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j", "k"] },
+                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
+                        "h_0": { "op": "index", "args": ["h", { "op": "+", "args": ["i", 1] }, "j", "k"] },
+                        "h_p1": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j", "k"] },
+                        "h_p2": { "op": "index", "args": ["h", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j", "k"] },
+                        "m_m2": { "op": "index", "args": ["mask", { "op": "max", "args": [1, { "op": "-", "args": ["i", 1] }] }, "j"] },
+                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
+                        "m_0": { "op": "index", "args": ["mask", { "op": "+", "args": ["i", 1] }, "j"] },
+                        "m_p1": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 2] }] }, "j"] },
+                        "m_p2": { "op": "index", "args": ["mask", { "op": "min", "args": ["N_I", { "op": "+", "args": ["i", 3] }] }, "j"] },
+                        "h_min_recon": "h_min_recon"
                       }
                     },
                     0.0

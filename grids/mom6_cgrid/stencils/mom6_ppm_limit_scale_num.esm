@@ -1,0 +1,35 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_ppm_limit_scale_num",
+    "description": "The numerator of the PPM_limit_pos scale (MOM_continuity_PPM.F90:2671, 2674): num = 12*curv*(h_0 - h_min_recon) with curv = mom6_ppm_curv. The parabola's minimum is h_0 - den/(12*curv) (den = mom6_ppm_limit_scale_den), so num < den is exactly the test that the minimum undershoots the floor h_min_recon, and num/den is the scale that lifts it back to the floor. Pure scalar algebra, [m^2].",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:limit"],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201. (The positive-definiteness argument behind PPM_limit_pos.)",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_template_imports": [{ "ref": "./mom6_ppm_curv.esm" }],
+  "expression_templates": {
+    "mom6_ppm_limit_scale_num": {
+      "params": ["hL_raw", "hR_raw", "h_0", "h_min_recon"],
+      "description": "The PPM_limit_pos scale numerator 12*curv*(h_0 - h_min_recon) of one cell (MOM_continuity_PPM.F90:2671, 2674)",
+      "body": {
+        "op": "*",
+        "args": [
+          12.0,
+          {
+            "op": "*",
+            "args": [
+              { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_curv", "bindings": { "hL_raw": "hL_raw", "hR_raw": "hR_raw", "h_0": "h_0" } },
+              { "op": "-", "args": ["h_0", "h_min_recon"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

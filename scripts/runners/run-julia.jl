@@ -82,12 +82,6 @@ import OrdinaryDiffEqTsit5
 # specializes `SciMLBase.__init` / `__solve` on an `EsmProblem` rather than
 # exporting copies that would collide with any loaded solver.
 import SciMLBase
-# The spherical geometry kernel (manifold "spherical" on intersect_polygon /
-# polygon_intersection_area) lives in the EarthSciASTGeometryOpsExt
-# package extension, which loads only when GeometryOps + GeoInterface are in
-# the session (both are pinned deps of the pde_sim_adapter environment). The
-# planar path never needs them; the spherical regridding conformance case does.
-import GeometryOps, GeoInterface
 const ODE = OrdinaryDiffEqTsit5
 const ESS = EarthSciAST
 
@@ -334,9 +328,24 @@ function run_simulation(output_dir, files, verbose)
         try
             problem = normpath(joinpath(case_dir, String(manifest["problem"])))
             alg, reltol, abstol = integrator_opts(manifest)
-            results = ESS.run_inline_tests(problem;
-                model_name=String(manifest["model"]),
-                alg=alg, reltol=reltol, abstol=abstol)
+            # An optional "bindings" entry (the ast-category shape) rebinds the
+            # grid metaparameters before the tests run: load the problem with
+            # load_path(...; metaparameters=bindings) and run the loaded file
+            # (the §9.7.6 loader-API binding site, same as the convergence
+            # category). The other bindings' simulation runners do not read it
+            # (their manifests say so via scope_excluded).
+            if haskey(manifest, "bindings")
+                bindings = Dict{String,Int}(String(k) => Int(v)
+                                            for (k, v) in pairs(manifest["bindings"]))
+                file = ESS.load_path(problem; metaparameters=bindings)
+                results = ESS.run_inline_tests(file;
+                    model_name=String(manifest["model"]),
+                    alg=alg, reltol=reltol, abstol=abstol)
+            else
+                results = ESS.run_inline_tests(problem;
+                    model_name=String(manifest["model"]),
+                    alg=alg, reltol=reltol, abstol=abstol)
+            end
             wanted = Set(String.(manifest["tests"]))
             results = [r for r in results if r.test_id in wanted]
             isempty(results) && error("no assertions ran for tests $(collect(wanted))")
