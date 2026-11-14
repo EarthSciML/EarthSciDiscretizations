@@ -170,10 +170,10 @@ side is precomputed (`cartesian_rings_regrid_cart2cart_3x3_to_2x2`).
 
 Scope gaps are recorded in the manifests, never shimmed: Go/TypeScript are
 rewrite-only ports (`scope_excluded` from the numeric categories), and the
-`blocked_upstream_bindings` entries name their precise upstream sites. Since
-esm 2.0.0 both overlap kernels are pure-AST `esm:std/geometry.esm` templates
-(`overlap_area_planar`, `overlap_area_spherical`), so planar and spherical
-regrid both run on Julia + Python + Rust.
+`blocked_upstream_bindings` entries name their precise upstream sites. Planar
+and spherical regrid both run on Julia + Python + Rust: since esm 2.0.0 the
+overlap areas are the `esm:std/geometry.esm` templates, so no binding needs a
+geometry backend.
 
 The repo carries exemplar content — uniform 1-D cartesian (arbitrary extent;
 a centered second derivative with zero-gradient, parameterized Dirichlet, and

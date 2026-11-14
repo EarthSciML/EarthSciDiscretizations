@@ -1,0 +1,62 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "sectional_lr2m_position",
+    "description": "Position of the mean volume of section j within the section, as a fraction of its width: x = (vbar - vb[j]) / (vb[j+1] - vb[j]), 0 at the lower edge and 1 at the upper one (vbar = sectional_mean_volume). Every branch test of the two-moment reconstruction is a test on x -- the lower and upper thirds (sectional_lr2m_low_triangle / _high_triangle), the 1 % edge band (sectional_lr2m_interior_mean) -- and the slope of the full-section profile is 12 (x - 1/2) (sectional_lr2m_slope). Measuring the position in units of the section width keeps those tests independent of how wide the section is relative to its volume, so they hold on arbitrarily fine size grids.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:sectional_volume_1d",
+      "op:advection",
+      "order:2",
+      "scheme:linear-discrete"
+    ],
+    "references": [
+      {
+        "citation": "Zaveri, R. A., Easter, R. C., Fast, J. D., & Peters, L. K. (2008). Model for Simulating Aerosol Interactions and Chemistry (MOSAIC). Journal of Geophysical Research, 113, D13204.",
+        "doi": "10.1029/2007JD008782"
+      },
+      {
+        "citation": "WRF-Chem v4.8.0 chem/module_mosaic_movesect.F, subroutines move_sections_calc_masnumadvect and move_sections_apply_moves (R. C. Easter), the 'linear-discrete' / mass-number-advection section-moving algorithm (msectional = 20)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "./sectional_mean_volume.esm"
+    },
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "sectional_lr2m_position": {
+      "params": ["N", "V", "c", "j"],
+      "body": {
+        "op": "/",
+        "args": [
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "sectional_mean_volume",
+                "bindings": {"N": "N", "V": "V", "c": "c", "j": "j"}
+              },
+              {"op": "index", "args": ["vb", "j"]}
+            ]
+          },
+          {
+            "op": "-",
+            "args": [
+              {"op": "index", "args": ["vb", {"op": "+", "args": ["j", 1]}]},
+              {"op": "index", "args": ["vb", "j"]}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

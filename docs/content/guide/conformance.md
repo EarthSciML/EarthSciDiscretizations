@@ -65,10 +65,11 @@ expression with `earthsci_ast.to_ascii` and has no renderer of its own.
   **dense == gated value-identity** where both broad-phase paths are computed
   and **end-to-end** grid-spec → rings → broad phase → gated overlap → apply
   (`cartesian_rings_regrid_gated_3x3_to_2x2`, `mpas_l0_to_octants_sphere`).
-  Scope is recorded honestly per case: planar and spherical regrid run on
-  Julia + Python + Rust (since esm 2.0.0 both overlap kernels are pure-AST
-  `esm:std/geometry.esm` templates). Go and TypeScript are rewrite-only
-  ports, `scope_excluded` (no aggregate/makearray lowering or simulator).
+  Scope is recorded honestly per case: planar and spherical regrid both run
+  on Julia + Python + Rust (the overlap areas are the `esm:std/geometry.esm`
+  templates, so no binding needs a geometry backend). Go and TypeScript are
+  rewrite-only ports, `scope_excluded` (no aggregate/makearray lowering or
+  simulator).
 
 Manifests declare scope honestly: `reference_binding` (always `julia`),
 `bindings_required`, and `scope_excluded` with a reason per excluded binding

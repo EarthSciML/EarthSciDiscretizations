@@ -1,0 +1,1536 @@
+{
+  "esm": "2.1.0",
+  "index_sets": {
+    "bin": {
+      "kind": "interval",
+      "size": 4
+    },
+    "bin_nodes": {
+      "kind": "interval",
+      "size": 5
+    },
+    "cell": {
+      "kind": "interval",
+      "size": 2
+    },
+    "tracer": {
+      "kind": "interval",
+      "size": 1
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for grids/sectional_volume_1d/rules/growth_lr2m_D_bin_closed: a minimal consuming model binding NCELL=2, NBIN=4, NTRACER=1 at the import edges, writing dN/dt = -D(lam*N, V, wrt: bin) with the section number N, the section volume V and the relative growth rate lam all declared [cell, bin]. The two-operand compound match must fire through the fixpoint (priority 10, where lam, N, V: [cell, bin]) and lower to the rule's three-region makearray -- interior sections [2, 3] holding the imported sectional_lr2m_growth_number_interior stencil, section 1 and section 4 holding the closed-end regions that drop the outer edge flux (section 1: up-flux through its upper edge minus the down-flux of section 2; section 4: down-flux through its lower edge minus the up-flux of section 3). The model follows the grid's consumer-supplied-geometry contract: the 5-edge array vb comes from the grid's shared test grid mesh/mms_sections.esm (vb[kn] = 2^((kn-1)/4)), read by the rule's stencils by bare name. The golden pins the byte-identical post-lowering AST, in the esm-spec 9.6.4 reference-preserving form (stencil and mesh template references survive uninlined in the document's template registry), across bindings.",
+    "license": "MIT",
+    "name": "growth_lr2m_D_bin_closed_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:sectional_volume_1d",
+      "rule:growth_lr2m_D_bin_closed"
+    ]
+  },
+  "models": {
+    "GrowthLr2mDBinClosedAst": {
+      "equations": [
+        {
+          "lhs": {
+            "args": [
+              "N"
+            ],
+            "op": "ic"
+          },
+          "rhs": 1
+        },
+        {
+          "lhs": {
+            "args": [
+              "N"
+            ],
+            "op": "D",
+            "wrt": "t"
+          },
+          "rhs": {
+            "args": [
+              {
+                "args": [],
+                "op": "makearray",
+                "regions": [
+                  [
+                    [
+                      1,
+                      2
+                    ],
+                    [
+                      2,
+                      3
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      2
+                    ],
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  [
+                    [
+                      1,
+                      2
+                    ],
+                    [
+                      4,
+                      4
+                    ]
+                  ]
+                ],
+                "values": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "lam": "lam"
+                    },
+                    "name": "sectional_lr2m_growth_number_interior",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [],
+                          "bindings": {
+                            "N": "N",
+                            "V": "V",
+                            "c": "c",
+                            "j": "j",
+                            "lam": "lam"
+                          },
+                          "name": "sectional_lr2m_number_flux_up",
+                          "op": "apply_expression_template"
+                        },
+                        {
+                          "args": [],
+                          "bindings": {
+                            "N": "N",
+                            "V": "V",
+                            "c": "c",
+                            "j": {
+                              "args": [
+                                "j",
+                                1
+                              ],
+                              "op": "+"
+                            },
+                            "lam": "lam"
+                          },
+                          "name": "sectional_lr2m_number_flux_down",
+                          "op": "apply_expression_template"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    "op": "faq",
+                    "output_idx": [
+                      "c",
+                      "j"
+                    ],
+                    "ranges": {
+                      "c": {
+                        "from": "cell"
+                      },
+                      "j": [
+                        1,
+                        1
+                      ]
+                    }
+                  },
+                  {
+                    "args": [],
+                    "expr": {
+                      "args": [
+                        {
+                          "args": [],
+                          "bindings": {
+                            "N": "N",
+                            "V": "V",
+                            "c": "c",
+                            "j": "j",
+                            "lam": "lam"
+                          },
+                          "name": "sectional_lr2m_number_flux_down",
+                          "op": "apply_expression_template"
+                        },
+                        {
+                          "args": [],
+                          "bindings": {
+                            "N": "N",
+                            "V": "V",
+                            "c": "c",
+                            "j": {
+                              "args": [
+                                "j",
+                                1
+                              ],
+                              "op": "-"
+                            },
+                            "lam": "lam"
+                          },
+                          "name": "sectional_lr2m_number_flux_up",
+                          "op": "apply_expression_template"
+                        }
+                      ],
+                      "op": "-"
+                    },
+                    "op": "faq",
+                    "output_idx": [
+                      "c",
+                      "j"
+                    ],
+                    "ranges": {
+                      "c": {
+                        "from": "cell"
+                      },
+                      "j": [
+                        4,
+                        4
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "op": "-"
+          }
+        },
+        {
+          "lhs": "V",
+          "rhs": {
+            "args": [],
+            "expr": {
+              "args": [
+                1.5,
+                {
+                  "args": [
+                    "N",
+                    "c",
+                    "j"
+                  ],
+                  "op": "index"
+                }
+              ],
+              "op": "*"
+            },
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": {
+                "from": "bin"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "lam",
+          "rhs": {
+            "args": [],
+            "expr": 0.1,
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": {
+                "from": "bin"
+              }
+            }
+          }
+        },
+        {
+          "lhs": "vb",
+          "rhs": {
+            "args": [],
+            "bindings": {},
+            "name": "mms_sections_vb",
+            "op": "apply_expression_template"
+          }
+        }
+      ],
+      "expression_templates": {
+        "growth_lr2m_D_bin_closed": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  2
+                ],
+                [
+                  2,
+                  3
+                ]
+              ],
+              [
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              [
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  4
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "lam": "lam"
+                },
+                "name": "sectional_lr2m_growth_number_interior",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": "j",
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_up",
+                      "op": "apply_expression_template"
+                    },
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": {
+                          "args": [
+                            "j",
+                            1
+                          ],
+                          "op": "+"
+                        },
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_down",
+                      "op": "apply_expression_template"
+                    }
+                  ],
+                  "op": "-"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "c",
+                  "j"
+                ],
+                "ranges": {
+                  "c": {
+                    "from": "cell"
+                  },
+                  "j": [
+                    1,
+                    1
+                  ]
+                }
+              },
+              {
+                "args": [],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": "j",
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_down",
+                      "op": "apply_expression_template"
+                    },
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": {
+                          "args": [
+                            "j",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_up",
+                      "op": "apply_expression_template"
+                    }
+                  ],
+                  "op": "-"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "c",
+                  "j"
+                ],
+                "ranges": {
+                  "c": {
+                    "from": "cell"
+                  },
+                  "j": [
+                    4,
+                    4
+                  ]
+                }
+              }
+            ]
+          },
+          "match": {
+            "args": [
+              {
+                "args": [
+                  "lam",
+                  "N"
+                ],
+                "op": "*"
+              },
+              "V"
+            ],
+            "op": "D",
+            "wrt": "bin"
+          },
+          "params": [
+            "lam",
+            "N",
+            "V"
+          ],
+          "priority": 10,
+          "where": {
+            "N": {
+              "shape": [
+                "cell",
+                "bin"
+              ]
+            },
+            "V": {
+              "shape": [
+                "cell",
+                "bin"
+              ]
+            },
+            "lam": {
+              "shape": [
+                "cell",
+                "bin"
+              ]
+            }
+          }
+        },
+        "mms_sections_vb": {
+          "body": {
+            "args": [],
+            "expr": {
+              "args": [
+                2,
+                {
+                  "args": [
+                    {
+                      "args": [
+                        "kn",
+                        1
+                      ],
+                      "op": "-"
+                    },
+                    4
+                  ],
+                  "op": "/"
+                }
+              ],
+              "op": "^"
+            },
+            "op": "faq",
+            "output_idx": [
+              "kn"
+            ],
+            "ranges": {
+              "kn": {
+                "from": "bin_nodes"
+              }
+            }
+          },
+          "description": "Section edge volumes of the geometric test grid: vb[kn] = 2^((kn - 1)/NBIN) over kn in bin_nodes.",
+          "params": []
+        },
+        "sectional_lr2m_density_bottom": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    },
+                    "name": "sectional_lr2m_interior_mean",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_bottom",
+                        "op": "apply_expression_template"
+                      },
+                      {
+                        "args": [
+                          "vb",
+                          "j"
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": "<="
+                  }
+                ],
+                "op": "and"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          1,
+                          {
+                            "args": [
+                              {
+                                "args": [],
+                                "bindings": {
+                                  "N": "N",
+                                  "V": "V",
+                                  "c": "c",
+                                  "j": "j"
+                                },
+                                "name": "sectional_lr2m_slope",
+                                "op": "apply_expression_template"
+                              },
+                              2
+                            ],
+                            "op": "/"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      {
+                        "args": [
+                          "N",
+                          "c",
+                          "j"
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": "*"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_top",
+                        "op": "apply_expression_template"
+                      },
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_bottom",
+                        "op": "apply_expression_template"
+                      }
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "/"
+              },
+              0
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_density_top": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    },
+                    "name": "sectional_lr2m_interior_mean",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_top",
+                        "op": "apply_expression_template"
+                      },
+                      {
+                        "args": [
+                          "vb",
+                          {
+                            "args": [
+                              "j",
+                              1
+                            ],
+                            "op": "+"
+                          }
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": ">="
+                  }
+                ],
+                "op": "and"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          1,
+                          {
+                            "args": [
+                              {
+                                "args": [],
+                                "bindings": {
+                                  "N": "N",
+                                  "V": "V",
+                                  "c": "c",
+                                  "j": "j"
+                                },
+                                "name": "sectional_lr2m_slope",
+                                "op": "apply_expression_template"
+                              },
+                              2
+                            ],
+                            "op": "/"
+                          }
+                        ],
+                        "op": "+"
+                      },
+                      {
+                        "args": [
+                          "N",
+                          "c",
+                          "j"
+                        ],
+                        "op": "index"
+                      }
+                    ],
+                    "op": "*"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_top",
+                        "op": "apply_expression_template"
+                      },
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_support_bottom",
+                        "op": "apply_expression_template"
+                      }
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "/"
+              },
+              0
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_growth_number_interior": {
+          "body": {
+            "args": [
+              "lam",
+              "N",
+              "V"
+            ],
+            "expr": {
+              "args": [
+                {
+                  "args": [
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": "j",
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_up",
+                      "op": "apply_expression_template"
+                    },
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": "j",
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_down",
+                      "op": "apply_expression_template"
+                    }
+                  ],
+                  "op": "+"
+                },
+                {
+                  "args": [
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": {
+                          "args": [
+                            "j",
+                            1
+                          ],
+                          "op": "-"
+                        },
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_up",
+                      "op": "apply_expression_template"
+                    },
+                    {
+                      "args": [],
+                      "bindings": {
+                        "N": "N",
+                        "V": "V",
+                        "c": "c",
+                        "j": {
+                          "args": [
+                            "j",
+                            1
+                          ],
+                          "op": "+"
+                        },
+                        "lam": "lam"
+                      },
+                      "name": "sectional_lr2m_number_flux_down",
+                      "op": "apply_expression_template"
+                    }
+                  ],
+                  "op": "+"
+                }
+              ],
+              "op": "-"
+            },
+            "op": "faq",
+            "output_idx": [
+              "c",
+              "j"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "j": [
+                2,
+                3
+              ]
+            }
+          },
+          "params": [
+            "lam",
+            "N",
+            "V"
+          ]
+        },
+        "sectional_lr2m_high_triangle": {
+          "body": {
+            "args": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_position",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [
+                  2,
+                  3
+                ],
+                "op": "/"
+              }
+            ],
+            "op": ">="
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_interior_mean": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      "N",
+                      "c",
+                      "j"
+                    ],
+                    "op": "index"
+                  },
+                  0
+                ],
+                "op": ">"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_position",
+                        "op": "apply_expression_template"
+                      },
+                      0.01
+                    ],
+                    "op": ">"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "bindings": {
+                          "N": "N",
+                          "V": "V",
+                          "c": "c",
+                          "j": "j"
+                        },
+                        "name": "sectional_lr2m_position",
+                        "op": "apply_expression_template"
+                      },
+                      0.99
+                    ],
+                    "op": "<"
+                  }
+                ],
+                "op": "and"
+              }
+            ],
+            "op": "and"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_low_triangle": {
+          "body": {
+            "args": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_position",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [
+                  1,
+                  3
+                ],
+                "op": "/"
+              }
+            ],
+            "op": "<="
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_number_flux_down": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "lam",
+                              "c",
+                              "j"
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      },
+                      0
+                    ],
+                    "op": "max"
+                  },
+                  {
+                    "args": [
+                      "vb",
+                      "j"
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "*"
+              },
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_density_bottom",
+                "op": "apply_expression_template"
+              }
+            ],
+            "op": "*"
+          },
+          "params": [
+            "lam",
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_number_flux_up": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          "lam",
+                          "c",
+                          "j"
+                        ],
+                        "op": "index"
+                      },
+                      0
+                    ],
+                    "op": "max"
+                  },
+                  {
+                    "args": [
+                      "vb",
+                      {
+                        "args": [
+                          "j",
+                          1
+                        ],
+                        "op": "+"
+                      }
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "*"
+              },
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_density_top",
+                "op": "apply_expression_template"
+              }
+            ],
+            "op": "*"
+          },
+          "params": [
+            "lam",
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_position": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    },
+                    "name": "sectional_mean_volume",
+                    "op": "apply_expression_template"
+                  },
+                  {
+                    "args": [
+                      "vb",
+                      "j"
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "-"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      "vb",
+                      {
+                        "args": [
+                          "j",
+                          1
+                        ],
+                        "op": "+"
+                      }
+                    ],
+                    "op": "index"
+                  },
+                  {
+                    "args": [
+                      "vb",
+                      "j"
+                    ],
+                    "op": "index"
+                  }
+                ],
+                "op": "-"
+              }
+            ],
+            "op": "/"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_slope": {
+          "body": {
+            "args": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_low_triangle",
+                "op": "apply_expression_template"
+              },
+              -2,
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "bindings": {
+                      "N": "N",
+                      "V": "V",
+                      "c": "c",
+                      "j": "j"
+                    },
+                    "name": "sectional_lr2m_high_triangle",
+                    "op": "apply_expression_template"
+                  },
+                  2,
+                  {
+                    "args": [
+                      12,
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "bindings": {
+                              "N": "N",
+                              "V": "V",
+                              "c": "c",
+                              "j": "j"
+                            },
+                            "name": "sectional_lr2m_position",
+                            "op": "apply_expression_template"
+                          },
+                          {
+                            "args": [
+                              1,
+                              2
+                            ],
+                            "op": "/"
+                          }
+                        ],
+                        "op": "-"
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "ifelse"
+              }
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_support_bottom": {
+          "body": {
+            "args": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_high_triangle",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      "vb",
+                      {
+                        "args": [
+                          "j",
+                          1
+                        ],
+                        "op": "+"
+                      }
+                    ],
+                    "op": "index"
+                  },
+                  {
+                    "args": [
+                      3,
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "bindings": {
+                              "N": "N",
+                              "V": "V",
+                              "c": "c",
+                              "j": "j"
+                            },
+                            "name": "sectional_mean_volume",
+                            "op": "apply_expression_template"
+                          },
+                          {
+                            "args": [
+                              "vb",
+                              {
+                                "args": [
+                                  "j",
+                                  1
+                                ],
+                                "op": "+"
+                              }
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "+"
+              },
+              {
+                "args": [
+                  "vb",
+                  "j"
+                ],
+                "op": "index"
+              }
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_lr2m_support_top": {
+          "body": {
+            "args": [
+              {
+                "args": [],
+                "bindings": {
+                  "N": "N",
+                  "V": "V",
+                  "c": "c",
+                  "j": "j"
+                },
+                "name": "sectional_lr2m_low_triangle",
+                "op": "apply_expression_template"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      "vb",
+                      "j"
+                    ],
+                    "op": "index"
+                  },
+                  {
+                    "args": [
+                      3,
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "bindings": {
+                              "N": "N",
+                              "V": "V",
+                              "c": "c",
+                              "j": "j"
+                            },
+                            "name": "sectional_mean_volume",
+                            "op": "apply_expression_template"
+                          },
+                          {
+                            "args": [
+                              "vb",
+                              "j"
+                            ],
+                            "op": "index"
+                          }
+                        ],
+                        "op": "-"
+                      }
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "+"
+              },
+              {
+                "args": [
+                  "vb",
+                  {
+                    "args": [
+                      "j",
+                      1
+                    ],
+                    "op": "+"
+                  }
+                ],
+                "op": "index"
+              }
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_mean_volume": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      "N",
+                      "c",
+                      "j"
+                    ],
+                    "op": "index"
+                  },
+                  0
+                ],
+                "op": ">"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      "V",
+                      "c",
+                      "j"
+                    ],
+                    "op": "index"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [
+                              "N",
+                              "c",
+                              "j"
+                            ],
+                            "op": "index"
+                          },
+                          0
+                        ],
+                        "op": ">"
+                      },
+                      {
+                        "args": [
+                          "N",
+                          "c",
+                          "j"
+                        ],
+                        "op": "index"
+                      },
+                      1
+                    ],
+                    "op": "ifelse"
+                  }
+                ],
+                "op": "/"
+              },
+              {
+                "args": [
+                  "vb",
+                  "j"
+                ],
+                "op": "index"
+              }
+            ],
+            "op": "ifelse"
+          },
+          "params": [
+            "N",
+            "V",
+            "c",
+            "j"
+          ]
+        },
+        "sectional_total": {
+          "body": {
+            "args": [
+              "N"
+            ],
+            "expr": {
+              "args": [
+                "N",
+                "c",
+                "gj"
+              ],
+              "op": "index"
+            },
+            "op": "faq",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "cell"
+              },
+              "gj": {
+                "from": "bin"
+              }
+            },
+            "reduce": "+"
+          },
+          "description": "Per-cell total sum_j N[c,j] over the size sections of a [cell, bin] section moment (number, or volume), shape [cell]: the quantity every flux-form operator on this grid conserves exactly, since each lowers to edge fluxes that cancel in pairs between neighbouring sections and vanish at the two closed ends of the size range. Aggregation index `gj`, so it never captures a consuming rule's own index when inlined. problems/growth_sectional_lr2m_mms asserts it (its Ntot observed) both with the distribution inside the size range and after it has piled up against both closed ends.",
+          "params": [
+            "N"
+          ]
+        }
+      },
+      "variables": {
+        "N": {
+          "description": "Section number moment.",
+          "shape": [
+            "cell",
+            "bin"
+          ],
+          "type": "unknown",
+          "units": "1/m^3"
+        },
+        "V": {
+          "description": "Section volume moment, 1.5 times the number (mean volume 1.5 um^3 in every section).",
+          "shape": [
+            "cell",
+            "bin"
+          ],
+          "type": "unknown",
+          "units": "um^3/m^3"
+        },
+        "lam": {
+          "description": "Relative volume growth rate, uniform 0.1 1/s.",
+          "shape": [
+            "cell",
+            "bin"
+          ],
+          "type": "unknown",
+          "units": "1/s"
+        },
+        "vb": {
+          "description": "Section edge volumes, mms_sections_vb at NBIN=4.",
+          "shape": [
+            "bin_nodes"
+          ],
+          "type": "unknown",
+          "units": "um^3"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,411 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "mms_bump",
+    "description": "Exact section moments of the manufactured solution shared by the MMS problems of grids/sectional_volume_1d -- a fixture template library (grids/*/mesh/ holds fixture data, schema-validated only), so the closed-form moments are written once instead of once per ic equation and test reference. The solution is the compactly supported C2 bump n0(u) = 64 s^3 (1-s)^3, s = clamp((u - ctr)/0.3, 0, 1), centred per spatial cell at ctr = 0.9 + 0.3 c (cell 1 on [1.2, 1.5], cell 2 on [1.5, 1.8]), carried by the growth law G(v) = sigma v with sigma = 3 - 2 c (cell 1 grows, cell 2 shrinks, lam0 = 1). Along characteristics v = u e^{sigma t}, so n(v, t) = e n0(v e) with e = e^{-sigma t}; the moments of section j = [2^((j-1)/NBIN), 2^(j/NBIN)] (the mms_sections_vb grid) are N = P(s(b)) - P(s(a)) and V = e^{-1} [Q(s(b)) - Q(s(a))], a and b the section edges pulled back to t = 0 (edge times e), where P(s) = 64 w [s^4/4 - 3 s^5/5 + s^6/2 - s^7/7] is the antiderivative of n0 (w = 0.3) and Q(s) = ctr P(s) + 64 w^2 [s^5/5 - s^6/2 + 3 s^7/7 - s^8/8] that of u n0(u), both in Horner form. Every template is CLOSED -- it reads only its parameters, literals and the metaparameter NBIN, never a model variable -- so, unlike a free-name geometry template, it may be applied in an ic equation, where the build inlines it like any other template. It may NOT be applied in an esm-spec 6.6.5 test reference: the inline-test oracle evaluates references without resolving template references (EarthSciAST 84ed0627e), so the problems spell the reference moments inline in the same Horner form. `c`, `j` are the cell and section indices and `t` the time.",
+    "license": "MIT",
+    "tags": [
+      "esd:mesh-data",
+      "family:sectional",
+      "grid:sectional_volume_1d",
+      "mms"
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mms_bump_s": {
+      "params": [
+        "u",
+        "c"
+      ],
+      "description": "Bump coordinate of pulled-back volume u in cell c, clamped to the support: s = min(max((u - (0.9 + 0.3 c))/0.3, 0), 1).",
+      "body": {
+        "op": "min",
+        "args": [
+          {
+            "op": "max",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      "u",
+                      {
+                        "op": "+",
+                        "args": [
+                          0.9,
+                          {
+                            "op": "*",
+                            "args": [
+                              0.3,
+                              "c"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  0.3
+                ]
+              },
+              0
+            ]
+          },
+          1
+        ]
+      }
+    },
+    "mms_bump_P": {
+      "params": [
+        "s"
+      ],
+      "description": "Antiderivative of the number density in the bump coordinate, P(s) = 19.2 s^4 (1/4 + s (-3/5 + s (1/2 - s/7))) (19.2 = 64 w, w = 0.3).",
+      "body": {
+        "op": "*",
+        "args": [
+          19.2,
+          {
+            "op": "^",
+            "args": [
+              "s",
+              4
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              0.25,
+              {
+                "op": "*",
+                "args": [
+                  "s",
+                  {
+                    "op": "+",
+                    "args": [
+                      -0.6,
+                      {
+                        "op": "*",
+                        "args": [
+                          "s",
+                          {
+                            "op": "-",
+                            "args": [
+                              0.5,
+                              {
+                                "op": "/",
+                                "args": [
+                                  "s",
+                                  7
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "mms_bump_Q": {
+      "params": [
+        "s",
+        "c"
+      ],
+      "description": "Antiderivative of the volume density u n0(u) in the bump coordinate for cell c, Q(s) = (0.9 + 0.3 c) P(s) + 5.76 s^5 (1/5 + s (-1/2 + s (3/7 - s/8))) (5.76 = 64 w^2).",
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  0.9,
+                  {
+                    "op": "*",
+                    "args": [
+                      0.3,
+                      "c"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "mms_bump_P",
+                "bindings": {
+                  "s": "s"
+                }
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              5.76,
+              {
+                "op": "^",
+                "args": [
+                  "s",
+                  5
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  0.2,
+                  {
+                    "op": "*",
+                    "args": [
+                      "s",
+                      {
+                        "op": "+",
+                        "args": [
+                          -0.5,
+                          {
+                            "op": "*",
+                            "args": [
+                              "s",
+                              {
+                                "op": "-",
+                                "args": [
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      3,
+                                      7
+                                    ]
+                                  },
+                                  {
+                                    "op": "/",
+                                    "args": [
+                                      "s",
+                                      8
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "mms_bump_edge_s": {
+      "params": [
+        "kn",
+        "c",
+        "t"
+      ],
+      "description": "Bump coordinate of the geometric test grid's section edge at volume 2^(kn/NBIN) (bin_nodes index kn + 1, kn = 0..NBIN) at time t in cell c, the edge pulled back along its characteristic: mms_bump_s(2^(kn/NBIN) e^{-(3 - 2 c) t}, c).",
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "mms_bump_s",
+        "bindings": {
+          "u": {
+            "op": "*",
+            "args": [
+              {
+                "op": "^",
+                "args": [
+                  2,
+                  {
+                    "op": "/",
+                    "args": [
+                      "kn",
+                      "NBIN"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "exp",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      -1,
+                      "t",
+                      {
+                        "op": "-",
+                        "args": [
+                          3,
+                          {
+                            "op": "*",
+                            "args": [
+                              2,
+                              "c"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "c": "c"
+        }
+      }
+    },
+    "mms_bump_number": {
+      "params": [
+        "c",
+        "j",
+        "t"
+      ],
+      "description": "Exact number moment of section j in cell c at time t: P(s(b)) - P(s(a)).",
+      "body": {
+        "op": "-",
+        "args": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_bump_P",
+            "bindings": {
+              "s": {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "mms_bump_edge_s",
+                "bindings": {
+                  "kn": "j",
+                  "c": "c",
+                  "t": "t"
+                }
+              }
+            }
+          },
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "mms_bump_P",
+            "bindings": {
+              "s": {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "mms_bump_edge_s",
+                "bindings": {
+                  "kn": {
+                    "op": "-",
+                    "args": [
+                      "j",
+                      1
+                    ]
+                  },
+                  "c": "c",
+                  "t": "t"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "mms_bump_volume": {
+      "params": [
+        "c",
+        "j",
+        "t"
+      ],
+      "description": "Exact volume moment of section j in cell c at time t: e^{(3 - 2 c) t} [Q(s(b)) - Q(s(a))].",
+      "body": {
+        "op": "*",
+        "args": [
+          {
+            "op": "exp",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "t",
+                  {
+                    "op": "-",
+                    "args": [
+                      3,
+                      {
+                        "op": "*",
+                        "args": [
+                          2,
+                          "c"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "-",
+            "args": [
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "mms_bump_Q",
+                "bindings": {
+                  "s": {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "mms_bump_edge_s",
+                    "bindings": {
+                      "kn": "j",
+                      "c": "c",
+                      "t": "t"
+                    }
+                  },
+                  "c": "c"
+                }
+              },
+              {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "mms_bump_Q",
+                "bindings": {
+                  "s": {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "mms_bump_edge_s",
+                    "bindings": {
+                      "kn": {
+                        "op": "-",
+                        "args": [
+                          "j",
+                          1
+                        ]
+                      },
+                      "c": "c",
+                      "t": "t"
+                    }
+                  },
+                  "c": "c"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "esm": "2.1.0",
+  "metadata": {
+    "name": "sectional_volume_1d",
+    "description": "SECTIONAL particle size distribution in single-particle VOLUME v, the size grid of a sectional aerosol model (MOSAIC, MADRID, CMAQ-sectional, ...): NBIN contiguous sections `bin` with the NBIN+1 section edges `bin_nodes`, carried independently in each of NCELL spatial cells `cell` (a column level, a grid box -- whatever the consumer's own cell axis is; rename it at the import edge, e.g. {cell: lev}). Section j spans [vb[j], vb[j+1]], so consecutive sections share an edge and the sections tile [vb[1], vb[NBIN+1]]. Each section carries INTEGRATED moments of the number distribution n(v): the number N[c,j] = integral of n dv over the section and the volume V[c,j] = integral of v n dv, plus any number of volume-carried quantities (component masses, water) on the trailing axis `tracer` (NTRACER), which are assumed uniformly mixed over the section's particles. Because the moments are section integrals, not densities, a flux-form operator on this grid returns the INTEGRATED divergence: the net flux through a section's two edges, with no division by the section width. The geometry is consumer-supplied (the integers-are-metaparameters, reals-are-consumer-supplied convention): a consuming model supplies the edge volumes `vb`, shape [bin_nodes], strictly increasing with the bin index, as a free name resolved in its own scope. Nothing here assumes a particular spacing; MOSAIC's sections are geometric (vb[j+1]/vb[j] = 8, a doubling of diameter).",
+    "license": "MIT",
+    "tags": [
+      "esd:grid",
+      "family:sectional",
+      "ndim:2",
+      "spacing:nonuniform",
+      "axis:cell",
+      "axis:bin",
+      "axis:tracer"
+    ],
+    "references": [
+      {
+        "citation": "Gelbard, F., Tambour, Y., & Seinfeld, J. H. (1980). Sectional representations for simulating aerosol dynamics. Journal of Colloid and Interface Science, 76(2), 541-556.",
+        "doi": "10.1016/0021-9797(80)90394-X"
+      }
+    ]
+  },
+  "metaparameters": {
+    "NCELL": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of spatial cells, each carrying its own size distribution."
+    },
+    "NBIN": {
+      "type": "integer",
+      "default": 8,
+      "description": "Number of size sections; the edge axis bin_nodes has NBIN+1 members. Minimum 2."
+    },
+    "NTRACER": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of volume-carried quantities on the trailing axis."
+    }
+  },
+  "index_sets": {
+    "cell": {
+      "kind": "interval",
+      "size": "NCELL"
+    },
+    "bin": {
+      "kind": "interval",
+      "size": "NBIN"
+    },
+    "bin_nodes": {
+      "kind": "interval",
+      "size": {
+        "op": "+",
+        "args": [
+          "NBIN",
+          1
+        ]
+      }
+    },
+    "tracer": {
+      "kind": "interval",
+      "size": "NTRACER"
+    }
+  },
+  "expression_templates": {
+    "sectional_total": {
+      "params": [
+        "N"
+      ],
+      "description": "Per-cell total sum_j N[c,j] over the size sections of a [cell, bin] section moment (number, or volume), shape [cell]: the quantity every flux-form operator on this grid conserves exactly, since each lowers to edge fluxes that cancel in pairs between neighbouring sections and vanish at the two closed ends of the size range. Aggregation index `gj`, so it never captures a consuming rule's own index when inlined. problems/growth_sectional_lr2m_mms asserts it (its Ntot observed) both with the distribution inside the size range and after it has piled up against both closed ends.",
+      "body": {
+        "op": "faq",
+        "output_idx": [
+          "c"
+        ],
+        "reduce": "+",
+        "args": [
+          "N"
+        ],
+        "ranges": {
+          "c": {
+            "from": "cell"
+          },
+          "gj": {
+            "from": "bin"
+          }
+        },
+        "expr": {
+          "op": "index",
+          "args": [
+            "N",
+            "c",
+            "gj"
+          ]
+        }
+      }
+    }
+  }
+}

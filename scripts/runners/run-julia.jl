@@ -82,8 +82,6 @@ import OrdinaryDiffEqTsit5
 # specializes `SciMLBase.__init` / `__solve` on an `EsmProblem` rather than
 # exporting copies that would collide with any loaded solver.
 import SciMLBase
-# The spherical overlap kernel is the pure-AST esm:std overlap_area_spherical
-# template since esm 2.0.0 (the GeometryOps package extension is gone).
 const ODE = OrdinaryDiffEqTsit5
 const ESS = EarthSciAST
 
