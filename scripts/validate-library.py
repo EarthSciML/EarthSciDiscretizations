@@ -286,15 +286,25 @@ def lint_rule_regions(path: Path, doc: dict, tags, lib: Library, findings: Findi
         return  # L004 already fired
     grid = lib.docs[grid_path]
     axes = axes_decl[0].split(",") if axes_decl else []
-    index_sets = grid.get("index_sets") or {}
+    # An axis may be declared by the rule itself rather than the grid: a passive
+    # operand axis the grid geometry knows nothing about (e.g. cice_bgrid's
+    # `layer`), exported by the rule file so a consumer can bind its size and
+    # rename it at the import edge (esm-spec 9.7.7). Rule-local declarations
+    # shadow the grid's, mirroring the rule's own resolution scope.
+    index_sets = {**(grid.get("index_sets") or {}), **(doc.get("index_sets") or {})}
     sizes_expr = {}
     for ax in axes:
         decl = index_sets.get(ax)
         if not isinstance(decl, dict) or decl.get("kind") != "interval":
-            findings.add(path, "L006", f"axes:{ax} is not an interval index set of grid {grid_names[0]}")
+            findings.add(
+                path, "L006",
+                f"axes:{ax} is not an interval index set of grid {grid_names[0]} or of the rule",
+            )
             return
         sizes_expr[ax] = decl.get("size")
-    metaparams = list((grid.get("metaparameters") or {}))
+    metaparams = list(
+        dict.fromkeys([*(grid.get("metaparameters") or {}), *(doc.get("metaparameters") or {})])
+    )
 
     for tmpl_name, makearray in find_makearray_bodies(doc):
         regions = makearray.get("regions", [])
