@@ -11,7 +11,7 @@
     }
   },
   "metadata": {
-    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two prescribed-flux free names kdudz_bot / kdudz_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's three-region makearray -- interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 holding the prescribed-flux faces; every K du/dz flux in all three regions is a reference to the one interface_flux_K_lev template, bound at n = k+1, k, 2 and 8. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
+    "description": "AST-expansion conformance fixture for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc: a minimal consuming model binding NLEV=8 at the import edge, writing du/dt = D(K*D(u, wrt: lev), wrt: lev) with the coefficient K declared on the interfaces (shape [lev_nodes]) and the two prescribed-flux free names kdudz_bot / kdudz_top as parameters. The compound match must fire through the fixpoint (priority 10, where u: [lev], K: [lev_nodes]) and lower to the rule's body, a reference to the grid's shared three-region layout rules/varcoeff_face_laplacian_lev_frame (interior [2,7] holding the imported interface-coefficient flux-difference stencil aggregate, layer 1 and layer 8 the boundary layers) with its two face-flux parameters bound to the free names kdudz_bot / kdudz_top; every interior K du/dz flux is a reference to the one interface_flux_K_lev template, bound at n = k+1, k, 2 and 8, itself an application of the grid's two-point law interface_flux_K_two_point. The model follows the grid's EDGE-ARRAY contract at NLEV=8: it takes the 9-interface (lev_nodes) quadratic-stretch array ze from the grid's shared fixture library mesh/mms_column.esm (NLEV bound to 8 at that edge as well) and derives zc = column_cell_center(ze), dz = column_cell_thickness(ze); the geometry templates are the cartesian_nonuniform_1d ones renamed onto lev by the grid's own import edge, so the expanded document's template registry carries the renamed cartesian templates beside the column wrappers that reference them (esm-spec 9.6.4 reference-preserving form: bodies stay uninlined). The golden pins the byte-identical post-lowering AST -- including the grid-derived geometry observeds -- across bindings.",
     "license": "MIT",
     "name": "varcoeff_face_laplacian_lev_flux_bc_ast_fixture",
     "tags": [
@@ -43,94 +43,14 @@
           },
           "rhs": {
             "args": [],
-            "op": "makearray",
-            "regions": [
-              [
-                [
-                  2,
-                  7
-                ]
-              ],
-              [
-                [
-                  1,
-                  1
-                ]
-              ],
-              [
-                [
-                  8,
-                  8
-                ]
-              ]
-            ],
-            "values": [
-              {
-                "args": [],
-                "bindings": {
-                  "K": "K",
-                  "u": "u"
-                },
-                "name": "varcoeff_face_laplacian_lev_interior",
-                "op": "apply_expression_template"
-              },
-              {
-                "args": [
-                  {
-                    "args": [
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 2,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
-                      },
-                      "kdudz_bot"
-                    ],
-                    "op": "-"
-                  },
-                  {
-                    "args": [
-                      "dz",
-                      1
-                    ],
-                    "op": "index"
-                  }
-                ],
-                "op": "/"
-              },
-              {
-                "args": [
-                  {
-                    "args": [
-                      "kdudz_top",
-                      {
-                        "args": [],
-                        "bindings": {
-                          "K": "K",
-                          "n": 8,
-                          "u": "u"
-                        },
-                        "name": "interface_flux_K_lev",
-                        "op": "apply_expression_template"
-                      }
-                    ],
-                    "op": "-"
-                  },
-                  {
-                    "args": [
-                      "dz",
-                      8
-                    ],
-                    "op": "index"
-                  }
-                ],
-                "op": "/"
-              }
-            ]
+            "bindings": {
+              "G_bot": "kdudz_bot",
+              "G_top": "kdudz_top",
+              "K": "K",
+              "u": "u"
+            },
+            "name": "varcoeff_face_laplacian_lev_frame",
+            "op": "apply_expression_template"
           }
         },
         {
@@ -206,63 +126,82 @@
         },
         "interface_flux_K_lev": {
           "body": {
-            "args": [
-              {
+            "args": [],
+            "bindings": {
+              "K_face": {
                 "args": [
                   "K",
                   "n"
                 ],
                 "op": "index"
               },
+              "u_hi": {
+                "args": [
+                  "u",
+                  "n"
+                ],
+                "op": "index"
+              },
+              "u_lo": {
+                "args": [
+                  "u",
+                  {
+                    "args": [
+                      "n",
+                      1
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "index"
+              },
+              "z_hi": {
+                "args": [
+                  "zc",
+                  "n"
+                ],
+                "op": "index"
+              },
+              "z_lo": {
+                "args": [
+                  "zc",
+                  {
+                    "args": [
+                      "n",
+                      1
+                    ],
+                    "op": "-"
+                  }
+                ],
+                "op": "index"
+              }
+            },
+            "name": "interface_flux_K_two_point",
+            "op": "apply_expression_template"
+          },
+          "params": [
+            "u",
+            "K",
+            "n"
+          ]
+        },
+        "interface_flux_K_two_point": {
+          "body": {
+            "args": [
+              "K_face",
               {
                 "args": [
                   {
                     "args": [
-                      {
-                        "args": [
-                          "u",
-                          "n"
-                        ],
-                        "op": "index"
-                      },
-                      {
-                        "args": [
-                          "u",
-                          {
-                            "args": [
-                              "n",
-                              1
-                            ],
-                            "op": "-"
-                          }
-                        ],
-                        "op": "index"
-                      }
+                      "u_hi",
+                      "u_lo"
                     ],
                     "op": "-"
                   },
                   {
                     "args": [
-                      {
-                        "args": [
-                          "zc",
-                          "n"
-                        ],
-                        "op": "index"
-                      },
-                      {
-                        "args": [
-                          "zc",
-                          {
-                            "args": [
-                              "n",
-                              1
-                            ],
-                            "op": "-"
-                          }
-                        ],
-                        "op": "index"
-                      }
+                      "z_hi",
+                      "z_lo"
                     ],
                     "op": "-"
                   }
@@ -273,9 +212,11 @@
             "op": "*"
           },
           "params": [
-            "u",
-            "K",
-            "n"
+            "K_face",
+            "u_lo",
+            "u_hi",
+            "z_lo",
+            "z_hi"
           ]
         },
         "mms_column_integrand": {
@@ -493,6 +434,55 @@
         "varcoeff_face_laplacian_lev_flux_bc": {
           "body": {
             "args": [],
+            "bindings": {
+              "G_bot": "kdudz_bot",
+              "G_top": "kdudz_top",
+              "K": "K",
+              "u": "u"
+            },
+            "name": "varcoeff_face_laplacian_lev_frame",
+            "op": "apply_expression_template"
+          },
+          "match": {
+            "args": [
+              {
+                "args": [
+                  "K",
+                  {
+                    "args": [
+                      "u"
+                    ],
+                    "op": "D",
+                    "wrt": "lev"
+                  }
+                ],
+                "op": "*"
+              }
+            ],
+            "op": "D",
+            "wrt": "lev"
+          },
+          "params": [
+            "u",
+            "K"
+          ],
+          "priority": 10,
+          "where": {
+            "K": {
+              "shape": [
+                "lev_nodes"
+              ]
+            },
+            "u": {
+              "shape": [
+                "lev"
+              ]
+            }
+          }
+        },
+        "varcoeff_face_laplacian_lev_frame": {
+          "body": {
+            "args": [],
             "op": "makearray",
             "regions": [
               [
@@ -538,7 +528,7 @@
                         "name": "interface_flux_K_lev",
                         "op": "apply_expression_template"
                       },
-                      "kdudz_bot"
+                      "G_bot"
                     ],
                     "op": "-"
                   },
@@ -556,7 +546,7 @@
                 "args": [
                   {
                     "args": [
-                      "kdudz_top",
+                      "G_top",
                       {
                         "args": [],
                         "bindings": {
@@ -582,42 +572,12 @@
               }
             ]
           },
-          "match": {
-            "args": [
-              {
-                "args": [
-                  "K",
-                  {
-                    "args": [
-                      "u"
-                    ],
-                    "op": "D",
-                    "wrt": "lev"
-                  }
-                ],
-                "op": "*"
-              }
-            ],
-            "op": "D",
-            "wrt": "lev"
-          },
           "params": [
             "u",
-            "K"
-          ],
-          "priority": 10,
-          "where": {
-            "K": {
-              "shape": [
-                "lev_nodes"
-              ]
-            },
-            "u": {
-              "shape": [
-                "lev"
-              ]
-            }
-          }
+            "K",
+            "G_bot",
+            "G_top"
+          ]
         },
         "varcoeff_face_laplacian_lev_interior": {
           "body": {

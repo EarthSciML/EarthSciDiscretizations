@@ -1,0 +1,45 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_ppm_slope_mag",
+    "description": "The Lin (1994) Eq. B2 limited magnitude of the MOM6 PPM center slope (PPM_reconstruction_x, MOM_continuity_PPM.F90:2403-2405): |s| = min(|mom6_ppm_slope_raw|, 2*min(dMx, dMn)) with dMx = max(h_p1, h_m1, h_0) - h_0 and dMn = h_0 - min(h_p1, h_m1, h_0), so the slope never pushes an edge outside the range of the cell and its two neighbours. mom6_ppm_slope restores the sign. Pure scalar algebra, [m].",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:limit"],
+    "references": [
+      {
+        "citation": "Lin, S.-J. (1994). A nearly conservative flux-reconstruction scheme. Monthly Weather Review, 122(5), 994-1011. (Eq. B2, the monotonic slope constraint.)"
+      }
+    ]
+  },
+  "expression_template_imports": [{ "ref": "./mom6_ppm_slope_raw.esm" }],
+  "expression_templates": {
+    "mom6_ppm_slope_mag": {
+      "params": ["h_m1", "h_0", "h_p1"],
+      "description": "The Lin-1994-limited magnitude of one cell's PPM slope (MOM_continuity_PPM.F90:2403-2405)",
+      "body": {
+        "op": "min",
+        "args": [
+          {
+            "op": "abs",
+            "args": [
+              { "op": "apply_expression_template", "args": [], "name": "mom6_ppm_slope_raw", "bindings": { "h_m1": "h_m1", "h_p1": "h_p1" } }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              2.0,
+              {
+                "op": "min",
+                "args": [
+                  { "op": "-", "args": [{ "op": "max", "args": ["h_p1", { "op": "max", "args": ["h_m1", "h_0"] }] }, "h_0"] },
+                  { "op": "-", "args": ["h_0", { "op": "min", "args": ["h_p1", { "op": "min", "args": ["h_m1", "h_0"] }] }] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

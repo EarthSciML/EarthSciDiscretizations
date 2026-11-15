@@ -1,0 +1,52 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_ppm_edge",
+    "description": "One raw edge of the MOM6 PPM parabola (PPM_reconstruction_x, MOM_continuity_PPM.F90:2428-2449), shared by the left and right edges of a cell: edge = 0.5*(h_side_masked + h_0) + (slp_side - slp_0)/6 with h_side_masked = m_side*h_side + (1 - m_side)*h_0 (a masked neighbor is replaced by the cell's own thickness, the Fortran's h_im1/h_ip1 masked replacement at F90:2430-2431 and 2441-2442). The caller binds the two edges with swapped slope roles: the LEFT edge binds slp_side to the west neighbor's slope and slp_0 to the cell's own (hL = 0.5*(h_im1 + h_0) + oneSixth*(slp(i-1) - slp(i))), the RIGHT edge binds slp_side to the cell's own slope and slp_0 to the east neighbor's (hR = 0.5*(h_ip1 + h_0) + oneSixth*(slp(i) - slp(i+1))). One law, both edges; the un-limited (raw) edge feeds mom6_ppm_limit_scale. Pure scalar algebra, [m].",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:reconstruct"],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201. (Eq. 1.6, the edge interpolation.)",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "expression_templates": {
+    "mom6_ppm_edge": {
+      "params": ["h_side", "h_0", "slp_side", "slp_0", "m_side"],
+      "description": "One raw PPM edge of a cell (MOM_continuity_PPM.F90:2428-2449), left or right by the caller's slope bindings",
+      "body": {
+        "op": "+",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              0.5,
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      { "op": "*", "args": ["m_side", "h_side"] },
+                      { "op": "*", "args": [{ "op": "-", "args": [1.0, "m_side"] }, "h_0"] }
+                    ]
+                  },
+                  "h_0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              { "op": "/", "args": [1.0, 6.0] },
+              { "op": "-", "args": ["slp_side", "slp_0"] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

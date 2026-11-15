@@ -1,0 +1,380 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_momentum_pgf_ast_fixture",
+    "description": "AST-expansion conformance fixture for the mom6_cgrid pressure-gradient rule pair (grids/mom6_cgrid/rules/mom6_cgrid_diff_x/y.esm, with the face-thickness averages mom6_cgrid_avg_u/v.esm) at N_I = N_J = 8, N_K = 3 (the traced stage-2 subdomain of EqESM stage2/mom6_momentum.esm): the same five equations as the consuming PressureGradientForce model — P_int = pa_top*h + intz_dpa, the east/north face pressure-difference groups dP_x = -diff_x(P_int) + (diff_x(h)*intx_pa - diff_x(e_bot)*intx_dpa*Z_to_H) and dP_y = -diff_y(P_int) + (diff_y(h)*inty_pa - diff_y(e_bot)*inty_dpa*Z_to_H) (the g1 + (g2f - g2s) grouping of PressureForce_FV_Bouss :1797-1805, bit-exact against the dump, built from the east/north face forward differences of MOM_PressureForce_FV.F90:1795-1813 with the explicit mirrored 0 wall regions at i = N_I / j = N_J), and the face accelerations PFu = 2*I_Rho0*IdxCu*dP_x/(2*avg_u(h) + h_neglect) and PFv = 2*I_Rho0*IdyCv*dP_y/(2*avg_v(h) + h_neglect) (the 0.5 face averages of avg_u/avg_v doubled back to the exact h_c + h_e/h_n + h_neglect denominator — exact since the 0.5 factor is a power of two — with the mirrored wall regions). Forces expansion of the diff rules' 0-valued wall regions and the avg rules' mirrored wall regions at the domain edges; every apply_expression_template node of the named-op rules must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/3 at the grid import edge). The stage-2 test pins (stage2/mom6_momentum.esm) carry the numeric comparison against the Fortran dumps at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mom6_cgrid",
+      "rule:mom6_cgrid_diff_x",
+      "rule:mom6_cgrid_diff_y",
+      "rule:mom6_cgrid_avg_u",
+      "rule:mom6_cgrid_avg_v"
+    ]
+  },
+  "models": {
+    "Mom6CgridMomentumPgfAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/mom6_cgrid/grid.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_diff_x.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_diff_y.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_avg_u.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_avg_v.esm"
+        }
+      ],
+      "variables": {
+        "pa_top": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Pressure anomaly at the top interface of layer k at the cells."
+        },
+        "h": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer thickness at the cells (start-of-step, the pgf dump's h)."
+        },
+        "intz_dpa": {
+          "type": "parameter",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Vertical integral in depth of the pressure anomaly less the top pressure anomaly, over the layer."
+        },
+        "e_bot": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface height below layer k at the cells."
+        },
+        "intx_pa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface integral of the pressure anomaly along the east faces divided by the grid spacing."
+        },
+        "inty_pa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface integral of the pressure anomaly along the north faces divided by the grid spacing."
+        },
+        "intx_dpa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer change of intx_pa along the east faces."
+        },
+        "inty_dpa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer change of inty_pa along the north faces."
+        },
+        "IdxCu": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/zonal face length at the east faces."
+        },
+        "IdyCv": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/meridional face length at the north faces."
+        },
+        "I_Rho0": {
+          "type": "parameter",
+          "units": "m^3/kg",
+          "default": 0.0,
+          "description": "1/rho0, the Boussinesq density scaling of the PGF."
+        },
+        "h_neglect": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Thickness denominator floor of the face acceleration."
+        },
+        "Z_to_H": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.0,
+          "description": "Depth-to-height conversion of the e_bot correction term."
+        },
+        "P_int": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Vertical integral of the pressure anomaly over layer k, the g1 numerator group of the face law."
+        },
+        "dP_x": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face pressure-difference group g1 + g2, the diff_x rule assembly target."
+        },
+        "dP_y": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face pressure-difference group, the dP_x mirror with the s/n neighbours."
+        },
+        "PFu": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Zonal pressure-gradient acceleration on the east faces."
+        },
+        "PFv": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Meridional pressure-gradient acceleration on the north faces."
+        }
+      },
+      "equations": [
+        {
+          "lhs": "P_int",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": ["pa_top", "h"]
+              },
+              "intz_dpa"
+            ]
+          }
+        },
+        {
+          "lhs": "dP_x",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "mom6_cgrid_diff_x",
+                    "args": ["P_int"]
+                  }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "mom6_cgrid_diff_x",
+                        "args": ["h"]
+                      },
+                      "intx_pa"
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "mom6_cgrid_diff_x",
+                            "args": ["e_bot"]
+                          },
+                          "intx_dpa"
+                        ]
+                      },
+                      "Z_to_H"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dP_y",
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "mom6_cgrid_diff_y",
+                    "args": ["P_int"]
+                  }
+                ]
+              },
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "mom6_cgrid_diff_y",
+                        "args": ["h"]
+                      },
+                      "inty_pa"
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "mom6_cgrid_diff_y",
+                            "args": ["e_bot"]
+                          },
+                          "inty_dpa"
+                        ]
+                      },
+                      "Z_to_H"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "PFu",
+          "rhs": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "const",
+                            "args": [],
+                            "value": 2.0,
+                            "units": "1"
+                          },
+                          "I_Rho0"
+                        ]
+                      },
+                      "IdxCu"
+                    ]
+                  },
+                  "dP_x"
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "const",
+                        "args": [],
+                        "value": 2.0,
+                        "units": "1"
+                      },
+                      {
+                        "op": "mom6_cgrid_avg_u",
+                        "args": ["h"]
+                      }
+                    ]
+                  },
+                  "h_neglect"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "PFv",
+          "rhs": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "*",
+                        "args": [
+                          {
+                            "op": "const",
+                            "args": [],
+                            "value": 2.0,
+                            "units": "1"
+                          },
+                          "I_Rho0"
+                        ]
+                      },
+                      "IdyCv"
+                    ]
+                  },
+                  "dP_y"
+                ]
+              },
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "op": "const",
+                        "args": [],
+                        "value": 2.0,
+                        "units": "1"
+                      },
+                      {
+                        "op": "mom6_cgrid_avg_v",
+                        "args": ["h"]
+                      }
+                    ]
+                  },
+                  "h_neglect"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

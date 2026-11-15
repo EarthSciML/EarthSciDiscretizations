@@ -1,0 +1,523 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_momentum_ast_fixture",
+    "description": "AST-expansion conformance fixture for the mom6_cgrid momentum rule set (grids/mom6_cgrid/rules/mom6_cgrid_vort_x/y.esm, mom6_cgrid_grad_x/y.esm, mom6_cgrid_avg_u/v.esm, mom6_cgrid_avg_cell.esm, mom6_cgrid_sum_q.esm, mom6_cgrid_mask2dBu.esm, mom6_cgrid_pvf_u/v.esm, mom6_cgrid_bound_coriolis_u/v.esm) at N_I = N_J = 8, N_K = 3 (the traced stage-2 subdomain of EqESM stage2/mom6_momentum.esm): the same twenty equations as the consuming MomentumCoriolis model — the ground per-variable D rewrites dvdx = D(v,x) and dudy = D(u,y) (the dyCv/dxCu-weighted q-point forward differences of MOM_CoriolisAdv.F90:322-326 with the explicit free-slip 0 east/north wall regions), KEx = D(KE,x) and KEy = D(KE,y) (the IdxCu/IdyCv-scaled east/north face gradients of gradKE :1249-1397 with 0 walls), the q-point mask mask2dBu = mom6_cgrid_mask2dBu(mask) (the four-cell product with the explicit 0 walls at i = N_I / j = N_J), the rel_vort/av chain, the face layer volumes hArea_u = mom6_cgrid_avg_u(Ah_h) and hArea_v = mom6_cgrid_avg_v(Ah_h) (0.5 cell-to-face averages with the mirrored east/north walls) from the Ah_h = Area_h*h cell product, the q-cell corner sum hArea_q = mom6_cgrid_sum_q(hArea_u, hArea_v) (the (x_u(i,j)+x_u(i,j+1))+(x_v(i,j)+x_v(i+1,j)) grouping, through the mom6_q_corner_sum template, with the land faces beyond the east/north walls bound to 0), Ih_q/q, the KE_ARAKAWA cell kinetic energy KE = IareaT*mom6_cgrid_avg_cell(eu2, nv2) (the 0.25 four-face average mom6_cell_face_mean with the west/south wall-face terms bound to 0, the div-rule wall-flux-zero convention), the raw SADOURNY75_ENERGY PV fluxes pvf_u = mom6_cgrid_pvf_u(q, vh, IdxCu) and pvf_v = mom6_cgrid_pvf_v(q, uh, IdyCv) (both through the mom6_sadourny_pvf template, with the wall-face and land-face fluxes bound to 0), and the bound_coriolis accelerations CAu = mom6_cgrid_bound_coriolis_u(pvf_u, av, v, KEx) and CAv = mom6_cgrid_bound_coriolis_v(pvf_v, av, u, KEy) (the mom6_coriolis_clamp4 min/max clamp over the fv/fu products, the wall-face and land-face velocity products bound to 0). Forces expansion of every rule's region makearrays (the vort/grad/mask2dBu rules' 0-valued wall regions, the avg rules' mirrored wall regions, the avg_cell/sum_q/pvf/bound rules' zero-wall-term regions) at the domain edges; every apply_expression_template node of the named-op rules must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/3 at the grid import edge). The numeric comparison is carried by tests/conformance/simulation/mom6_cgrid_momentum (independent numpy transcription of CorAdCalc and PressureForce_FV_Bouss, including the faces next to the walls) and by the stage-2 test pins (stage2/mom6_momentum.esm) against the Fortran dumps at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
+    "license": "MIT",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mom6_cgrid",
+      "rule:mom6_cgrid_vort_x",
+      "rule:mom6_cgrid_vort_y",
+      "rule:mom6_cgrid_grad_x",
+      "rule:mom6_cgrid_grad_y",
+      "rule:mom6_cgrid_avg_u",
+      "rule:mom6_cgrid_avg_v",
+      "rule:mom6_cgrid_avg_cell",
+      "rule:mom6_cgrid_sum_q",
+      "rule:mom6_cgrid_mask2dBu",
+      "rule:mom6_cgrid_pvf_u",
+      "rule:mom6_cgrid_pvf_v",
+      "rule:mom6_cgrid_bound_coriolis_u",
+      "rule:mom6_cgrid_bound_coriolis_v"
+    ]
+  },
+  "models": {
+    "Mom6CgridMomentumAst": {
+      "expression_template_imports": [
+        {
+          "ref": "../../../../grids/mom6_cgrid/grid.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_vort_x.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_vort_y.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_grad_x.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_grad_y.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_avg_u.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_avg_v.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_avg_cell.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_sum_q.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_mask2dBu.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_pvf_u.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_pvf_v.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_bound_coriolis_u.esm"
+        },
+        {
+          "ref": "../../../../grids/mom6_cgrid/rules/mom6_cgrid_bound_coriolis_v.esm"
+        }
+      ],
+      "variables": {
+        "mask": {
+          "type": "parameter",
+          "units": "1",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "0/1 ocean-cell indicator on the T cells."
+        },
+        "Area_h": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Cell area of the h-cells."
+        },
+        "IareaT": {
+          "type": "parameter",
+          "units": "1/m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/cell area of the h-cells, the KE_ARAKAWA normalization."
+        },
+        "areaCu": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "u-cell area on the east faces, the KE_ARAKAWA face weight."
+        },
+        "areaCv": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "v-cell area on the north faces, the KE_ARAKAWA face weight."
+        },
+        "IdxCu": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/zonal face length at the east faces."
+        },
+        "IdyCv": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/meridional face length at the north faces."
+        },
+        "dxCu": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Zonal face length at the east faces."
+        },
+        "dyCv": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Meridional face length at the north faces."
+        },
+        "IareaBu": {
+          "type": "parameter",
+          "units": "1/m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/q-cell area at the q-points."
+        },
+        "f": {
+          "type": "parameter",
+          "units": "1/s",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Coriolis parameter at the q-points."
+        },
+        "Aq": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "q-cell area at the q-points."
+        },
+        "h": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer thickness on the T cells."
+        },
+        "u": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face zonal velocity."
+        },
+        "v": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face meridional velocity."
+        },
+        "uh": {
+          "type": "parameter",
+          "units": "m^3/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face zonal layer volume flux."
+        },
+        "vh": {
+          "type": "parameter",
+          "units": "m^3/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face meridional layer volume flux."
+        },
+        "vol_neglect": {
+          "type": "parameter",
+          "units": "m^3",
+          "default": 0.0,
+          "description": "hArea_q denominator floor."
+        },
+        "Ah_h": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Area_h*h, the cell layer volume, the avg_u/avg_v rule argument."
+        },
+        "eu2": {
+          "type": "unknown",
+          "units": "m^4/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "areaCu*u^2 on the east faces, an avg_cell rule argument."
+        },
+        "nv2": {
+          "type": "unknown",
+          "units": "m^4/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "areaCv*v^2 on the north faces, an avg_cell rule argument."
+        },
+        "dvdx": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Zonal derivative of the meridional volume transport at the q-points, the vort_x rule target."
+        },
+        "dudy": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Meridional derivative of the zonal volume transport at the q-points, the vort_y rule target."
+        },
+        "mask2dBu": {
+          "type": "unknown",
+          "units": "1",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "The q-point mask, the mask2dBu rule target."
+        },
+        "rel_vort": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Relative vorticity at the q-points."
+        },
+        "av": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Absolute vorticity at the q-points."
+        },
+        "hArea_u": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the u-cell on the east face, the avg_u rule target."
+        },
+        "hArea_v": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the v-cell on the north face, the avg_v rule target."
+        },
+        "hArea_q": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the q-cell, the sum_q rule target."
+        },
+        "Ih_q": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "1/q-cell layer thickness."
+        },
+        "q": {
+          "type": "unknown",
+          "units": "m^-1 s^-1",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Potential vorticity at the q-points."
+        },
+        "KE": {
+          "type": "unknown",
+          "units": "m^2/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Kinetic energy on the T cells, the grad rule operand."
+        },
+        "KEx": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Zonal KE gradient at the east faces, the grad_x rule target."
+        },
+        "KEy": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Meridional KE gradient at the north faces, the grad_y rule target."
+        },
+        "pvf_u": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Raw east-face potential-vorticity flux, the pvf_u rule target."
+        },
+        "pvf_v": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Raw north-face potential-vorticity flux, the pvf_v rule target."
+        },
+        "CAu": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face Coriolis + momentum-advection acceleration, the bound_coriolis_u rule target."
+        },
+        "CAv": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face Coriolis + momentum-advection acceleration, the bound_coriolis_v rule target."
+        }
+      },
+      "equations": [
+        {
+          "lhs": "dvdx",
+          "rhs": {
+            "op": "D",
+            "args": ["v"],
+            "wrt": "x"
+          }
+        },
+        {
+          "lhs": "dudy",
+          "rhs": {
+            "op": "D",
+            "args": ["u"],
+            "wrt": "y"
+          }
+        },
+        {
+          "lhs": "mask2dBu",
+          "rhs": {
+            "op": "mom6_cgrid_mask2dBu",
+            "args": ["mask"]
+          }
+        },
+        {
+          "lhs": "rel_vort",
+          "rhs": {
+            "op": "*",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  "mask2dBu",
+                  {
+                    "op": "-",
+                    "args": ["dvdx", "dudy"]
+                  }
+                ]
+              },
+              "IareaBu"
+            ]
+          }
+        },
+        {
+          "lhs": "av",
+          "rhs": {
+            "op": "+",
+            "args": ["f", "rel_vort"]
+          }
+        },
+        {
+          "lhs": "Ah_h",
+          "rhs": {
+            "op": "*",
+            "args": ["Area_h", "h"]
+          }
+        },
+        {
+          "lhs": "hArea_u",
+          "rhs": {
+            "op": "mom6_cgrid_avg_u",
+            "args": ["Ah_h"]
+          }
+        },
+        {
+          "lhs": "hArea_v",
+          "rhs": {
+            "op": "mom6_cgrid_avg_v",
+            "args": ["Ah_h"]
+          }
+        },
+        {
+          "lhs": "hArea_q",
+          "rhs": {
+            "op": "mom6_cgrid_sum_q",
+            "args": ["hArea_u", "hArea_v"]
+          }
+        },
+        {
+          "lhs": "Ih_q",
+          "rhs": {
+            "op": "/",
+            "args": [
+              "Aq",
+              {
+                "op": "+",
+                "args": ["hArea_q", "vol_neglect"]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "q",
+          "rhs": {
+            "op": "*",
+            "args": ["av", "Ih_q"]
+          }
+        },
+        {
+          "lhs": "eu2",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "areaCu",
+              {
+                "op": "^",
+                "args": ["u", 2]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "nv2",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "areaCv",
+              {
+                "op": "^",
+                "args": ["v", 2]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "KE",
+          "rhs": {
+            "op": "*",
+            "args": [
+              "IareaT",
+              {
+                "op": "mom6_cgrid_avg_cell",
+                "args": ["eu2", "nv2"]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "KEx",
+          "rhs": {
+            "op": "D",
+            "args": ["KE"],
+            "wrt": "x"
+          }
+        },
+        {
+          "lhs": "KEy",
+          "rhs": {
+            "op": "D",
+            "args": ["KE"],
+            "wrt": "y"
+          }
+        },
+        {
+          "lhs": "pvf_u",
+          "rhs": {
+            "op": "mom6_cgrid_pvf_u",
+            "args": ["q", "vh", "IdxCu"]
+          }
+        },
+        {
+          "lhs": "pvf_v",
+          "rhs": {
+            "op": "mom6_cgrid_pvf_v",
+            "args": ["q", "uh", "IdyCv"]
+          }
+        },
+        {
+          "lhs": "CAu",
+          "rhs": {
+            "op": "mom6_cgrid_bound_coriolis_u",
+            "args": ["pvf_u", "av", "v", "KEx"]
+          }
+        },
+        {
+          "lhs": "CAv",
+          "rhs": {
+            "op": "mom6_cgrid_bound_coriolis_v",
+            "args": ["pvf_v", "av", "u", "KEy"]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_vort_x",
+    "description": "The zonal C-grid vorticity rewrite target D(v, wrt: x) on the mom6_cgrid: lowers the spatial derivative of the meridional face velocity field v [i,j,k] (the north-face velocity of each T cell) to the q-point zonal derivative of the meridional volume transport dvdx(i,j,k) = v(i+1,j,k)*dyCv(i+1,j) - v(i,j,k)*dyCv(i,j) (the forward difference dvdx(I,J) = v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J) of MOM_CoriolisAdv.F90:322-323, with v(i+1,j) the north-face velocity of the east neighbor cell, i.e. the v at the east side of the q-point, and dyCv(i+1,j) its face length; the vorticity is second-order accurate with free-slip boundaries). SOLID-WALL BOUNDARY: the q-points at the east domain edge (i = N_I) lie on the east wall. MOM6 still forms dvdx there (= -v(N_I,j)*dyCv(N_I,j), the land v beyond being 0), but its free-slip relative vorticity multiplies dvdx by mask2dBu = 0 on wall q-points (MOM_CoriolisAdv.F90:526), so no wall value ever reaches rel_vort; this rule states the free-slip result explicitly, dvdx(N_I,j,k) = 0. UNDIVIDED: D(v, x) lowers to the undivided circulation difference v(i+1,j)*dyCv(i+1,j) - v(i,j)*dyCv(i,j) [m2 s-1], NOT a derivative dv/dx: no 1/dx factor is applied, because MOM6 divides the q-cell circulation (dvdx - dudy) by the q-cell area once, through IareaBu (:526). A consumer that wants dv/dx must not import this rule. The rule is a GROUND per-variable selector (esm-spec 9.6.1): v is NOT a parameter, so the match arg \"v\" is a literal that fires only on the derivative of the declared variable named v — mixed-scheme per-variable selection on one axis — and carries priority 20 so it outranks the wildcard sibling mom6_cgrid_div_x (priority 10, whose uh IS a parameter), which matches any [i,j,k] operand, whenever both are imported. SHAPE GUARD: esm-spec 9.6.1 admits `where` keys only for declared params (a non-param key is apply_expression_template_invalid_declaration), so a ground selector cannot carry a where shape constraint; making v a param to constrain it would turn the rule into a wildcard D(*, x) over [i,j,k] fields that outranks mom6_cgrid_div_x on every operand. The guard is therefore the literal name: the rule fires only on D(v, x) of a variable named v, and a consumer importing it must declare v as the [i,j,k] field this rule assumes (the momentum fixtures and problems/mom6_cgrid_momentum.esm do). The body is a pure forward difference of the face transport — no reconstruction (the momentum PV advection is centered, PV_ADV_CENTERED). v and dyCv are free names resolved in the consuming model (the free-name contract of grids/mom6_cgrid/grid.esm); the body's v is the matched operand, so a consumer must bind the derivative target's operand to a declared field named v (esm-spec 9.6.1, the same bare-variable discipline as a where shape constraint).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:vort",
+      "order:1",
+      "bc:wall",
+      "axes:i,j,k",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc, dvdx at :322-323 (Stokes_VF = .false. branch); the q-point convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_vort_x": {
+      "params": [],
+      "priority": 20,
+      "match": {
+        "op": "D",
+        "args": ["v"],
+        "wrt": "x"
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, { "op": "-", "args": ["N_I", 1] }],
+            [1, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            ["N_I", "N_I"],
+            [1, "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["v", "dyCv"],
+            "ranges": {
+              "i": [1, { "op": "-", "args": ["N_I", 1] }],
+              "j": [1, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["dyCv", { "op": "+", "args": ["i", 1] }, "j"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["v", { "op": "+", "args": ["i", 1] }, "j", "k"]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["dyCv", "i", "j"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["v", "i", "j", "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          0.0
+        ]
+      }
+    }
+  }
+}

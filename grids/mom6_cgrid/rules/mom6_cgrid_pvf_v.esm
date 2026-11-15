@@ -1,0 +1,138 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_pvf_v",
+    "description": "The raw north-face potential-vorticity flux of the SADOURNY75_ENERGY Coriolis scheme on the mom6_cgrid: pvf_v(i,j,k) = -0.25 * ((q(i-1,j,k)*(uh(i-1,j,k) + uh(i-1,j+1,k))) + (q(i,j,k)*(uh(i,j,k) + uh(i,j+1,k)))) * IdyCv(i,j), the CAv of MOM_CoriolisAdv.F90 CorAdCalc :951-953 before the bound_coriolis clamp and the -KEy term, with q the layer potential vorticity at the q-points at the two ends of the north face (q(i-1,j) west, q(i,j) east), uh the east-face layer volume fluxes adjacent to them (uh(i-1,j)/uh(i-1,j+1) the west faces of the cell and its north neighbour, uh(i,j)/uh(i,j+1) their east faces) and IdyCv(i,j) the north-face 1/length. Every region applies the one law mom6_sadourny_pvf (the same template as mom6_cgrid_pvf_u) with region bindings, negated. SOLID-WALL BOUNDARIES (a basin closed by land, MOM6's zero wall fluxes): at i = 1 the west faces uh(0,j)/uh(0,j+1) are the closed west wall, flux 0, so the q(0,j) term vanishes (q_a, f_a1, f_a2 are bound to 0; the wall q-point is not stored and is multiplied only by zero fluxes) and pvf_v(1,j) = -0.25*(0 + (q(1,j)*(uh(1,j) + uh(1,j+1))))*IdyCv(1,j), an interior north face whose value MOM6 computes from the east-side term alone. At j = N_J the north face is the closed north wall itself and uh(*,N_J+1) are east faces of the land row beyond it, flux 0, so f_a2 and f_b2 are bound to 0 (the literal MOM6 value at the wall face, whose velocity is 0). The NW corner applies both. (Before this revision the wall regions copied the edge cell's own q/uh into the out-of-domain slots, double-counting the interior term on the whole i = 1 column of real faces.) The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_pvf_v(q, uh, IdyCv); the where clause requires q and uh to be [i,j,k] fields and IdyCv an [i,j] field (esm-spec 9.6.1).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:mom6_cgrid", "grid:mom6_cgrid", "op:pvf", "order:0", "bc:wall", "axes:i,j,k"],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc SADOURNY75_ENERGY CAv at :949-954; the face conventions of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [{ "ref": "../grid.esm" }, { "ref": "../stencils/mom6_sadourny_pvf.esm" }],
+  "expression_templates": {
+    "mom6_cgrid_pvf_v": {
+      "params": ["q", "uh", "IdyCv"],
+      "match": { "op": "mom6_cgrid_pvf_v", "args": ["q", "uh", "IdyCv"] },
+      "where": { "q": { "shape": ["i", "j", "k"] }, "uh": { "shape": ["i", "j", "k"] }, "IdyCv": { "shape": ["i", "j"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, "N_I"], [1, { "op": "-", "args": ["N_J", 1] }], [1, "N_K"]],
+          [[1, 1], [1, { "op": "-", "args": ["N_J", 1] }], [1, "N_K"]],
+          [[2, "N_I"], ["N_J", "N_J"], [1, "N_K"]],
+          [[1, 1], ["N_J", "N_J"], [1, "N_K"]]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": { "i": [2, "N_I"], "j": [1, { "op": "-", "args": ["N_J", 1] }], "k": [1, "N_K"] },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mom6_sadourny_pvf",
+                  "bindings": {
+                    "q_a": { "op": "index", "args": ["q", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                    "f_a1": { "op": "index", "args": ["uh", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                    "f_a2": { "op": "index", "args": ["uh", { "op": "-", "args": ["i", 1] }, { "op": "+", "args": ["j", 1] }, "k"] },
+                    "q_b": { "op": "index", "args": ["q", "i", "j", "k"] },
+                    "f_b1": { "op": "index", "args": ["uh", "i", "j", "k"] },
+                    "f_b2": { "op": "index", "args": ["uh", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                    "I_d": { "op": "index", "args": ["IdyCv", "i", "j"] }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": { "i": [1, 1], "j": [1, { "op": "-", "args": ["N_J", 1] }], "k": [1, "N_K"] },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mom6_sadourny_pvf",
+                  "bindings": {
+                    "q_a": 0.0,
+                    "f_a1": 0.0,
+                    "f_a2": 0.0,
+                    "q_b": { "op": "index", "args": ["q", "i", "j", "k"] },
+                    "f_b1": { "op": "index", "args": ["uh", "i", "j", "k"] },
+                    "f_b2": { "op": "index", "args": ["uh", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                    "I_d": { "op": "index", "args": ["IdyCv", "i", "j"] }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": { "i": [2, "N_I"], "j": ["N_J", "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mom6_sadourny_pvf",
+                  "bindings": {
+                    "q_a": { "op": "index", "args": ["q", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                    "f_a1": { "op": "index", "args": ["uh", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                    "f_a2": 0.0,
+                    "q_b": { "op": "index", "args": ["q", "i", "j", "k"] },
+                    "f_b1": { "op": "index", "args": ["uh", "i", "j", "k"] },
+                    "f_b2": 0.0,
+                    "I_d": { "op": "index", "args": ["IdyCv", "i", "j"] }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["q", "uh", "IdyCv"],
+            "ranges": { "i": [1, 1], "j": ["N_J", "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mom6_sadourny_pvf",
+                  "bindings": {
+                    "q_a": 0.0,
+                    "f_a1": 0.0,
+                    "f_a2": 0.0,
+                    "q_b": { "op": "index", "args": ["q", "i", "j", "k"] },
+                    "f_b1": { "op": "index", "args": ["uh", "i", "j", "k"] },
+                    "f_b2": 0.0,
+                    "I_d": { "op": "index", "args": ["IdyCv", "i", "j"] }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

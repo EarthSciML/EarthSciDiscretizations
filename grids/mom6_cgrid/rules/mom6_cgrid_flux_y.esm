@@ -1,0 +1,116 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_flux_y",
+    "description": "The meridional PPM layer-flux lowering rule of the mom6_cgrid, the y mirror of mom6_cgrid_flux_x: matches the user rewrite target mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) (the north-face layer volume flux of every cell) and emits the [i,j,k] makearray of the MOM6 meridional flux law (merid_flux_layer, MOM_continuity_PPM.F90:1852-1872, VOL_CFL=False, por_face_areaV = 1): vh(i,j,k) = dx_Cv_N(i,j) * v_N(i,j,k) * (the PPM parabola integral of the UPWIND cell's PPM_limit_pos-limited edges), applying the same two per-cell templates as the zonal rule along j (PPM_reconstruction_y is PPM_reconstruction_x with the axes swapped). The sign of the face velocity selects the upwind cell: v_N > 0 upwinds the cell itself, mom6_ppm_upwind_flux_pos bound to the stencil j-2..j+2 with I_dx = IdyT(i,j) (F90:1854-1861: CFL = v*dt*IdyT(i,j), vh = dx*v*(h_N(i,j) + CFL*(0.5*(h_S(i,j) - h_N(i,j)) + curv_3*(CFL - 1.5)))); v_N < 0 upwinds the north neighbour, mom6_ppm_upwind_flux_neg bound to the stencil j-1..j+3 with I_dx = IdyT_n(i,j) (F90:1862-1869: CFL = -v*dt*IdyT(i,j+1), vh = dx*v*(h_S(i,j+1) + CFL*(0.5*(h_N(i,j+1) - h_S(i,j+1)) + curv_3*(CFL - 1.5)))); v_N == 0 gives the zero flux. LAND CLOSURE: the stencil index expressions CLAMP at the domain edges (max(1, j-2), max(1, j-1) low; min(N_J, j+2), min(N_J, j+3) high), which reproduces MOM6's land-masked closure exactly, as if the cells outside the domain were land (the clamped thickness is the masked-neighbour replacement and the clamped slope of an edge or ghost cell is identically zero; see mom6_cgrid_flux_x). The NORTH DOMAIN WALL is an explicit region: the face at j = N_J (the north edge of the last cell row) carries the zero flux of a solid wall whatever v_N holds there; the convergence (vh(i,j) - vh(i,j-1))*IareaT then telescopes to -vh(i,N_J-1)*IareaT in the sibling mom6_cgrid_div_y. The consuming model spells vh = mom6_cgrid_flux_y(h, v_N, dx_Cv_N, mask, h_min_recon, dt, IdyT, IdyT_n) with h [i,j,k], v_N [i,j,k], the horizontal metrics dx_Cv_N/IdyT/IdyT_n [i,j], mask [i,j] and the scalars h_min_recon/dt (esm-spec 9.6.1: non-param strings in the match are literal per-variable selectors, so the rule fires only on THIS operator with exactly these argument variables).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:mom6_cgrid", "grid:mom6_cgrid", "op:advection", "order:3", "bc:wall", "axes:i,j,k", "spec:9.6.8"],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J. (1994). A nearly conservative flux-reconstruction scheme. Monthly Weather Review, 122(5), 994-1011. (The monotonic slope constraint, Eq. B2.)"
+      },
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../grid.esm" },
+    { "ref": "../stencils/mom6_ppm_upwind_flux_pos.esm" },
+    { "ref": "../stencils/mom6_ppm_upwind_flux_neg.esm" }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_flux_y": {
+      "params": ["h", "v_N", "dx_Cv_N", "mask", "h_min_recon", "dt", "IdyT", "IdyT_n"],
+      "priority": 10,
+      "match": { "op": "mom6_cgrid_flux_y", "args": ["h", "v_N", "dx_Cv_N", "mask", "h_min_recon", "dt", "IdyT", "IdyT_n"] },
+      "where": {
+        "h": { "shape": ["i", "j", "k"] },
+        "v_N": { "shape": ["i", "j", "k"] },
+        "dx_Cv_N": { "shape": ["i", "j"] },
+        "mask": { "shape": ["i", "j"] },
+        "IdyT": { "shape": ["i", "j"] },
+        "IdyT_n": { "shape": ["i", "j"] }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, "N_I"], [1, { "op": "-", "args": ["N_J", 1] }], [1, "N_K"]],
+          [[1, "N_I"], ["N_J", "N_J"], [1, "N_K"]]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["h", "v_N", "dx_Cv_N", "mask", "h_min_recon", "dt", "IdyT", "IdyT_n"],
+            "ranges": { "i": [1, "N_I"], "j": [1, { "op": "-", "args": ["N_J", 1] }], "k": [1, "N_K"] },
+            "expr": {
+              "op": "ifelse",
+              "args": [
+                { "op": ">", "args": [{ "op": "index", "args": ["v_N", "i", "j", "k"] }, 0.0] },
+                {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mom6_ppm_upwind_flux_pos",
+                  "bindings": {
+                    "u": { "op": "index", "args": ["v_N", "i", "j", "k"] },
+                    "dt": "dt",
+                    "dy": { "op": "index", "args": ["dx_Cv_N", "i", "j"] },
+                    "I_dx": { "op": "index", "args": ["IdyT", "i", "j"] },
+                    "h_m2": { "op": "index", "args": ["h", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 2] }] }, "k"] },
+                    "h_m1": { "op": "index", "args": ["h", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 1] }] }, "k"] },
+                    "h_0": { "op": "index", "args": ["h", "i", "j", "k"] },
+                    "h_p1": { "op": "index", "args": ["h", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                    "h_p2": { "op": "index", "args": ["h", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 2] }] }, "k"] },
+                    "m_m2": { "op": "index", "args": ["mask", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 2] }] }] },
+                    "m_m1": { "op": "index", "args": ["mask", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 1] }] }] },
+                    "m_0": { "op": "index", "args": ["mask", "i", "j"] },
+                    "m_p1": { "op": "index", "args": ["mask", "i", { "op": "+", "args": ["j", 1] }] },
+                    "m_p2": { "op": "index", "args": ["mask", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 2] }] }] },
+                    "h_min_recon": "h_min_recon"
+                  }
+                },
+                {
+                  "op": "ifelse",
+                  "args": [
+                    { "op": "<", "args": [{ "op": "index", "args": ["v_N", "i", "j", "k"] }, 0.0] },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "mom6_ppm_upwind_flux_neg",
+                      "bindings": {
+                        "u": { "op": "index", "args": ["v_N", "i", "j", "k"] },
+                        "dt": "dt",
+                        "dy": { "op": "index", "args": ["dx_Cv_N", "i", "j"] },
+                        "I_dx": { "op": "index", "args": ["IdyT_n", "i", "j"] },
+                        "h_m2": { "op": "index", "args": ["h", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 1] }] }, "k"] },
+                        "h_m1": { "op": "index", "args": ["h", "i", "j", "k"] },
+                        "h_0": { "op": "index", "args": ["h", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                        "h_p1": { "op": "index", "args": ["h", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 2] }] }, "k"] },
+                        "h_p2": { "op": "index", "args": ["h", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 3] }] }, "k"] },
+                        "m_m2": { "op": "index", "args": ["mask", "i", { "op": "max", "args": [1, { "op": "-", "args": ["j", 1] }] }] },
+                        "m_m1": { "op": "index", "args": ["mask", "i", "j"] },
+                        "m_0": { "op": "index", "args": ["mask", "i", { "op": "+", "args": ["j", 1] }] },
+                        "m_p1": { "op": "index", "args": ["mask", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 2] }] }] },
+                        "m_p2": { "op": "index", "args": ["mask", "i", { "op": "min", "args": ["N_J", { "op": "+", "args": ["j", 3] }] }] },
+                        "h_min_recon": "h_min_recon"
+                      }
+                    },
+                    0.0
+                  ]
+                }
+              ]
+            }
+          },
+          0.0
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_avg_cell",
+    "description": "The face-to-cell average on the mom6_cgrid: avg_cell(i,j,k) = 0.25*((x_u(i,j,k) + x_u(i-1,j,k)) + (x_v(i,j,k) + x_v(i,j-1,k))), the quarter-sum of the four face values of a cell, with x_u [i,j,k] the east-face field (x_u(i-1,j) is the cell's west face) and x_v [i,j,k] the north-face field (x_v(i,j-1) is its south face). Every region applies the one law mom6_cell_face_mean with region bindings. KE ASSUMPTION: the average is UNWEIGHTED. It reproduces the KE_ARAKAWA kinetic energy of MOM_CoriolisAdv.F90 gradKE :1290-1297, KE = (((areaCu(I,j)*u(I,j)^2) + (areaCu(I-1,j)*u(I-1,j)^2)) + ((areaCv(i,J)*v(i,J)^2) + (areaCv(i,J-1)*v(i,J-1)^2)))*0.25*IareaT, only if the consumer passes the area-weighted squares x_u = areaCu*u^2 and x_v = areaCv*v^2 and multiplies the result by IareaT itself (KE = IareaT*avg_cell(eu2, nv2) in the momentum fixture); with plain u^2/v^2 it is the KE_SIMPLE-style unweighted mean, not KE_ARAKAWA. SOLID-WALL BOUNDARIES: the west face of cell i = 1 and the south face of cell j = 1 are the closed domain walls, where the velocity (hence any face value built from it) is 0, the same zero-wall convention as mom6_cgrid_div_x/y, so those slots are bound to 0: avg_cell(1,j,k) = 0.25*((x_u(1,j,k) + 0) + (x_v(1,j,k) + x_v(1,j-1,k))), avg_cell(i,1,k) = 0.25*((x_u(i,1,k) + x_u(i-1,1,k)) + (x_v(i,1,k) + 0)), both at the (1,1) corner, which is the Fortran's grouping with u(0,j) = v(i,0) = 0. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_avg_cell(x_u, x_v); both params must be declared [i,j,k] fields (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:mom6_cgrid", "grid:mom6_cgrid", "op:avg", "order:0", "bc:wall", "axes:i,j,k"],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 gradKE :1290-1297, the KE_ARAKAWA cell sum; the face conventions of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [{ "ref": "../grid.esm" }, { "ref": "../stencils/mom6_cell_face_mean.esm" }],
+  "expression_templates": {
+    "mom6_cgrid_avg_cell": {
+      "params": ["x_u", "x_v"],
+      "match": { "op": "mom6_cgrid_avg_cell", "args": ["x_u", "x_v"] },
+      "where": { "x_u": { "shape": ["i", "j", "k"] }, "x_v": { "shape": ["i", "j", "k"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, "N_I"], [2, "N_J"], [1, "N_K"]],
+          [[1, 1], [2, "N_J"], [1, "N_K"]],
+          [[2, "N_I"], [1, 1], [1, "N_K"]],
+          [[1, 1], [1, 1], [1, "N_K"]]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [2, "N_I"], "j": [2, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_cell_face_mean",
+              "bindings": {
+                "x_e": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_w": { "op": "index", "args": ["x_u", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                "x_n": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_s": { "op": "index", "args": ["x_v", "i", { "op": "-", "args": ["j", 1] }, "k"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [1, 1], "j": [2, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_cell_face_mean",
+              "bindings": {
+                "x_e": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_w": 0.0,
+                "x_n": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_s": { "op": "index", "args": ["x_v", "i", { "op": "-", "args": ["j", 1] }, "k"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [2, "N_I"], "j": [1, 1], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_cell_face_mean",
+              "bindings": {
+                "x_e": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_w": { "op": "index", "args": ["x_u", { "op": "-", "args": ["i", 1] }, "j", "k"] },
+                "x_n": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_s": 0.0
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [1, 1], "j": [1, 1], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_cell_face_mean",
+              "bindings": {
+                "x_e": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_w": 0.0,
+                "x_n": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_s": 0.0
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

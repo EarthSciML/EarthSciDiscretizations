@@ -328,9 +328,24 @@ function run_simulation(output_dir, files, verbose)
         try
             problem = normpath(joinpath(case_dir, String(manifest["problem"])))
             alg, reltol, abstol = integrator_opts(manifest)
-            results = ESS.run_inline_tests(problem;
-                model_name=String(manifest["model"]),
-                alg=alg, reltol=reltol, abstol=abstol)
+            # An optional "bindings" entry (the ast-category shape) rebinds the
+            # grid metaparameters before the tests run: load the problem with
+            # load_path(...; metaparameters=bindings) and run the loaded file
+            # (the §9.7.6 loader-API binding site, same as the convergence
+            # category). The other bindings' simulation runners do not read it
+            # (their manifests say so via scope_excluded).
+            if haskey(manifest, "bindings")
+                bindings = Dict{String,Int}(String(k) => Int(v)
+                                            for (k, v) in pairs(manifest["bindings"]))
+                file = ESS.load_path(problem; metaparameters=bindings)
+                results = ESS.run_inline_tests(file;
+                    model_name=String(manifest["model"]),
+                    alg=alg, reltol=reltol, abstol=abstol)
+            else
+                results = ESS.run_inline_tests(problem;
+                    model_name=String(manifest["model"]),
+                    alg=alg, reltol=reltol, abstol=abstol)
+            end
             wanted = Set(String.(manifest["tests"]))
             results = [r for r in results if r.test_id in wanted]
             isempty(results) && error("no assertions ran for tests $(collect(wanted))")

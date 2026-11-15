@@ -1,0 +1,1154 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_momentum",
+    "description": "Numeric conformance problem for the mom6_cgrid momentum rules (grids/mom6_cgrid/rules/mom6_cgrid_vort_x/y, grad_x/y, mask2dBu, avg_u/v, sum_q, avg_cell, pvf_u/v, bound_coriolis_u/v, diff_x/y) on a tiny 5x5x1 basin closed by solid walls (the grid metaparameters N_I/N_J/N_K are bound to 5/5/1 by the simulation manifest). The model chains the same equations as the AST fixtures tests/conformance/ast/mom6_cgrid_momentum (the SADOURNY75_ENERGY Coriolis + KE_ARAKAWA momentum-advection acceleration CAu/CAv of MOM_CoriolisAdv.F90 CorAdCalc with bound_Coriolis) and mom6_cgrid_momentum_pgf (the PressureForce_FV_Bouss face accelerations PFu/PFv of MOM_PressureForce_FV.F90:1796-1813) (the two accelerations a MOM6 momentum step sums with its other tendencies). The wall convention is MOM6's for a basin closed by land: velocities and volume fluxes on the closed wall faces (and on land faces beyond the domain) are 0, so the state sets u(5,j) = uh(5,j) = 0 on the east wall faces and v(i,5) = vh(i,5) = 0 on the north wall faces. Assertions are made only where MOM6 defines the value on such a basin: every interior u-face (i < N_I) and v-face (j < N_J), every cell, and the q-points off the walls. EVALUATION FORM: the products of an [i,j] metric with an [i,j,k] field are written as explicit faq index loops, and the rule calls that feed them (avg_cell, avg_u/avg_v) as their own variables, because the Julia tree-walk evaluator of EarthSciAST 184aa13d3 does not broadcast an [i,j] operand (a parameter array or a makearray result) against an [i,j,k] one (E_TREEWALK_CONSTARRAY_NDIM / E_TREEWALK_MAKEARRAY_NDIM); the arithmetic and its association are those of the AST fixtures.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:mom6_cgrid",
+      "rule:mom6_cgrid_vort_x",
+      "rule:mom6_cgrid_vort_y",
+      "rule:mom6_cgrid_grad_x",
+      "rule:mom6_cgrid_grad_y",
+      "rule:mom6_cgrid_mask2dBu",
+      "rule:mom6_cgrid_avg_u",
+      "rule:mom6_cgrid_avg_v",
+      "rule:mom6_cgrid_sum_q",
+      "rule:mom6_cgrid_avg_cell",
+      "rule:mom6_cgrid_pvf_u",
+      "rule:mom6_cgrid_pvf_v",
+      "rule:mom6_cgrid_bound_coriolis_u",
+      "rule:mom6_cgrid_bound_coriolis_v",
+      "rule:mom6_cgrid_diff_x",
+      "rule:mom6_cgrid_diff_y"
+    ],
+    "references": [
+      {
+        "citation": "Sadourny, R. (1975). The dynamics of finite-difference models of the shallow-water equations. Journal of the Atmospheric Sciences, 32(4), 680-689.",
+        "doi": "10.1175/1520-0469(1975)032<0680:TDOFDM>2.0.CO;2"
+      },
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      }
+    ]
+  },
+  "models": {
+    "Mom6CgridMomentum": {
+      "expression_template_imports": [
+        { "ref": "../grids/mom6_cgrid/grid.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_vort_x.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_vort_y.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_grad_x.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_grad_y.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_avg_u.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_avg_v.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_avg_cell.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_sum_q.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_mask2dBu.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_pvf_u.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_pvf_v.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_bound_coriolis_u.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_bound_coriolis_v.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_diff_x.esm" },
+        { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_diff_y.esm" }
+      ],
+      "variables": {
+        "u": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face zonal velocity (0 on the east wall faces i = N_I)."
+        },
+        "v": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face meridional velocity (0 on the north wall faces j = N_J)."
+        },
+        "mask": {
+          "type": "parameter",
+          "units": "1",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "0/1 ocean-cell indicator on the T cells (all ocean)."
+        },
+        "Area_h": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Ocean area of the h-cells (areaT*mask2dT)."
+        },
+        "IareaT": {
+          "type": "parameter",
+          "units": "1/m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/cell area of the h-cells, the KE_ARAKAWA normalization."
+        },
+        "areaCu": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "u-cell area on the east faces, the KE_ARAKAWA face weight."
+        },
+        "areaCv": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "v-cell area on the north faces, the KE_ARAKAWA face weight."
+        },
+        "IdxCu": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/zonal length of the u-cell at the east faces."
+        },
+        "IdyCv": {
+          "type": "parameter",
+          "units": "1/m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/meridional length of the v-cell at the north faces."
+        },
+        "dxCu": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Zonal length of the u-cell at the east faces (the dudy circulation weight)."
+        },
+        "dyCv": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Meridional length of the v-cell at the north faces (the dvdx circulation weight)."
+        },
+        "IareaBu": {
+          "type": "parameter",
+          "units": "1/m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "1/q-cell area at the q-points."
+        },
+        "f": {
+          "type": "parameter",
+          "units": "1/s",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Coriolis parameter at the q-points."
+        },
+        "Aq": {
+          "type": "parameter",
+          "units": "m^2",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "Area_q of CorAdCalc (MOM_CoriolisAdv.F90:314): the sum of the four adjacent ocean cell areas Area_h at the q-point (land cells beyond the walls count 0)."
+        },
+        "h": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer thickness on the T cells."
+        },
+        "uh": {
+          "type": "parameter",
+          "units": "m^3/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face zonal layer volume flux (0 on the east wall faces)."
+        },
+        "vh": {
+          "type": "parameter",
+          "units": "m^3/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face meridional layer volume flux (0 on the north wall faces)."
+        },
+        "vol_neglect": { "type": "parameter", "units": "m^3", "default": 0.0, "description": "hArea_q denominator floor." },
+        "pa_top": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Pressure anomaly at the top interface of layer k at the cells."
+        },
+        "intz_dpa": {
+          "type": "parameter",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Vertical integral in depth of the pressure anomaly less the top pressure anomaly, over the layer."
+        },
+        "e_bot": {
+          "type": "parameter",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface height below layer k at the cells."
+        },
+        "intx_pa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface integral of the pressure anomaly along the east faces divided by the grid spacing."
+        },
+        "inty_pa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Interface integral of the pressure anomaly along the north faces divided by the grid spacing."
+        },
+        "intx_dpa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer change of intx_pa along the east faces."
+        },
+        "inty_dpa": {
+          "type": "parameter",
+          "units": "Pa",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer change of inty_pa along the north faces."
+        },
+        "I_Rho0": {
+          "type": "parameter",
+          "units": "m^3/kg",
+          "default": 0.0,
+          "description": "1/rho0, the Boussinesq density scaling of the PGF."
+        },
+        "h_neglect": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Thickness denominator floor of the face acceleration."
+        },
+        "Z_to_H": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.0,
+          "description": "Depth-to-thickness conversion of the e_bot correction term."
+        },
+        "Ah_h": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Area_h*h, the cell layer volume, the avg_u/avg_v argument."
+        },
+        "eu2": {
+          "type": "unknown",
+          "units": "m^4/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "areaCu*u^2 on the east faces, an avg_cell argument (the KE_ARAKAWA weighting avg_cell itself does not apply)."
+        },
+        "nv2": {
+          "type": "unknown",
+          "units": "m^4/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "areaCv*v^2 on the north faces, an avg_cell argument."
+        },
+        "dvdx": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "The undivided circulation difference D(v,x) at the q-points, the vort_x target."
+        },
+        "dudy": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "The undivided circulation difference D(u,y) at the q-points, the vort_y target."
+        },
+        "mask2dBu": {
+          "type": "unknown",
+          "units": "1",
+          "shape": ["i", "j"],
+          "default": 0.0,
+          "description": "The q-point mask, the mask2dBu target."
+        },
+        "rel_vort": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Free-slip relative vorticity at the q-points."
+        },
+        "av": {
+          "type": "unknown",
+          "units": "1/s",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Absolute vorticity at the q-points."
+        },
+        "hArea_u": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the u-cell on the east face, the avg_u target."
+        },
+        "hArea_v": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the v-cell on the north face, the avg_v target."
+        },
+        "hArea_q": {
+          "type": "unknown",
+          "units": "m^3",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Layer volume of the q-cell, the sum_q target."
+        },
+        "Ih_q": {
+          "type": "unknown",
+          "units": "1/m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "1/q-cell layer thickness."
+        },
+        "q": {
+          "type": "unknown",
+          "units": "m^-1 s^-1",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Potential vorticity at the q-points."
+        },
+        "KE_sum": {
+          "type": "unknown",
+          "units": "m^4/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "The unweighted four-face mean avg_cell(eu2, nv2) (area-weighted squares, m^4/s^2); KE = IareaT*KE_sum is KE_ARAKAWA."
+        },
+        "KE": {
+          "type": "unknown",
+          "units": "m^2/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "KE_ARAKAWA kinetic energy on the T cells, the grad rule operand."
+        },
+        "KEx": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Zonal KE gradient at the east faces, the grad_x target."
+        },
+        "KEy": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Meridional KE gradient at the north faces, the grad_y target."
+        },
+        "pvf_u": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Raw east-face potential-vorticity flux, the pvf_u target."
+        },
+        "pvf_v": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Raw north-face potential-vorticity flux, the pvf_v target."
+        },
+        "CAu": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face Coriolis + momentum-advection acceleration, the bound_coriolis_u target."
+        },
+        "CAv": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face Coriolis + momentum-advection acceleration, the bound_coriolis_v target."
+        },
+        "P_int": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Vertical integral of the pressure anomaly over layer k."
+        },
+        "dP_x": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "East-face pressure-difference group."
+        },
+        "dP_y": {
+          "type": "unknown",
+          "units": "Pa m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "North-face pressure-difference group."
+        },
+        "h_u": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Face thickness avg_u(h) at the east faces, half the PFu denominator."
+        },
+        "h_v": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Face thickness avg_v(h) at the north faces, half the PFv denominator."
+        },
+        "PFu": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Zonal pressure-gradient acceleration on the east faces."
+        },
+        "PFv": {
+          "type": "unknown",
+          "units": "m/s^2",
+          "shape": ["i", "j", "k"],
+          "default": 0.0,
+          "description": "Meridional pressure-gradient acceleration on the north faces."
+        }
+      },
+      "equations": [
+        { "lhs": "dvdx", "rhs": { "op": "D", "args": ["v"], "wrt": "x" } },
+        { "lhs": "dudy", "rhs": { "op": "D", "args": ["u"], "wrt": "y" } },
+        { "lhs": "mask2dBu", "rhs": { "op": "mom6_cgrid_mask2dBu", "args": ["mask"] } },
+        {
+          "lhs": "rel_vort",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["mask2dBu", "dvdx", "dudy", "IareaBu"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    { "op": "index", "args": ["mask2dBu", "i", "j"] },
+                    {
+                      "op": "-",
+                      "args": [
+                        { "op": "index", "args": ["dvdx", "i", "j", "k"] },
+                        { "op": "index", "args": ["dudy", "i", "j", "k"] }
+                      ]
+                    }
+                  ]
+                },
+                { "op": "index", "args": ["IareaBu", "i", "j"] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "av",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["f", "rel_vort"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "+",
+              "args": [{ "op": "index", "args": ["f", "i", "j"] }, { "op": "index", "args": ["rel_vort", "i", "j", "k"] }]
+            }
+          }
+        },
+        {
+          "lhs": "Ah_h",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["Area_h", "h"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "*",
+              "args": [{ "op": "index", "args": ["Area_h", "i", "j"] }, { "op": "index", "args": ["h", "i", "j", "k"] }]
+            }
+          }
+        },
+        { "lhs": "hArea_u", "rhs": { "op": "mom6_cgrid_avg_u", "args": ["Ah_h"] } },
+        { "lhs": "hArea_v", "rhs": { "op": "mom6_cgrid_avg_v", "args": ["Ah_h"] } },
+        { "lhs": "hArea_q", "rhs": { "op": "mom6_cgrid_sum_q", "args": ["hArea_u", "hArea_v"] } },
+        {
+          "lhs": "Ih_q",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["Aq", "hArea_q", "vol_neglect"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                { "op": "index", "args": ["Aq", "i", "j"] },
+                { "op": "+", "args": [{ "op": "index", "args": ["hArea_q", "i", "j", "k"] }, "vol_neglect"] }
+              ]
+            }
+          }
+        },
+        { "lhs": "q", "rhs": { "op": "*", "args": ["av", "Ih_q"] } },
+        {
+          "lhs": "eu2",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["areaCu", "u"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["areaCu", "i", "j"] },
+                { "op": "^", "args": [{ "op": "index", "args": ["u", "i", "j", "k"] }, 2] }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "nv2",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["areaCv", "v"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "*",
+              "args": [
+                { "op": "index", "args": ["areaCv", "i", "j"] },
+                { "op": "^", "args": [{ "op": "index", "args": ["v", "i", "j", "k"] }, 2] }
+              ]
+            }
+          }
+        },
+        { "lhs": "KE_sum", "rhs": { "op": "mom6_cgrid_avg_cell", "args": ["eu2", "nv2"] } },
+        {
+          "lhs": "KE",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["IareaT", "KE_sum"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "*",
+              "args": [{ "op": "index", "args": ["IareaT", "i", "j"] }, { "op": "index", "args": ["KE_sum", "i", "j", "k"] }]
+            }
+          }
+        },
+        { "lhs": "KEx", "rhs": { "op": "D", "args": ["KE"], "wrt": "x" } },
+        { "lhs": "KEy", "rhs": { "op": "D", "args": ["KE"], "wrt": "y" } },
+        { "lhs": "pvf_u", "rhs": { "op": "mom6_cgrid_pvf_u", "args": ["q", "vh", "IdxCu"] } },
+        { "lhs": "pvf_v", "rhs": { "op": "mom6_cgrid_pvf_v", "args": ["q", "uh", "IdyCv"] } },
+        { "lhs": "CAu", "rhs": { "op": "mom6_cgrid_bound_coriolis_u", "args": ["pvf_u", "av", "v", "KEx"] } },
+        { "lhs": "CAv", "rhs": { "op": "mom6_cgrid_bound_coriolis_v", "args": ["pvf_v", "av", "u", "KEy"] } },
+        { "lhs": "P_int", "rhs": { "op": "+", "args": [{ "op": "*", "args": ["pa_top", "h"] }, "intz_dpa"] } },
+        {
+          "lhs": "dP_x",
+          "rhs": {
+            "op": "+",
+            "args": [
+              { "op": "-", "args": [{ "op": "mom6_cgrid_diff_x", "args": ["P_int"] }] },
+              {
+                "op": "-",
+                "args": [
+                  { "op": "*", "args": [{ "op": "mom6_cgrid_diff_x", "args": ["h"] }, "intx_pa"] },
+                  {
+                    "op": "*",
+                    "args": [{ "op": "*", "args": [{ "op": "mom6_cgrid_diff_x", "args": ["e_bot"] }, "intx_dpa"] }, "Z_to_H"]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lhs": "dP_y",
+          "rhs": {
+            "op": "+",
+            "args": [
+              { "op": "-", "args": [{ "op": "mom6_cgrid_diff_y", "args": ["P_int"] }] },
+              {
+                "op": "-",
+                "args": [
+                  { "op": "*", "args": [{ "op": "mom6_cgrid_diff_y", "args": ["h"] }, "inty_pa"] },
+                  {
+                    "op": "*",
+                    "args": [{ "op": "*", "args": [{ "op": "mom6_cgrid_diff_y", "args": ["e_bot"] }, "inty_dpa"] }, "Z_to_H"]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        { "lhs": "h_u", "rhs": { "op": "mom6_cgrid_avg_u", "args": ["h"] } },
+        { "lhs": "h_v", "rhs": { "op": "mom6_cgrid_avg_v", "args": ["h"] } },
+        {
+          "lhs": "PFu",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["I_Rho0", "IdxCu", "dP_x", "h_u", "h_neglect"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [{ "op": "*", "args": [2.0, "I_Rho0"] }, { "op": "index", "args": ["IdxCu", "i", "j"] }]
+                    },
+                    { "op": "index", "args": ["dP_x", "i", "j", "k"] }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [{ "op": "*", "args": [2.0, { "op": "index", "args": ["h_u", "i", "j", "k"] }] }, "h_neglect"]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "lhs": "PFv",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["I_Rho0", "IdyCv", "dP_y", "h_v", "h_neglect"],
+            "ranges": { "i": [1, "N_I"], "j": [1, "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [{ "op": "*", "args": [2.0, "I_Rho0"] }, { "op": "index", "args": ["IdyCv", "i", "j"] }]
+                    },
+                    { "op": "index", "args": ["dP_y", "i", "j", "k"] }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [{ "op": "*", "args": [2.0, { "op": "index", "args": ["h_v", "i", "j", "k"] }] }, "h_neglect"]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "tests": [
+        {
+          "id": "momentum_numeric",
+          "description": "Instantaneous numeric pin (time span 0 to 0, rel 1e-11) of the momentum rule chain on the 5x5x1 basin. STATE: u(i,j) = 0.1*sin(1.3i + 0.7j) and v(i,j) = 0.08*cos(0.9i - 1.1j) rounded to 3 decimals, 0 on the east/north wall faces; h = 100 + 7i - 3j m with a 5 m bump at (3,3); cell widths dxT by i = (10, 11, 9, 12, 10) km and dyT by j = (10, 9.5, 10.5, 11, 9) km, the face metrics and areas derived from them (dxCu, dyCv the face-centred spacings, Area_h = dxT*dyT, areaCu = dxCu*dyT, areaCv = dxT*dyCv, IareaBu = 1/(dxCu*dyCv), Aq = MOM6's Area_q, the sum of the four adjacent ocean Area_h); f = 1e-4 + 2e-6 j; uh = u*dyT*(60 + 4j) and vh = v*dxT*(55 + 3i) (face thicknesses different from the cell means, as a PPM face thickness is), with uh(2,3) and vh(3,3) scaled by 4 and 6 so that the bound_Coriolis clamp is ACTIVE at the interior faces CAu(2,3) (pvf_u above max fv) and CAv(2,3) (pvf_v above max fu); the PGF fields are smooth linear profiles. WALLS: the south-row u-faces (j = 1: pvf_u/CAu(1,1), (2,1), (4,1)) and west-column v-faces (i = 1: pvf_v/CAv(1,1), (1,3), (1,4)) are real interior faces next to a wall; MOM6 drops the wall q-point term there (zero wall fluxes) and includes 0 in the bound_Coriolis range (zero wall velocities). The pre-fix rules (which copied the edge cell into the wall slots) give twice the pvf at every such face and clamp CAu(1,1), CAu(4,1), CAv(1,1), CAv(1,3), CAv(1,4) to a nonzero bound, so these assertions fail on them. KE(1,j), KE(i,1), KE(1,1) pin avg_cell's west/south wall terms. EXPECTED VALUES come from an independent numpy transcription of MOM_CoriolisAdv.F90 CorAdCalc (dvdx/dudy :357-358, hArea_u/v :361-366, free-slip rel_vort :526, hArea_q/Ih_q/q :541-545, SADOURNY75_ENERGY CAu/CAv :724-726/:951-953, bound_Coriolis :897-908/:1139-1150, -KEx/-KEy :912-914/:1154-1156; gradKE KE_ARAKAWA :1295-1298 and KEx/KEy :1404/:1409) and of the PressureForce_FV_Bouss face law (MOM_PressureForce_FV.F90:1796-1813), evaluated on the basin padded with land cells (mask2dT = 0, Area_h = 0, zero velocities and fluxes on every wall and land face). The tolerance covers association-order differences only (e.g. the rule's 0.25*((...)*IdxCu) against the Fortran's (0.25*(...))*IdxCu).",
+          "time_span": { "start": 0.0, "end": 0.0 },
+          "parameter_overrides": {
+            "u": [
+              [[0.091], [0.043], [-0.026], [-0.082], [-0.1]],
+              [[-0.016], [-0.076], [-0.1], [-0.077], [-0.018]],
+              [[-0.099], [-0.083], [-0.028], [0.04], [0.09]],
+              [[-0.037], [0.031], [0.085], [0.099], [0.066]],
+              [[0.0], [0.0], [0.0], [0.0], [0.0]]
+            ],
+            "v": [
+              [[0.078], [0.021], [-0.059], [-0.075], [0.0]],
+              [[0.061], [0.074], [0.006], [-0.069], [0.0]],
+              [[-0.002], [0.07], [0.066], [-0.01], [0.0]],
+              [[-0.064], [0.014], [0.076], [0.056], [0.0]],
+              [[-0.077], [-0.053], [0.029], [0.08], [0.0]]
+            ],
+            "h": [
+              [[104.0], [101.0], [98.0], [95.0], [92.0]],
+              [[111.0], [108.0], [105.0], [102.0], [99.0]],
+              [[118.0], [115.0], [117.0], [109.0], [106.0]],
+              [[125.0], [122.0], [119.0], [116.0], [113.0]],
+              [[132.0], [129.0], [126.0], [123.0], [120.0]]
+            ],
+            "uh": [
+              [[58240.0], [27777.999999999996], [-19656.0], [-68552.0], [-72000.0]],
+              [[-10240.0], [-49096.0], [-302400.0], [-64372.0], [-12960.0]],
+              [[-63360.0], [-53618.0], [-21168.0], [33440.0], [64800.0]],
+              [[-23680.0], [20026.0], [64260.00000000001], [82764.0], [47520.0]],
+              [[0.0], [0.0], [0.0], [0.0], [0.0]]
+            ],
+            "vh": [
+              [[45240.0], [12180.0], [-34220.0], [-43500.0], [0.0]],
+              [[40931.0], [49654.0], [4026.0], [-46299.00000000001], [0.0]],
+              [[-1152.0], [40320.00000000001], [228096.0], [-5760.0], [0.0]],
+              [[-51456.0], [11256.0], [61104.0], [45024.0], [0.0]],
+              [[-53900.0], [-37100.0], [20300.0], [56000.0], [0.0]]
+            ],
+            "mask": [
+              [1.0, 1.0, 1.0, 1.0, 1.0],
+              [1.0, 1.0, 1.0, 1.0, 1.0],
+              [1.0, 1.0, 1.0, 1.0, 1.0],
+              [1.0, 1.0, 1.0, 1.0, 1.0],
+              [1.0, 1.0, 1.0, 1.0, 1.0]
+            ],
+            "Area_h": [
+              [100000000.0, 95000000.0, 105000000.0, 110000000.0, 90000000.0],
+              [110000000.0, 104500000.0, 115500000.0, 121000000.0, 99000000.0],
+              [90000000.0, 85500000.0, 94500000.0, 99000000.0, 81000000.0],
+              [120000000.0, 114000000.0, 126000000.0, 132000000.0, 108000000.0],
+              [100000000.0, 95000000.0, 105000000.0, 110000000.0, 90000000.0]
+            ],
+            "IareaT": [
+              [1e-08, 1.0526315789473684e-08, 9.523809523809524e-09, 9.09090909090909e-09, 1.1111111111111112e-08],
+              [
+                9.09090909090909e-09,
+                9.569377990430621e-09,
+                8.658008658008658e-09,
+                8.264462809917355e-09,
+                1.01010101010101e-08
+              ],
+              [
+                1.1111111111111112e-08,
+                1.1695906432748538e-08,
+                1.0582010582010582e-08,
+                1.01010101010101e-08,
+                1.234567901234568e-08
+              ],
+              [
+                8.333333333333334e-09,
+                8.771929824561404e-09,
+                7.936507936507936e-09,
+                7.575757575757576e-09,
+                9.259259259259259e-09
+              ],
+              [1e-08, 1.0526315789473684e-08, 9.523809523809524e-09, 9.09090909090909e-09, 1.1111111111111112e-08]
+            ],
+            "areaCu": [
+              [105000000.0, 99750000.0, 110250000.0, 115500000.0, 94500000.0],
+              [100000000.0, 95000000.0, 105000000.0, 110000000.0, 90000000.0],
+              [105000000.0, 99750000.0, 110250000.0, 115500000.0, 94500000.0],
+              [110000000.0, 104500000.0, 115500000.0, 121000000.0, 99000000.0],
+              [100000000.0, 95000000.0, 105000000.0, 110000000.0, 90000000.0]
+            ],
+            "areaCv": [
+              [97500000.0, 100000000.0, 107500000.0, 100000000.0, 90000000.0],
+              [107250000.0, 110000000.0, 118250000.0, 110000000.0, 99000000.0],
+              [87750000.0, 90000000.0, 96750000.0, 90000000.0, 81000000.0],
+              [117000000.0, 120000000.0, 129000000.0, 120000000.0, 108000000.0],
+              [97500000.0, 100000000.0, 107500000.0, 100000000.0, 90000000.0]
+            ],
+            "IdxCu": [
+              [
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05
+              ],
+              [0.0001, 0.0001, 0.0001, 0.0001, 0.0001],
+              [
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05,
+                9.523809523809524e-05
+              ],
+              [
+                9.09090909090909e-05,
+                9.09090909090909e-05,
+                9.09090909090909e-05,
+                9.09090909090909e-05,
+                9.09090909090909e-05
+              ],
+              [0.0001, 0.0001, 0.0001, 0.0001, 0.0001]
+            ],
+            "IdyCv": [
+              [0.00010256410256410256, 0.0001, 9.302325581395348e-05, 0.0001, 0.00011111111111111112],
+              [0.00010256410256410256, 0.0001, 9.302325581395348e-05, 0.0001, 0.00011111111111111112],
+              [0.00010256410256410256, 0.0001, 9.302325581395348e-05, 0.0001, 0.00011111111111111112],
+              [0.00010256410256410256, 0.0001, 9.302325581395348e-05, 0.0001, 0.00011111111111111112],
+              [0.00010256410256410256, 0.0001, 9.302325581395348e-05, 0.0001, 0.00011111111111111112]
+            ],
+            "dxCu": [
+              [10500.0, 10500.0, 10500.0, 10500.0, 10500.0],
+              [10000.0, 10000.0, 10000.0, 10000.0, 10000.0],
+              [10500.0, 10500.0, 10500.0, 10500.0, 10500.0],
+              [11000.0, 11000.0, 11000.0, 11000.0, 11000.0],
+              [10000.0, 10000.0, 10000.0, 10000.0, 10000.0]
+            ],
+            "dyCv": [
+              [9750.0, 10000.0, 10750.0, 10000.0, 9000.0],
+              [9750.0, 10000.0, 10750.0, 10000.0, 9000.0],
+              [9750.0, 10000.0, 10750.0, 10000.0, 9000.0],
+              [9750.0, 10000.0, 10750.0, 10000.0, 9000.0],
+              [9750.0, 10000.0, 10750.0, 10000.0, 9000.0]
+            ],
+            "IareaBu": [
+              [
+                9.768009768009768e-09,
+                9.523809523809524e-09,
+                8.859357696566999e-09,
+                9.523809523809524e-09,
+                1.0582010582010582e-08
+              ],
+              [1.0256410256410256e-08, 1e-08, 9.302325581395349e-09, 1e-08, 1.1111111111111112e-08],
+              [
+                9.768009768009768e-09,
+                9.523809523809524e-09,
+                8.859357696566999e-09,
+                9.523809523809524e-09,
+                1.0582010582010582e-08
+              ],
+              [
+                9.324009324009324e-09,
+                9.09090909090909e-09,
+                8.456659619450317e-09,
+                9.09090909090909e-09,
+                1.01010101010101e-08
+              ],
+              [1.0256410256410256e-08, 1e-08, 9.302325581395349e-09, 1e-08, 1.1111111111111112e-08]
+            ],
+            "f": [
+              [0.000102, 0.00010400000000000001, 0.000106, 0.00010800000000000001, 0.00011],
+              [0.000102, 0.00010400000000000001, 0.000106, 0.00010800000000000001, 0.00011],
+              [0.000102, 0.00010400000000000001, 0.000106, 0.00010800000000000001, 0.00011],
+              [0.000102, 0.00010400000000000001, 0.000106, 0.00010800000000000001, 0.00011],
+              [0.000102, 0.00010400000000000001, 0.000106, 0.00010800000000000001, 0.00011]
+            ],
+            "Aq": [
+              [409500000.0, 420000000.0, 451500000.0, 420000000.0, 189000000.0],
+              [390000000.0, 400000000.0, 430000000.0, 400000000.0, 180000000.0],
+              [409500000.0, 420000000.0, 451500000.0, 420000000.0, 189000000.0],
+              [429000000.0, 440000000.0, 473000000.0, 440000000.0, 198000000.0],
+              [195000000.0, 200000000.0, 215000000.0, 200000000.0, 90000000.0]
+            ],
+            "vol_neglect": 1e-20,
+            "pa_top": [
+              [[970.2], [950.6], [931.0], [911.4000000000001], [891.8000000000001]],
+              [[980.0], [960.4], [940.8], [921.2], [901.6]],
+              [[989.8], [970.2], [950.6], [931.0000000000001], [911.4000000000001]],
+              [[999.6], [980.0], [960.4], [940.8000000000001], [921.2]],
+              [[1009.4], [989.8], [970.2], [950.6000000000001], [931.0000000000001]]
+            ],
+            "intz_dpa": [
+              [[49146.99999999999], [49294.0], [49440.99999999999], [49588.0], [49734.99999999999]],
+              [[49294.0], [49588.0], [49882.0], [50176.0], [50470.0]],
+              [[49440.99999999999], [49882.0], [50322.99999999999], [50764.0], [51205.0]],
+              [[49588.0], [50176.0], [50764.0], [51352.0], [51940.0]],
+              [[49734.99999999999], [50470.0], [51205.0], [51940.0], [52675.0]]
+            ],
+            "e_bot": [
+              [[-100.5], [-99.0], [-97.5], [-96.0], [-94.5]],
+              [[-102.5], [-101.0], [-99.5], [-98.0], [-96.5]],
+              [[-104.5], [-103.0], [-101.5], [-100.0], [-98.5]],
+              [[-106.5], [-105.0], [-103.5], [-102.0], [-100.5]],
+              [[-108.5], [-107.0], [-105.5], [-104.0], [-102.5]]
+            ],
+            "intx_pa": [
+              [[1010.0], [1020.0], [1030.0], [1040.0], [1050.0]],
+              [[1010.0], [1020.0], [1030.0], [1040.0], [1050.0]],
+              [[1010.0], [1020.0], [1030.0], [1040.0], [1050.0]],
+              [[1010.0], [1020.0], [1030.0], [1040.0], [1050.0]],
+              [[1010.0], [1020.0], [1030.0], [1040.0], [1050.0]]
+            ],
+            "intx_dpa": [
+              [[490.0], [490.0], [490.0], [490.0], [490.0]],
+              [[480.0], [480.0], [480.0], [480.0], [480.0]],
+              [[470.0], [470.0], [470.0], [470.0], [470.0]],
+              [[460.0], [460.0], [460.0], [460.0], [460.0]],
+              [[450.0], [450.0], [450.0], [450.0], [450.0]]
+            ],
+            "inty_pa": [
+              [[1089.0], [1089.0], [1089.0], [1089.0], [1089.0]],
+              [[1078.0], [1078.0], [1078.0], [1078.0], [1078.0]],
+              [[1067.0], [1067.0], [1067.0], [1067.0], [1067.0]],
+              [[1056.0], [1056.0], [1056.0], [1056.0], [1056.0]],
+              [[1045.0], [1045.0], [1045.0], [1045.0], [1045.0]]
+            ],
+            "inty_dpa": [
+              [[456.74999999999994], [463.5], [470.24999999999994], [477.0], [483.75]],
+              [[456.74999999999994], [463.5], [470.24999999999994], [477.0], [483.75]],
+              [[456.74999999999994], [463.5], [470.24999999999994], [477.0], [483.75]],
+              [[456.74999999999994], [463.5], [470.24999999999994], [477.0], [483.75]],
+              [[456.74999999999994], [463.5], [470.24999999999994], [477.0], [483.75]]
+            ],
+            "I_Rho0": 0.000966183574879227,
+            "h_neglect": 1e-10,
+            "Z_to_H": 1.0
+          },
+          "assertions": [
+            {
+              "variable": "dvdx",
+              "time": 0.0,
+              "expected": -39.999999999999886,
+              "coords": { "i": 2, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "dudy",
+              "time": 0.0,
+              "expected": -240.0,
+              "coords": { "i": 2, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "rel_vort",
+              "time": 0.0,
+              "expected": 2.000000000000001e-06,
+              "coords": { "i": 2, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "hArea_q",
+              "time": 0.0,
+              "expected": 44302500000.0,
+              "coords": { "i": 2, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "q",
+              "time": 0.0,
+              "expected": 9.570565995147001e-07,
+              "coords": { "i": 2, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "q",
+              "time": 0.0,
+              "expected": 9.91515485962613e-07,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "q",
+              "time": 0.0,
+              "expected": 9.630829765073488e-07,
+              "coords": { "i": 4, "j": 4, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KE",
+              "time": 0.0,
+              "expected": 0.005288039682539684,
+              "coords": { "i": 3, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KE",
+              "time": 0.0,
+              "expected": 0.001173420238095238,
+              "coords": { "i": 1, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KE",
+              "time": 0.0,
+              "expected": 0.002930711111111111,
+              "coords": { "i": 3, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KE",
+              "time": 0.0,
+              "expected": 0.0036567375,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KEx",
+              "time": 0.0,
+              "expected": 1.5409704184704202e-07,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "KEy",
+              "time": 0.0,
+              "expected": 3.8380357142857316e-08,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_u",
+              "time": 0.0,
+              "expected": 8.071447794018126e-06,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAu",
+              "time": 0.0,
+              "expected": 7.689902958152958e-06,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_u",
+              "time": 0.0,
+              "expected": -1.6451039477571342e-08,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAu",
+              "time": 0.0,
+              "expected": 1.8112152039433058e-07,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_v",
+              "time": 0.0,
+              "expected": 9.879369051511229e-06,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAv",
+              "time": 0.0,
+              "expected": 9.840988694368372e-06,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_v",
+              "time": 0.0,
+              "expected": 1.1104667407571926e-05,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAv",
+              "time": 0.0,
+              "expected": 1.0958524413570927e-05,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_u",
+              "time": 0.0,
+              "expected": 2.034282879544865e-06,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAu",
+              "time": 0.0,
+              "expected": 2.102417565692051e-06,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_u",
+              "time": 0.0,
+              "expected": -1.7732344709720683e-06,
+              "coords": { "i": 4, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAu",
+              "time": 0.0,
+              "expected": -1.6246500012750986e-06,
+              "coords": { "i": 4, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAu",
+              "time": 0.0,
+              "expected": 8.99920802379188e-07,
+              "coords": { "i": 2, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_v",
+              "time": 0.0,
+              "expected": -2.1868763864495397e-06,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAv",
+              "time": 0.0,
+              "expected": -2.033615252846301e-06,
+              "coords": { "i": 1, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "pvf_v",
+              "time": 0.0,
+              "expected": 2.4051094673711556e-06,
+              "coords": { "i": 1, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAv",
+              "time": 0.0,
+              "expected": 2.152038728420184e-06,
+              "coords": { "i": 1, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "CAv",
+              "time": 0.0,
+              "expected": 3.9558096280134925e-06,
+              "coords": { "i": 1, "j": 4, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "PFu",
+              "time": 0.0,
+              "expected": 3.854289071678792e-07,
+              "coords": { "i": 2, "j": 3, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "PFu",
+              "time": 0.0,
+              "expected": -3.0608914384912504e-07,
+              "coords": { "i": 4, "j": 1, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "PFv",
+              "time": 0.0,
+              "expected": 1.1248958853901678e-06,
+              "coords": { "i": 3, "j": 2, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            },
+            {
+              "variable": "PFv",
+              "time": 0.0,
+              "expected": 4.2150404298718763e-07,
+              "coords": { "i": 1, "j": 4, "k": 1 },
+              "tolerance": { "rel": 1e-11, "abs": 0.0 }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
