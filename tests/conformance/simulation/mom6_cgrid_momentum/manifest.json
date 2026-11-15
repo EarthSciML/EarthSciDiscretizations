@@ -1,0 +1,20 @@
+{
+  "category": "simulation",
+  "version": "1.0",
+  "case": "mom6_cgrid_momentum",
+  "description": "Numeric conformance gate for the mom6_cgrid momentum rules (vort_x/y, grad_x/y, mask2dBu, avg_u/v, sum_q, avg_cell, pvf_u/v, bound_coriolis_u/v, diff_x/y): run the inline esm-spec 6.6 test of problems/mom6_cgrid_momentum.esm (model Mom6CgridMomentum, test momentum_numeric) at the tiny basin N_I = N_J = 5, N_K = 1 through the Julia simulation pathway. The 35 instant assertions (time span 0 to 0) pin the q-point circulation, vorticity, q-cell volume and PV, the KE_ARAKAWA cell kinetic energy and its face gradients, the SADOURNY75_ENERGY PV fluxes and the bound_Coriolis accelerations CAu/CAv (including two interior faces where the clamp is active, and the real faces next to the south and west walls, where MOM6 drops the wall q-point term and includes 0 in the clamp range), and the PressureForce_FV_Bouss face accelerations PFu/PFv, against an independent numpy transcription of MOM_CoriolisAdv.F90 CorAdCalc and MOM_PressureForce_FV.F90 on the basin padded with land, at rel 1e-11. The grid metaparameters arrive through the manifest's bindings entry, honored by the Julia runner via load_path(...; metaparameters=bindings) (the other bindings' simulation runners do not read it and are excluded below).",
+  "problem": "../../../../problems/mom6_cgrid_momentum.esm",
+  "model": "Mom6CgridMomentum",
+  "tests": ["momentum_numeric"],
+  "bindings": { "N_I": 5, "N_J": 5, "N_K": 1 },
+  "reference_binding": "julia",
+  "bindings_required": ["julia"],
+  "scope_excluded": {
+    "python": "python simulation runner does not read the manifest bindings entry yet (no metaparameter rebinding for simulation cases); add parity when it does",
+    "rust": "rust simulation runner does not read the manifest bindings entry yet (no metaparameter rebinding for simulation cases); add parity when it does",
+    "go": "rewrite-only port; no makearray lowering / simulator",
+    "typescript": "rewrite-only port; no makearray lowering / simulator"
+  },
+  "integrators": { "julia": { "algorithm": "Tsit5", "reltol": 1e-10, "abstol": 1e-12 } },
+  "status": "active"
+}
