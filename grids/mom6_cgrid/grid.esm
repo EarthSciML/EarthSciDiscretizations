@@ -1,0 +1,46 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid",
+    "description": "The Arakawa C-grid of the MOM6 ocean model: the cell axes `i` (x) and `j` (y) of the N_I x N_J thickness (T) cells, plus the layer axis `k` of the N_K layers that carry the per-layer state (the layer thickness h and the layer face velocities). The C-grid staggering: the zonal velocity u lives on the EAST faces of the T cells and the meridional velocity v on the NORTH faces; a face flux of a cell is the face velocity times the face length times the reconstructed upwind edge thickness. N_I, N_J, N_K are the esm-spec 9.7 metaparameters, bound at an import edge or the loader API; the consuming EqESM stage-2 model (stage2/mom6_dynamics.esm) binds N_I = N_J = 8, N_K = 2 for the traced 8x8 subdomain (global T cells i = -1..6, j = 74..81 of the stage-1 continuity dump) and the pinned dump layers k = 1 and 37. FREE-NAME CONTRACT: a consuming model supplies the real-valued geometry and state as its own variables with the names u_E/v_N (face velocities, shape [i,j,k]), dy_Cu_E/dx_Cv_N (east/north face lengths, [i,j]), mask (0/1 ocean-cell indicator, [i,j]), IdxT/IdxT_e and IdyT/IdyT_n (the 1/dxT of the cell and its east neighbor, the 1/dyT of the cell and its north neighbor, [i,j]), IareaT (1/cell area, [i,j]), h_min_recon (the PPM_limit_pos thickness floor) and dt (the tracer time step) as scalars — exactly the columns of the stage-1 continuity dump (mom6_continuity.csv) — together with the layer thickness field h [i,j,k] the rules advect; the rules below read them by bare name, so a consumer MAY either bind them from its own state (the stage-2 pin tests override them from the dump) or derive them through this file's templates. The single geometry template is the exact MOM6 reciprocal bridge (Adcroft_reciprocal, MOM_grid_initialize.F90:1173-1179, applied to the grid metrics at MOM_grid.F90:420-424): a consumer holding dxT/dyT/areaT (or dx_Cu/dy_Cv for the face metrics of a future pressure-gradient component) derives IdxT/IdyT/IareaT/IdxCu/IdyCv through it. The stage-2 model binds the dumped reciprocals directly so its pins compare the rules against the Fortran's own values bit-for-bit. The rules are the PPM continuity pair (stage-1 dump description; MOM_continuity_PPM.F90): mom6_cgrid_flux_x/y lower the per-face PPM layer volume flux uh = dy*u*int(parabola) (zonal_flux_layer F90:903-979, merid_flux_layer F90:1801-1885) and mom6_cgrid_div_x/y lower the C-grid flux-form divergence D(uh,x) = (uh(i,j) - uh(i-1,j))*IareaT, together the thickness continuity dh/dt = -div(uh) - div(vh). The reconstruction stencils transcribe PPM_reconstruction_x/y (F90:2327-2562) and PPM_limit_pos (F90:2636-2674) of the reference run (FIRST_DIRECTION=0, MONOTONIC_CONTINUITY=False, SIMPLE_2ND_PPM=False, UPWIND_1ST=False, VOL_CFL=False), including the masked-neighbor edge replacement and the zero slope on masked cells (G%mask2dT = 0 over land), as a DAG of one-template laws: the center slope mom6_ppm_slope (over mom6_ppm_slope_raw/_mag), the raw edges mom6_ppm_edge_w/_e (over mom6_ppm_edge), the PPM_limit_pos scale mom6_ppm_cell_scale (over mom6_ppm_limit_scale and its mom6_ppm_curv/_dh/_limit_scale_num/_limit_scale_den sub-laws), the limited edge mom6_ppm_limited_edge, the parabola integral mom6_ppm_face_integral, and the upwind-cell face fluxes mom6_ppm_upwind_flux_pos/_neg that the flux rules apply, one per flow direction, to the upwind cell's 5-cell stencil.",
+    "license": "MIT",
+    "tags": ["esd:grid", "family:mom6_cgrid", "ndim:2", "stagger:c", "axis:i", "axis:j", "axis:k"],
+    "references": [
+      {
+        "citation": "Adcroft, A., Anderson, W., Balaji, V., Blastoch, A., Bushuk, M., Dufour, C. O., ... & Zhang, R. (2019). The GFDL global ocean and sea ice model OM4.0: Model description and simulation features. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "Lin, S.-J. (1994). A nearly conservative flux-reconstruction scheme. Monthly Weather Review, 122(5), 994-1011. (The monotonic slope constraint, Eq. B2, used by PPM_reconstruction_x.)"
+      },
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      }
+    ]
+  },
+  "metaparameters": {
+    "N_I": { "type": "integer", "default": 8, "description": "Number of T cells along the C-grid x axis (cell-based axis), [-]." },
+    "N_J": { "type": "integer", "default": 8, "description": "Number of T cells along the C-grid y axis (cell-based axis), [-]." },
+    "N_K": { "type": "integer", "default": 2, "description": "Number of layers carried by the component (the traced continuity dump pins layers 1 and 37 of the reference run), [-]." }
+  },
+  "index_sets": {
+    "i": { "kind": "interval", "size": "N_I" },
+    "j": { "kind": "interval", "size": "N_J" },
+    "k": { "kind": "interval", "size": "N_K" }
+  },
+  "expression_templates": {
+    "mom6_adcroft_reciprocal": {
+      "params": ["x"],
+      "description": "The guarded reciprocal of the MOM6 grid metrics (Adcroft_reciprocal, MOM_grid_initialize.F90:1173-1179): 1/x, or exactly 0.0 when x == 0.0. The grid's metrics are derived with it at MOM_grid.F90:420-424 (IdxT = 1/dxT, IdyT = 1/dyT, IareaT = 1/areaT); a consumer holding the positive metric lengths applies this template to each to obtain the free-name reciprocals (the dump supplies the reciprocals directly, so the traced stage-2 model binds them rather than deriving).",
+      "body": {
+        "op": "ifelse",
+        "args": [
+          { "op": "==", "args": ["x", 0.0] },
+          0.0,
+          { "op": "/", "args": [1.0, "x"] }
+        ]
+      }
+    }
+  }
+}

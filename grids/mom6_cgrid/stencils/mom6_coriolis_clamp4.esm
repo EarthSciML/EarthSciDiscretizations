@@ -1,0 +1,35 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_coriolis_clamp4",
+    "description": "The bound_Coriolis clamp of MOM6 (MOM_CoriolisAdv.F90 CorAdCalc :897-908 for CAu, :1139-1150 for CAv): clamp4 = min(max(x, min(f1, f2, f3, f4)), max(f1, f2, f3, f4)), the raw Coriolis term x limited to the range of the four products f1..f4 of the absolute vorticity and the transverse velocity at the q-points around the face (fv1..fv4 = abs_vort*v for CAu, fu1..fu4 = -abs_vort*u for CAv). The Fortran applies CAu = min(CAu, max_fv) then CAu = max(CAu, min_fv); min(max(x, lo), hi) gives the same bits whenever lo <= hi, which always holds here. Each product is bound once, so the min and the max read the same four values. At a solid wall the rules bind a product whose transverse velocity sits on a closed wall face (or on a land face beyond the domain) to 0, so 0 enters the min and the max exactly as MOM6's zero wall velocity makes it. Pure scalar algebra.",
+    "license": "MIT",
+    "tags": ["esd:stencil", "family:mom6_cgrid", "grid:mom6_cgrid", "op:clamp"],
+    "references": [
+      {
+        "citation": "Sadourny, R. (1975). The dynamics of finite-difference models of the shallow-water equations. Journal of the Atmospheric Sciences, 32(4), 680-689.",
+        "doi": "10.1175/1520-0469(1975)032<0680:TDOFDM>2.0.CO;2"
+      },
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      }
+    ]
+  },
+  "expression_templates": {
+    "mom6_coriolis_clamp4": {
+      "params": ["x", "f1", "f2", "f3", "f4"],
+      "description": "The bound_Coriolis min/max clamp of a raw Coriolis term to four bounds (MOM_CoriolisAdv.F90:897-908, :1139-1150)",
+      "body": {
+        "op": "min",
+        "args": [
+          {
+            "op": "max",
+            "args": ["x", { "op": "min", "args": ["f1", { "op": "min", "args": ["f2", { "op": "min", "args": ["f3", "f4"] }] }] }]
+          },
+          { "op": "max", "args": ["f1", { "op": "max", "args": ["f2", { "op": "max", "args": ["f3", "f4"] }] }] }
+        ]
+      }
+    }
+  }
+}

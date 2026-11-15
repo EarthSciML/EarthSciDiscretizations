@@ -1,0 +1,87 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_diff_y",
+    "description": "The meridional face forward difference on the mom6_cgrid, the y mirror of mom6_cgrid_diff_x: diff_y(i,j,k) = X(i,j+1,k) - X(i,j,k), the north-neighbor-minus-cell difference of a cell field X [i,j,k] lowered onto the north faces. It is the difference-building block of the finite-volume pressure-gradient force of MOM_PressureForce_FV.F90 PressureForce_FV_Bouss (:1797-1805): the consumer assembles the north-face pressure-difference group dP_y = -diff_y(P_int) + diff_y(h)*inty_pa - diff_y(e_bot)*inty_dpa*Z_to_H from the P_int/h/e_bot cell fields and the inty_pa/inty_dpa north-face interface integrals, keeping the Fortran's exact g1 + (g2f - g2s) grouping (verified bit-exact against the dump), and the face-thickness denominator h_c + h_n of the PFv acceleration from 2*mom6_cgrid_avg_v(h) (exact since the 0.5 factor is a power of two). SOLID-WALL BOUNDARY: the north face at the domain edge (j = N_J) is a wall with a zero-gradient halo, so the j = N_J region is the EXPLICIT mirror wall diff_y(i,N_J,k) = X(i,N_J,k) - X(i,N_J,k) = 0 (the y mirror of the diff_x explicit-wall statement). The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_diff_y(X); X is a param whose shape must be declared [i,j,k] (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:diff",
+      "order:1",
+      "bc:wall",
+      "axes:i,j,k"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_PressureForce_FV.F90 PressureForce_FV_Bouss g1+g2 at :1797-1805; the north-face convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_diff_y": {
+      "params": ["X"],
+      "match": {
+        "op": "mom6_cgrid_diff_y",
+        "args": ["X"]
+      },
+      "where": {
+        "X": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, "N_I"],
+            [1, { "op": "-", "args": ["N_J", 1] }],
+            [1, "N_K"]
+          ],
+          [
+            [1, "N_I"],
+            ["N_J", "N_J"],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["X"],
+            "ranges": {
+              "i": [1, "N_I"],
+              "j": [1, { "op": "-", "args": ["N_J", 1] }],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "-",
+              "args": [
+                {
+                  "op": "index",
+                  "args": ["X", "i", { "op": "+", "args": ["j", 1] }, "k"]
+                },
+                {
+                  "op": "index",
+                  "args": ["X", "i", "j", "k"]
+                }
+              ]
+            }
+          },
+          0.0
+        ]
+      }
+    }
+  }
+}

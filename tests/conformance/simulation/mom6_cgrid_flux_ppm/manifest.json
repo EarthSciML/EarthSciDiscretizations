@@ -1,0 +1,35 @@
+{
+ "category": "simulation",
+ "version": "1.0",
+ "case": "mom6_cgrid_flux_ppm",
+ "description": "Numeric conformance gate for the mom6_cgrid PPM flux/divergence rule quartet: run the inline esm-spec 6.6 tests of problems/mom6_cgrid_flux_ppm.esm (model Mom6CgridFluxPpm, tests flux_law_numeric and limiter_and_walls_numeric) at the tiny grid N_I = N_J = 7, N_K = 1 through the Julia simulation pathway. flux_law_numeric's 14 instant assertions (time span 0 to 0) pin the rule-lowered zonal/meridional PPM layer fluxes and the C-grid face-flux divergences on a smooth bump with a masked cell; limiter_and_walls_numeric's 20 assertions pin the PPM_limit_pos 0 < scale < 1 and h <= h_min_recon branches (thin and vanished upwind cells), the faces next to all four walls (the clamped-index land closure), the west/south divergence wall regions, and the east/north zero-flux wall regions at nonzero wall velocity, on non-uniform metrics. All expected values are from an independent numpy transcription of MOM_continuity_PPM.F90 (which also reproduces the EqESM dump extractor's original 14 values exactly), at rel 1e-11. Unlike the AST fixture (tests/conformance/ast/mom6_cgrid_continuity, which pins the byte-identical post-lowering expansion by sha256), this case evaluates the lowered operators NUMERICALLY, so a rule change that keeps the expansion bytes intact but perturbs the arithmetic is caught here. The grid metaparameters arrive through the manifest's bindings entry, honored by the Julia runner via load_path(...; metaparameters=bindings) (the other bindings' simulation runners do not read it and are excluded below).",
+ "problem": "../../../../problems/mom6_cgrid_flux_ppm.esm",
+ "model": "Mom6CgridFluxPpm",
+ "tests": [
+  "flux_law_numeric",
+  "limiter_and_walls_numeric"
+ ],
+ "bindings": {
+  "N_I": 7,
+  "N_J": 7,
+  "N_K": 1
+ },
+ "reference_binding": "julia",
+ "bindings_required": [
+  "julia"
+ ],
+ "scope_excluded": {
+  "python": "python simulation runner does not read the manifest bindings entry yet (no metaparameter rebinding for simulation cases); add parity when it does",
+  "rust": "rust simulation runner does not read the manifest bindings entry yet (no metaparameter rebinding for simulation cases); add parity when it does",
+  "go": "rewrite-only port; no makearray lowering / simulator",
+  "typescript": "rewrite-only port; no makearray lowering / simulator"
+ },
+ "integrators": {
+  "julia": {
+   "algorithm": "Tsit5",
+   "reltol": 1e-10,
+   "abstol": 1e-12
+  }
+ },
+ "status": "active"
+}

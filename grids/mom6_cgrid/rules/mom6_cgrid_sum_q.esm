@@ -1,0 +1,106 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_sum_q",
+    "description": "The q-point corner sum on the mom6_cgrid: sum_q(i,j,k) = (x_u(i,j,k) + x_u(i,j+1,k)) + (x_v(i,j,k) + x_v(i+1,j,k)), the two east-face values south and north of the q-point at the NE corner of cell (i,j) plus the two north-face values west and east of it, the MOM6 q-cell layer volume hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J)) of MOM_CoriolisAdv.F90 CorAdCalc :542 (with hArea_u/hArea_v of :361-366). Every region applies the one law mom6_q_corner_sum with region bindings. WALL q-POINTS (a basin closed by land): the q-points at i = N_I and j = N_J lie on the east/north walls, where the face beyond the domain (x_v(N_I+1,j), x_u(i,N_J+1)) belongs to a land cell whose Area_h = 0 makes hArea_v/hArea_u vanish, so those slots are bound to 0, MOM6's value. (Before this revision they copied the edge face's own value.) A wall q-point never reaches an interior face: it multiplies only the zero wall-face fluxes in mom6_cgrid_pvf_u/v. The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_sum_q(x_u, x_v); both params must be declared [i,j,k] fields (esm-spec 9.6.1 where clause).",
+    "license": "MIT",
+    "tags": ["esd:rule", "family:mom6_cgrid", "grid:mom6_cgrid", "op:sum", "order:0", "bc:wall", "axes:i,j,k"],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      },
+      {
+        "citation": "MOM6 source: MOM_CoriolisAdv.F90 CorAdCalc hArea_q :541-545; the q-point convention of the mom6_cgrid grid.esm."
+      }
+    ]
+  },
+  "expression_template_imports": [{ "ref": "../grid.esm" }, { "ref": "../stencils/mom6_q_corner_sum.esm" }],
+  "expression_templates": {
+    "mom6_cgrid_sum_q": {
+      "params": ["x_u", "x_v"],
+      "match": { "op": "mom6_cgrid_sum_q", "args": ["x_u", "x_v"] },
+      "where": { "x_u": { "shape": ["i", "j", "k"] }, "x_v": { "shape": ["i", "j", "k"] } },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[1, { "op": "-", "args": ["N_I", 1] }], [1, { "op": "-", "args": ["N_J", 1] }], [1, "N_K"]],
+          [["N_I", "N_I"], [1, { "op": "-", "args": ["N_J", 1] }], [1, "N_K"]],
+          [[1, { "op": "-", "args": ["N_I", 1] }], ["N_J", "N_J"], [1, "N_K"]],
+          [["N_I", "N_I"], ["N_J", "N_J"], [1, "N_K"]]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [1, { "op": "-", "args": ["N_I", 1] }], "j": [1, { "op": "-", "args": ["N_J", 1] }], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_q_corner_sum",
+              "bindings": {
+                "x_s": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_n": { "op": "index", "args": ["x_u", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                "x_w": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_e": { "op": "index", "args": ["x_v", { "op": "+", "args": ["i", 1] }, "j", "k"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": ["N_I", "N_I"], "j": [1, { "op": "-", "args": ["N_J", 1] }], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_q_corner_sum",
+              "bindings": {
+                "x_s": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_n": { "op": "index", "args": ["x_u", "i", { "op": "+", "args": ["j", 1] }, "k"] },
+                "x_w": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_e": 0.0
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": [1, { "op": "-", "args": ["N_I", 1] }], "j": ["N_J", "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_q_corner_sum",
+              "bindings": {
+                "x_s": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_n": 0.0,
+                "x_w": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_e": { "op": "index", "args": ["x_v", { "op": "+", "args": ["i", 1] }, "j", "k"] }
+              }
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["x_u", "x_v"],
+            "ranges": { "i": ["N_I", "N_I"], "j": ["N_J", "N_J"], "k": [1, "N_K"] },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "mom6_q_corner_sum",
+              "bindings": {
+                "x_s": { "op": "index", "args": ["x_u", "i", "j", "k"] },
+                "x_n": 0.0,
+                "x_w": { "op": "index", "args": ["x_v", "i", "j", "k"] },
+                "x_e": 0.0
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

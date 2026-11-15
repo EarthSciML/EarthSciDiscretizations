@@ -1,0 +1,118 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "mom6_cgrid_div_y",
+    "description": "The meridional C-grid flux-form divergence rewrite target D(vh, wrt: y) on the mom6_cgrid, the y mirror of mom6_cgrid_div_x: lowers the spatial derivative of the north-face layer volume flux field vh [i,j,k] to the cell divergence div_y(i,j,k) = (vh(i,j,k) - vh(i,j-1,k)) * IareaT(i,j) (the MOM6 continuity convergence (vh(i,j) - vh(i,j-1))*IareaT of continuity_merid_convergence, MOM_continuity_PPM.F90:1564-1573, with vh(i,j) the north-face flux of each cell and vh(i,j-1) the north-face flux of the south neighbor, i.e. the south face of cell (i,j)). SOLID-WALL BOUNDARIES: the south edge of cell j = 1 is a wall whose face flux is identically zero, so the j = 1 region is the EXPLICIT wall divergence div_y(i,1,k) = vh(i,1,k) * IareaT(i,1) — NOT the clamped difference (vh(1) - vh(1))*IareaT = 0 (the bug it replaces, the y mirror of the div_x fix). The north wall is carried by the flux rule, which emits the zero face flux at the north domain edge (j = N_J), so the interior region formula extends to j = N_J unchanged: div_y(i,N_J,k) = (0 - vh(i,N_J-1,k))*IareaT(i,N_J). The rule matches any D(vh, y) whose operand is a declared [i,j,k] field; IareaT is a free name resolved in the consuming model. Pure telescoping difference of the face fluxes; the PPM reconstruction lives in the sibling mom6_cgrid_flux_y rule.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:mom6_cgrid",
+      "grid:mom6_cgrid",
+      "op:div",
+      "order:1",
+      "bc:wall",
+      "axes:i,j,k",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "Adcroft, A., et al. (2019). The GFDL global ocean and sea ice model OM4.0. Journal of Advances in Modeling Earth Systems, 11(10), 3167-3211.",
+        "doi": "10.1029/2019MS001726"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "mom6_cgrid_div_y": {
+      "params": ["vh"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": ["vh"],
+        "wrt": "y"
+      },
+      "where": {
+        "vh": {
+          "shape": ["i", "j", "k"]
+        }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [
+            [1, "N_I"],
+            [2, "N_J"],
+            [1, "N_K"]
+          ],
+          [
+            [1, "N_I"],
+            [1, 1],
+            [1, "N_K"]
+          ]
+        ],
+        "values": [
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["vh", "IareaT"],
+            "ranges": {
+              "i": [1, "N_I"],
+              "j": [2, "N_J"],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": ["IareaT", "i", "j"]
+                },
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "index",
+                      "args": ["vh", "i", "j", "k"]
+                    },
+                    {
+                      "op": "index",
+                      "args": ["vh", "i", { "op": "-", "args": ["j", 1] }, "k"]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": ["i", "j", "k"],
+            "args": ["vh", "IareaT"],
+            "ranges": {
+              "i": [1, "N_I"],
+              "j": [1, 1],
+              "k": [1, "N_K"]
+            },
+            "expr": {
+              "op": "*",
+              "args": [
+                {
+                  "op": "index",
+                  "args": ["IareaT", "i", "j"]
+                },
+                {
+                  "op": "index",
+                  "args": ["vh", "i", "j", "k"]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

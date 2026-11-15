@@ -1,0 +1,1782 @@
+{
+  "esm": "2.2.0",
+  "index_sets": {
+    "i": {
+      "kind": "interval",
+      "size": 8
+    },
+    "j": {
+      "kind": "interval",
+      "size": 8
+    },
+    "k": {
+      "kind": "interval",
+      "size": 2
+    }
+  },
+  "metadata": {
+    "description": "AST-expansion conformance fixture for the mom6_cgrid pressure-gradient rule pair (grids/mom6_cgrid/rules/mom6_cgrid_diff_x/y.esm, with the face-thickness averages mom6_cgrid_avg_u/v.esm) at N_I = N_J = 8, N_K = 3 (the traced stage-2 subdomain of EqESM stage2/mom6_momentum.esm): the same five equations as the consuming PressureGradientForce model — P_int = pa_top*h + intz_dpa, the east/north face pressure-difference groups dP_x = -diff_x(P_int) + (diff_x(h)*intx_pa - diff_x(e_bot)*intx_dpa*Z_to_H) and dP_y = -diff_y(P_int) + (diff_y(h)*inty_pa - diff_y(e_bot)*inty_dpa*Z_to_H) (the g1 + (g2f - g2s) grouping of PressureForce_FV_Bouss :1797-1805, bit-exact against the dump, built from the east/north face forward differences of MOM_PressureForce_FV.F90:1795-1813 with the explicit mirrored 0 wall regions at i = N_I / j = N_J), and the face accelerations PFu = 2*I_Rho0*IdxCu*dP_x/(2*avg_u(h) + h_neglect) and PFv = 2*I_Rho0*IdyCv*dP_y/(2*avg_v(h) + h_neglect) (the 0.5 face averages of avg_u/avg_v doubled back to the exact h_c + h_e/h_n + h_neglect denominator — exact since the 0.5 factor is a power of two — with the mirrored wall regions). Forces expansion of the diff rules' 0-valued wall regions and the avg rules' mirrored wall regions at the domain edges; every apply_expression_template node of the named-op rules must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/3 at the grid import edge). The stage-2 test pins (stage2/mom6_momentum.esm) carry the numeric comparison against the Fortran dumps at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
+    "license": "MIT",
+    "name": "mom6_cgrid_momentum_pgf_ast_fixture",
+    "tags": [
+      "conformance",
+      "ast",
+      "grid:mom6_cgrid",
+      "rule:mom6_cgrid_diff_x",
+      "rule:mom6_cgrid_diff_y",
+      "rule:mom6_cgrid_avg_u",
+      "rule:mom6_cgrid_avg_v"
+    ]
+  },
+  "models": {
+    "Mom6CgridMomentumPgfAst": {
+      "equations": [
+        {
+          "lhs": "P_int",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  "pa_top",
+                  "h"
+                ],
+                "op": "*"
+              },
+              "intz_dpa"
+            ],
+            "op": "+"
+          }
+        },
+        {
+          "lhs": "dP_x",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "op": "makearray",
+                    "regions": [
+                      [
+                        [
+                          1,
+                          7
+                        ],
+                        [
+                          1,
+                          8
+                        ],
+                        [
+                          1,
+                          2
+                        ]
+                      ],
+                      [
+                        [
+                          8,
+                          8
+                        ],
+                        [
+                          1,
+                          8
+                        ],
+                        [
+                          1,
+                          2
+                        ]
+                      ]
+                    ],
+                    "values": [
+                      {
+                        "args": [
+                          "P_int"
+                        ],
+                        "expr": {
+                          "args": [
+                            {
+                              "args": [
+                                "P_int",
+                                {
+                                  "args": [
+                                    "i",
+                                    1
+                                  ],
+                                  "op": "+"
+                                },
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "P_int",
+                                "i",
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "-"
+                        },
+                        "op": "faq",
+                        "output_idx": [
+                          "i",
+                          "j",
+                          "k"
+                        ],
+                        "ranges": {
+                          "i": [
+                            1,
+                            7
+                          ],
+                          "j": [
+                            1,
+                            8
+                          ],
+                          "k": [
+                            1,
+                            2
+                          ]
+                        }
+                      },
+                      0
+                    ]
+                  }
+                ],
+                "op": "-"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "op": "makearray",
+                        "regions": [
+                          [
+                            [
+                              1,
+                              7
+                            ],
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ],
+                          [
+                            [
+                              8,
+                              8
+                            ],
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ]
+                        ],
+                        "values": [
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [
+                                    "h",
+                                    {
+                                      "args": [
+                                        "i",
+                                        1
+                                      ],
+                                      "op": "+"
+                                    },
+                                    "j",
+                                    "k"
+                                  ],
+                                  "op": "index"
+                                },
+                                {
+                                  "args": [
+                                    "h",
+                                    "i",
+                                    "j",
+                                    "k"
+                                  ],
+                                  "op": "index"
+                                }
+                              ],
+                              "op": "-"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                1,
+                                7
+                              ],
+                              "j": [
+                                1,
+                                8
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      "intx_pa"
+                    ],
+                    "op": "*"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "op": "makearray",
+                            "regions": [
+                              [
+                                [
+                                  1,
+                                  7
+                                ],
+                                [
+                                  1,
+                                  8
+                                ],
+                                [
+                                  1,
+                                  2
+                                ]
+                              ],
+                              [
+                                [
+                                  8,
+                                  8
+                                ],
+                                [
+                                  1,
+                                  8
+                                ],
+                                [
+                                  1,
+                                  2
+                                ]
+                              ]
+                            ],
+                            "values": [
+                              {
+                                "args": [
+                                  "e_bot"
+                                ],
+                                "expr": {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        "e_bot",
+                                        {
+                                          "args": [
+                                            "i",
+                                            1
+                                          ],
+                                          "op": "+"
+                                        },
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    },
+                                    {
+                                      "args": [
+                                        "e_bot",
+                                        "i",
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    }
+                                  ],
+                                  "op": "-"
+                                },
+                                "op": "faq",
+                                "output_idx": [
+                                  "i",
+                                  "j",
+                                  "k"
+                                ],
+                                "ranges": {
+                                  "i": [
+                                    1,
+                                    7
+                                  ],
+                                  "j": [
+                                    1,
+                                    8
+                                  ],
+                                  "k": [
+                                    1,
+                                    2
+                                  ]
+                                }
+                              },
+                              0
+                            ]
+                          },
+                          "intx_dpa"
+                        ],
+                        "op": "*"
+                      },
+                      "Z_to_H"
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "-"
+              }
+            ],
+            "op": "+"
+          }
+        },
+        {
+          "lhs": "dP_y",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "op": "makearray",
+                    "regions": [
+                      [
+                        [
+                          1,
+                          8
+                        ],
+                        [
+                          1,
+                          7
+                        ],
+                        [
+                          1,
+                          2
+                        ]
+                      ],
+                      [
+                        [
+                          1,
+                          8
+                        ],
+                        [
+                          8,
+                          8
+                        ],
+                        [
+                          1,
+                          2
+                        ]
+                      ]
+                    ],
+                    "values": [
+                      {
+                        "args": [
+                          "P_int"
+                        ],
+                        "expr": {
+                          "args": [
+                            {
+                              "args": [
+                                "P_int",
+                                "i",
+                                {
+                                  "args": [
+                                    "j",
+                                    1
+                                  ],
+                                  "op": "+"
+                                },
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            {
+                              "args": [
+                                "P_int",
+                                "i",
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            }
+                          ],
+                          "op": "-"
+                        },
+                        "op": "faq",
+                        "output_idx": [
+                          "i",
+                          "j",
+                          "k"
+                        ],
+                        "ranges": {
+                          "i": [
+                            1,
+                            8
+                          ],
+                          "j": [
+                            1,
+                            7
+                          ],
+                          "k": [
+                            1,
+                            2
+                          ]
+                        }
+                      },
+                      0
+                    ]
+                  }
+                ],
+                "op": "-"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "op": "makearray",
+                        "regions": [
+                          [
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              7
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ],
+                          [
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              8,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ]
+                        ],
+                        "values": [
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [
+                                    "h",
+                                    "i",
+                                    {
+                                      "args": [
+                                        "j",
+                                        1
+                                      ],
+                                      "op": "+"
+                                    },
+                                    "k"
+                                  ],
+                                  "op": "index"
+                                },
+                                {
+                                  "args": [
+                                    "h",
+                                    "i",
+                                    "j",
+                                    "k"
+                                  ],
+                                  "op": "index"
+                                }
+                              ],
+                              "op": "-"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                1,
+                                8
+                              ],
+                              "j": [
+                                1,
+                                7
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      "inty_pa"
+                    ],
+                    "op": "*"
+                  },
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "op": "makearray",
+                            "regions": [
+                              [
+                                [
+                                  1,
+                                  8
+                                ],
+                                [
+                                  1,
+                                  7
+                                ],
+                                [
+                                  1,
+                                  2
+                                ]
+                              ],
+                              [
+                                [
+                                  1,
+                                  8
+                                ],
+                                [
+                                  8,
+                                  8
+                                ],
+                                [
+                                  1,
+                                  2
+                                ]
+                              ]
+                            ],
+                            "values": [
+                              {
+                                "args": [
+                                  "e_bot"
+                                ],
+                                "expr": {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        "e_bot",
+                                        "i",
+                                        {
+                                          "args": [
+                                            "j",
+                                            1
+                                          ],
+                                          "op": "+"
+                                        },
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    },
+                                    {
+                                      "args": [
+                                        "e_bot",
+                                        "i",
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    }
+                                  ],
+                                  "op": "-"
+                                },
+                                "op": "faq",
+                                "output_idx": [
+                                  "i",
+                                  "j",
+                                  "k"
+                                ],
+                                "ranges": {
+                                  "i": [
+                                    1,
+                                    8
+                                  ],
+                                  "j": [
+                                    1,
+                                    7
+                                  ],
+                                  "k": [
+                                    1,
+                                    2
+                                  ]
+                                }
+                              },
+                              0
+                            ]
+                          },
+                          "inty_dpa"
+                        ],
+                        "op": "*"
+                      },
+                      "Z_to_H"
+                    ],
+                    "op": "*"
+                  }
+                ],
+                "op": "-"
+              }
+            ],
+            "op": "+"
+          }
+        },
+        {
+          "lhs": "PFu",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "op": "const",
+                            "units": "1",
+                            "value": 2
+                          },
+                          "I_Rho0"
+                        ],
+                        "op": "*"
+                      },
+                      "IdxCu"
+                    ],
+                    "op": "*"
+                  },
+                  "dP_x"
+                ],
+                "op": "*"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "op": "const",
+                        "units": "1",
+                        "value": 2
+                      },
+                      {
+                        "args": [],
+                        "op": "makearray",
+                        "regions": [
+                          [
+                            [
+                              1,
+                              7
+                            ],
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ],
+                          [
+                            [
+                              8,
+                              8
+                            ],
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ]
+                        ],
+                        "values": [
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [],
+                                  "op": "const",
+                                  "units": "1",
+                                  "value": 0.5
+                                },
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        "h",
+                                        "i",
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    },
+                                    {
+                                      "args": [
+                                        "h",
+                                        {
+                                          "args": [
+                                            "i",
+                                            1
+                                          ],
+                                          "op": "+"
+                                        },
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    }
+                                  ],
+                                  "op": "+"
+                                }
+                              ],
+                              "op": "*"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                1,
+                                7
+                              ],
+                              "j": [
+                                1,
+                                8
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          },
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                "h",
+                                8,
+                                "j",
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                8,
+                                8
+                              ],
+                              "j": [
+                                1,
+                                8
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "op": "*"
+                  },
+                  "h_neglect"
+                ],
+                "op": "+"
+              }
+            ],
+            "op": "/"
+          }
+        },
+        {
+          "lhs": "PFv",
+          "rhs": {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [
+                          {
+                            "args": [],
+                            "op": "const",
+                            "units": "1",
+                            "value": 2
+                          },
+                          "I_Rho0"
+                        ],
+                        "op": "*"
+                      },
+                      "IdyCv"
+                    ],
+                    "op": "*"
+                  },
+                  "dP_y"
+                ],
+                "op": "*"
+              },
+              {
+                "args": [
+                  {
+                    "args": [
+                      {
+                        "args": [],
+                        "op": "const",
+                        "units": "1",
+                        "value": 2
+                      },
+                      {
+                        "args": [],
+                        "op": "makearray",
+                        "regions": [
+                          [
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              1,
+                              7
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ],
+                          [
+                            [
+                              1,
+                              8
+                            ],
+                            [
+                              8,
+                              8
+                            ],
+                            [
+                              1,
+                              2
+                            ]
+                          ]
+                        ],
+                        "values": [
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                {
+                                  "args": [],
+                                  "op": "const",
+                                  "units": "1",
+                                  "value": 0.5
+                                },
+                                {
+                                  "args": [
+                                    {
+                                      "args": [
+                                        "h",
+                                        "i",
+                                        "j",
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    },
+                                    {
+                                      "args": [
+                                        "h",
+                                        "i",
+                                        {
+                                          "args": [
+                                            "j",
+                                            1
+                                          ],
+                                          "op": "+"
+                                        },
+                                        "k"
+                                      ],
+                                      "op": "index"
+                                    }
+                                  ],
+                                  "op": "+"
+                                }
+                              ],
+                              "op": "*"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                1,
+                                8
+                              ],
+                              "j": [
+                                1,
+                                7
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          },
+                          {
+                            "args": [
+                              "h"
+                            ],
+                            "expr": {
+                              "args": [
+                                "h",
+                                "i",
+                                8,
+                                "k"
+                              ],
+                              "op": "index"
+                            },
+                            "op": "faq",
+                            "output_idx": [
+                              "i",
+                              "j",
+                              "k"
+                            ],
+                            "ranges": {
+                              "i": [
+                                1,
+                                8
+                              ],
+                              "j": [
+                                8,
+                                8
+                              ],
+                              "k": [
+                                1,
+                                2
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "op": "*"
+                  },
+                  "h_neglect"
+                ],
+                "op": "+"
+              }
+            ],
+            "op": "/"
+          }
+        }
+      ],
+      "expression_templates": {
+        "mom6_adcroft_reciprocal": {
+          "body": {
+            "args": [
+              {
+                "args": [
+                  "x",
+                  0
+                ],
+                "op": "=="
+              },
+              0,
+              {
+                "args": [
+                  1,
+                  "x"
+                ],
+                "op": "/"
+              }
+            ],
+            "op": "ifelse"
+          },
+          "description": "The guarded reciprocal of the MOM6 grid metrics (Adcroft_reciprocal, MOM_grid_initialize.F90:1173-1179): 1/x, or exactly 0.0 when x == 0.0. The grid's metrics are derived with it at MOM_grid.F90:420-424 (IdxT = 1/dxT, IdyT = 1/dyT, IareaT = 1/areaT); a consumer holding the positive metric lengths applies this template to each to obtain the free-name reciprocals (the dump supplies the reciprocals directly, so the traced stage-2 model binds them rather than deriving).",
+          "params": [
+            "x"
+          ]
+        },
+        "mom6_cgrid_avg_u": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  7
+                ],
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ],
+              [
+                [
+                  8,
+                  8
+                ],
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [],
+                      "op": "const",
+                      "units": "1",
+                      "value": 0.5
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "X",
+                            "i",
+                            "j",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "X",
+                            {
+                              "args": [
+                                "i",
+                                1
+                              ],
+                              "op": "+"
+                            },
+                            "j",
+                            "k"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "*"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    1,
+                    7
+                  ],
+                  "j": [
+                    1,
+                    8
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              },
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    "X",
+                    8,
+                    "j",
+                    "k"
+                  ],
+                  "op": "index"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    8,
+                    8
+                  ],
+                  "j": [
+                    1,
+                    8
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              }
+            ]
+          },
+          "match": {
+            "args": [
+              "X"
+            ],
+            "op": "mom6_cgrid_avg_u"
+          },
+          "params": [
+            "X"
+          ],
+          "where": {
+            "X": {
+              "shape": [
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          }
+        },
+        "mom6_cgrid_avg_v": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  7
+                ],
+                [
+                  1,
+                  2
+                ]
+              ],
+              [
+                [
+                  1,
+                  8
+                ],
+                [
+                  8,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [],
+                      "op": "const",
+                      "units": "1",
+                      "value": 0.5
+                    },
+                    {
+                      "args": [
+                        {
+                          "args": [
+                            "X",
+                            "i",
+                            "j",
+                            "k"
+                          ],
+                          "op": "index"
+                        },
+                        {
+                          "args": [
+                            "X",
+                            "i",
+                            {
+                              "args": [
+                                "j",
+                                1
+                              ],
+                              "op": "+"
+                            },
+                            "k"
+                          ],
+                          "op": "index"
+                        }
+                      ],
+                      "op": "+"
+                    }
+                  ],
+                  "op": "*"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    1,
+                    8
+                  ],
+                  "j": [
+                    1,
+                    7
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              },
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    "X",
+                    "i",
+                    8,
+                    "k"
+                  ],
+                  "op": "index"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    1,
+                    8
+                  ],
+                  "j": [
+                    8,
+                    8
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              }
+            ]
+          },
+          "match": {
+            "args": [
+              "X"
+            ],
+            "op": "mom6_cgrid_avg_v"
+          },
+          "params": [
+            "X"
+          ],
+          "where": {
+            "X": {
+              "shape": [
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          }
+        },
+        "mom6_cgrid_diff_x": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  7
+                ],
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ],
+              [
+                [
+                  8,
+                  8
+                ],
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        "X",
+                        {
+                          "args": [
+                            "i",
+                            1
+                          ],
+                          "op": "+"
+                        },
+                        "j",
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "X",
+                        "i",
+                        "j",
+                        "k"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "-"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    1,
+                    7
+                  ],
+                  "j": [
+                    1,
+                    8
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              },
+              0
+            ]
+          },
+          "match": {
+            "args": [
+              "X"
+            ],
+            "op": "mom6_cgrid_diff_x"
+          },
+          "params": [
+            "X"
+          ],
+          "where": {
+            "X": {
+              "shape": [
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          }
+        },
+        "mom6_cgrid_diff_y": {
+          "body": {
+            "args": [],
+            "op": "makearray",
+            "regions": [
+              [
+                [
+                  1,
+                  8
+                ],
+                [
+                  1,
+                  7
+                ],
+                [
+                  1,
+                  2
+                ]
+              ],
+              [
+                [
+                  1,
+                  8
+                ],
+                [
+                  8,
+                  8
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            ],
+            "values": [
+              {
+                "args": [
+                  "X"
+                ],
+                "expr": {
+                  "args": [
+                    {
+                      "args": [
+                        "X",
+                        "i",
+                        {
+                          "args": [
+                            "j",
+                            1
+                          ],
+                          "op": "+"
+                        },
+                        "k"
+                      ],
+                      "op": "index"
+                    },
+                    {
+                      "args": [
+                        "X",
+                        "i",
+                        "j",
+                        "k"
+                      ],
+                      "op": "index"
+                    }
+                  ],
+                  "op": "-"
+                },
+                "op": "faq",
+                "output_idx": [
+                  "i",
+                  "j",
+                  "k"
+                ],
+                "ranges": {
+                  "i": [
+                    1,
+                    8
+                  ],
+                  "j": [
+                    1,
+                    7
+                  ],
+                  "k": [
+                    1,
+                    2
+                  ]
+                }
+              },
+              0
+            ]
+          },
+          "match": {
+            "args": [
+              "X"
+            ],
+            "op": "mom6_cgrid_diff_y"
+          },
+          "params": [
+            "X"
+          ],
+          "where": {
+            "X": {
+              "shape": [
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          }
+        }
+      },
+      "variables": {
+        "I_Rho0": {
+          "default": 0,
+          "description": "1/rho0, the Boussinesq density scaling of the PGF.",
+          "type": "parameter",
+          "units": "m^3/kg"
+        },
+        "IdxCu": {
+          "default": 0,
+          "description": "1/zonal face length at the east faces.",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "type": "parameter",
+          "units": "1/m"
+        },
+        "IdyCv": {
+          "default": 0,
+          "description": "1/meridional face length at the north faces.",
+          "shape": [
+            "i",
+            "j"
+          ],
+          "type": "parameter",
+          "units": "1/m"
+        },
+        "PFu": {
+          "default": 0,
+          "description": "Zonal pressure-gradient acceleration on the east faces.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "unknown",
+          "units": "m/s^2"
+        },
+        "PFv": {
+          "default": 0,
+          "description": "Meridional pressure-gradient acceleration on the north faces.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "unknown",
+          "units": "m/s^2"
+        },
+        "P_int": {
+          "default": 0,
+          "description": "Vertical integral of the pressure anomaly over layer k, the g1 numerator group of the face law.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "unknown",
+          "units": "Pa m"
+        },
+        "Z_to_H": {
+          "default": 0,
+          "description": "Depth-to-height conversion of the e_bot correction term.",
+          "type": "parameter",
+          "units": "1"
+        },
+        "dP_x": {
+          "default": 0,
+          "description": "East-face pressure-difference group g1 + g2, the diff_x rule assembly target.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "unknown",
+          "units": "Pa m"
+        },
+        "dP_y": {
+          "default": 0,
+          "description": "North-face pressure-difference group, the dP_x mirror with the s/n neighbours.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "unknown",
+          "units": "Pa m"
+        },
+        "e_bot": {
+          "default": 0,
+          "description": "Interface height below layer k at the cells.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "m"
+        },
+        "h": {
+          "default": 0,
+          "description": "Layer thickness at the cells (start-of-step, the pgf dump's h).",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "m"
+        },
+        "h_neglect": {
+          "default": 0,
+          "description": "Thickness denominator floor of the face acceleration.",
+          "type": "parameter",
+          "units": "m"
+        },
+        "intx_dpa": {
+          "default": 0,
+          "description": "Layer change of intx_pa along the east faces.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa"
+        },
+        "intx_pa": {
+          "default": 0,
+          "description": "Interface integral of the pressure anomaly along the east faces divided by the grid spacing.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa"
+        },
+        "inty_dpa": {
+          "default": 0,
+          "description": "Layer change of inty_pa along the north faces.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa"
+        },
+        "inty_pa": {
+          "default": 0,
+          "description": "Interface integral of the pressure anomaly along the north faces divided by the grid spacing.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa"
+        },
+        "intz_dpa": {
+          "default": 0,
+          "description": "Vertical integral in depth of the pressure anomaly less the top pressure anomaly, over the layer.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa m"
+        },
+        "pa_top": {
+          "default": 0,
+          "description": "Pressure anomaly at the top interface of layer k at the cells.",
+          "shape": [
+            "i",
+            "j",
+            "k"
+          ],
+          "type": "parameter",
+          "units": "Pa"
+        }
+      }
+    }
+  }
+}
