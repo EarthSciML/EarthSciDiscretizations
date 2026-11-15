@@ -1,0 +1,316 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "heat_column_varcoeff_value_bc",
+    "description": "MMS driver for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc (conservative finite-volume diffusion with an interface-valued coefficient and supplied boundary VALUES): u_t = d/dz(K du/dz) + S(z,t) on the unit column [0, 1], discretized on the grid's shared quadratic-stretch MMS column, with the GENUINELY VARIABLE interface coefficient K(z) = 1 + z (K[kn] = 1 + ze[kn]). Manufactured solution u(z,t) = exp(-t) (1 + z + sin(pi z)) (the model-local template value_bc_mms_exact): u_z = exp(-t) (1 + pi cos(pi z)), so K u_z = exp(-t) (1+z) (1 + pi cos(pi z)), whose z-derivative is exp(-t) [ 1 + pi cos(pi z) - pi^2 (1+z) sin(pi z) ], and u_t = -u; the forcing that makes u exact is S(z,t) = exp(-t) [ -2 - z - sin(pi z) - pi cos(pi z) + pi^2 (1+z) sin(pi z) ] (value_bc_mms_forcing), evaluated at the RUNTIME layer centres zc. The rule's free names are tied to the solution in the model: the face coordinates z_sfc = 0 and z_top = 1 are parameters and the boundary values are the observeds u_sfc = value_bc_mms_exact(z_sfc, t) = exp(-t) and u_top = value_bc_mms_exact(z_top, t) = 2 exp(-t). The problem is chosen so that an index or orientation slip in the rule cannot hide: the two boundary values differ (1 vs 2, so swapping u_sfc and u_top is an O(1) error); the two face fluxes K u_z are nonzero and unequal ((1 + pi) exp(-t) at the surface, 2 (1 - pi) exp(-t) at the top) and the face coefficients differ (K = 1 vs 2), so reading K[2] for K[1] or K[NLEV] for K[NLEV+1], or zc[2] for zc[1], changes a nonzero face flux by O(1) relative; and nothing is discretely exact, so the t = 0.1 error is the full spatial error of the scheme, half-cell one-sided boundary closure included. The mesh follows the grid's edge-array contract (ze = the shared mms_column_ze of grids/column_nonuniform_1d/mesh/mms_column.esm; zc and dz grid-derived). The ic applies the closed per-layer centre template mms_column_zc (grids/column_nonuniform_1d/mesh/mms_column_centre.esm) inside an aggregate over lev; the 6.6.5 test references spell the layer centre inline from literals and NLEV, because the inline-test oracle does not resolve template references.",
+    "license": "MIT",
+    "tags": [
+      "esd:problem",
+      "grid:column_nonuniform_1d",
+      "equation:heat",
+      "mms"
+    ],
+    "references": [
+      {
+        "citation": "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
+        "doi": "10.1115/1.1436090"
+      }
+    ]
+  },
+  "models": {
+    "Heat": {
+      "expression_template_imports": [
+        { "ref": "../grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc.esm" },
+        { "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm" },
+        { "ref": "../grids/column_nonuniform_1d/mesh/mms_column_centre.esm" }
+      ],
+      "expression_templates": {
+        "value_bc_mms_exact": {
+          "params": ["z", "t"],
+          "description": "Manufactured solution u(z,t) = exp(-t) (1 + z + sin(pi z)).",
+          "body": {
+            "op": "*",
+            "args": [
+              { "op": "exp", "args": [{ "op": "-", "args": ["t"] }] },
+              {
+                "op": "+",
+                "args": [
+                  1.0,
+                  "z",
+                  { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, "z"] }] }
+                ]
+              }
+            ]
+          }
+        },
+        "value_bc_mms_forcing": {
+          "params": ["z", "t"],
+          "description": "Manufactured forcing S(z,t) = u_t - d/dz((1+z) u_z) = exp(-t) [ -2 - z - sin(pi z) - pi cos(pi z) + pi^2 (1+z) sin(pi z) ].",
+          "body": {
+            "op": "*",
+            "args": [
+              { "op": "exp", "args": [{ "op": "-", "args": ["t"] }] },
+              {
+                "op": "+",
+                "args": [
+                  -2.0,
+                  { "op": "-", "args": ["z"] },
+                  { "op": "-", "args": [{ "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, "z"] }] }] },
+                  {
+                    "op": "-",
+                    "args": [
+                      { "op": "*", "args": [3.141592653589793, { "op": "cos", "args": [{ "op": "*", "args": [3.141592653589793, "z"] }] }] }
+                    ]
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      9.869604401089358,
+                      { "op": "+", "args": [1.0, "z"] },
+                      { "op": "sin", "args": [{ "op": "*", "args": [3.141592653589793, "z"] }] }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "variables": {
+        "u": {
+          "type": "unknown",
+          "units": "K",
+          "shape": ["lev"],
+          "description": "Temperature over the lev (layer) axis."
+        },
+        "K": {
+          "type": "unknown",
+          "units": "m^2/s",
+          "shape": ["lev_nodes"],
+          "description": "Interface diffusivity K = 1 + z evaluated on the interfaces, K[kn] = 1 + ze[kn] (1 at the surface face, 2 at the top face)."
+        },
+        "S": {
+          "type": "unknown",
+          "units": "K/s",
+          "shape": ["lev"],
+          "description": "Manufactured forcing value_bc_mms_forcing(zc, t)."
+        },
+        "u_sfc": {
+          "type": "unknown",
+          "units": "K",
+          "description": "Boundary value of u on the surface face (the rule's free name): the manufactured solution at z_sfc, exp(-t)."
+        },
+        "u_top": {
+          "type": "unknown",
+          "units": "K",
+          "description": "Boundary value of u on the top face (the rule's free name): the manufactured solution at z_top, 2 exp(-t)."
+        },
+        "z_sfc": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Surface-face coordinate (the rule's free name), ze[1] = 0 on the unit column."
+        },
+        "z_top": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1.0,
+          "description": "Top-face coordinate (the rule's free name), ze[NLEV+1] = 1 on the unit column."
+        },
+        "ze": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev_nodes"],
+          "description": "Interface coordinates of the quadratic-stretch column, the grid's shared MMS test column mms_column_ze (grids/column_nonuniform_1d/mesh/mms_column.esm): ze[kn] = 0.6 ((kn-1)/NLEV) + 0.4 ((kn-1)/NLEV)^2 for kn = 1..NLEV+1."
+        },
+        "zc": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev"],
+          "description": "Layer centres, GRID-DERIVED from ze by applying grids/column_nonuniform_1d column_cell_center. Read by the rule by bare name."
+        },
+        "dz": {
+          "type": "unknown",
+          "units": "m",
+          "shape": ["lev"],
+          "description": "Layer thicknesses, GRID-DERIVED from ze by applying column_cell_thickness. The finite-volume measure read by the rule by bare name."
+        }
+      },
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["u"] },
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i"],
+            "args": [],
+            "ranges": { "i": { "from": "lev" } },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "value_bc_mms_exact",
+              "bindings": {
+                "z": {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "mms_column_zc",
+                  "bindings": { "i": "i" }
+                },
+                "t": 0.0
+              }
+            }
+          }
+        },
+        {
+          "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
+          "rhs": {
+            "op": "+",
+            "args": [
+              {
+                "op": "D",
+                "args": [
+                  { "op": "*", "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }] }
+                ],
+                "wrt": "lev"
+              },
+              "S"
+            ]
+          }
+        },
+        {
+          "lhs": "K",
+          "rhs": { "op": "+", "args": [1.0, "ze"] }
+        },
+        {
+          "lhs": "S",
+          "rhs": {
+            "op": "faq",
+            "output_idx": ["i"],
+            "args": ["zc"],
+            "ranges": { "i": { "from": "lev" } },
+            "expr": {
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "value_bc_mms_forcing",
+              "bindings": { "z": { "op": "index", "args": ["zc", "i"] }, "t": "t" }
+            }
+          }
+        },
+        {
+          "lhs": "u_sfc",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "value_bc_mms_exact",
+            "bindings": { "z": "z_sfc", "t": "t" }
+          }
+        },
+        {
+          "lhs": "u_top",
+          "rhs": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "value_bc_mms_exact",
+            "bindings": { "z": "z_top", "t": "t" }
+          }
+        },
+        {
+          "lhs": "ze",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "mms_column_ze", "bindings": {} }
+        },
+        {
+          "lhs": "zc",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_center", "bindings": { "ze": "ze" } }
+        },
+        {
+          "lhs": "dz",
+          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_thickness", "bindings": { "ze": "ze" } }
+        }
+      ],
+      "tests": [
+        {
+          "id": "mms_column_variable_k_value_bc",
+          "description": "Manufactured solution u(z,t) = exp(-t) (1 + z + sin(pi z)) with K = 1 + z on the interfaces, the matching forcing S, and the boundary values u_sfc = exp(-t), u_top = 2 exp(-t) on the quadratic-stretch column. The t=0 assertion pins the ic wiring; the t=0.1 assertion bounds the L2 error at the default NLEV = 64 (second-order; per-resolution values pinned in tests/conformance/convergence/heat_column_varcoeff_value_bc/golden/errors.json).",
+          "time_span": { "start": 0.0, "end": 0.1 },
+          "assertions": [
+            {
+              "variable": "u",
+              "time": 0.0,
+              "expected": 0.0,
+              "tolerance": { "abs": 1e-09 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "faq",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "lev" } },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    1.0,
+                    {
+                      "op": "+",
+                      "args": [
+                        1.0,
+                        {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}]}, {"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": ["i", "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": ["i", "NLEV"]}, {"op": "/", "args": ["i", "NLEV"]}]}]}]}]},
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}]}, {"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": ["i", "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": ["i", "NLEV"]}, {"op": "/", "args": ["i", "NLEV"]}]}]}]}]}
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "variable": "u",
+              "time": 0.1,
+              "expected": 0.0,
+              "tolerance": { "abs": 0.000125 },
+              "reduce": "L2_error",
+              "reference": {
+                "op": "faq",
+                "output_idx": ["i"],
+                "args": [],
+                "ranges": { "i": { "from": "lev" } },
+                "expr": {
+                  "op": "*",
+                  "args": [
+                    0.9048374180359595,
+                    {
+                      "op": "+",
+                      "args": [
+                        1.0,
+                        {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}]}, {"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": ["i", "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": ["i", "NLEV"]}, {"op": "/", "args": ["i", "NLEV"]}]}]}]}]},
+                        {
+                          "op": "sin",
+                          "args": [
+                            {
+                              "op": "*",
+                              "args": [
+                                3.141592653589793,
+                                {"op": "*", "args": [0.5, {"op": "+", "args": [{"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}, {"op": "/", "args": [{"op": "-", "args": ["i", 1]}, "NLEV"]}]}]}, {"op": "+", "args": [{"op": "*", "args": [0.6, {"op": "/", "args": ["i", "NLEV"]}]}, {"op": "*", "args": [0.4, {"op": "/", "args": ["i", "NLEV"]}, {"op": "/", "args": ["i", "NLEV"]}]}]}]}]}
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

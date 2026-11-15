@@ -1,0 +1,81 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_value_bc",
+    "description": "Conservative finite-volume variable-coefficient vertical diffusion d/dz(K du/dz) on column_nonuniform_1d with the coefficient K on the INTERFACES and consumer-supplied VALUES of u on the two domain faces (the Dirichlet-boundary analogue of rules/varcoeff_face_laplacian_lev_flux_bc, which takes prescribed fluxes). The consumer writes the compound D( {op:*, args:[K, D(u, wrt: lev)]}, wrt: lev ) -- coefficient on the LEFT of the product (matching is structural and non-commutative) -- and the rule fires on the whole compound at priority 10 (esm-spec 9.6.3 outermost-first compound precedence) before any plain-D rule can lower the inner derivative; it is match-scoped with where {u: {shape: [lev]}, K: {shape: [lev_nodes]}} (esm-spec 9.6.1), so it fires only when the state is a bare layer field and the coefficient a bare interface field of THIS grid. The body is the grid's shared three-region layout rules/varcoeff_face_laplacian_lev_frame -- the same interior stencil and the same boundary-layer flux differences as the flux_bc rule -- with the two domain-face fluxes closed by the grid's one two-point flux law stencils/interface_flux_K_two_point against the boundary VALUES: G_bot = K[1] (u[1]-u_sfc)/(zc[1]-z_sfc) at the surface face and G_top = K[NLEV+1] (u_top-u[NLEV])/(z_top-zc[NLEV]) at the top face (a consumer reading a face flux, e.g. a basal conductive flux, applies the same template with the same operands). Every interior flux is G[n] = K[n] (u[n]-u[n-1])/(zc[n]-zc[n-1]) (stencils/interface_flux_K_lev, itself that law). Interior [2, NLEV-1]: (G[k+1] - G[k]) / dz[k]; boundary layers: L u[1] = ( G[2] - G_bot ) / dz[1] and L u[NLEV] = ( G_top - G[NLEV] ) / dz[NLEV]. Free-name contract (resolved in the consuming model): the grid geometry observeds zc, dz (grids/column_nonuniform_1d/grid.esm), the domain-face coordinates z_sfc = ze[1], z_top = ze[NLEV+1] (shared with the integral rules), and the boundary values u_sfc (at the surface face) and u_top (at the top face) -- the names are POSITIONAL (ze[1] and ze[NLEV+1], ze increasing with the lev index), so a model whose vertical coordinate runs top-down (e.g. the CISM sigma column, with the ice surface at ze[1] = z_sfc = 0 and the bed at ze[NLEV+1] = z_top) satisfies the contract directly without reversing its arrays, the surface value entering the face at ze[1] and the bed value the face at ze[NLEV+1]. Because every interior flux enters the column sum once with each sign, the operator telescopes exactly: sum_k dz[k] L u[k] = G_top - G_bot, the difference of the two boundary-value fluxes, so the column integral of u changes only through the two domain faces. The scheme is the node-centered conservative finite-volume diffusion of LeVeque section 2.13 on a stretched column -- exactly the dups stencil of the CISM temperature solve (glissade_therm.F90:151-163, 1410-1418 glissade_temperature_matrix_elements) with a constant per-column K -- and reduces to the classical three-point form on a uniform column with uniform K. The face closure is the half-cell one-sided quotient, first order locally in the two boundary layers, yet the solution is second-order in L2 on a smoothly stretched column (supraconvergent); MMS convergence with a variable K and nonzero, unequal boundary values and face fluxes is pinned by problems/heat_column_varcoeff_value_bc. IMPORT EXACTLY ONE OF THIS RULE AND rules/varcoeff_face_laplacian_lev_flux_bc PER MODEL: the two have the same match, the same where constraints and the same priority and differ only in the face closure, so in a model importing both the earlier-imported one silently wins every D(K*D(u, lev), lev) node (esm-spec 9.6.3 declaration-order tie-break) and the other never fires; neither the format nor the library lint can flag the pair. Minimum extent NLEV = 2 (see the frame).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:dirichlet",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "./varcoeff_face_laplacian_lev_frame.esm" },
+    { "ref": "../stencils/interface_flux_K_two_point.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_value_bc": {
+      "params": ["u", "K"],
+      "priority": 10,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": { "shape": ["lev"] },
+        "K": { "shape": ["lev_nodes"] }
+      },
+      "body": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "varcoeff_face_laplacian_lev_frame",
+        "bindings": {
+          "u": "u",
+          "K": "K",
+          "G_bot": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "interface_flux_K_two_point",
+            "bindings": {
+              "K_face": { "op": "index", "args": ["K", 1] },
+              "u_lo": "u_sfc",
+              "u_hi": { "op": "index", "args": ["u", 1] },
+              "z_lo": "z_sfc",
+              "z_hi": { "op": "index", "args": ["zc", 1] }
+            }
+          },
+          "G_top": {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "interface_flux_K_two_point",
+            "bindings": {
+              "K_face": { "op": "index", "args": ["K", { "op": "+", "args": ["NLEV", 1] }] },
+              "u_lo": { "op": "index", "args": ["u", "NLEV"] },
+              "u_hi": "u_top",
+              "z_lo": { "op": "index", "args": ["zc", "NLEV"] },
+              "z_hi": "z_top"
+            }
+          }
+        }
+      }
+    }
+  }
+}
