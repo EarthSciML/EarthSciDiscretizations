@@ -1,0 +1,99 @@
+{
+  "esm": "2.2.0",
+  "metadata": {
+    "name": "varcoeff_face_laplacian_lev_tracer_frame",
+    "description": "The three-region layout of the conservative variable-coefficient vertical diffusion d/dz(K du/dz) for a field with a trailing TRACER axis, u shaped [lev, tracer], with the coefficient K [lev_nodes] on the interfaces and the geometry shared by every tracer, whatever closes the two domain faces: a makearray tiling [lev, tracer] whose interior [2, NLEV-1] x [1, NTRACER] is stencils/varcoeff_face_laplacian_lev_interior_tracer, (G[k+1,s] - G[k,s]) / dz[k], and whose two boundary layers are L u[1,s] = ( G[2,s] - G_bot[s] ) / dz[1] and L u[NLEV,s] = ( G_top[s] - G[NLEV,s] ) / dz[NLEV], every interior flux G[n,s] being stencils/interface_flux_K_lev_tracer (the column grid's two-point law grids/column_nonuniform_1d/stencils/interface_flux_K_two_point applied to column s). Column s is exactly the 1-D layout of grids/column_nonuniform_1d applied to u[:, s]. The two domain-face fluxes are PARAMETERS, [tracer]-shaped arrays read element by element as G_bot[s] (the diffusive flux K du/dz of tracer s through the surface face z = ze[1]) and G_top[s] (through the top face z = ze[NLEV+1]), positive in the +lev (upward) direction and bound by the applying match rule to whatever its boundary condition makes them -- the per-tracer free names kdudz_bot / kdudz_top in rules/varcoeff_face_laplacian_lev_flux_bc_tracer. So the interior stencil, the region layout and the boundary-layer flux differences have one spelling on this grid, and the telescoping identity sum_k dz[k] L u[k,s] = G_top[s] - G_bot[s] holds tracer by tracer for every closure. A match-less rule template (it never fires on its own); the bc: tag names what it takes, not a closure it imposes. The two boundary layers are faqs with output_idx [1, s] -- an explicit singleton lev dimension -- because the be1fafe6d Rust binding fills the WHOLE array with NaN when a rank-1 [tracer] value is assigned to a [1, NTRACER] region, although esm-spec 4.3.2 says singleton dimensions are excluded from the shape match. `zc` and `dz` are the consumer's free-name geometry observeds (grids/column_nonuniform_1d/grid.esm). Minimum extent NLEV = 2, as on the column grid.",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d_tracer",
+      "op:varcoeff_laplacian",
+      "axes:lev,tracer",
+      "order:2",
+      "stencil_width:3",
+      "bc:supplied_face_flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "../stencils/varcoeff_face_laplacian_lev_interior_tracer.esm" },
+    { "ref": "../stencils/interface_flux_K_lev_tracer.esm" },
+    { "ref": "../grid.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_tracer_frame": {
+      "params": ["u", "K", "G_bot", "G_top"],
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NLEV", 1] }], [1, "NTRACER"]],
+          [[1, 1], [1, "NTRACER"]],
+          [["NLEV", "NLEV"], [1, "NTRACER"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_laplacian_lev_interior_tracer",
+            "bindings": { "u": "u", "K": "K" }
+          },
+          {
+            "op": "faq",
+            "output_idx": [1, "s"],
+            "args": ["u", "K"],
+            "ranges": { "s": { "from": "tracer" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "interface_flux_K_lev_tracer",
+                      "bindings": { "u": "u", "K": "K", "n": 2, "s": "s" }
+                    },
+                    { "op": "index", "args": ["G_bot", "s"] }
+                  ]
+                },
+                { "op": "index", "args": ["dz", 1] }
+              ]
+            }
+          },
+          {
+            "op": "faq",
+            "output_idx": [1, "s"],
+            "args": ["u", "K"],
+            "ranges": { "s": { "from": "tracer" } },
+            "expr": {
+              "op": "/",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    { "op": "index", "args": ["G_top", "s"] },
+                    {
+                      "op": "apply_expression_template",
+                      "args": [],
+                      "name": "interface_flux_K_lev_tracer",
+                      "bindings": { "u": "u", "K": "K", "n": "NLEV", "s": "s" }
+                    }
+                  ]
+                },
+                { "op": "index", "args": ["dz", "NLEV"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
