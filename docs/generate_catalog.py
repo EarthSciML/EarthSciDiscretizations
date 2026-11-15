@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""generate_catalog.py — build the generated docs content from the library files.
+r"""generate_catalog.py — build the generated docs content from the library files.
 
 Walks grids/, regridding/, and reprojection/ and emits, under docs/content/:
 
@@ -25,12 +25,13 @@ files").
 Expression display policy (AGENTS.md "single pathway"):
   * This script reads .esm JSON structurally and NEVER evaluates library math.
   * Every expression shown on a generated page is printed by the public
-    `earthsci_ast.to_ascii` and nothing else, so the pages show EarthSciAST's
-    ascii surface syntax — the text `earthsci_ast.parse_expression` reads —
-    and a reader can paste any displayed expression back in. There is no
-    local renderer and no fallback: earthsci_ast is a hard requirement (the CI
-    docs job pip-installs it), and an expression `to_ascii` cannot print fails
-    the build. Full precision always lives in the .esm sources the pages link.
+    `earthsci_ast.print_math` (format "markdown") and nothing else, so the
+    pages show EarthSciAST's LaTeX math, the form its `parse_math` reads back,
+    typeset by the site's KaTeX: `\(...\)` inline (running text and table
+    cells) and `$$...$$` for display blocks. There is no local renderer and no
+    fallback: earthsci_ast is a hard requirement (the CI docs job pip-installs
+    it), and an expression `print_math` cannot print fails the build. Full
+    precision always lives in the .esm sources the pages link.
   * Template names and parameter lists are shown as labels next to the
     printed body; region tables and stencil expansion are gone — a rule's
     `makearray` body is printed whole, imported stencils appearing as the
@@ -161,41 +162,87 @@ _MD_CODE_OR_LINKISH = re.compile(r"(?P<code>`+[^`]*`+)|(?P<linkish>\]\()")
 
 
 # ---------------------------------------------------------------------------
-# Expression display: earthsci_ast.to_ascii, and nothing else.
+# Expression display: earthsci_ast.print_math, and nothing else.
 # ---------------------------------------------------------------------------
 
 
-def _load_to_ascii():
+def _load_print_math():
     try:
-        # PUBLIC surface only, from the package namespace. In the Python
-        # binding an `Expr` IS the wire dict, so raw .esm JSON goes in directly.
-        from earthsci_ast import to_ascii  # type: ignore
+        # PUBLIC surface only, from the package namespace. print_math takes an
+        # expression's JSON form, so raw .esm JSON goes in directly.
+        from earthsci_ast import print_math  # type: ignore
     except ImportError as exc:
         raise SystemExit(
-            "generate_catalog.py: earthsci_ast is required — every expression on the "
-            "generated pages is printed by earthsci_ast.to_ascii. Install it with\n"
+            "generate_catalog.py: earthsci_ast with print_math is required — every "
+            "expression on the generated pages is printed by earthsci_ast.print_math. "
+            "Install it with\n"
             '  pip install "git+https://github.com/EarthSciML/EarthSciAST.git'
             '#subdirectory=pkg/earthsci-ast-py"\n'
             f"({exc})"
         ) from exc
-    return to_ascii
+    return print_math
 
 
-class AsciiPrinter:
-    """Prints displayed expressions with the public `earthsci_ast.to_ascii`."""
+# The fields of an expression node that hold sub-expressions: a template
+# application's `bindings` holds them as its values, and `wrt` is a name.
+_EXPR_FIELDS = ("lhs", "rhs", "args", "expr", "values", "bindings", "wrt")
+
+
+def expression_names(node, out: list | None = None) -> list:
+    """The names an expression uses, in order of first use: its string leaves
+    in expression positions. print_math takes them as the declared names, so
+    each prints as a variable and the printer's spellings avoid colliding
+    with them (an undeclared `d` would print as `\\mathit{d}`)."""
+    if out is None:
+        out = []
+    if isinstance(node, str):
+        if node not in out:
+            out.append(node)
+    elif isinstance(node, list):
+        for item in node:
+            expression_names(item, out)
+    elif isinstance(node, dict):
+        for key in _EXPR_FIELDS:
+            if key not in node:
+                continue
+            value = node[key]
+            if key == "bindings" and isinstance(value, dict):
+                value = list(value.values())
+            expression_names(value, out)
+    return out
+
+
+class MathPrinter:
+    """Prints displayed expressions as LaTeX with the public
+    `earthsci_ast.print_math(expr, names, "markdown")`."""
 
     def __init__(self) -> None:
-        self._to_ascii = _load_to_ascii()
+        self._print_math = _load_print_math()
         self.count = 0
 
     def __call__(self, node, where: str) -> str:
         try:
-            text = self._to_ascii(node)
+            text = self._print_math(node, expression_names(node), "markdown")
         except Exception as exc:  # reported, and fails the build
-            fail(f"{where}: earthsci_ast.to_ascii failed: {exc}")
-            return "?"
+            fail(f"{where}: earthsci_ast.print_math failed: {exc}")
+            return r"\text{?}"
         self.count += 1
         return text
+
+
+def inline_math(latex: str) -> str:
+    r"""LaTeX as inline KaTeX math, `\(...\)`, for running text or a table cell.
+
+    earthsci.dev's Goldmark passthrough extension hands `\(...\)` to the page
+    untouched, so backslashes and underscores need no Markdown escaping. What
+    it cannot protect is a table row: GFM splits the row on `|` before any
+    inline parsing, and an escaped `\|` would reach KaTeX as a norm bar. So
+    bars are spelled `\vert` / `\Vert`, and `<` / `>` as `\lt` / `\gt` so the
+    raw passthrough text can never open an HTML tag.
+    """
+    latex = latex.replace("\n", " ").replace(r"\|", r"\Vert ").replace("|", r"\vert ")
+    latex = latex.replace("<", r"\lt ").replace(">", r"\gt ")
+    return r"\(" + latex + r"\)"
 
 
 def code_span(text: str) -> str:
@@ -465,8 +512,13 @@ def write_convergence_plot(case: dict, rows, out_png: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def math_block(text: str) -> str:
-    return f'<div class="math-block">{html.escape(text)}</div>'
+def math_block(latex: str) -> str:
+    """LaTeX as display KaTeX math, `$$...$$`, in a raw HTML block.
+
+    Goldmark leaves the content of a raw `<div>` block alone (no Markdown
+    escaping needed), and the browser decodes the escaped `<`, `>` and `&`
+    back into the text KaTeX's auto-render scans."""
+    return f'<div class="math-block">$${html.escape(latex)}$$</div>'
 
 
 def chips(pairs) -> str:
@@ -553,7 +605,7 @@ def convergence_section(case: dict, plots_root: Path) -> list[str]:
 def rule_section(
     rule_path: Path,
     doc: dict,
-    printer: AsciiPrinter,
+    printer: MathPrinter,
     conformance_cases,
     problem_cache,
     plots_root: Path,
@@ -589,7 +641,7 @@ def rule_section(
     if match is not None:
         pretty = printer(match, f"{rel(rule_path)} match")
         priority_note = f" at priority {template['priority']}" if "priority" in template else ""
-        out.append(f"**Rewrites** {code_span(pretty)}{priority_note} — match pattern:")
+        out.append(f"**Rewrites** {inline_math(pretty)}{priority_note} — match pattern:")
         out.append("")
         out.append("```json")
         out.append(json.dumps(match, ensure_ascii=False))
@@ -622,7 +674,7 @@ def rule_section(
         )
         out.append("")
 
-    # Discretization: the whole body, printed by earthsci_ast.to_ascii.
+    # Discretization: the whole body, printed by earthsci_ast.print_math.
     body = template.get("body")
     if body is not None:
         if isinstance(body, dict) and body.get("op") == "makearray":
@@ -675,7 +727,7 @@ def params_line(params) -> str:
     return "Parameters: " + ", ".join(code_span(str(p)) for p in params)
 
 
-def stencil_section(stencil_path: Path, doc: dict, printer: AsciiPrinter) -> list[str]:
+def stencil_section(stencil_path: Path, doc: dict, printer: MathPrinter) -> list[str]:
     metadata = doc.get("metadata", {})
     tags = metadata.get("tags") or []
     entry = sole_template(doc, stencil_path)
@@ -712,7 +764,7 @@ def stencil_section(stencil_path: Path, doc: dict, printer: AsciiPrinter) -> lis
 
 def grid_page(
     grid_dir: Path,
-    printer: AsciiPrinter,
+    printer: MathPrinter,
     conformance_cases,
     problem_cache,
     plots_root: Path,
@@ -835,9 +887,13 @@ def grid_page(
                     f"{k}: {spec[k]}" for k in ("offsets", "values") if k in spec
                 )
                 size = f"{detail} ({extras})" if extras else detail
+                size = f"`{md_cell(size)}`"
+            elif "size" in spec:
+                # A size is an expression (a number, a metaparameter, or e.g. N + 1).
+                size = inline_math(printer(spec["size"], f"{rel(grid_path)} index set {iname}"))
             else:
-                size = str(spec.get("size", ""))
-            lines.append(f"| `{iname}` | {spec.get('kind', '')} | `{md_cell(size)}` |")
+                size = ""
+            lines.append(f"| `{iname}` | {spec.get('kind', '')} | {size} |")
         lines.append("")
 
     templates = doc.get("expression_templates") or {}
@@ -852,7 +908,7 @@ def grid_page(
             params = ", ".join(f"`{p}`" for p in tmpl.get("params") or []) or "—"
             definition = printer(tmpl.get("body"), f"{rel(grid_path)} template {tname}")
             lines.append(
-                f"| `{tname}` | {params} | `{md_cell(definition)}` "
+                f"| `{tname}` | {params} | {inline_math(definition)} "
                 f"| {md_cell(md_prose(tmpl.get('description', '')))} |"
             )
         lines.append("")
@@ -886,7 +942,7 @@ def grid_page(
     return "\n".join(lines) + "\n"
 
 
-def cross_grid_section_page(directory: Path, title: str, kind: str, printer: AsciiPrinter) -> str:
+def cross_grid_section_page(directory: Path, title: str, kind: str, printer: MathPrinter) -> str:
     """Section page (_index.md) for regridding/ or reprojection/."""
     tag_prefix = {"regrid": "method:", "reproject": "crs:"}[kind]
     tag_label = {"regrid": "method", "reproject": "crs"}[kind]
@@ -1005,7 +1061,7 @@ def clean_dir(path: Path) -> None:
 
 
 def generate(content_root: Path, static_root: Path) -> None:
-    printer = AsciiPrinter()
+    printer = MathPrinter()
 
     conformance_cases = index_conformance()
     problem_cache: dict = {}
@@ -1056,7 +1112,7 @@ def generate(content_root: Path, static_root: Path) -> None:
         )
 
     print(f"[info] generated {n_grids} grid page(s) into {grids_out}")
-    print(f"[info] earthsci_ast.to_ascii printed {printer.count} expression(s)")
+    print(f"[info] earthsci_ast.print_math printed {printer.count} expression(s)")
 
 
 def main() -> int:
