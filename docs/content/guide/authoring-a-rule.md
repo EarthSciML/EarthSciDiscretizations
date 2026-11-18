@@ -67,7 +67,7 @@ target operator and whose body is one `makearray`:
   out-ranks plain-D rules (§9.6.3).
 - A **`where` shape constraint** (§9.6.1) scopes the match to *this* grid:
   `"where": { "f": { "shape": ["x"] } }` (or `{"F": {"shape": ["edges"]}}` for
-  the MPAS div rule). Every library rule carries one — it stops an axis-name
+  the MPAS divergence rule). Every library rule carries one — it stops an axis-name
   collision from firing the rule on an unrelated derivative, and it is what lets
   the rule be imported twice (renamed) without a first-declared-wins tie-break:
   the shape names an index set, so §9.7.7 renaming rewrites it to `[meshA.x]` /
@@ -76,7 +76,7 @@ target operator and whose body is one `makearray`:
 
   **Authoring convention:** a `where` shape requires a *bare declared shaped
   field*. Write the constraint over a plain parameter (`f`, `F`), and document
-  that a consumer differentiating a compound inline expression (`div(u*h)`,
+  that a consumer differentiating a compound inline expression (`D(u*h, x)`,
   `D(D(u*v,x),x)`) must first bind it to a declared shaped observed — i.e. an
   `unknown` with a `shape`, defined by a bare-variable-LHS equation (esm 1.0.0
   declares only `unknown` and `parameter`; "observed" is derived from the

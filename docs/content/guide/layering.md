@@ -41,7 +41,7 @@ template importing `grid.esm`, e.g. the 3-point centered second difference over
 `i ∈ [2, N−1]`. It cannot fire on its own — it exists to be wrapped.
 
 **`rules/<name>.esm`** is the complete, auto-applied rewrite rule: a template
-with a `match` pattern on a spatial `D` (or on `div`, `laplacian`, … — the open
+with a `match` pattern on a spatial `D` (or on an expression of spatial `D`s, or on a user operator — the open
 namespace of esm-spec §4.2) whose body is a single `makearray`. The interior
 region invokes the imported stencil; the boundary-face regions encode the
 boundary condition. **Boundary conditions live inside the rule and nowhere
@@ -52,6 +52,13 @@ anywhere in the format. Choosing a scheme = choosing a rule
 plain per-derivative rules via `priority` (esm-spec §9.6.3), so a
 second-derivative rule at priority 10 fires on `D(D(f,x),x)` before any plain-D
 rule lowers the inner derivative.
+
+Not every `rules/` file is auto-applied. The cubed-sphere `duo` grid's rule
+files (and a few on `cartesian_uniform_2d`, `column_nonuniform_1d` and
+`column_nonuniform_1d_tracer`) are **plain templates with no `match`**: a
+consuming model applies them by name with `apply_expression_template`, and they
+never fire on a spatial `D` by themselves. The `mom6_cgrid` rules match **user
+operators** (`mom6_cgrid_diff_x`, …) that the consuming model writes by name.
 
 **`problems/<name>.esm`** is a runnable driver: a model importing its grid's
 rule, with equations, initial conditions written over the grid's geometry
@@ -135,7 +142,7 @@ spell the coordinate inline from literals and the metaparameter name — e.g.
 
 ## Two instances of one grid: rename and where
 
-A rule fires by matching an operator (`D(D(f,x),x)`, `div(F)`, …). The `wrt`
+A rule fires by matching an operator (`D(D(f,x),x)`, a user operator, …). The `wrt`
 literal and the operator alone are not enough to keep two grids apart when both
 reuse an axis name, so every library rule also carries a §9.6.1 **`where`**
 shape constraint — `{"f": {"shape": ["x"]}}`, `{"F": {"shape": ["edges"]}}`.
@@ -165,7 +172,7 @@ no priority arbitration. `problems/two_cartesian_grids_coexist.esm` is the
 worked driver — the composition that was inexpressible before renaming +
 match-scoping landed. When you author a `where`-constrained rule, the consumer
 must present a **bare declared shaped field**; a compound inline flux
-(`div(u*h)`) must first be bound to a declared shaped observed.
+(`D(u*h, x)`) must first be bound to a declared shaped observed.
 
 ## What resolves when
 
