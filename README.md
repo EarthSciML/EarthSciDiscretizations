@@ -37,8 +37,10 @@ file are different:
   consuming model calls explicitly with `apply_expression_template`, by name; they
   never fire on a spatial `D` by themselves.
 - **Rules that match a user operator** rather than `D` (the `mom6_cgrid` operators,
-  the column entraining plume): the consuming model writes that operator by name,
-  and the rule lowers it.
+  the column entraining plume, the MPAS finite-volume `div` / `grad` / `laplacian`
+  rules and the lat-lon Laplace–Beltrami `laplacian` rule): the consuming model
+  writes that operator by name, and the rule lowers it. `div`, `grad` and
+  `laplacian` are ordinary operator names to EarthSciAST, like any other.
 
 A consuming model needs one import and one `D`:
 

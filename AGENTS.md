@@ -76,7 +76,7 @@ fixpoint → official runner`.
   and so it survives §9.7.7 import renaming (the shape follows the renamed axis, enabling
   multi-instance coexistence). A shape-constrained rule needs a **bare declared shaped
   field**, not a compound inline flux: write the match over a plain parameter, and require
-  a consumer differentiating a compound expression (`D(u*h, x)`) to bind it to a declared
+  a consumer differentiating a compound expression (`div(u*h)`) to bind it to a declared
   shaped observed first.
 - A rule author commits exactly: the library file(s), the `tests/conformance/ast/<rule>/`
   fixture + golden, a `tests/conformance/convergence/` case when an order claim is made,
