@@ -28,8 +28,8 @@ grids/<grid>/grid.esm             index sets + geometry (metaparameters: N, NLON
 
 On most grids a `rules/` file is an auto-applied rewrite rule: its `match` is a
 spatial `D` (or an expression of spatial `D`s, such as a Hamilton–Jacobi norm), so
-importing it is enough to discretize every derivative it matches. Two kinds of rule
-file are different:
+importing it is enough to discretize every derivative it matches. The rest are
+different:
 
 - **Plain templates applied by name.** The cubed-sphere `duo` grid's `rules/` files
   (and a few on `cartesian_uniform_2d`, `column_nonuniform_1d` and
@@ -39,8 +39,10 @@ file are different:
 - **Rules that match a user operator** rather than `D` (the `mom6_cgrid` operators,
   the column entraining plume, the MPAS finite-volume `div` / `grad` / `laplacian`
   rules and the lat-lon Laplace–Beltrami `laplacian` rule): the consuming model
-  writes that operator by name, and the rule lowers it. `div`, `grad` and
-  `laplacian` are ordinary operator names to EarthSciAST, like any other.
+  writes that operator by name, and the rule lowers it.
+- **Rules that match a column `integral`** rather than `D`: the
+  `column_nonuniform_1d` `integral_lev_*` rules lower an `integral` over `lev`
+  (whole-column or cumulative, to cells or to nodes) into a quadrature.
 
 A consuming model needs one import and one `D`:
 
