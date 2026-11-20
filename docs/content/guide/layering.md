@@ -53,6 +53,16 @@ plain per-derivative rules via `priority` (esm-spec §9.6.3), so a
 second-derivative rule at priority 10 fires on `D(D(f,x),x)` before any plain-D
 rule lowers the inner derivative.
 
+Not every `rules/` file is auto-applied. The cubed-sphere `duo` grid's rule
+files (and a few on `cartesian_uniform_2d`, `column_nonuniform_1d` and
+`column_nonuniform_1d_tracer`) are **plain templates with no `match`**: a
+consuming model applies them by name with `apply_expression_template`, and they
+never fire on a spatial `D` by themselves. The `mom6_cgrid` rules, the column
+entraining plume, and the MPAS finite-volume and lat-lon Laplace–Beltrami rules
+match **user operators** (`mom6_cgrid_diff_x`, `entraining_plume_lev`, `div`,
+`grad`, `laplacian`, …) that the consuming model writes by name, and the
+`column_nonuniform_1d` `integral_lev_*` rules match a column **`integral`**.
+
 **`problems/<name>.esm`** is a runnable driver: a model importing its grid's
 rule, with equations, initial conditions written over the grid's geometry
 templates, and inline §6.6.5 MMS tests. Your own model sits at exactly this

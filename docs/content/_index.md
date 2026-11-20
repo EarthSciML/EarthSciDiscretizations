@@ -32,6 +32,10 @@ grids/<grid>/grid.esm             index sets + geometry (metaparameters: N, NLON
                                      (also: your model, importing the rule)
 ```
 
+On most grids a rule is auto-applied: its `match` is a spatial `D`. The
+cubed-sphere `duo` grid's rules (and a few others) are plain templates a model
+applies by name; see [the layering](/guide/layering/).
+
 Boundary conditions live **inside** the rule (interior region = the stencil
 `faq`, boundary-face regions = the BC); there is no separate
 boundary-condition declaration anywhere (esm-spec §9.6.8). Rebinding the
