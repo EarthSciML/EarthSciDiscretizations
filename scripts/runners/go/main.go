@@ -315,6 +315,32 @@ func discoverManifests(esdRoot, category string, files []string) ([]manifestEntr
 	return out, nil
 }
 
+// readDocumentJSON reads the document at path as JSON text. A fixture may be
+// written as JSON (.esm), Typst (.typ) or Markdown (.md); the raw §9.7
+// pipeline takes JSON text, so a Typst or Markdown document is read in the
+// format its extension names (esm-spec §1.2.1) by the binding's own public
+// esm.ParseTypst / esm.ParseMarkdown and re-encoded.
+func readDocumentJSON(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var parse func(string) (any, error)
+	switch filepath.Ext(path) {
+	case ".md":
+		parse = esm.ParseMarkdown
+	case ".typ":
+		parse = esm.ParseTypst
+	default:
+		return data, nil
+	}
+	doc, err := parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return json.Marshal(doc)
+}
+
 func readJSONMap(path string) (map[string]interface{}, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -408,7 +434,7 @@ func runAst(esdRoot, outputDir string, files []string, verbose bool) (map[string
 		rec := map[string]interface{}{"case": caseName, "status": "ok"}
 		err := func() error {
 			fixture := filepath.Join(me.dir, me.manifest["fixture"].(string))
-			data, err := os.ReadFile(fixture)
+			data, err := readDocumentJSON(fixture)
 			if err != nil {
 				return err
 			}

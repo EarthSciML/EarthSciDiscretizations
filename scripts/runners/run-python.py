@@ -56,6 +56,13 @@ if not (ESS_ROOT / "esm-schema.json").is_file():
 # directory moved from `packages/earthsci_ast` to `pkg/earthsci-ast-py`
 # upstream; the old spelling had gone dead, so this insert did nothing.)
 sys.path.insert(0, str(ESS_ROOT / "pkg" / "earthsci-ast-py" / "src"))
+# A fixture may be written as JSON (.esm), Typst (.typ) or Markdown (.md); the
+# raw §9.7 pipeline below takes the decoded document, read in the format its
+# extension names (esm-spec §1.2.1) by earthsci_ast's own parse_typst /
+# parse_markdown (scripts/esd_documents.py). Every loader-API path (load_path,
+# run_inline_tests) picks the format itself.
+sys.path.insert(1, str(ESD_ROOT / "scripts"))
+from esd_documents import read_document  # noqa: E402
 
 # PUBLIC SURFACE ONLY (api-surface.json): every EarthSciAST name this runner
 # calls is imported from the package namespace `earthsci_ast`, which is the
@@ -325,7 +332,7 @@ def run_ast(output_dir: Path, files, verbose):
             continue
         try:
             fixture = case_dir / manifest["fixture"]
-            raw = json.loads(fixture.read_text())
+            raw = read_document(fixture)
             resolved = resolve_template_machinery(raw, str(fixture.parent))
             doc = lower_expression_templates(resolved if resolved is not None else raw)
             doc_n = _norm(doc)
@@ -678,7 +685,7 @@ def run_regridding(output_dir: Path, files, verbose):
 # ---------------------------------------------------------------------------
 
 
-def _reproj_wrapper_doc(params):
+def _reproj_wrapper_doc(params, lib_name):
     crs = {k: float(params[k]) for k in ("lat_1", "lat_2", "lat_0", "lon_0", "R")}
 
     def mkapply(tpl, *args):
@@ -711,7 +718,7 @@ def _reproj_wrapper_doc(params):
                          "description": "Runner-built template invocation "
                                         "(manifest fixture: null)."},
             "models": {"Reproject": {
-                "expression_template_imports": [{"ref": "lambert_conformal.esm"}],
+                "expression_template_imports": [{"ref": lib_name}],
                 "variables": variables, "equations": equations}}}
 
 
@@ -733,7 +740,7 @@ def run_reprojection(output_dir: Path, files, verbose):
             gold = json.loads((case_dir / manifest["golden"]).read_text())
             exprs = {}
             for setname, params in gold["parameter_sets"].items():
-                doc = _reproj_wrapper_doc(params)
+                doc = _reproj_wrapper_doc(params, lib.name)
                 file = load_string(json.dumps(doc), base_path=str(lib.parent))
                 m = file.models["Reproject"]
                 defs = observed_definitions(m)

@@ -1,9 +1,23 @@
 # Agent and contributor guide
 
-This repo is the ESM discretization standard library: pure data (`.esm` files) plus the
+This repo is the ESM discretization standard library: pure data (ESM documents) plus the
 test harness and docs pipeline that pin its behavior. The sibling spec repo is
 [EarthSciAST](https://github.com/EarthSciML/EarthSciAST) (`$ESS_ROOT`,
 default `../EarthSciAST` — resolved everywhere by `scripts/ess-locate.sh`).
+
+### Document formats
+
+An ESM document may be written as JSON (`.esm`), Typst (`.typ`) or Markdown (`.md`);
+the format is chosen by the file extension, exactly as EarthSciAST's loaders choose it
+for a root file or a `ref` (esm-spec §1.2.1), and all three read to the same document.
+Every tool here is format-agnostic: the runners hand fixtures to the bindings' own
+`parse_typst` / `parse_markdown` (or their loaders), and the Python tools read through
+`scripts/esd_documents.py`. So a file can move between formats by renaming it, updating
+the `ref`s and manifest paths that name it, and regenerating any AST golden that embeds
+those refs. A name is written in one format only (L009), and since every `.md` file under
+`grids/`, `regridding/`, `reprojection/` and `problems/` is read as a document, prose
+READMEs do not go there. Below, `grid.esm` and
+`<name>.esm` stand for whichever extension the file has.
 
 ## 1. AST first
 
@@ -23,7 +37,7 @@ fixpoint → official runner`.
   upstream in EarthSciAST — **never** patch a local shim, shadow evaluator, or
   per-rule special case here. The archive's retired shadow evaluators are the cautionary
   tale.
-- `tools/` and `docs/generate_catalog.py` may *structurally* read `.esm` JSON (offsets,
+- `tools/` and `docs/generate_catalog.py` may *structurally* read documents (offsets,
   tags, metadata) and may call official ESS display/pretty-print APIs; they must never
   numerically evaluate library math. Every expression the docs display is printed by
   `earthsci_ast.print_math` as LaTeX — no local renderer — the form EarthSciAST's
@@ -84,7 +98,7 @@ fixpoint → official runner`.
 
 ## 4. Metadata and tags contract (lint-enforced)
 
-`scripts/validate-library.py` enforces (codes L001–L008; fixtures in
+`scripts/validate-library.py` enforces (codes L001–L009; fixtures in
 `tests/invalid/lint/`):
 
 - Exactly one kind tag: `esd:grid | esd:stencil | esd:rule | esd:regrid | esd:reproject |
@@ -117,6 +131,8 @@ fixpoint → official runner`.
   derivation applies to a runner-BUILT document (`esm_version()` in the Julia and
   Python runners, for the reprojection wrapper) — a corpus migration that leaves a
   hardcoded version behind in a runner is not finished.
+- Each name is written in one document format: `foo.esm` and `foo.typ` (or `foo.md`)
+  side by side are ambiguous (L009).
 - Provenance goes in `metadata.references` (Fornberg, Snyder, Roache, …);
   human-readable derivations (incl. MMS solutions and BC-compatibility arguments) go in
   `metadata.description` / test descriptions.

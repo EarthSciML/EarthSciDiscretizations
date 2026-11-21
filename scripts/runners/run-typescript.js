@@ -46,7 +46,20 @@ if (!fs.existsSync(DIST)) {
     '(cd pkg/earthsci-ast-ts && npm ci && npm run build)')
   process.exit(1)
 }
-const { resolveTemplateMachinery, lowerExpressionTemplates } = require(DIST)
+const {
+  resolveTemplateMachinery, lowerExpressionTemplates, parseMarkdown, parseTypst
+} = require(DIST)
+
+// A fixture may be written as JSON (.esm), Typst (.typ) or Markdown (.md); the
+// raw §9.7 pipeline in runAst takes the decoded document, read in the format
+// its extension names (esm-spec §1.2.1) by the binding's own public
+// parseTypst / parseMarkdown.
+function readDocument (file) {
+  const text = fs.readFileSync(file, 'utf8')
+  if (file.endsWith('.md')) return parseMarkdown(text)
+  if (file.endsWith('.typ')) return parseTypst(text)
+  return JSON.parse(text)
+}
 
 const CONF = path.join(ESD_ROOT, 'tests', 'conformance')
 
@@ -212,7 +225,7 @@ function runAst (outputDir, files, verbose) {
     const rec = { case: kase, status: 'ok' }
     try {
       const fixture = path.join(caseDir, manifest.fixture)
-      const raw = JSON.parse(fs.readFileSync(fixture, 'utf8'))
+      const raw = readDocument(fixture)
       const resolved = resolveTemplateMachinery(raw, path.dirname(fixture))
       const doc = lowerExpressionTemplates(resolved !== null ? resolved : raw)
       const violations = []
