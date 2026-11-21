@@ -85,6 +85,18 @@ import SciMLBase
 const ODE = OrdinaryDiffEqTsit5
 const ESS = EarthSciAST
 
+# A fixture may be written as JSON (.esm), Typst (.typ) or Markdown (.md); the
+# raw §9.7 pipeline in run_ast takes the decoded document, read in the format
+# its extension names (esm-spec §1.2.1) by the binding's own public
+# parse_typst / parse_markdown. Every loader-API path (load, load_string with
+# a base path) picks the format itself.
+function read_document(path::AbstractString)
+    text = read(path, String)
+    endswith(path, ".md") && return ESS.parse_markdown(text)
+    endswith(path, ".typ") && return ESS.parse_typst(text)
+    return JSON3.read(text)
+end
+
 const ALL_CATEGORIES = ["ast", "simulation", "convergence", "regridding", "reprojection"]
 const CONF = joinpath(ESD_ROOT, "tests", "conformance")
 
@@ -281,7 +293,7 @@ function run_ast(output_dir, files, verbose)
         rec = Dict{String,Any}("case" => case, "status" => "ok")
         try
             fixture = joinpath(case_dir, String(manifest["fixture"]))
-            raw = JSON3.read(read(fixture, String))
+            raw = read_document(fixture)
             resolved = resolve_template_machinery(raw, dirname(fixture))
             out = lower_expression_templates(resolved === nothing ? raw : resolved)
             # ESS retired the JSONLikeDict property-surface shim; the sole post-wire
@@ -515,7 +527,7 @@ end
 # manifest's `fixture: null` contract) importing the library, loaded so §9.7.3
 # body composition inlines the template bodies, then `evaluate_expr` per point.
 # ---------------------------------------------------------------------------
-function _reproj_wrapper_doc(params)
+function _reproj_wrapper_doc(params, lib_name)
     crs = Dict{String,Any}(k => Float64(params[k])
                            for k in ("lat_1", "lat_2", "lat_0", "lon_0", "R"))
     mkapply(tpl, args...) = Dict{String,Any}(
@@ -546,7 +558,7 @@ function _reproj_wrapper_doc(params)
         "metadata" => Dict{String,Any}("name" => "lambert_conformal_eval",
             "description" => "Runner-built template invocation (manifest fixture: null)."),
         "models" => Dict{String,Any}("Reproject" => Dict{String,Any}(
-            "expression_template_imports" => Any[Dict{String,Any}("ref" => "lambert_conformal.esm")],
+            "expression_template_imports" => Any[Dict{String,Any}("ref" => lib_name)],
             "variables" => vars, "equations" => eqs)))
 end
 
@@ -560,7 +572,7 @@ function run_reprojection(output_dir, files, verbose)
             gold = JSON3.read(read(joinpath(case_dir, String(manifest["golden"])), String))
             exprs = Dict{String,Dict{String,Any}}()
             for (setname, params) in pairs(gold["parameter_sets"])
-                doc = _reproj_wrapper_doc(params)
+                doc = _reproj_wrapper_doc(params, basename(lib))
                 # Under Option B lowering (esm 0.9.0, §9.6.4) the wrapper's
                 # non-eager applies survive as leaves, and `evaluate_expr`
                 # (registry-free, single expression) cannot resolve them — so

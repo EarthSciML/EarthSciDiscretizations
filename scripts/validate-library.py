@@ -8,12 +8,12 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
     L001  exactly one `esd:` kind tag (grid|stencil|rule|regrid|reproject|problem)
     L002  required prefix tags present for the kind
     L003  name agreement: filename stem == metadata.name == sole expression_templates
-          key (esd:grid: file is grid.esm and metadata.name == parent directory name).
+          key (esd:grid: file is grid.<ext> and metadata.name == parent directory name).
           esd:regrid / esd:reproject files factor one operation into several
           templates (weight/normalize/apply stages; forward/inverse pairs plus
           helper fragments), so they may declare multiple templates: every key
           must be the stem or prefixed "<stem>_"
-    L004  every `grid:` tag resolves to grids/<name>/grid.esm with matching metadata.name
+    L004  every `grid:` tag resolves to grids/<name>/grid.<ext> with matching metadata.name
     L005  stencils/rules live under the grid directory their `grid:` tag names
     L006  a rule's makearray regions tile the axes named by its `axes:` tag exactly
           (`axes:none` declares a rank-0 output, which must not be a makearray)
@@ -22,14 +22,23 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
     L007  kind/payload agreement: grid|stencil|rule|regrid|reproject are pure
           template-library files; problem files carry models
     L008  esm version matches the ESS schema's $id (see esm_version())
+    L009  each name is written in one document format: no two of foo.esm,
+          foo.typ, foo.md side by side
+
+A library file is any ESM document under the library directories: JSON
+(`.esm`), Typst (`.typ`) or Markdown (`.md`), read in the format its extension
+names (esm-spec §1.2.1; scripts/esd_documents.py). Typst and Markdown files are
+decoded by EarthSciAST's own readers (from $ESS_ROOT, like the runners), so
+every check below sees the same JSON document whatever the source format.
 
 Usage:
   validate-library.py               validate + lint the library (exit 1 on findings)
   validate-library.py --invalid     check tests/invalid/lint/ fixtures against
                                     tests/invalid/lint/expected_errors.json
 
-Requires: jsonschema (pip install jsonschema). CI installs it; locally the
-EarthSciAST Python venv also carries it.
+Requires: jsonschema, plus EarthSciAST's Python dependencies when the library
+holds Typst or Markdown documents (pip install -e $ESS_ROOT/pkg/earthsci-ast-py
+installs both; CI does that).
 """
 
 from __future__ import annotations
@@ -41,6 +50,9 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts"))
+from esd_documents import documents, duplicate_stems, read_document  # noqa: E402
+
 LIBRARY_DIRS = ("grids", "regridding", "reprojection", "problems")
 KINDS = ("grid", "stencil", "rule", "regrid", "reproject", "problem")
 REQUIRED_TAGS = {
@@ -73,19 +85,40 @@ def esm_version() -> str:
 
 
 
+_ESS_ROOT: Path | None = None
+
+
 def ess_root() -> Path:
+    global _ESS_ROOT
+    if _ESS_ROOT is not None:
+        return _ESS_ROOT
     out = subprocess.run(
         [str(REPO / "scripts" / "ess-locate.sh")], capture_output=True, text=True
     )
     if out.returncode != 0:
         sys.stderr.write(out.stderr)
         sys.exit(2)
-    return Path(out.stdout.strip())
+    _ESS_ROOT = Path(out.stdout.strip())
+    # Typst / Markdown documents are read by EarthSciAST's own readers, taken
+    # from this checkout rather than whatever earthsci_ast is installed.
+    sys.path.insert(0, str(_ESS_ROOT / "pkg" / "earthsci-ast-py" / "src"))
+    return _ESS_ROOT
 
 
 def load_json(path: Path):
     with open(path) as f:
         return json.load(f)
+
+
+def load_document(path: Path) -> dict:
+    """The document at `path` in whichever format it is written, or a
+    {"__parse_error__": …} stand-in the lint reports as PARSE."""
+    if path.suffix != ".esm":
+        ess_root()  # puts EarthSciAST's readers on sys.path
+    try:
+        return read_document(path)
+    except ValueError as e:  # JSONDecodeError, or EarthSciAST's ParseError
+        return {"__parse_error__": f"{type(e).__name__}: {e}"}
 
 
 class Findings:
@@ -162,21 +195,17 @@ class Library:
         self.files: list[Path] = []
         for d in LIBRARY_DIRS:
             base = REPO / d
-            if base.is_dir():
-                self.files.extend(sorted(base.rglob("*.esm")))
+            self.files.extend(documents(base, recursive=True))
         # Mesh-data files (grids/*/mesh/) are fixture data, not lintable library
         # entries; they are schema-validated only.
         self.entries = [p for p in self.files if "mesh" not in p.parts]
         self.docs: dict[Path, dict] = {}
         for p in self.files:
-            try:
-                self.docs[p] = load_json(p)
-            except json.JSONDecodeError as e:
-                self.docs[p] = {"__parse_error__": str(e)}
+            self.docs[p] = load_document(p)
         self.grids: dict[str, Path] = {}
         for p in self.entries:
             doc = self.docs[p]
-            if p.name == "grid.esm" and "__parse_error__" not in doc:
+            if p.stem == "grid" and "__parse_error__" not in doc:
                 name = doc.get("metadata", {}).get("name", "")
                 self.grids[name] = p
 
@@ -208,8 +237,8 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
     name = meta.get("name", "")
     templates = doc.get("expression_templates") or {}
     if kind == "grid":
-        if path.name != "grid.esm":
-            findings.add(path, "L003", "esd:grid files must be named grid.esm")
+        if stem != "grid":
+            findings.add(path, "L003", "esd:grid files must be named grid.<ext>")
         if name != path.parent.name:
             findings.add(
                 path, "L003",
@@ -254,7 +283,7 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
     for grid_name in tags.get("grid", []):
         grid_path = lib.grids.get(grid_name)
         if grid_path is None:
-            findings.add(path, "L004", f"grid:{grid_name} does not resolve to a grids/*/grid.esm")
+            findings.add(path, "L004", f"grid:{grid_name} does not resolve to a grids/*/grid.<ext>")
         elif kind in ("stencil", "rule") and grid_path.parent not in path.parents:
             findings.add(
                 path, "L005",
@@ -362,7 +391,7 @@ def lint_rule_regions(path: Path, doc: dict, tags, lib: Library, findings: Findi
                 break
 
 
-def validate_schema(files, findings: Findings) -> None:
+def validate_schema(files: dict[Path, dict], findings: Findings) -> None:
     try:
         import jsonschema
     except ImportError:
@@ -373,10 +402,8 @@ def validate_schema(files, findings: Findings) -> None:
         sys.exit(2)
     schema = load_json(ess_root() / "esm-schema.json")
     validator = jsonschema.Draft202012Validator(schema)
-    for path in files:
-        try:
-            doc = load_json(path)
-        except json.JSONDecodeError:
+    for path, doc in files.items():
+        if "__parse_error__" in doc:
             continue  # PARSE finding handled by lint
         for err in validator.iter_errors(doc):
             findings.add(path, "SCHEMA", f"{'/'.join(map(str, err.path))}: {err.message[:200]}")
@@ -385,7 +412,14 @@ def validate_schema(files, findings: Findings) -> None:
 def run_validate() -> int:
     lib = Library()
     findings = Findings()
-    validate_schema(lib.files, findings)
+    validate_schema(lib.docs, findings)
+    for stem, paths in duplicate_stems(lib.files).items():
+        for p in paths:
+            findings.add(
+                p, "L009",
+                f"{stem.name} is written in several formats: "
+                + ", ".join(q.name for q in paths),
+            )
     for path in lib.entries:
         lint_file(path, lib, findings)
     print(f"validated {len(lib.files)} file(s) ({len(lib.entries)} library entries)")
@@ -404,7 +438,7 @@ def run_invalid() -> int:
             print(f"MISSING fixture {rel}")
             failures += 1
             continue
-        lib.docs[path] = load_json(path)
+        lib.docs[path] = load_document(path)
         lint_file(path, lib, findings)
         got = {code for _, code, _ in findings.items}
         want = set(spec["codes"])

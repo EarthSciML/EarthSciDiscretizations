@@ -23,7 +23,11 @@ docs/content/reprojection/, docs/static/plots/ — see AGENTS.md "Generated
 files").
 
 Expression display policy (AGENTS.md "single pathway"):
-  * This script reads .esm JSON structurally and NEVER evaluates library math.
+  * This script reads library documents structurally and NEVER evaluates
+    library math. A document may be JSON (.esm), Typst (.typ) or Markdown
+    (.md); scripts/esd_documents.py reads it in the format its extension
+    names, Typst and Markdown through earthsci_ast's own readers, so every
+    page is built from the same JSON document whatever the source format.
   * Every expression shown on a generated page is printed by the public
     `earthsci_ast.print_math` (format "markdown") and nothing else, so the
     pages show EarthSciAST's LaTeX math, the form its `parse_math` reads back,
@@ -31,7 +35,7 @@ Expression display policy (AGENTS.md "single pathway"):
     cells) and `$$...$$` for display blocks. There is no local renderer and no
     fallback: earthsci_ast is a hard requirement (the CI docs job pip-installs
     it), and an expression `print_math` cannot print fails the build. Full
-    precision always lives in the .esm sources the pages link.
+    precision always lives in the library sources the pages link.
   * Template names and parameter lists are shown as labels next to the
     printed body; region tables and stencil expansion are gone — a rule's
     `makearray` body is printed whole, imported stencils appearing as the
@@ -61,6 +65,9 @@ from pathlib import Path
 DOCS = Path(__file__).resolve().parent
 REPO = DOCS.parent
 REPO_URL = "https://github.com/EarthSciML/earthscidiscretizations"
+
+sys.path.insert(0, str(REPO / "scripts"))
+from esd_documents import documents, find_document, read_document  # noqa: E402
 
 GRIDS = REPO / "grids"
 REGRIDDING = REPO / "regridding"
@@ -94,6 +101,15 @@ def load_json(path: Path):
         return None
 
 
+def load_doc(path: Path):
+    """A library document in whichever format it is written, or None."""
+    try:
+        return read_document(path)
+    except (OSError, ValueError) as exc:  # JSONDecodeError, earthsci_ast ParseError
+        fail(f"{path.relative_to(REPO)}: unreadable document: {exc}")
+        return None
+
+
 def rel(path: Path) -> str:
     return path.relative_to(REPO).as_posix()
 
@@ -121,6 +137,28 @@ def first_sentence(text: str) -> str:
         if i != -1:
             return text[: i + 1]
     return text
+
+
+def _display_order(node):
+    """`node` with every object's keys in one fixed order — `op`, then `args`,
+    then the rest sorted — so a pattern shows the same whichever format its
+    document is written in (the Typst and Markdown readers return keys sorted;
+    a JSON file keeps its author's order)."""
+    if isinstance(node, dict):
+        head = [k for k in ("op", "args") if k in node]
+        keys = head + sorted(k for k in node if k not in head)
+        return {k: _display_order(node[k]) for k in keys}
+    if isinstance(node, list):
+        return [_display_order(v) for v in node]
+    return node
+
+
+# Name-keyed tables (metaparameters, index sets, templates) are listed in sorted
+# order for the same reason: the page must not depend on the source format.
+
+
+def display_json(node) -> str:
+    return json.dumps(_display_order(node), ensure_ascii=False)
 
 
 def yaml_str(value) -> str:
@@ -207,7 +245,7 @@ def expression_names(node, out: list | None = None) -> list:
                 continue
             value = node[key]
             if key == "bindings" and isinstance(value, dict):
-                value = list(value.values())
+                value = [value[k] for k in sorted(value)]
             expression_names(value, out)
     return out
 
@@ -255,21 +293,15 @@ def code_span(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def esm_files(directory: Path) -> list[Path]:
-    if not directory.is_dir():
-        return []
-    return sorted(p for p in directory.iterdir() if p.suffix == ".esm" and p.is_file())
-
-
 def sole_template(doc: dict, path: Path):
     """(name, template) for the single expression_templates entry, or None."""
     templates = doc.get("expression_templates") or {}
     if not templates:
         warn(f"{rel(path)}: no expression_templates")
         return None
-    name = doc.get("metadata", {}).get("name") or next(iter(templates))
+    name = doc.get("metadata", {}).get("name") or min(templates)
     if name not in templates:
-        name = next(iter(templates))
+        name = min(templates)
     return name, templates[name]
 
 
@@ -398,7 +430,7 @@ def problem_imports(problem_path: Path, cache: dict) -> set[Path]:
     if problem_path in cache:
         return cache[problem_path]
     refs: set[Path] = set()
-    doc = load_json(problem_path) if problem_path.exists() else None
+    doc = load_doc(problem_path) if problem_path.exists() else None
     if doc:
         for model in (doc.get("models") or {}).values():
             for imp in model.get("expression_template_imports") or []:
@@ -644,7 +676,7 @@ def rule_section(
         out.append(f"**Rewrites** {inline_math(pretty)}{priority_note} — match pattern:")
         out.append("")
         out.append("```json")
-        out.append(json.dumps(match, ensure_ascii=False))
+        out.append(display_json(match))
         out.append("```")
         out.append("")
     else:
@@ -656,13 +688,13 @@ def rule_section(
     where = template.get("where")
     if where:
         clauses = []
-        for var, spec in where.items():
+        for var, spec in sorted(where.items()):
             shape = spec.get("shape") if isinstance(spec, dict) else None
             if isinstance(shape, list):
                 axes_s = ", ".join(str(a) for a in shape)
                 clauses.append(f"<code>{html.escape(str(var))}</code> is a bare field shaped <code>[{html.escape(axes_s)}]</code>")
             else:
-                clauses.append(f"<code>{html.escape(str(var))}</code>: <code>{html.escape(json.dumps(spec, ensure_ascii=False))}</code>")
+                clauses.append(f"<code>{html.escape(str(var))}</code>: <code>{html.escape(display_json(spec))}</code>")
         out.append(
             '<div class="callout callout-scope"><strong>Match scope</strong> '
             "(esm-spec §9.6.1 <code>where</code>): fires only when " + "; ".join(clauses) + ". "
@@ -769,8 +801,8 @@ def grid_page(
     problem_cache,
     plots_root: Path,
 ) -> str | None:
-    grid_path = grid_dir / "grid.esm"
-    doc = load_json(grid_path)
+    grid_path = find_document(grid_dir, "grid")
+    doc = load_doc(grid_path)
     if doc is None:
         return None
     metadata = doc.get("metadata", {})
@@ -778,8 +810,8 @@ def grid_page(
     tags = metadata.get("tags") or []
     family = tag_value(tags, "family:")
 
-    stencil_docs = [(p, load_json(p)) for p in esm_files(grid_dir / "stencils")]
-    rule_docs = [(p, load_json(p)) for p in esm_files(grid_dir / "rules")]
+    stencil_docs = [(p, load_doc(p)) for p in documents(grid_dir / "stencils")]
+    rule_docs = [(p, load_doc(p)) for p in documents(grid_dir / "rules")]
     stencil_docs = [(p, d) for p, d in stencil_docs if d is not None]
     rule_docs = [(p, d) for p, d in rule_docs if d is not None]
 
@@ -820,7 +852,7 @@ def grid_page(
     metaparameters = doc.get("metaparameters") or {}
     if metaparameters:
         lines += ["## Metaparameters", "", "| Name | Type | Default | Description |", "|---|---|---|---|"]
-        for pname, spec in metaparameters.items():
+        for pname, spec in sorted(metaparameters.items()):
             default = spec.get("default", "—")
             lines.append(
                 f"| `{pname}` | {spec.get('type', '')} | `{default}` | {md_cell(md_prose(spec.get('description', '')))} |"
@@ -879,7 +911,7 @@ def grid_page(
     index_sets = doc.get("index_sets") or {}
     if index_sets:
         lines += ["## Index sets", "", "| Name | Kind | Size |", "|---|---|---|"]
-        for iname, spec in index_sets.items():
+        for iname, spec in sorted(index_sets.items()):
             if spec.get("kind") == "ragged":
                 of = spec.get("of") or []
                 detail = f"per {', '.join(of)}" if of else "ragged"
@@ -904,7 +936,7 @@ def grid_page(
             "| Template | Parameters | Definition | Description |",
             "|---|---|---|---|",
         ]
-        for tname, tmpl in templates.items():
+        for tname, tmpl in sorted(templates.items()):
             params = ", ".join(f"`{p}`" for p in tmpl.get("params") or []) or "—"
             definition = printer(tmpl.get("body"), f"{rel(grid_path)} template {tname}")
             lines.append(
@@ -992,7 +1024,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Mat
         ],
     }[kind]
 
-    entries = esm_files(directory)
+    entries = documents(directory)
     lines = [
         "---",
         f"title: {yaml_str(title)}",
@@ -1012,7 +1044,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Mat
         return "\n".join(lines) + "\n"
 
     for path in entries:
-        doc = load_json(path)
+        doc = load_doc(path)
         if doc is None:
             continue
         metadata = doc.get("metadata", {})
@@ -1031,7 +1063,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Mat
         if templates:
             lines.append(f"<details><summary>Templates ({len(templates)})</summary>")
             lines.append("")
-            for tname, tmpl in templates.items():
+            for tname, tmpl in sorted(templates.items()):
                 lines.append(f"**`{tname}`**")
                 if tmpl.get("description"):
                     lines.append("")
@@ -1088,8 +1120,8 @@ def generate(content_root: Path, static_root: Path) -> None:
     n_grids = 0
     if GRIDS.is_dir():
         for grid_dir in sorted(p for p in GRIDS.iterdir() if p.is_dir()):
-            if not (grid_dir / "grid.esm").exists():
-                warn(f"{rel(grid_dir)}: no grid.esm — skipped (possibly still landing)")
+            if find_document(grid_dir, "grid") is None:
+                warn(f"{rel(grid_dir)}: no grid document — skipped (possibly still landing)")
                 continue
             page = grid_page(grid_dir, printer, conformance_cases, problem_cache, plots_root)
             if page is None:
