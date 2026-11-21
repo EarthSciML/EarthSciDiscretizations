@@ -1,0 +1,61 @@
+#import "@preview/esm:0.1.0": *
+#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "column_nonuniform_1d_tracer", references: (
+  (
+    citation: "Grell, G. A., Peckham, S. E., Schmitz, R., McKeen, S. A., Frost, G., Skamarock, W. C., and Eder, B. (2005). Fully coupled 'online' chemistry within the WRF model. Atmos. Environ. 39, 6957-6975. (Per-species vertical mixing with shared exchange coefficients.)",
+    doi: "10.1016/j.atmosenv.2005.04.027",
+  ),
+), tags: (
+  "esd:grid",
+  "family:column",
+  "ndim:2",
+  "spacing:nonuniform",
+  "axis:lev",
+  "axis:tracer",
+))
+
+#description[grids/column\_nonuniform\_1d with a trailing TRACER axis: fields shaped \[lev, tracer\] are NTRACER transported constituents (chemical species, aerosol sections) that share ONE column's geometry and coefficients. The vertical axes are exactly the column grid's -- \`lev\` (NLEV layers, layer 1 the surface) and \`lev\_nodes\` (NLEV+1 interfaces) -- declared here -- with the NLEV metaparameter -- verbatim as on that grid, so they deep-equal and dedupe against grids/column\_nonuniform\_1d when a model imports from both grids; \`tracer\` (NTRACER members) is the only new axis. The geometry is the column grid's, unchanged: a consumer supplies the interface array \`ze\` \[lev\_nodes\] and derives \`zc\` and \`dz\` \[lev\] by applying column\_nonuniform\_1d's \`column\_cell\_center\` / \`column\_cell\_thickness\` (import that grid file, or its mesh fixture, beside this grid's rules); this grid adds no geometry, so the per-tracer operators read the same \`zc\`/\`dz\` by bare name. Its one template, \`tracer\_column\_total\`, is the per-tracer column total sum\_k u\[k,s\] dz\[k\] that the flux-form operators here conserve tracer by tracer. It is a separate grid rather than an extra index set on column\_nonuniform\_1d because the grid-first layout (AGENTS.md section 3) puts an operator that takes a different form on a different field shape under its own grid, and rule match-scoping (esm-spec 9.6.1 \`where\` shapes) already tells a \[lev\] field from a \[lev, tracer\] one by axis names, so the two grids' rules are disjoint and a model may import both. A consumer whose species axis has another name imports this grid's rules with \`rename: {tracer: \<its axis\>}\` (esm-spec 9.7.7) and binds NTRACER to that axis's size; NLEV is bound as on the column grid. Motivation: one mount of a column tracer-mixing component for every species of an atmospheric-chemistry mechanism (WRF-Chem's vertmx is called once per species with the same exchange coefficients).]
+
+#esm-block("index_sets", (
+  lev: (
+    kind: "interval",
+    size: "NLEV",
+  ),
+  lev_nodes: (
+    kind: "interval",
+    size: (
+      args: (
+        "NLEV",
+        1,
+      ),
+      op: "+",
+    ),
+  ),
+  tracer: (
+    kind: "interval",
+    size: "NTRACER",
+  ),
+))
+
+#esm-block("metaparameters", (
+  NLEV: (
+    default: 64,
+    description: "Number of layers (cells) along lev; the interface axis lev_nodes has NLEV+1 members. Minimum 2 (see the grid description).",
+    type: "integer",
+  ),
+  NTRACER: (
+    default: 1,
+    description: "Number of tracers on the trailing axis.",
+    type: "integer",
+  ),
+))
+
+#template(description: "Per-tracer column total sum_k u[k,s] dz[k] of a [lev, tracer] field, shape [tracer]: the finite-volume measure the per-tracer flux-form operators on this grid conserve, so for the prescribed-flux diffusion rule d/dt of it equals kdudz_top[s] - kdudz_bot[s] exactly (telescoping). The same sum as grids/column_nonuniform_1d/stencils/integral_lev_total applied to each column u[:, s]; `dz` is read by bare name as on the column grid. Aggregation index `gk`, not `k`, so it never captures a consuming rule's own aggregate index when inlined.")[$ op("tracer_column_total")(u) := op("faq")(u; upright("expr") = u_(italic("gk"), s) italic("dz")_(italic("gk")), upright("output_idx") = #(
+  "s",
+), upright("ranges") = #(
+  gk: (
+    from: "lev",
+  ),
+  s: (
+    from: "tracer",
+  ),
+), upright("reduce") = #"+") $]
