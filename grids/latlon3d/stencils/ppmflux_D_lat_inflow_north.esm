@@ -1,8 +1,8 @@
 {
   "esm": "2.3.0",
   "metadata": {
-    "name": "ppmflux_D_lat_inflow_whole",
-    "description": "The upwind-biased, monotone, conservative flux-form meridional advection D(V*q) at EVERY cell of the regional latlon3d grid at once, OPEN walls included: exactly the expression of ./ppmflux_D_lat_interior (the same spherical metric and the same two face fluxes ../stencils/ppmflux_lev_face_flux, upper face first), with each window member of a face read through the lateral halo. The upper face of cell j reads cells j-2..j+3 and V at face j+1, the lower face cells j-3..j+2 and V at face j. A member outside the domain is the prescribed lateral-boundary concentration (qbc_s below cell 1, qbc_n above cell NLAT), so each read is ifelse(inside, q at the clamped cell, halo): the subscript stays in range and the halo is selected exactly; the meridional widths dphi_lat are read at the clamped (edge-extended) cell. This is the boundary closure the open-wall rule has always used -- every near-wall slab of the earlier spelling read exactly this window -- written so that the lat index is an ordinary array axis and the operator is one aggregate instead of an interior stencil plus six one-row slabs. At q == 1 with the halo == 1 every slope is 0.0 and each face flux is the wind bitwise. Any NLAT >= 1.",
+    "name": "ppmflux_D_lat_inflow_north",
+    "description": "The upwind-biased, monotone, conservative flux-form meridional advection D(V*q) over the three rows next to the north wall (j = NLAT-2..NLAT) of the regional latlon3d grid at once, OPEN walls included: exactly the expression of ./ppmflux_D_lat_interior (the same spherical metric and the same two face fluxes ../stencils/ppmflux_lev_face_flux, upper face first), with each window member of a face read through the lateral halo. The upper face of cell j reads cells j-2..j+3 and V at face j+1, the lower face cells j-3..j+2 and V at face j. A member outside the domain is the prescribed lateral-boundary concentration (qbc_s below cell 1, qbc_n above cell NLAT), so each read is ifelse(inside, q at the clamped cell, halo): the subscript stays in range and the halo is selected exactly; the meridional widths dphi_lat are read at the clamped (edge-extended) cell. This is the boundary closure the open-wall rule has always used -- every near-wall slab of the earlier spelling read exactly this window -- written so that the lat index is an ordinary array axis and a whole three-row slab is one aggregate instead of three one-row stencils. At q == 1 with the halo == 1 every slope is 0.0 and each face flux is the wind bitwise. Only the north wall's closure can act on these rows (requires NLAT >= 6), so only that side's reads carry it; the window members toward the other wall are read by plain offsets. The interior rows use ./ppmflux_D_lat_interior and the opposite slab ./ppmflux_D_lat_inflow_south.",
     "license": "MIT",
     "tags": [
       "esd:stencil",
@@ -44,11 +44,10 @@
     }
   ],
   "expression_templates": {
-    "ppmflux_D_lat_inflow_whole": {
+    "ppmflux_D_lat_inflow_north": {
       "params": [
         "q",
         "V",
-        "qbc_s",
         "qbc_n"
       ],
       "body": {
@@ -66,9 +65,16 @@
           "i": {
             "from": "lon"
           },
-          "j": {
-            "from": "lat"
-          },
+          "j": [
+            {
+              "op": "-",
+              "args": [
+                "NLAT",
+                2
+              ]
+            },
+            "NLAT"
+          ],
           "k": {
             "from": "lev"
           }
@@ -88,97 +94,33 @@
                       "name": "ppmflux_lev_face_flux",
                       "bindings": {
                         "aL2": {
-                          "op": "ifelse",
+                          "op": "index",
                           "args": [
+                            "q",
+                            "i",
                             {
-                              "op": ">=",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    2
-                                  ]
-                                },
-                                1
+                                "j",
+                                2
                               ]
                             },
-                            {
-                              "op": "index",
-                              "args": [
-                                "q",
-                                "i",
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        2
-                                      ]
-                                    },
-                                    1
-                                  ]
-                                },
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "qbc_s",
-                                "i",
-                                "k"
-                              ]
-                            }
+                            "k"
                           ]
                         },
                         "aL1": {
-                          "op": "ifelse",
+                          "op": "index",
                           "args": [
+                            "q",
+                            "i",
                             {
-                              "op": ">=",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    1
-                                  ]
-                                },
+                                "j",
                                 1
                               ]
                             },
-                            {
-                              "op": "index",
-                              "args": [
-                                "q",
-                                "i",
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        1
-                                      ]
-                                    },
-                                    1
-                                  ]
-                                },
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "qbc_s",
-                                "i",
-                                "k"
-                              ]
-                            }
+                            "k"
                           ]
                         },
                         "aC": {
@@ -336,16 +278,10 @@
                           "args": [
                             "dphi_lat",
                             {
-                              "op": "max",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    2
-                                  ]
-                                },
-                                1
+                                "j",
+                                2
                               ]
                             }
                           ]
@@ -355,15 +291,9 @@
                           "args": [
                             "dphi_lat",
                             {
-                              "op": "max",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    1
-                                  ]
-                                },
+                                "j",
                                 1
                               ]
                             }
@@ -474,144 +404,48 @@
                       "name": "ppmflux_lev_face_flux",
                       "bindings": {
                         "aL2": {
-                          "op": "ifelse",
+                          "op": "index",
                           "args": [
+                            "q",
+                            "i",
                             {
-                              "op": ">=",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    3
-                                  ]
-                                },
-                                1
+                                "j",
+                                3
                               ]
                             },
-                            {
-                              "op": "index",
-                              "args": [
-                                "q",
-                                "i",
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        3
-                                      ]
-                                    },
-                                    1
-                                  ]
-                                },
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "qbc_s",
-                                "i",
-                                "k"
-                              ]
-                            }
+                            "k"
                           ]
                         },
                         "aL1": {
-                          "op": "ifelse",
+                          "op": "index",
                           "args": [
+                            "q",
+                            "i",
                             {
-                              "op": ">=",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    2
-                                  ]
-                                },
-                                1
+                                "j",
+                                2
                               ]
                             },
-                            {
-                              "op": "index",
-                              "args": [
-                                "q",
-                                "i",
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        2
-                                      ]
-                                    },
-                                    1
-                                  ]
-                                },
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "qbc_s",
-                                "i",
-                                "k"
-                              ]
-                            }
+                            "k"
                           ]
                         },
                         "aC": {
-                          "op": "ifelse",
+                          "op": "index",
                           "args": [
+                            "q",
+                            "i",
                             {
-                              "op": ">=",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    1
-                                  ]
-                                },
+                                "j",
                                 1
                               ]
                             },
-                            {
-                              "op": "index",
-                              "args": [
-                                "q",
-                                "i",
-                                {
-                                  "op": "max",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "j",
-                                        1
-                                      ]
-                                    },
-                                    1
-                                  ]
-                                },
-                                "k"
-                              ]
-                            },
-                            {
-                              "op": "index",
-                              "args": [
-                                "qbc_s",
-                                "i",
-                                "k"
-                              ]
-                            }
+                            "k"
                           ]
                         },
                         "aRc": {
@@ -722,16 +556,10 @@
                           "args": [
                             "dphi_lat",
                             {
-                              "op": "max",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    3
-                                  ]
-                                },
-                                1
+                                "j",
+                                3
                               ]
                             }
                           ]
@@ -741,16 +569,10 @@
                           "args": [
                             "dphi_lat",
                             {
-                              "op": "max",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    2
-                                  ]
-                                },
-                                1
+                                "j",
+                                2
                               ]
                             }
                           ]
@@ -760,15 +582,9 @@
                           "args": [
                             "dphi_lat",
                             {
-                              "op": "max",
+                              "op": "-",
                               "args": [
-                                {
-                                  "op": "-",
-                                  "args": [
-                                    "j",
-                                    1
-                                  ]
-                                },
+                                "j",
                                 1
                               ]
                             }
