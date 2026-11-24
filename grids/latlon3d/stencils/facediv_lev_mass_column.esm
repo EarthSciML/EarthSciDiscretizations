@@ -1,0 +1,93 @@
+{
+  "esm": "2.3.0",
+  "metadata": {
+    "name": "facediv_lev_mass_column",
+    "description": "The RAW (mass-form, moving-grid) vertical face-flux difference F[k+1] - F[k] over EVERY cell k = 1..NLEV of every column, from a face array F of shape [lon,lat,lev_nodes] (face k is the LOWER edge of cell k). No division by a cell thickness: the result is the extensive cell-mass tendency, the vertical divergence that stays conservative while the layers breathe (see facediv_lev_mass_interior). Unlike the interior stencil, the whole column is one aggregate: the boundary closure is carried by the face values the caller supplies at the two wall faces (k = 1 and k = NLEV+1). A rule with rigid no-flux walls passes zero there, so cell 1 gets F[2] - 0 and cell NLEV gets 0 - F[NLEV], bit for bit the one-sided wall differences.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:div",
+      "axes:lon,lat,lev",
+      "order:1",
+      "stencil_width:2"
+    ],
+    "references": [
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070. (Flux-form transport and the requirement that the tracer scheme reuse the mass fluxes of the continuity scheme.)",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      },
+      {
+        "citation": "Jacobson, M. Z. (2005). Fundamentals of Atmospheric Modeling (2nd ed.). Cambridge University Press. Chapter 6 (finite-volume flux-form tracer transport; consistency with continuity)."
+      },
+      {
+        "citation": "Jockel, P., von Kuhlmann, R., Lawrence, M. G., et al. (2001). On a fundamental problem in implementing flux-form advection schemes for tracer transport in 3-dimensional general circulation and chemistry transport models. Quarterly Journal of the Royal Meteorological Society, 127(573), 1035-1052. (The canonical statement of the consistency-with-continuity requirement and of what goes wrong without it.)",
+        "doi": "10.1002/qj.49712757318"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    }
+  ],
+  "expression_templates": {
+    "facediv_lev_mass_column": {
+      "params": [
+        "F"
+      ],
+      "body": {
+        "op": "faq",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "F"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": {
+            "from": "lev"
+          }
+        },
+        "expr": {
+          "op": "-",
+          "args": [
+            {
+              "op": "index",
+              "args": [
+                "F",
+                "i",
+                "j",
+                {
+                  "op": "+",
+                  "args": [
+                    "k",
+                    1
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "index",
+              "args": [
+                "F",
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
