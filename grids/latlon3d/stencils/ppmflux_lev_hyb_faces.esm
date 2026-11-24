@@ -1,0 +1,300 @@
+{
+  "esm": "2.3.0",
+  "metadata": {
+    "name": "ppmflux_lev_hyb_faces",
+    "description": "The upwind-biased, monotone PPM vertical face flux F_{k} = max(W,0)*aR_L + min(W,0)*aL_R (../stencils/ppmflux_lev_face_flux) at EVERY interior face k = 2..NLEV of every column at once, for the terrain-following (hybrid sigma-pressure) vertical. Face k is the LOWER edge of cell k: it lies between cell L = k-1 (aC) and cell R = k (aRc), and W[i,j,k] is the air-mass flux through it, positive upward. The CW84 eq (1.6)/(1.8)/(1.10) reconstruction reads the six-cell window k-3..k+2 of the tracer q and of the physical pressure thicknesses dp (free name, shape [lon,lat,lev]). Near the rigid walls that window reaches past the column; the out-of-column members are EDGE-EXTENDED -- read at the nearest in-column cell, max(k-3,1), max(k-2,1), min(k+1,NLEV), min(k+2,NLEV) -- which is exactly the near-wall reconstruction the no-flux rule has always used (cells below the ground repeat cell 1, cells above the model top repeat cell NLEV). Writing the edge extension as a clamped subscript keeps the level an ordinary array axis, so the whole three-dimensional face array is one aggregate instead of one slab per near-wall face. The two wall faces (k = 1 and k = NLEV+1) are not computed here: the consuming rule supplies them (rigid no-flux walls carry zero flux). Defined for NLEV >= 2 (no interior face otherwise). At q == 1 every slope is a difference of equal values, exactly 0.0, so F = W bitwise whatever the widths.",
+    "license": "MIT",
+    "tags": [
+      "esd:stencil",
+      "family:finite_volume",
+      "grid:latlon3d",
+      "op:advection",
+      "axes:lon,lat,lev_nodes",
+      "order:3",
+      "scheme:upwind",
+      "stencil_width:6"
+    ],
+    "references": [
+      {
+        "citation": "Colella, P., & Woodward, P. R. (1984). The Piecewise Parabolic Method (PPM) for gas-dynamical simulations. Journal of Computational Physics, 54(1), 174-201.",
+        "doi": "10.1016/0021-9991(84)90143-8"
+      },
+      {
+        "citation": "Lin, S.-J., & Rood, R. B. (1996). Multidimensional flux-form semi-Lagrangian transport schemes. Monthly Weather Review, 124(9), 2046-2070.",
+        "doi": "10.1175/1520-0493(1996)124<2046:MFFSLT>2.0.CO;2"
+      }
+    ]
+  },
+  "expression_template_imports": [
+    {
+      "ref": "../grid.esm"
+    },
+    {
+      "ref": "./ppmflux_lev_face_flux.esm"
+    }
+  ],
+  "expression_templates": {
+    "ppmflux_lev_hyb_faces": {
+      "params": [
+        "q",
+        "W"
+      ],
+      "body": {
+        "op": "faq",
+        "output_idx": [
+          "i",
+          "j",
+          "k"
+        ],
+        "args": [
+          "q",
+          "W"
+        ],
+        "ranges": {
+          "i": {
+            "from": "lon"
+          },
+          "j": {
+            "from": "lat"
+          },
+          "k": [
+            2,
+            "NLEV"
+          ]
+        },
+        "expr": {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "ppmflux_lev_face_flux",
+          "bindings": {
+            "aL2": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                {
+                  "op": "max",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        3
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "aL1": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                {
+                  "op": "max",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        2
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "aC": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                {
+                  "op": "-",
+                  "args": [
+                    "k",
+                    1
+                  ]
+                }
+              ]
+            },
+            "aRc": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                "k"
+              ]
+            },
+            "aR1": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    },
+                    "NLEV"
+                  ]
+                }
+              ]
+            },
+            "aR2": {
+              "op": "index",
+              "args": [
+                "q",
+                "i",
+                "j",
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        2
+                      ]
+                    },
+                    "NLEV"
+                  ]
+                }
+              ]
+            },
+            "dL2": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                {
+                  "op": "max",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        3
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "dL1": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                {
+                  "op": "max",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        "k",
+                        2
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "dC": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                {
+                  "op": "-",
+                  "args": [
+                    "k",
+                    1
+                  ]
+                }
+              ]
+            },
+            "dRc": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                "k"
+              ]
+            },
+            "dR1": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        1
+                      ]
+                    },
+                    "NLEV"
+                  ]
+                }
+              ]
+            },
+            "dR2": {
+              "op": "index",
+              "args": [
+                "dp",
+                "i",
+                "j",
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        "k",
+                        2
+                      ]
+                    },
+                    "NLEV"
+                  ]
+                }
+              ]
+            },
+            "w": {
+              "op": "index",
+              "args": [
+                "W",
+                "i",
+                "j",
+                "k"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
