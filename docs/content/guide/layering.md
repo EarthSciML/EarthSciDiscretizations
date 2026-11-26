@@ -5,8 +5,8 @@ weight: 1
 ---
 
 Every library entry is a valid ESM **template-library file** (esm-spec §9.7.1):
-a document whose payload is `expression_templates`, plus optionally
-`index_sets`, `metaparameters`, and `expression_template_imports`. Files
+a document whose payload is `operators`, plus optionally
+`index_sets`, `metaparameters`, and `operator_imports`. Files
 compose by reference — each layer imports the one below it — and nothing in the
 chain hard-codes a resolution.
 
@@ -41,7 +41,7 @@ template importing `grid.esm`, e.g. the 3-point centered second difference over
 `i ∈ [2, N−1]`. It cannot fire on its own — it exists to be wrapped.
 
 **`rules/<name>.esm`** is the complete, auto-applied rewrite rule: a template
-with a `match` pattern on a spatial `D` (or on `div`, `laplacian`, … — the open
+with a `match` pattern on a spatial derivative, `partial` (or on `div`, `laplacian`, … — the open
 namespace of esm-spec §4.2) whose body is a single `makearray`. The interior
 region invokes the imported stencil; the boundary-face regions encode the
 boundary condition. **Boundary conditions live inside the rule and nowhere
@@ -56,8 +56,8 @@ rule lowers the inner derivative.
 Not every `rules/` file is auto-applied. The cubed-sphere `duo` grid's rule
 files (and a few on `cartesian_uniform_2d`, `column_nonuniform_1d` and
 `column_nonuniform_1d_tracer`) are **plain templates with no `match`**: a
-consuming model applies them by name with `apply_expression_template`, and they
-never fire on a spatial `D` by themselves. The `mom6_cgrid` rules, the column
+consuming model applies them by name with `apply_operator`, and they
+never fire on a spatial `partial` by themselves. The `mom6_cgrid` rules, the column
 entraining plume, and the MPAS finite-volume and lat-lon Laplace–Beltrami rules
 match **user operators** (`mom6_cgrid_diff_x`, `entraining_plume_lev`, `div`,
 `grad`, `laplacian`, …) that the consuming model writes by name, and the
@@ -66,7 +66,7 @@ match **user operators** (`mom6_cgrid_diff_x`, `entraining_plume_lev`, `div`,
 **`problems/<name>.esm`** is a runnable driver: a model importing its grid's
 rule, with equations, initial conditions written over the grid's geometry
 templates, and inline §6.6.5 MMS tests. Your own model sits at exactly this
-layer — one import, one `D`.
+layer — one import, one `partial`.
 
 ## Metaparameters: one file, every resolution
 
@@ -79,7 +79,7 @@ AST division).
 
 Bindings flow down the reference DAG; open metaparameters flow up:
 
-1. **Import edge** — `expression_template_imports[k].bindings` closes the
+1. **Import edge** — `operator_imports[k].bindings` closes the
    imported document's metaparameters (`{ "N": 128 }`).
 2. **Re-export** — metaparameters left unbound at an edge are inherited by the
    importer, so binding once at the top of a chain reaches the grid file at
@@ -140,7 +140,7 @@ equation right-hand sides. They do **not** resolve in `ic` equations or §6.6.5
 test `reference`s, whose build-time cellwise evaluation is scope-free in every
 binding (model parameters/observeds are out of scope there). In those positions
 spell the coordinate inline from literals and the metaparameter name — e.g.
-`x_i = 0 + (i − 1/2)·(1/N)` — never `apply_expression_template x_coord`. See
+`x_i = 0 + (i − 1/2)·(1/N)` — never `apply_operator x_coord`. See
 [MMS and convergence](/guide/mms-and-convergence/).
 
 ## Two instances of one grid: rename and where
@@ -157,7 +157,7 @@ renaming**. Import one grid+rule family twice under distinct prefixes and each
 instance is scoped to its own mesh:
 
 ```json
-"expression_template_imports": [
+"operator_imports": [
   { "ref": ".../rules/central_D2_zero_grad_bc.esm",
     "prefix": "meshA", "bindings": { "N": 8 },  "rebind": { "dx": "meshA_dx" } },
   { "ref": ".../rules/central_D2_zero_grad_bc.esm",
@@ -181,7 +181,7 @@ must present a **bare declared shaped field**; a compound inline flux
 
 Per document, innermost-first (esm-spec §9.7.6): resolve imports (instantiating
 metaparameters at each edge) → merge `index_sets` into the importing document
-→ fold this document's metaparameters → inline `apply_expression_template`
+→ fold this document's metaparameters → inline `apply_operator`
 body references (§9.7.3) → run the §9.6.3 rewrite fixpoint on fully-concrete
 trees. By the time any `match` rule is considered, every rule body is a closed
 Expression AST. Two bindings expanding the same file must produce
@@ -193,7 +193,7 @@ byte-identical post-lowering ASTs — that determinism contract is what the
 `regridding/` and `reprojection/` are top-level because they connect grids
 rather than belonging to one. They follow the same template-library form:
 match-less templates (overlap-area matrices, projection formulas) that a
-coupling or model invokes with `apply_expression_template`.
+coupling or model invokes with `apply_operator`.
 
 Both are now **end-to-end declarative**. The conservative regridder ships its
 whole pipeline in-library — cell-ring constructors (`cartesian_cell_rings.esm`

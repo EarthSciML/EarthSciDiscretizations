@@ -205,13 +205,14 @@ function unloweredViolations (node, acc) {
   } else if (node !== null && typeof node === 'object') {
     const op = String(node.op || '')
     if (op === 'grad' || op === 'div' || op === 'laplacian') acc.push(`unlowered ${op}`)
+    if (op === 'partial') acc.push(`unlowered partial (wrt=${node.wrt})`)
     if (op === 'D' && String(node.wrt || 't') !== 't') {
       acc.push(`unlowered spatial D (wrt=${node.wrt})`)
     }
     for (const [k, v] of Object.entries(node)) {
       // `metadata`: prose may cite op names.
       // `expression_templates`: see the note above this function.
-      if (k === 'metadata' || k === 'expression_templates') continue
+      if (k === 'metadata' || k === 'operators' || k === 'expression_templates') continue
       unloweredViolations(v, acc)
     }
   }
@@ -232,7 +233,7 @@ function runAst (outputDir, files, verbose) {
       for (const model of Object.values(doc.models || {})) {
         const stripped = Object.fromEntries(
           Object.entries(model).filter(
-            ([k]) => k !== 'metadata' && k !== 'expression_templates'))
+            ([k]) => k !== 'metadata' && k !== 'operators' && k !== 'expression_templates'))
         unloweredViolations(stripped, violations)
       }
       if (violations.length > 0) {

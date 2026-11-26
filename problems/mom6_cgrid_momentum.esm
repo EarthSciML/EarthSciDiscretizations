@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "mom6_cgrid_momentum",
     "description": "Numeric conformance problem for the mom6_cgrid momentum rules (grids/mom6_cgrid/rules/mom6_cgrid_vort_x/y, grad_x/y, mask2dBu, avg_u/v, sum_q, avg_cell, pvf_u/v, bound_coriolis_u/v, diff_x/y) on a tiny 5x5x1 basin closed by solid walls (the grid metaparameters N_I/N_J/N_K are bound to 5/5/1 by the simulation manifest). The model chains the same equations as the AST fixtures tests/conformance/ast/mom6_cgrid_momentum (the SADOURNY75_ENERGY Coriolis + KE_ARAKAWA momentum-advection acceleration CAu/CAv of MOM_CoriolisAdv.F90 CorAdCalc with bound_Coriolis) and mom6_cgrid_momentum_pgf (the PressureForce_FV_Bouss face accelerations PFu/PFv of MOM_PressureForce_FV.F90:1796-1813) (the two accelerations a MOM6 momentum step sums with its other tendencies). The wall convention is MOM6's for a basin closed by land: velocities and volume fluxes on the closed wall faces (and on land faces beyond the domain) are 0, so the state sets u(5,j) = uh(5,j) = 0 on the east wall faces and v(i,5) = vh(i,5) = 0 on the north wall faces. Assertions are made only where MOM6 defines the value on such a basin: every interior u-face (i < N_I) and v-face (j < N_J), every cell, and the q-points off the walls. EVALUATION FORM: the products of an [i,j] metric with an [i,j,k] field are written as explicit faq index loops, and the rule calls that feed them (avg_cell, avg_u/avg_v) as their own variables, because the Julia tree-walk evaluator of EarthSciAST 184aa13d3 does not broadcast an [i,j] operand (a parameter array or a makearray result) against an [i,j,k] one (E_TREEWALK_CONSTARRAY_NDIM / E_TREEWALK_MAKEARRAY_NDIM); the arithmetic and its association are those of the AST fixtures.",
@@ -36,7 +36,7 @@
   },
   "models": {
     "Mom6CgridMomentum": {
-      "expression_template_imports": [
+      "operator_imports": [
         { "ref": "../grids/mom6_cgrid/grid.esm" },
         { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_vort_x.esm" },
         { "ref": "../grids/mom6_cgrid/rules/mom6_cgrid_vort_y.esm" },
@@ -440,8 +440,8 @@
         }
       },
       "equations": [
-        { "lhs": "dvdx", "rhs": { "op": "D", "args": ["v"], "wrt": "x" } },
-        { "lhs": "dudy", "rhs": { "op": "D", "args": ["u"], "wrt": "y" } },
+        { "lhs": "dvdx", "rhs": { "op": "partial", "args": ["v"], "wrt": "x" } },
+        { "lhs": "dudy", "rhs": { "op": "partial", "args": ["u"], "wrt": "y" } },
         { "lhs": "mask2dBu", "rhs": { "op": "mom6_cgrid_mask2dBu", "args": ["mask"] } },
         {
           "lhs": "rel_vort",
@@ -563,8 +563,8 @@
             }
           }
         },
-        { "lhs": "KEx", "rhs": { "op": "D", "args": ["KE"], "wrt": "x" } },
-        { "lhs": "KEy", "rhs": { "op": "D", "args": ["KE"], "wrt": "y" } },
+        { "lhs": "KEx", "rhs": { "op": "partial", "args": ["KE"], "wrt": "x" } },
+        { "lhs": "KEy", "rhs": { "op": "partial", "args": ["KE"], "wrt": "y" } },
         { "lhs": "pvf_u", "rhs": { "op": "mom6_cgrid_pvf_u", "args": ["q", "vh", "IdxCu"] } },
         { "lhs": "pvf_v", "rhs": { "op": "mom6_cgrid_pvf_v", "args": ["q", "uh", "IdyCv"] } },
         { "lhs": "CAu", "rhs": { "op": "mom6_cgrid_bound_coriolis_u", "args": ["pvf_u", "av", "v", "KEx"] } },

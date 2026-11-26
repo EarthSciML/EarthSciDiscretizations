@@ -1,5 +1,5 @@
 {
- "esm": "2.3.0",
+ "esm": "2.4.0",
  "metadata": {
   "name": "plume_column_trapezoidal",
   "description": "MMS driver for grids/column_nonuniform_1d/rules/entraining_plume_lev, the implicit-trapezoidal sweep of the entraining-plume ODE dphi/dz = lam(z)(phi_env(z) - phi(z)) + src(z) upward along lev from a seeded bottom cell. Manufactured solution phi*(z) = 1 + sin(pi z) on the grid's shared quadratic-stretch column (mesh/mms_column.esm), with environment phi_env = cos(pi z) and a VARYING entrainment rate lam = 2 + 3z; the forcing S(z) = phi*' - lam (phi_env - phi*) is sampled at the layer centres and supplied as the trapezoidal mean over each step, the centring the rule's source contract asks for. phi*, phi_env, lam and S are written once each, as the model's own expression templates plume_mms_*, and every equation applies them. The varying rate is the point: it separates the library step (rate at both ends, second order) from the frozen-coefficient step mass-flux schemes write (rate at the upper end only, first order), which this case was used to measure. An accumulator state w with ic 0 and dw/dt = phi makes w(1) = phi exactly, so the L2 error at t = 1 isolates the lowering. The test reference spells phi* at the layer centre from literals and NLEV rather than applying plume_mms_exact (build-time scope caveat, AGENTS.md; templates cannot be resolved in a 6.6.5 reference). This document is also the fixture of tests/conformance/ast/entraining_plume_lev, so the model that simulates is the model whose lowering is byte-pinned.",
@@ -19,7 +19,7 @@
  },
  "models": {
   "PlumeTrapezoidal": {
-   "expression_template_imports": [
+   "operator_imports": [
     {
      "ref": "../grids/column_nonuniform_1d/rules/entraining_plume_lev.esm"
     },
@@ -27,7 +27,7 @@
      "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm"
     }
    ],
-   "expression_templates": {
+   "operators": {
     "plume_mms_exact": {
      "params": [
       "z"
@@ -102,7 +102,7 @@
         "args": [
          3.141592653589793,
          {
-          "op": "apply_expression_template",
+          "op": "apply_operator",
           "args": [],
           "name": "plume_mms_env",
           "bindings": {
@@ -115,7 +115,7 @@
         "op": "*",
         "args": [
          {
-          "op": "apply_expression_template",
+          "op": "apply_operator",
           "args": [],
           "name": "plume_mms_rate",
           "bindings": {
@@ -126,7 +126,7 @@
           "op": "-",
           "args": [
            {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "plume_mms_env",
             "bindings": {
@@ -134,7 +134,7 @@
             }
            },
            {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "plume_mms_exact",
             "bindings": {
@@ -243,7 +243,7 @@
     {
      "lhs": "ze",
      "rhs": {
-      "op": "apply_expression_template",
+      "op": "apply_operator",
       "args": [],
       "name": "mms_column_ze",
       "bindings": {}
@@ -252,7 +252,7 @@
     {
      "lhs": "zc",
      "rhs": {
-      "op": "apply_expression_template",
+      "op": "apply_operator",
       "args": [],
       "name": "column_cell_center",
       "bindings": {
@@ -276,7 +276,7 @@
        }
       },
       "expr": {
-       "op": "apply_expression_template",
+       "op": "apply_operator",
        "args": [],
        "name": "plume_mms_rate",
        "bindings": {
@@ -307,7 +307,7 @@
        }
       },
       "expr": {
-       "op": "apply_expression_template",
+       "op": "apply_operator",
        "args": [],
        "name": "plume_mms_env",
        "bindings": {
@@ -338,7 +338,7 @@
        }
       },
       "expr": {
-       "op": "apply_expression_template",
+       "op": "apply_operator",
        "args": [],
        "name": "plume_mms_forcing",
        "bindings": {
@@ -423,7 +423,7 @@
     {
      "lhs": "phi0",
      "rhs": {
-      "op": "apply_expression_template",
+      "op": "apply_operator",
       "args": [],
       "name": "plume_mms_exact",
       "bindings": {

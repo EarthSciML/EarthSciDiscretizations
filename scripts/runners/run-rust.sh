@@ -211,6 +211,8 @@ def unlowered_violations(node, acc):
         op = str(node.get("op", ""))
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
+        if op == "partial":
+            acc.append(f"unlowered partial (wrt={node.get('wrt')})")
         if op == "D" and str(node.get("wrt", "t")) != "t":
             acc.append(f"unlowered spatial D (wrt={node['wrt']})")
         for k, v in node.items():
@@ -222,7 +224,7 @@ def unlowered_violations(node, acc):
             # reaching evaluation or compilation, which a match pattern never
             # does. Across all 139 lowered ast fixtures every rewrite-target op
             # is in a retained registry and none is in an evaluation position.
-            if k not in ("metadata", "expression_templates"):
+            if k not in ("metadata", "operators", "expression_templates"):
                 unlowered_violations(v, acc)
     elif isinstance(node, list):
         for v in node:
@@ -243,7 +245,7 @@ def run_ast():
             for model in doc.get("models", {}).values():
                 unlowered_violations(
                     {k: v for k, v in model.items()
-                     if k not in ("metadata", "expression_templates")}, violations)
+                     if k not in ("metadata", "operators", "expression_templates")}, violations)
             if violations:
                 raise RuntimeError("post-lowering gate failed: "
                                    + ", ".join(sorted(set(violations))))
