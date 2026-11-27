@@ -19,4 +19,4 @@
   ),
 ))
 
-$ op("varcoeff_face_laplacian_lev_interior_tracer")(u, K) := lr([sum (op("interface_flux_K_lev_tracer")(K = K, n = k + 1, s = s, u = u) - op("interface_flux_K_lev_tracer")(K = K, n = k, s = s, u = u))/italic("dz")_k])^({u, K})_(2 <= k <= italic("NLEV") - 1, s in italic("tracer")) $
+$ op("varcoeff_face_laplacian_lev_interior_tracer")(u, K) := lr([sum (op("interface_flux_K_lev_tracer")(K = K, n = k + 1, s = s, u = u) - op("interface_flux_K_lev_tracer")(K = K, n = k, s = s, u = u))/italic("dz")_k])^({u, K})_(2 <= k <= italic("NLEV") - 1, s in upright("tracer")) $
