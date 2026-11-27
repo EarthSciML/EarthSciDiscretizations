@@ -27,34 +27,35 @@ grids/<grid>/grid.esm             index sets + geometry (metaparameters: N, NLON
 ```
 
 On most grids a `rules/` file is an auto-applied rewrite rule: its `match` is a
-spatial `D` (or an expression of spatial `D`s, such as a Hamilton–Jacobi norm), so
+spatial derivative `partial` (or an expression of them, such as a Hamilton–Jacobi norm), so
 importing it is enough to discretize every derivative it matches. The rest are
 different:
 
 - **Plain templates applied by name.** The cubed-sphere `duo` grid's `rules/` files
   (and a few on `cartesian_uniform_2d`, `column_nonuniform_1d` and
   `column_nonuniform_1d_tracer`) have no `match`. They are expression templates a
-  consuming model calls explicitly with `apply_expression_template`, by name; they
-  never fire on a spatial `D` by themselves.
-- **Rules that match a user operator** rather than `D` (the `mom6_cgrid` operators,
+  consuming model calls explicitly with `apply_operator`, by name; they
+  never fire on a spatial `partial` by themselves.
+- **Rules that match a user operator** rather than `partial` (the `mom6_cgrid` operators,
   the column entraining plume, the MPAS finite-volume `div` / `grad` / `laplacian`
   rules and the lat-lon Laplace–Beltrami `laplacian` rule): the consuming model
   writes that operator by name, and the rule lowers it.
-- **Rules that match a column `integral`** rather than `D`: the
+- **Rules that match a column `integral`** rather than `partial`: the
   `column_nonuniform_1d` `integral_lev_*` rules lower an `integral` over `lev`
   (whole-column or cumulative, to cells or to nodes) into a quadrature.
 
-A consuming model needs one import and one `D`:
+A consuming model needs one import and one spatial derivative, `partial` (`D` is
+only the time derivative, esm 2.4.0):
 
 ```json
-"expression_template_imports": [
+"operator_imports": [
   { "ref": ".../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
     "bindings": { "N": 128 } }
 ],
 "equations": [
   { "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
     "rhs": { "op": "*", "args": ["alpha",
-             { "op": "D", "args": [{ "op": "D", "args": ["u"], "wrt": "x" }], "wrt": "x" }] } }
+             { "op": "partial", "args": [{ "op": "partial", "args": ["u"], "wrt": "x" }], "wrt": "x" }] } }
 ]
 ```
 

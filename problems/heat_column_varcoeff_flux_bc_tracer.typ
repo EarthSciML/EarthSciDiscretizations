@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "heat_column_varcoeff_flux_bc_tracer", references: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "heat_column_varcoeff_flux_bc_tracer", references: (
   (
     citation: "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
     doi: "10.1115/1.1436090",

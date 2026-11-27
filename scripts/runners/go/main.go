@@ -386,6 +386,10 @@ func unloweredViolations(node interface{}, acc *[]string) {
 		if op == "grad" || op == "div" || op == "laplacian" {
 			*acc = append(*acc, "unlowered "+op)
 		}
+		if op == "partial" {
+			wrt, _ := v["wrt"].(string)
+			*acc = append(*acc, "unlowered partial (wrt="+wrt+")")
+		}
 		if op == "D" {
 			if wrt, ok := v["wrt"].(string); ok && wrt != "t" {
 				*acc = append(*acc, "unlowered spatial D (wrt="+wrt+")")
@@ -394,7 +398,7 @@ func unloweredViolations(node interface{}, acc *[]string) {
 		for k, c := range v {
 			// "metadata": prose may cite op names.
 			// "expression_templates": see the note above this function.
-			if k == "metadata" || k == "expression_templates" {
+			if k == "metadata" || k == "operators" || k == "expression_templates" {
 				continue
 			}
 			unloweredViolations(c, acc)
@@ -454,7 +458,7 @@ func runAst(esdRoot, outputDir string, files []string, verbose bool) (map[string
 				for _, model := range models {
 					if mm, ok := model.(map[string]interface{}); ok {
 						for k, v := range mm {
-							if k == "metadata" || k == "expression_templates" {
+							if k == "metadata" || k == "operators" || k == "expression_templates" {
 								continue
 							}
 							unloweredViolations(v, &violations)

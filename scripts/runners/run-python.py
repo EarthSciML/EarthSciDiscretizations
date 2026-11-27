@@ -303,12 +303,14 @@ def unlowered_violations(node, acc):
         op = str(node.get("op", ""))
         if op in ("grad", "div", "laplacian"):
             acc.append(f"unlowered {op}")
+        if op == "partial":
+            acc.append(f"unlowered partial (wrt={node.get('wrt')})")
         if op == "D" and str(node.get("wrt", "t")) != "t":
             acc.append(f"unlowered spatial D (wrt={node['wrt']})")
         for k, v in node.items():
             # `metadata`: prose may cite op names.
             # `expression_templates`: see the note above the function.
-            if k in ("metadata", "expression_templates"):
+            if k in ("metadata", "operators", "expression_templates"):
                 continue
             unlowered_violations(v, acc)
     elif isinstance(node, list):
@@ -340,7 +342,7 @@ def run_ast(output_dir: Path, files, verbose):
             for model in doc_n.get("models", {}).values():
                 unlowered_violations(
                     {k: v for k, v in model.items()
-                     if k not in ("metadata", "expression_templates")}, violations)
+                     if k not in ("metadata", "operators", "expression_templates")}, violations)
             if violations:
                 raise RuntimeError("post-lowering gate failed: "
                                    + ", ".join(sorted(set(violations))))
@@ -689,7 +691,7 @@ def _reproj_wrapper_doc(params, lib_name):
     crs = {k: float(params[k]) for k in ("lat_1", "lat_2", "lat_0", "lon_0", "R")}
 
     def mkapply(tpl, *args):
-        return {"op": "apply_expression_template", "args": [], "name": tpl,
+        return {"op": "apply_operator", "args": [], "name": tpl,
                 "bindings": {**{a: a for a in args}, **crs}}
 
     # From esm 1.0.0 a document declares exactly two variable types. The four
@@ -718,7 +720,7 @@ def _reproj_wrapper_doc(params, lib_name):
                          "description": "Runner-built template invocation "
                                         "(manifest fixture: null)."},
             "models": {"Reproject": {
-                "expression_template_imports": [{"ref": lib_name}],
+                "operator_imports": [{"ref": lib_name}],
                 "variables": variables, "equations": equations}}}
 
 

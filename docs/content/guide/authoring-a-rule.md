@@ -58,7 +58,7 @@ target operator and whose body is one `makearray`:
   verifies this by folding metaparameter bounds at sampled sizes (one even,
   one odd — parity mistakes in region arithmetic are the classic bug).
 - The **interior region** invokes the stencil via
-  `apply_expression_template`.
+  `apply_operator`.
 - The **face regions** are the boundary condition: one-sided differences for
   zero-gradient, a periodic wrap, a fixed value for Dirichlet, an `index` into
   another variable for a shared seam. Later regions overwrite earlier
@@ -85,7 +85,7 @@ target operator and whose body is one `makearray`:
 
 Tags: `esd:rule` + `family:`, `grid:`, `op:`, `order:`, `bc:`, `axes:` (L002);
 `axes:` lists the output dimensions in order, comma-separated. The filename
-stem, `metadata.name`, and the sole `expression_templates` key must agree
+stem, `metadata.name`, and the sole `operators` key must agree
 (L003), and the file must live under the grid directory its `grid:` tag names
 (L004/L005). All files declare the `esm` version the ESS schema's `$id` names —
 currently `1.0.0` (L008); the lint derives it from the schema rather than

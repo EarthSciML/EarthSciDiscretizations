@@ -268,6 +268,7 @@ function unlowered_violations(node, acc::Vector{String}=String[])
     if node isa AbstractDict
         op = string(get(node, "op", ""))
         op in ("grad", "div", "laplacian") && push!(acc, "unlowered $op")
+        op == "partial" && push!(acc, "unlowered partial (wrt=$(get(node, "wrt", "")))")
         (op == "D" && string(get(node, "wrt", "t")) != "t") &&
             push!(acc, "unlowered spatial D (wrt=$(node["wrt"]))")
         for (k, v) in pairs(node)
@@ -275,7 +276,7 @@ function unlowered_violations(node, acc::Vector{String}=String[])
             # against Strings — the previous `(:metadata, Symbol("metadata"))`
             # spelling could never match, and Julia alone walked nested
             # `metadata` while the other four skipped it.
-            k in ("metadata", "expression_templates") && continue
+            k in ("metadata", "operators", "expression_templates") && continue
             unlowered_violations(v, acc)
         end
     elseif node isa AbstractVector
@@ -306,7 +307,7 @@ function run_ast(output_dir, files, verbose)
             for (mname, model) in get(doc_n, "models", Dict{String,Any}())
                 unlowered_violations(
                     Dict{String,Any}(k => v for (k, v) in model
-                                     if !(k in ("metadata", "expression_templates"))),
+                                     if !(k in ("metadata", "operators", "expression_templates"))),
                     violations)
             end
             isempty(violations) ||
@@ -531,7 +532,7 @@ function _reproj_wrapper_doc(params, lib_name)
     crs = Dict{String,Any}(k => Float64(params[k])
                            for k in ("lat_1", "lat_2", "lat_0", "lon_0", "R"))
     mkapply(tpl, args...) = Dict{String,Any}(
-        "op" => "apply_expression_template", "args" => Any[], "name" => tpl,
+        "op" => "apply_operator", "args" => Any[], "name" => tpl,
         "bindings" => Base.merge(Dict{String,Any}(a => a for a in args), crs))
     # From esm 1.0.0 a document declares exactly two variable types. The four
     # projection quantities are UNKNOWNS whose defining equations (bare-variable
@@ -558,7 +559,7 @@ function _reproj_wrapper_doc(params, lib_name)
         "metadata" => Dict{String,Any}("name" => "lambert_conformal_eval",
             "description" => "Runner-built template invocation (manifest fixture: null)."),
         "models" => Dict{String,Any}("Reproject" => Dict{String,Any}(
-            "expression_template_imports" => Any[Dict{String,Any}("ref" => lib_name)],
+            "operator_imports" => Any[Dict{String,Any}("ref" => lib_name)],
             "variables" => vars, "equations" => eqs)))
 end
 

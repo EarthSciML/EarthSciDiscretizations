@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "column_nonuniform_1d_tracer", references: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "column_nonuniform_1d_tracer", references: (
   (
     citation: "Grell, G. A., Peckham, S. E., Schmitz, R., McKeen, S. A., Frost, G., Skamarock, W. C., and Eder, B. (2005). Fully coupled 'online' chemistry within the WRF model. Atmos. Environ. 39, 6957-6975. (Per-species vertical mixing with shared exchange coefficients.)",
     doi: "10.1016/j.atmosenv.2005.04.027",

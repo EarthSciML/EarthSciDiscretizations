@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "weno5_eno1_blend_D1y_interior",
     "description": "Interior-only hybrid WENO5/ENO1 upwind first derivative d u/dy of NCAR fire_behavior's fire_upwinding = 10 -- the same scheme as fire_upwinding = 9 (stencils/weno5_eno1_D1y_interior) but with a BLENDING ZONE instead of a hard band edge -- on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3]. Per cell it is stencils/weno5_eno1_masked_blend of the WENO5 derivative (stencils/weno5_js_upwind_D1y, upwind side by the wind-relative sign stencils/grad4_dot_wind times stencils/central_D1y_4_point, exactly as in the fire_upwinding = 9 sibling) and the ENO1 derivative (stencils/eno1_minmod_D1y), with mask m = stencils/weno5_eno1_cosine_mask(|u[i,j]|, weno_band_cells * dx, pi_blend) -- 1 in the band, a cosine taper over B < |u| <= 2B, 0 beyond -- forced to 0 on the ENO1 wall band (stencils/eno1_wall_band), because case 10 sits inside the same wall `else` as cases 8 and 9. Where m = 0 (the wall band and the far field) the blend SELECTS the ENO1 value, so the result there is bitwise the ENO1 derivative, as in the reference, which skips WENO5 when mask = 0; the WENO5 value is still evaluated there (esm ifelse is not lazy) but cannot leak in. ENO1 appears once: the wall band enters through the mask, not through a second ifelse. Free names: wind_u, wind_v, bdy_eno1_cells, weno_band_cells, pi_blend, dx, dy. pi_blend is pi as the consumer's constants spell it (fire_behavior's PI = 3.1415926); it is a free name rather than a literal so the consumer supplies it.",
@@ -31,7 +31,7 @@
       }
     ]
   },
-  "expression_template_imports": [
+  "operator_imports": [
     {
       "ref": "../grid.esm"
     },
@@ -57,7 +57,7 @@
       "ref": "central_D1y_4_point.esm"
     }
   ],
-  "expression_templates": {
+  "operators": {
     "weno5_eno1_blend_D1y_interior": {
       "params": [
         "u"
@@ -94,7 +94,7 @@
           ]
         },
         "expr": {
-          "op": "apply_expression_template",
+          "op": "apply_operator",
           "args": [],
           "name": "weno5_eno1_masked_blend",
           "bindings": {
@@ -102,7 +102,7 @@
               "op": "ifelse",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "eno1_wall_band",
                   "bindings": {
@@ -112,7 +112,7 @@
                 },
                 0.0,
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "weno5_eno1_cosine_mask",
                   "bindings": {
@@ -142,7 +142,7 @@
               ]
             },
             "w": {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "weno5_js_upwind_D1y",
               "bindings": {
@@ -153,7 +153,7 @@
                   "op": "*",
                   "args": [
                     {
-                      "op": "apply_expression_template",
+                      "op": "apply_operator",
                       "args": [],
                       "name": "grad4_dot_wind",
                       "bindings": {
@@ -163,7 +163,7 @@
                       }
                     },
                     {
-                      "op": "apply_expression_template",
+                      "op": "apply_operator",
                       "args": [],
                       "name": "central_D1y_4_point",
                       "bindings": {
@@ -177,7 +177,7 @@
               }
             },
             "e": {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "eno1_minmod_D1y",
               "bindings": {
