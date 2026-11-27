@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "mom6_cgrid_momentum_ast_fixture",
     "description": "AST-expansion conformance fixture for the mom6_cgrid momentum rule set (grids/mom6_cgrid/rules/mom6_cgrid_vort_x/y.esm, mom6_cgrid_grad_x/y.esm, mom6_cgrid_avg_u/v.esm, mom6_cgrid_avg_cell.esm, mom6_cgrid_sum_q.esm, mom6_cgrid_mask2dBu.esm, mom6_cgrid_pvf_u/v.esm, mom6_cgrid_bound_coriolis_u/v.esm) at N_I = N_J = 8, N_K = 3 (the traced stage-2 subdomain of EqESM stage2/mom6_momentum.esm): the same twenty equations as the consuming MomentumCoriolis model — the ground per-variable D rewrites dvdx = D(v,x) and dudy = D(u,y) (the dyCv/dxCu-weighted q-point forward differences of MOM_CoriolisAdv.F90:322-326 with the explicit free-slip 0 east/north wall regions), KEx = D(KE,x) and KEy = D(KE,y) (the IdxCu/IdyCv-scaled east/north face gradients of gradKE :1249-1397 with 0 walls), the q-point mask mask2dBu = mom6_cgrid_mask2dBu(mask) (the four-cell product with the explicit 0 walls at i = N_I / j = N_J), the rel_vort/av chain, the face layer volumes hArea_u = mom6_cgrid_avg_u(Ah_h) and hArea_v = mom6_cgrid_avg_v(Ah_h) (0.5 cell-to-face averages with the mirrored east/north walls) from the Ah_h = Area_h*h cell product, the q-cell corner sum hArea_q = mom6_cgrid_sum_q(hArea_u, hArea_v) (the (x_u(i,j)+x_u(i,j+1))+(x_v(i,j)+x_v(i+1,j)) grouping, through the mom6_q_corner_sum template, with the land faces beyond the east/north walls bound to 0), Ih_q/q, the KE_ARAKAWA cell kinetic energy KE = IareaT*mom6_cgrid_avg_cell(eu2, nv2) (the 0.25 four-face average mom6_cell_face_mean with the west/south wall-face terms bound to 0, the div-rule wall-flux-zero convention), the raw SADOURNY75_ENERGY PV fluxes pvf_u = mom6_cgrid_pvf_u(q, vh, IdxCu) and pvf_v = mom6_cgrid_pvf_v(q, uh, IdyCv) (both through the mom6_sadourny_pvf template, with the wall-face and land-face fluxes bound to 0), and the bound_coriolis accelerations CAu = mom6_cgrid_bound_coriolis_u(pvf_u, av, v, KEx) and CAv = mom6_cgrid_bound_coriolis_v(pvf_v, av, u, KEy) (the mom6_coriolis_clamp4 min/max clamp over the fv/fu products, the wall-face and land-face velocity products bound to 0). Forces expansion of every rule's region makearrays (the vort/grad/mask2dBu rules' 0-valued wall regions, the avg rules' mirrored wall regions, the avg_cell/sum_q/pvf/bound rules' zero-wall-term regions) at the domain edges; every apply_expression_template node of the named-op rules must inline, and the lowered AST must carry zero unlowered rewrite-target ops and zero surviving metaparameter names (N_I/N_J/N_K bound to 8/8/3 at the grid import edge). The numeric comparison is carried by tests/conformance/simulation/mom6_cgrid_momentum (independent numpy transcription of CorAdCalc and PressureForce_FV_Bouss, including the faces next to the walls) and by the stage-2 test pins (stage2/mom6_momentum.esm) against the Fortran dumps at the interior faces; this fixture pins the byte-identical post-lowering AST over the whole subdomain.",
@@ -25,7 +25,7 @@
   },
   "models": {
     "Mom6CgridMomentumAst": {
-      "expression_template_imports": [
+      "operator_imports": [
         {
           "ref": "../../../../grids/mom6_cgrid/grid.esm"
         },
@@ -340,7 +340,7 @@
         {
           "lhs": "dvdx",
           "rhs": {
-            "op": "D",
+            "op": "partial",
             "args": ["v"],
             "wrt": "x"
           }
@@ -348,7 +348,7 @@
         {
           "lhs": "dudy",
           "rhs": {
-            "op": "D",
+            "op": "partial",
             "args": ["u"],
             "wrt": "y"
           }
@@ -476,7 +476,7 @@
         {
           "lhs": "KEx",
           "rhs": {
-            "op": "D",
+            "op": "partial",
             "args": ["KE"],
             "wrt": "x"
           }
@@ -484,7 +484,7 @@
         {
           "lhs": "KEy",
           "rhs": {
-            "op": "D",
+            "op": "partial",
             "args": ["KE"],
             "wrt": "y"
           }

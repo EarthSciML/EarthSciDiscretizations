@@ -7,7 +7,7 @@ Checks every library file (grids/, regridding/, reprojection/, problems/) agains
 
     L001  exactly one `esd:` kind tag (grid|stencil|rule|regrid|reproject|problem)
     L002  required prefix tags present for the kind
-    L003  name agreement: filename stem == metadata.name == sole expression_templates
+    L003  name agreement: filename stem == metadata.name == sole operators
           key (esd:grid: file is grid.<ext> and metadata.name == parent directory name).
           esd:regrid / esd:reproject files factor one operation into several
           templates (weight/normalize/apply stages; forward/inverse pairs plus
@@ -181,7 +181,7 @@ def find_makearray_bodies(doc: dict):
     match rules (applied from their bodies, e.g. cartesian_uniform_2d's
     weno5_eno1_D1x_extrapolate_frame) carries the regions those rules tile
     with, so it is where the tiling must be checked."""
-    for name, entry in (doc.get("expression_templates") or {}).items():
+    for name, entry in (doc.get("operators") or {}).items():
         if isinstance(entry.get("body"), dict):
             body = entry["body"]
             if body.get("op") == "makearray":
@@ -235,7 +235,7 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
 
     # L003 — name agreement.
     name = meta.get("name", "")
-    templates = doc.get("expression_templates") or {}
+    templates = doc.get("operators") or {}
     if kind == "grid":
         if stem != "grid":
             findings.add(path, "L003", "esd:grid files must be named grid.<ext>")
@@ -259,13 +259,13 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
             if not templates or bad:
                 findings.add(
                     path, "L003",
-                    f"expected expression_templates keys equal to {name!r} or prefixed "
+                    f"expected operators keys equal to {name!r} or prefixed "
                     f"'{name}_', got {bad or list(templates)}",
                 )
         elif list(templates) != [name]:
             findings.add(
                 path, "L003",
-                f"expected sole expression_templates key {name!r}, got {list(templates)}",
+                f"expected sole operators key {name!r}, got {list(templates)}",
             )
 
     # L007 — kind/payload agreement.
@@ -277,7 +277,7 @@ def lint_file(path: Path, lib: Library, findings: Findings) -> None:
         if present:
             findings.add(path, "L007", f"esd:{kind} must be a pure library file; found {present}")
         if not templates:
-            findings.add(path, "L007", f"esd:{kind} must declare expression_templates")
+            findings.add(path, "L007", f"esd:{kind} must declare operators")
 
     # L004 / L005 — grid resolution and placement.
     for grid_name in tags.get("grid", []):

@@ -32,7 +32,7 @@ grids/<grid>/grid.esm             index sets + geometry (metaparameters: N, NLON
                                      (also: your model, importing the rule)
 ```
 
-On most grids a rule is auto-applied: its `match` is a spatial `D`. The
+On most grids a rule is auto-applied: its `match` is a spatial derivative, `partial`. The
 cubed-sphere `duo` grid's rules (and a few others) are plain templates a model
 applies by name; see [the layering](/guide/layering/).
 
@@ -51,17 +51,18 @@ model — two meshes, each scoped to its own axis and spacing.
 
 ## Quickstart
 
-A consuming model needs one import and one `D`:
+A consuming model needs one import and one spatial derivative, `partial` (`D` is
+only the time derivative, esm 2.4.0):
 
 ```json
-"expression_template_imports": [
+"operator_imports": [
   { "ref": ".../grids/cartesian_uniform_1d/rules/central_D2_zero_grad_bc.esm",
     "bindings": { "N": 128 } }
 ],
 "equations": [
   { "lhs": { "op": "D", "args": ["u"], "wrt": "t" },
     "rhs": { "op": "*", "args": ["alpha",
-             { "op": "D", "args": [{ "op": "D", "args": ["u"], "wrt": "x" }], "wrt": "x" }] } }
+             { "op": "partial", "args": [{ "op": "partial", "args": ["u"], "wrt": "x" }], "wrt": "x" }] } }
 ]
 ```
 

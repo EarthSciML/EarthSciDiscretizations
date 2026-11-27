@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "latlon3d_transport_cwc_3d",
     "description": "Three-dimensional consistency with continuity (CWC) on the latlon3d grid: the free-stream-preservation gate for the whole horizontal+vertical flux-form transport wave. Carries the AIR MASS (m, a pressure thickness) alongside the TRACER MASS (mq) and derives the mixing ratio q = mq/m as an observed, so that six rules fire in one model -- three bare-D face-flux-divergence rules closing continuity (lon periodic, lat polar, lev no-flux) and three compound flux-form advection rules carrying the tracer (D(Mx*q,lon), D(My*q,lat), D(Mz*q,lev)). The three winds are shape-disjoint (Mx over [lon_nodes,lat,lev], My over [lon,lat_nodes,lev], Mz over [lon,lat,lev_nodes]) and q is over [lon,lat,lev], so esm-spec 9.6.1 shape constraints -- which compare index-set NAMES, not sizes -- select each rule unambiguously with no priority games. THE PROPERTY UNDER TEST: at q == 1 the donor flux collapses to F = 0.5*(M*(1+1) - |M|*(1-1)) = M with every IEEE operation exact, so each compound divergence becomes BITWISE identical to its bare-D twin; both right-hand sides are spelled with the same summation order, so dm/dt and dmq/dt are bitwise equal and mq tracks m to the last bit forever, holding q == 1 EXACTLY (not approximately) while the divergent wind relocates a large fraction of the air mass. This single assertion exercises the rule-enforced zonal wrap, the structural polar-face omission, the cos(phi)/sin-difference area weights and the vertical wall closure SIMULTANEOUSLY: if any pair of operators disagrees about a face, a weight or a wall, the cancellation is no longer bitwise. Mz is a POLYNOMIAL in pe (4z(1-z)(1-2z)) so it vanishes EXACTLY at both walls in IEEE -- a trig expression that merely vanishes analytically does not (sin(2*pi) is -2.45e-16) -- and it reverses sign mid-column so both donor branches are exercised. The mixing-ratio form of the same transport is the NEGATIVE CONTROL: driven by this same divergent wind it does NOT preserve a constant tracer, which is the gap that carrying the air mass repairs.",
@@ -16,7 +16,7 @@
   },
   "models": {
     "TransportCWC3d": {
-      "expression_template_imports": [
+      "operator_imports": [
         {
           "ref": "../grids/latlon3d/rules/face_flux_divergence_lon_periodic.esm",
           "bindings": {
@@ -557,21 +557,21 @@
                 "op": "+",
                 "args": [
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       "Mx"
                     ],
                     "wrt": "lon"
                   },
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       "My"
                     ],
                     "wrt": "lat"
                   },
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       "Mz"
                     ],
@@ -597,7 +597,7 @@
                 "op": "+",
                 "args": [
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       {
                         "op": "*",
@@ -610,7 +610,7 @@
                     "wrt": "lon"
                   },
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       {
                         "op": "*",
@@ -623,7 +623,7 @@
                     "wrt": "lat"
                   },
                   {
-                    "op": "D",
+                    "op": "partial",
                     "args": [
                       {
                         "op": "*",
@@ -658,7 +658,7 @@
                     "op": "+",
                     "args": [
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           {
                             "op": "*",
@@ -671,7 +671,7 @@
                         "wrt": "lon"
                       },
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           {
                             "op": "*",
@@ -684,7 +684,7 @@
                         "wrt": "lat"
                       },
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           {
                             "op": "*",
@@ -707,21 +707,21 @@
                     "op": "+",
                     "args": [
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           "Mx"
                         ],
                         "wrt": "lon"
                       },
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           "My"
                         ],
                         "wrt": "lat"
                       },
                       {
-                        "op": "D",
+                        "op": "partial",
                         "args": [
                           "Mz"
                         ],
@@ -785,7 +785,7 @@
         {
           "lhs": "dz",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "lev_thickness",
             "bindings": {
@@ -796,7 +796,7 @@
         {
           "lhs": "zc",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "lev_center",
             "bindings": {
@@ -807,7 +807,7 @@
         {
           "lhs": "phie",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "lat_edge",
             "bindings": {}
@@ -816,7 +816,7 @@
         {
           "lhs": "coslat_e",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "coslat_edge",
             "bindings": {
@@ -827,7 +827,7 @@
         {
           "lhs": "dS_lat",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "latcell_area",
             "bindings": {
@@ -838,7 +838,7 @@
         {
           "lhs": "dphi_lat",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "latcell_dphi",
             "bindings": {

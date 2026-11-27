@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "mom6_cgrid_bound_coriolis_u",
     "description": "The bound_coriolis east-face Coriolis + momentum-advection acceleration of the mom6_cgrid: CAu(i,j,k) = mom6_coriolis_clamp4(pvf_u(i,j,k), fv1, fv2, fv3, fv4) - KEx(i,j,k), the MOM_CoriolisAdv.F90 CorAdCalc bound_Coriolis law (the fv1..fv4 bounds and the min/max clamp at :897-908, then the -d(KE)/dx term at :911-914): fv1 = av(i,j,k)*v(i+1,j,k), fv2 = av(i,j,k)*v(i,j,k), fv3 = av(i,j-1,k)*v(i+1,j-1,k), fv4 = av(i,j-1,k)*v(i,j-1,k), the av*v products at the two q-points at the ends of the east face (av the absolute vorticity, v the north-face velocities of the cells on each side of the face), with the raw potential-vorticity flux pvf_u (the sibling mom6_cgrid_pvf_u) clamped to their range and the zonal KE gradient KEx subtracted. Every region applies the one clamp template, each product written once. SOLID-WALL BOUNDARIES (a basin closed by land, MOM6's zero wall velocities): at j = 1 the velocities v(i,0)/v(i+1,0) sit on the closed south wall, so fv3 = fv4 = 0 (bound to 0) and the clamp range of the real south-row faces includes 0, as MOM6's min/max over fv1..fv4 does. At i = N_I (the east wall face itself) v(N_I+1,*) are velocities of the land cell beyond, so fv1 = fv3 = 0 (the literal MOM6 value at a wall face, whose velocity is 0). The SE corner applies both. (Before this revision the wall regions copied the edge cell's own av/v into the out-of-domain slots, dropping 0 from the range on the whole j = 1 row of real faces.) The rule is a named-op rule (esm-spec 9.6.8), applied once per consumer equation as mom6_cgrid_bound_coriolis_u(pvf_u, av, v, KEx); all four params must be declared [i,j,k] fields (esm-spec 9.6.1 where clause).",
@@ -15,8 +15,8 @@
       }
     ]
   },
-  "expression_template_imports": [{ "ref": "../grid.esm" }, { "ref": "../stencils/mom6_coriolis_clamp4.esm" }],
-  "expression_templates": {
+  "operator_imports": [{ "ref": "../grid.esm" }, { "ref": "../stencils/mom6_coriolis_clamp4.esm" }],
+  "operators": {
     "mom6_cgrid_bound_coriolis_u": {
       "params": ["pvf_u", "av", "v", "KEx"],
       "match": { "op": "mom6_cgrid_bound_coriolis_u", "args": ["pvf_u", "av", "v", "KEx"] },
@@ -45,7 +45,7 @@
               "op": "-",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "mom6_coriolis_clamp4",
                   "bindings": {
@@ -81,7 +81,7 @@
               "op": "-",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "mom6_coriolis_clamp4",
                   "bindings": {
@@ -111,7 +111,7 @@
               "op": "-",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "mom6_coriolis_clamp4",
                   "bindings": {
@@ -135,7 +135,7 @@
               "op": "-",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "mom6_coriolis_clamp4",
                   "bindings": {

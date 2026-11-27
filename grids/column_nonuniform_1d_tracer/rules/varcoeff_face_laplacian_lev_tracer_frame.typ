@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "varcoeff_face_laplacian_lev_tracer_frame", references: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "varcoeff_face_laplacian_lev_tracer_frame", references: (
   (
     citation: "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids).",
   ),
@@ -29,4 +29,4 @@
   ),
 ))
 
-$ op("varcoeff_face_laplacian_lev_tracer_frame")(u, K, G_(upright("bot")), G_(upright("top"))) := mat(delim: "[", augment: #1, op("varcoeff_face_laplacian_lev_interior_tracer")(K = K, u = u), [2, italic("NLEV") - 1] times [1, italic("NTRACER")]; lr([sum (op("interface_flux_K_lev_tracer")(K = K, n = 2, s = s, u = u) - G_(upright("bot"))[s])/italic("dz")_1])^({u, K})_(1, s in italic("tracer")), [1, 1] times [1, italic("NTRACER")]; lr([sum (G_(upright("top"))[s] - op("interface_flux_K_lev_tracer")(K = K, n = italic("NLEV"), s = s, u = u))/italic("dz")_(italic("NLEV"))])^({u, K})_(1, s in italic("tracer")), [italic("NLEV"), italic("NLEV")] times [1, italic("NTRACER")]) $
+$ op("varcoeff_face_laplacian_lev_tracer_frame")(u, K, G_(upright("bot")), G_(upright("top"))) := mat(delim: "[", augment: #1, op("varcoeff_face_laplacian_lev_interior_tracer")(K = K, u = u), [2, italic("NLEV") - 1] times [1, italic("NTRACER")]; lr([sum (op("interface_flux_K_lev_tracer")(K = K, n = 2, s = s, u = u) - G_(upright("bot"))[s])/italic("dz")_1])^({u, K})_(1, s in upright("tracer")), [1, 1] times [1, italic("NTRACER")]; lr([sum (G_(upright("top"))[s] - op("interface_flux_K_lev_tracer")(K = K, n = italic("NLEV"), s = s, u = u))/italic("dz")_(italic("NLEV"))])^({u, K})_(1, s in upright("tracer")), [italic("NLEV"), italic("NLEV")] times [1, italic("NTRACER")]) $

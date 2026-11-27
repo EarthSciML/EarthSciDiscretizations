@@ -108,7 +108,7 @@ fixpoint → official runner`.
   - `esd:rule` → `family: grid: op: order: bc: axes:`
   - `esd:regrid` → `method:` · `esd:reproject` → `crs:` · `esd:problem` → `grid:`
 - Name agreement (L003): filename stem == `metadata.name` == the sole
-  `expression_templates` key. Grid constructors are `grids/<name>/grid.esm` with
+  `operators` key. Grid constructors are `grids/<name>/grid.esm` with
   `metadata.name == <name>`. Exception: `esd:regrid` / `esd:reproject` files factor
   one operation into several templates (weight/normalize/apply stages;
   forward/inverse pairs plus helper fragments), so they may declare multiple

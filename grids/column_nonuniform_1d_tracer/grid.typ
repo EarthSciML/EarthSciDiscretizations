@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "column_nonuniform_1d_tracer", references: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "column_nonuniform_1d_tracer", references: (
   (
     citation: "Grell, G. A., Peckham, S. E., Schmitz, R., McKeen, S. A., Frost, G., Skamarock, W. C., and Eder, B. (2005). Fully coupled 'online' chemistry within the WRF model. Atmos. Environ. 39, 6957-6975. (Per-species vertical mixing with shared exchange coefficients.)",
     doi: "10.1016/j.atmosenv.2005.04.027",
@@ -49,4 +49,4 @@
   ),
 ))
 
-#template(description: "Per-tracer column total sum_k u[k,s] dz[k] of a [lev, tracer] field, shape [tracer]: the finite-volume measure the per-tracer flux-form operators on this grid conserve, so for the prescribed-flux diffusion rule d/dt of it equals kdudz_top[s] - kdudz_bot[s] exactly (telescoping). The same sum as grids/column_nonuniform_1d/stencils/integral_lev_total applied to each column u[:, s]; `dz` is read by bare name as on the column grid. Aggregation index `gk`, not `k`, so it never captures a consuming rule's own aggregate index when inlined.")[$ op("tracer_column_total")(u) := lr([sum_(italic("gk") in italic("lev")) u_(italic("gk"), s) italic("dz")_(italic("gk"))])^({u})_(s in italic("tracer")) $]
+#template(description: "Per-tracer column total sum_k u[k,s] dz[k] of a [lev, tracer] field, shape [tracer]: the finite-volume measure the per-tracer flux-form operators on this grid conserve, so for the prescribed-flux diffusion rule d/dt of it equals kdudz_top[s] - kdudz_bot[s] exactly (telescoping). The same sum as grids/column_nonuniform_1d/stencils/integral_lev_total applied to each column u[:, s]; `dz` is read by bare name as on the column grid. Aggregation index `gk`, not `k`, so it never captures a consuming rule's own aggregate index when inlined.")[$ op("tracer_column_total")(u) := lr([sum_(italic("gk") in upright("lev")) u_(italic("gk"), s) italic("dz")_(italic("gk"))])^({u})_(s in upright("tracer")) $]

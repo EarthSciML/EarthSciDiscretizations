@@ -294,10 +294,10 @@ def code_span(text: str) -> str:
 
 
 def sole_template(doc: dict, path: Path):
-    """(name, template) for the single expression_templates entry, or None."""
-    templates = doc.get("expression_templates") or {}
+    """(name, template) for the single operators entry, or None."""
+    templates = doc.get("operators") or {}
     if not templates:
-        warn(f"{rel(path)}: no expression_templates")
+        warn(f"{rel(path)}: no operators")
         return None
     name = doc.get("metadata", {}).get("name") or min(templates)
     if name not in templates:
@@ -368,7 +368,7 @@ def free_names_for_grid(grid_doc: dict, sub_docs: list) -> list:
         # `layer` / `N_LAYER`); those names are bound, not consumer-supplied.
         bound |= set((doc.get("metaparameters") or {}).keys())
         bound |= set((doc.get("index_sets") or {}).keys())
-        templates = doc.get("expression_templates") or {}
+        templates = doc.get("operators") or {}
         bound |= set(templates.keys())
         for tmpl in templates.values():
             bound |= set(tmpl.get("params") or [])
@@ -386,7 +386,7 @@ def free_names_for_grid(grid_doc: dict, sub_docs: list) -> list:
 
     body_refs: set = set()
     for doc in docs:
-        for tmpl in (doc.get("expression_templates") or {}).values():
+        for tmpl in (doc.get("operators") or {}).values():
             body = tmpl.get("body")
             if body is not None:
                 _walk_name_refs(body, bound, out=body_refs)
@@ -433,7 +433,7 @@ def problem_imports(problem_path: Path, cache: dict) -> set[Path]:
     doc = load_doc(problem_path) if problem_path.exists() else None
     if doc:
         for model in (doc.get("models") or {}).values():
-            for imp in model.get("expression_template_imports") or []:
+            for imp in model.get("operator_imports") or []:
                 ref = imp.get("ref")
                 if ref and not ref.startswith(("http:", "https:")):
                     try:
@@ -928,7 +928,7 @@ def grid_page(
             lines.append(f"| `{iname}` | {spec.get('kind', '')} | {size} |")
         lines.append("")
 
-    templates = doc.get("expression_templates") or {}
+    templates = doc.get("operators") or {}
     if templates:
         lines += [
             "## Geometry templates",
@@ -1016,7 +1016,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Mat
             "These are forward/inverse **scalar** templates over the evaluable core — but they "
             "also apply **in-model over coordinate arrays**: invoke them inside a `faq` node "
             "whose bindings mix indexed reads, literals, and parameter references, and every "
-            "`apply_expression_template` inlines (esm-spec §9.6.2 Option A) into a closed "
+            "`apply_operator` call denotes its expansion (esm-spec §9.6.4) into a closed "
             "scalar AST at each cell. The `tests/conformance/reprojection/lcc_grid_roundtrip` "
             "case pins exactly this faq-mapped lowering: byte-identical expanded AST "
             "across all five bindings, and a working round-trip simulation on Julia + Python "
@@ -1059,7 +1059,7 @@ def cross_grid_section_page(directory: Path, title: str, kind: str, printer: Mat
         if metadata.get("description"):
             lines.append(md_prose(metadata["description"]))
             lines.append("")
-        templates = doc.get("expression_templates") or {}
+        templates = doc.get("operators") or {}
         if templates:
             lines.append(f"<details><summary>Templates ({len(templates)})</summary>")
             lines.append("")

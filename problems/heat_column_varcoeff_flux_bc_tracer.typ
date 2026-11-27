@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "heat_column_varcoeff_flux_bc_tracer", references: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "heat_column_varcoeff_flux_bc_tracer", references: (
   (
     citation: "Roache, P. J. (2002). Code verification by the method of manufactured solutions. J. Fluids Eng. 124(1), 4-10.",
     doi: "10.1115/1.1436090",
@@ -50,15 +50,15 @@
   "lev_nodes",
 ), units: "m")
 
-$ u(t_0) = lr([sum ((4 - 3 s) op("mms_column_zc")(i = i) + 1 (1.5 - 0.5 s) cos(3.141592653589793 op("mms_column_zc")(i = i)))])_(i in italic("lev"), s in italic("tracer")) $
+$ u(t_0) = lr([sum ((4 - 3 s) op("mms_column_zc")(i = i) + 1 (1.5 - 0.5 s) cos(3.141592653589793 op("mms_column_zc")(i = i)))])_(i in upright("lev"), s in upright("tracer")) $
 
 $ (dif u)/(dif t) = (partial)/(partial italic("lev")) (K (partial u)/(partial italic("lev"))) $
 
-$ K = lr([sum alpha])_(italic("kn") in italic("lev_nodes")) $
+$ K = lr([sum alpha])_(italic("kn") in upright("lev_nodes")) $
 
-$ italic("kdudz_bot") = lr([sum alpha (4 thin upright("K") thin upright("m")^(-1) - 3 s)])_(s in italic("tracer")) $
+$ italic("kdudz_bot") = lr([sum alpha (4 thin upright("K") thin upright("m")^(-1) - 3 s)])_(s in upright("tracer")) $
 
-$ italic("kdudz_top") = lr([sum alpha (4 thin upright("K") thin upright("m")^(-1) - 3 s)])_(s in italic("tracer")) $
+$ italic("kdudz_top") = lr([sum alpha (4 thin upright("K") thin upright("m")^(-1) - 3 s)])_(s in upright("tracer")) $
 
 $ italic("total") = op("tracer_column_total")(u = u) $
 
@@ -95,7 +95,7 @@ $ italic("dz") = op("column_cell_thickness")(italic("ze") = italic("ze")) $
       (
         expected: 0,
         reduce: "L2_error",
-        reference: $lr([sum ((4 - 3 s) (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV")))) + 1 (1.5 - 0.5 s) cos(3.141592653589793 (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV"))))))])_(i in italic("lev"), s in italic("tracer"))$,
+        reference: $lr([sum ((4 - 3 s) (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV")))) + 1 (1.5 - 0.5 s) cos(3.141592653589793 (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV"))))))])_(i in upright("lev"), s in upright("tracer"))$,
         time: 0,
         tolerance: (
           abs: 1.0e-9,
@@ -105,7 +105,7 @@ $ italic("dz") = op("column_cell_thickness")(italic("ze") = italic("ze")) $
       (
         expected: 0,
         reduce: "L2_error",
-        reference: $lr([sum ((4 - 3 s) (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV")))) + 0.9901789403074717 (1.5 - 0.5 s) cos(3.141592653589793 (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV"))))))])_(i in italic("lev"), s in italic("tracer"))$,
+        reference: $lr([sum ((4 - 3 s) (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV")))) + 0.9901789403074717 (1.5 - 0.5 s) cos(3.141592653589793 (0.5 ((0.6 (i - 1)/italic("NLEV") + 0.4 (i - 1)/italic("NLEV") (i - 1)/italic("NLEV")) + (0.6 i/italic("NLEV") + 0.4 i/italic("NLEV") i/italic("NLEV"))))))])_(i in upright("lev"), s in upright("tracer"))$,
         time: 0.1,
         tolerance: (
           abs: 1.0e-5,

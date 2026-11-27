@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "weno3_eno1_D1y_interior",
     "description": "Interior-only hybrid WENO3/ENO1 upwind first derivative d u/dy of NCAR fire_behavior's fire_upwinding = 8 level-set scheme on cartesian_uniform_2d over the block [3, NX-2] x [4, NY-3]: stencils/weno5_eno1_D1y_interior (fire_upwinding = 9) with the WENO branch stencils/weno3_js_upwind_D1y in place of stencils/weno5_js_upwind_D1y, which is the only difference between Calc_tend_ls cases 8 and 9. Per cell the switch is the same: ENO1 minmod (stencils/eno1_minmod_D1y) within bdy_eno1_cells of any wall (stencils/eno1_wall_band) or where |u[i,j]| >= weno_band_cells * dx (outside the band around the front), otherwise the third-order WENO3 derivative with the upwind side picked by signo_y = (grad4 u . U) (d4 u/dy) (stencils/grad4_dot_wind times stencils/central_D1y_4_point). The block is the one the WENO5 sibling uses, so this stencil fits the shared frame rules/weno5_eno1_D1y_extrapolate_frame unchanged: with bdy_eno1_cells >= 3 (fire_behavior's BDY_ENO1 = 10 is a compile-time constant) every cell outside the block is ENO1 in the reference code too, so the shorter WENO3 reach needs no other tiling. FREE NAMES: wind_u, wind_v, bdy_eno1_cells (>= 3), weno_band_cells, and the grid's dx, dy. Both ifelse branches are evaluated on every cell (esm ifelse is not lazy). Order: third in smooth parts of the WENO band, first in the ENO1 regions; exact on a linear field.",
@@ -31,7 +31,7 @@
       }
     ]
   },
-  "expression_template_imports": [
+  "operator_imports": [
     {
       "ref": "../grid.esm"
     },
@@ -51,7 +51,7 @@
       "ref": "central_D1y_4_point.esm"
     }
   ],
-  "expression_templates": {
+  "operators": {
     "weno3_eno1_D1y_interior": {
       "params": [
         "u"
@@ -94,7 +94,7 @@
               "op": "or",
               "args": [
                 {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "eno1_wall_band",
                   "bindings": {
@@ -130,7 +130,7 @@
               ]
             },
             {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "eno1_minmod_D1y",
               "bindings": {
@@ -140,7 +140,7 @@
               }
             },
             {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "weno3_js_upwind_D1y",
               "bindings": {
@@ -151,7 +151,7 @@
                   "op": "*",
                   "args": [
                     {
-                      "op": "apply_expression_template",
+                      "op": "apply_operator",
                       "args": [],
                       "name": "grad4_dot_wind",
                       "bindings": {
@@ -161,7 +161,7 @@
                       }
                     },
                     {
-                      "op": "apply_expression_template",
+                      "op": "apply_operator",
                       "args": [],
                       "name": "central_D1y_4_point",
                       "bindings": {
