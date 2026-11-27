@@ -8,9 +8,9 @@
   "stencil_width:3",
 ))
 
-#description[Interior \[2, NLEV-1\] of the variable-coefficient vertical diffusion for a \[lev, tracer\] field: (G\[k+1,s\] - G\[k,s\]) / dz\[k\] for every tracer s, G being stencils/interface\_flux\_K\_lev\_tracer. Column s is grids/column\_nonuniform\_1d/stencils/varcoeff\_face\_laplacian\_lev\_interior applied to u\[:, s\].]
+#description[Interior [2, NLEV-1] of the variable-coefficient vertical diffusion for a [lev, tracer] field: (G[k+1,s] - G[k,s]) / dz[k] for every tracer s, G being stencils/interface_flux_K_lev_tracer. Column s is grids/column_nonuniform_1d/stencils/varcoeff_face_laplacian_lev_interior applied to u[:, s].]
 
-#esm-block("expression_template_imports", (
+#esm-block("operator_imports", (
   (
     ref: "./interface_flux_K_lev_tracer.typ",
   ),
