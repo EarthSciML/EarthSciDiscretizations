@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "ppm_lev_edge",
     "description": "Colella-Woodward (1984) eq. (1.6) non-uniform 4th-order interpolation of a cell-averaged field to the interface a_{j+1/2} between cells j and j+1, on an arbitrarily-spaced 1-D mesh, using the RAW (unlimited) eq. (1.7) average slopes. A thin wrapper: it supplies ../stencils/ppm_lev_slope at cells j and j+1 to the shared eq (1.6) combination ../stencils/ppm_lev_edge_core (which owns the algebra; the monotone sibling ../stencils/ppm_lev_edge_mono is the same wrapper with monotonized slopes, so the eq (1.6) body is written once). Given four consecutive cell averages (am,a0,ap,app) = (a_{j-1},a_j,a_{j+1},a_{j+2}) and their widths (dm,d0,dp,dpp) it returns a_{j+1/2}. On a uniform mesh this collapses exactly to the (7/12)(a0+ap) - (1/12)(am+app) edge of ppm_face_value, and on the quadratic-stretch vertical it is verified 4th-order accurate (interior). UNLIMITED: the raw slopes make this the maximally accurate reconstruction but it is NOT bounded -- the edge value can overshoot the range of the two cells it separates, which on a sharp vertical gradient (a plume, an inversion, the tropopause) produces new extrema and NEGATIVE tracer concentrations. Use the monotone chain (ppm_lev_edge_mono -> ppm_lev_flux_mono -> rules/ppm_D_lev_mono_noflux_bc) for production tracer transport, and this one where the field is smooth and the 4th order is wanted. Grid-agnostic scalar algebra; match-less named template; composed by ppm_lev_flux.",
@@ -19,7 +19,7 @@
       }
     ]
   },
-  "expression_template_imports": [
+  "operator_imports": [
     {
       "ref": "./ppm_lev_slope.esm"
     },
@@ -27,7 +27,7 @@
       "ref": "./ppm_lev_edge_core.esm"
     }
   ],
-  "expression_templates": {
+  "operators": {
     "ppm_lev_edge": {
       "params": [
         "am",
@@ -41,7 +41,7 @@
       ],
       "description": "CW84 eq.(1.6) non-uniform edge a_{j+1/2} using raw eq.(1.7) slopes",
       "body": {
-        "op": "apply_expression_template",
+        "op": "apply_operator",
         "args": [],
         "name": "ppm_lev_edge_core",
         "bindings": {
@@ -52,7 +52,7 @@
           "dp": "dp",
           "dpp": "dpp",
           "sj": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "ppm_lev_slope",
             "bindings": {
@@ -65,7 +65,7 @@
             }
           },
           "sjp1": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "ppm_lev_slope",
             "bindings": {

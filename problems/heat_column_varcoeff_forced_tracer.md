@@ -1,5 +1,5 @@
 ---
-esm: "2.3.0"
+esm: "2.4.0"
 license: "MIT"
 name: "heat_column_varcoeff_forced_tracer"
 references:
@@ -106,7 +106,7 @@ $$
 $$
 :::
 
-```esm:expression_template_imports
+```esm:operator_imports
 - bindings:
     NTRACER: 2
   ref: "../grids/column_nonuniform_1d_tracer/rules/varcoeff_face_laplacian_lev_flux_bc_tracer.md"

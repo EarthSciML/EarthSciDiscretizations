@@ -1,5 +1,5 @@
 #import "@preview/esm:0.1.0": *
-#show: esm-document.with(esm: "2.3.0", license: "MIT", name: "varcoeff_face_laplacian_lev_interior_tracer", tags: (
+#show: esm-document.with(esm: "2.4.0", license: "MIT", name: "varcoeff_face_laplacian_lev_interior_tracer", tags: (
   "esd:stencil",
   "family:finite_volume",
   "grid:column_nonuniform_1d_tracer",

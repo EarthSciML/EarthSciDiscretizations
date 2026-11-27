@@ -1,5 +1,5 @@
 {
-  "esm": "2.3.0",
+  "esm": "2.4.0",
   "metadata": {
     "name": "heat_column_varcoeff_value_bc",
     "description": "MMS driver for grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc (conservative finite-volume diffusion with an interface-valued coefficient and supplied boundary VALUES): u_t = d/dz(K du/dz) + S(z,t) on the unit column [0, 1], discretized on the grid's shared quadratic-stretch MMS column, with the GENUINELY VARIABLE interface coefficient K(z) = 1 + z (K[kn] = 1 + ze[kn]). Manufactured solution u(z,t) = exp(-t) (1 + z + sin(pi z)) (the model-local template value_bc_mms_exact): u_z = exp(-t) (1 + pi cos(pi z)), so K u_z = exp(-t) (1+z) (1 + pi cos(pi z)), whose z-derivative is exp(-t) [ 1 + pi cos(pi z) - pi^2 (1+z) sin(pi z) ], and u_t = -u; the forcing that makes u exact is S(z,t) = exp(-t) [ -2 - z - sin(pi z) - pi cos(pi z) + pi^2 (1+z) sin(pi z) ] (value_bc_mms_forcing), evaluated at the RUNTIME layer centres zc. The rule's free names are tied to the solution in the model: the face coordinates z_sfc = 0 and z_top = 1 are parameters and the boundary values are the observeds u_sfc = value_bc_mms_exact(z_sfc, t) = exp(-t) and u_top = value_bc_mms_exact(z_top, t) = 2 exp(-t). The problem is chosen so that an index or orientation slip in the rule cannot hide: the two boundary values differ (1 vs 2, so swapping u_sfc and u_top is an O(1) error); the two face fluxes K u_z are nonzero and unequal ((1 + pi) exp(-t) at the surface, 2 (1 - pi) exp(-t) at the top) and the face coefficients differ (K = 1 vs 2), so reading K[2] for K[1] or K[NLEV] for K[NLEV+1], or zc[2] for zc[1], changes a nonzero face flux by O(1) relative; and nothing is discretely exact, so the t = 0.1 error is the full spatial error of the scheme, half-cell one-sided boundary closure included. The mesh follows the grid's edge-array contract (ze = the shared mms_column_ze of grids/column_nonuniform_1d/mesh/mms_column.esm; zc and dz grid-derived). The ic applies the closed per-layer centre template mms_column_zc (grids/column_nonuniform_1d/mesh/mms_column_centre.esm) inside an aggregate over lev; the 6.6.5 test references spell the layer centre inline from literals and NLEV, because the inline-test oracle does not resolve template references.",
@@ -19,12 +19,12 @@
   },
   "models": {
     "Heat": {
-      "expression_template_imports": [
+      "operator_imports": [
         { "ref": "../grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_value_bc.esm" },
         { "ref": "../grids/column_nonuniform_1d/mesh/mms_column.esm" },
         { "ref": "../grids/column_nonuniform_1d/mesh/mms_column_centre.esm" }
       ],
-      "expression_templates": {
+      "operators": {
         "value_bc_mms_exact": {
           "params": ["z", "t"],
           "description": "Manufactured solution u(z,t) = exp(-t) (1 + z + sin(pi z)).",
@@ -145,12 +145,12 @@
             "args": [],
             "ranges": { "i": { "from": "lev" } },
             "expr": {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "value_bc_mms_exact",
               "bindings": {
                 "z": {
-                  "op": "apply_expression_template",
+                  "op": "apply_operator",
                   "args": [],
                   "name": "mms_column_zc",
                   "bindings": { "i": "i" }
@@ -166,9 +166,9 @@
             "op": "+",
             "args": [
               {
-                "op": "D",
+                "op": "partial",
                 "args": [
-                  { "op": "*", "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }] }
+                  { "op": "*", "args": ["K", { "op": "partial", "args": ["u"], "wrt": "lev" }] }
                 ],
                 "wrt": "lev"
               },
@@ -188,7 +188,7 @@
             "args": ["zc"],
             "ranges": { "i": { "from": "lev" } },
             "expr": {
-              "op": "apply_expression_template",
+              "op": "apply_operator",
               "args": [],
               "name": "value_bc_mms_forcing",
               "bindings": { "z": { "op": "index", "args": ["zc", "i"] }, "t": "t" }
@@ -198,7 +198,7 @@
         {
           "lhs": "u_sfc",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "value_bc_mms_exact",
             "bindings": { "z": "z_sfc", "t": "t" }
@@ -207,7 +207,7 @@
         {
           "lhs": "u_top",
           "rhs": {
-            "op": "apply_expression_template",
+            "op": "apply_operator",
             "args": [],
             "name": "value_bc_mms_exact",
             "bindings": { "z": "z_top", "t": "t" }
@@ -215,15 +215,15 @@
         },
         {
           "lhs": "ze",
-          "rhs": { "op": "apply_expression_template", "args": [], "name": "mms_column_ze", "bindings": {} }
+          "rhs": { "op": "apply_operator", "args": [], "name": "mms_column_ze", "bindings": {} }
         },
         {
           "lhs": "zc",
-          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_center", "bindings": { "ze": "ze" } }
+          "rhs": { "op": "apply_operator", "args": [], "name": "column_cell_center", "bindings": { "ze": "ze" } }
         },
         {
           "lhs": "dz",
-          "rhs": { "op": "apply_expression_template", "args": [], "name": "column_cell_thickness", "bindings": { "ze": "ze" } }
+          "rhs": { "op": "apply_operator", "args": [], "name": "column_cell_thickness", "bindings": { "ze": "ze" } }
         }
       ],
       "tests": [
